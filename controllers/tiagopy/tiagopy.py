@@ -1,6 +1,16 @@
 
 from controller import Robot, Keyboard
+from robo_server import WebotsHTTPBridge, capture_jpeg
+
+from pathlib import Path
+import tempfile
 import math
+
+bridge = WebotsHTTPBridge(
+    host="127.0.0.1",
+    port=8765,
+)
+bridge.start()
 
 # --------------------------------------------------
 # Configuration
@@ -64,7 +74,7 @@ depth_camera.enable(TIME_STEP)
 # --------------------------------------------------
 
 initial_positions = {
-    "head_1_joint": 0.24,
+    "head_1_joint": 0,
     "head_2_joint": -0.67,
     "torso_lift_joint": 0.09,
     "arm_1_joint": 0.07,
@@ -173,7 +183,10 @@ Click the 3D simulation window before using the keyboard.
 
 previous_key = -1
 
+
+step_count = 0
 while robot.step(TIME_STEP) != -1:
+    step_count += 1
     key = keyboard.getKey()
 
     # Drive while an arrow key is active.
@@ -193,3 +206,23 @@ while robot.step(TIME_STEP) != -1:
         move_head(key)
 
     previous_key = key
+    
+    # telemetry = {
+        # "connection": "Webots",
+        # "simulation": "Running",
+        # "joints": [
+            # sensor.getValue()
+            # for sensor in arm_sensors
+        # ],
+        # "gripper": "Open",
+    # }
+
+    # bridge.publish(telemetry=telemetry)
+    
+    if step_count % 1 == 0:
+        jpeg = capture_jpeg(
+            rgb_camera,
+            str(Path(tempfile.gettempdir()) / "tiago_frame.jpg"),
+        )
+        if jpeg is not None:
+            bridge.publish(camera_jpeg=jpeg)

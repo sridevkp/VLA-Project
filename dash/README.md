@@ -1,66 +1,53 @@
-# TIAGo AI Studio — Streamlit prototype
+# TIAGo VLA Dashboard
 
-A lightweight, Python-only dashboard for a Webots TIAGo robotics project.
+## Run the dashboard (Windows PowerShell)
 
-## Features
-- Prompt/chat interface for a vision-language model
-- Optional image upload to the model
-- Demo mode that does not call any model
-- Local model support:
-  - Ollama `/api/chat` (vision-capable model required for images)
-  - OpenAI-compatible `/chat/completions`
-- Robot telemetry view with seven arm joints, base velocity, torso lift, gripper state
-- Import/export telemetry JSON
-- Event log
-- No robot motion commands are sent
-
-## Install (Windows PowerShell)
+Start the Webots controller that exposes port 8765, then in this folder run:
 
 ```powershell
-cd tiago_ai_studio
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
+Open the local Streamlit URL, usually http://localhost:8501.
+
 If PowerShell blocks activation, run:
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-## Local model setup
+The app reads:
+- `http://127.0.0.1:8765/health`
+- `http://127.0.0.1:8765/api/telemetry`
+- `http://127.0.0.1:8765/api/camera.jpg`
+- `http://127.0.0.1:8765/api/snapshot`
 
-### Ollama
-1. Start Ollama and make sure a vision-capable model is installed.
-2. Open **Settings** in the dashboard.
-3. Select **Ollama**.
-4. Use `http://localhost:11434` as the base endpoint.
-5. Enter the exact local model name (for example, the name shown by `ollama list`).
-6. Save settings, test the connection, then switch **Model mode** in the sidebar to **Local model**.
+## Connect an inference service
 
-### OpenAI-compatible local server
-Choose **OpenAI-compatible**, enter the server base URL (for example `http://localhost:8000/v1`) and the model identifier expected by that server.
-
-## Telemetry format
-
-The Telemetry & State page can import a JSON object such as:
-
-```json
-{
-  "connection": "Webots bridge",
-  "simulation": "Running",
-  "base_linear": 0.0,
-  "base_angular": 0.0,
-  "torso_lift": 0.12,
-  "gripper": "Open",
-  "joints": [0.07094, -0.01704, -0.00003, 0.00001, 0.00001, -0.000003, 0.000002],
-  "battery": 96
-}
+Set a base URL for a reachable VLA server:
+```powershell
+$env:VLA_API_URL = "http://YOUR-VLA-SERVER:8000"
+streamlit run app.py
 ```
+The dashboard POSTs to `/predict` with JSON keys `task`, `telemetry`, `image_base64`, `image_mime_type`. It expects an `action` or `actions` field in the JSON response.
 
-The `joints` array must contain exactly seven values in radians.
+## SmolVLA service scaffold
 
-## Planned Webots integration
-This prototype is intentionally not connected to Webots yet. A next step is a small Python bridge that reads joint position sensors and camera frames from the Webots controller and publishes structured JSON to the dashboard (e.g. over a local WebSocket or HTTP endpoint). Keep robot actuation separate and guarded until simulation control is tested.
+In a separate environment (preferably a remote GPU machine if local memory/GPU is insufficient):
+```powershell
+pip install "lerobot[smolvla]" fastapi "uvicorn[standard]" pillow
+$env:VLA_MODEL_ID = "lerobot/smolvla_base"
+$env:VLA_DEVICE = "cpu"
+uvicorn vla_worker:app --host 0.0.0.0 --port 8000
+```
+For a GPU host set `VLA_DEVICE=cuda`. Check `/health` and `/model-info`.
+
+**Important:** `vla_worker.py` intentionally returns HTTP 501 for `/predict` until a TIAGo-specific adapter is implemented. The base checkpoint's expected observation and action features may not match TIAGo. This prevents false confidence from arbitrary tensor mappings. The service currently demonstrates model loading and exposes the required feature metadata; it is not yet a working TIAGo action policy.
+
+## Next step
+
+Copy the JSON from `http://127.0.0.1:8765/api/telemetry` (remove secrets if any). Use it to map camera, torso, seven arm joint readings, gripper, and base state into a dataset/policy representation compatible with a TIAGo-trained or fine-tuned model. Keep all model output preview-only until units, dimensions, joint order, limits, and stopping behavior are validated.

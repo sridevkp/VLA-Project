@@ -59,6 +59,7 @@ DEF TIAGO_ROBOT Tiago {
   translation -0.53683 -3.70906 0.0885438
   rotation 0.015624928760601675 -0.010480586407633047 -0.9998229937892898 1.601211204317911
   controller "tiago_arm_api"
+  window "ai_interface"
   supervisor TRUE
 }
 OilBarrel {

@@ -16,6 +16,13 @@ PLACE_BASE      = np.array([-1.07, -3.9, 0.8])
 # --------------------------------------------------
 # Configuration
 # --------------------------------------------------
+# Cameras
+# rgb_camera = robot.getDevice("Astra rgb")
+# depth_camera = robot.getDevice("Astra depth")
+
+# rgb_camera.enable(TIME_STEP)
+# depth_camera.enable(TIME_STEP)
+
 
 TIME_STEP = 32
 

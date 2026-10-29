@@ -31,6 +31,7 @@ GRIPPER_TEST    = False            # after the torso lift, cycle the fingers clo
                                    # (3 s each) inside THIS controller and then stop. Set False after.
 
 
+
 # ====================================================
 robot = Supervisor()
 ts = int(robot.getBasicTimeStep())
@@ -48,6 +49,9 @@ chain = Chain.from_urdf_file(URDF, base_elements=BASE_ELEMENTS,
 for i, l in enumerate(chain.links):
     chain.active_links_mask[i] = l.name in ARM
 idx = {l.name: i for i, l in enumerate(chain.links)}
+
+
+
 
 # ---------- devices ----------
 motors, sensors = {}, {}
@@ -98,6 +102,16 @@ depth_camera = robot.getDevice("Astra depth")
 rgb_camera.enable(TIME_STEP)
 depth_camera.enable(TIME_STEP)
 
+from ui_bridge import UIBridge
+bridge = UIBridge(robot, rgb_camera, period_ms=250, quality=60)
+
+_raw_step = robot.step
+def _step(dt):
+    r = _raw_step(dt)
+    if r != -1:
+        bridge.tick()
+    return r
+robot.step = _step
 # ---------- frames ----------
 def base_to_world(p_base):
     R = np.array(me.getOrientation()).reshape(3, 3)
@@ -492,6 +506,8 @@ while robot.step(ts) != -1 and state not in ("DONE", "FAILED"):
     if STOP_AFTER and finished == STOP_AFTER:
         print(f"Stopped after {finished}; next state would be {state}.")
         break
+        
+
 
 print("Final state:", state)
 while robot.step(ts) != -1:

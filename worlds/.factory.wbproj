@@ -6,11 +6,10 @@ minimizedPerspectives: 000000ff00000000fd00000002000000010000027f000002acfc02000
 maximizedDockId: -1
 centralWidgetVisible: 1
 orthographicViewHeight: 1
-textFiles: 1 "controllers/tiagopy/tiagopy.py" "controllers/tiago_arm_api/tiago_arm_api.py" "controllers/gripper_test/gripper_test.py"
-robotWindow: TIAGo
-globalOptionalRendering: AllBoundingObjects
+textFiles: 2 "controllers/tiago_controller/tiago_controller.py" "controllers/tiago_controller/pick_place.py" "controllers/tiago_controller/config.py" "controllers/tiago_controller/kinematics.py" "controllers/tiago_controller/motion.py" "controllers/tiago_controller/gripper.py"
+globalOptionalRendering: AllBoundingObjects::ContactPoints
 consoles: Console:All:All
 renderingDevicePerspectives: DARwIn-OP:Camera;0;1.79375;0;0
 renderingDevicePerspectives: ERS-7:PRM:/r1/c1/c2/c3/i1-FbkImageSensor:F1;0;1.20944;0.301478;0
 renderingDevicePerspectives: TIAGo:Astra depth;0;0.354837;0;0
-renderingDevicePerspectives: TIAGo:Astra rgb;1;0.376075;0.684;0
+renderingDevicePerspectives: TIAGo:Astra rgb;1;0.361675;0.696;0.00365631

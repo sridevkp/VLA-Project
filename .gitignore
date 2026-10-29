@@ -3,3 +3,6 @@
 .env.*
 .venv
 tiago_ikfast/*.cpp
+__pycache__/
+*.py[cod]
+*$py.class

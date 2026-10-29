@@ -26,12 +26,13 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/stairs/protos/StraightStairsRail.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago/protos/Tiago.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/drinks/protos/Can.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/fruits/protos/Apple.proto"
 
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.20864169068942512 0.7490808094166939 0.6287659229553467 0.8340139278558151
-  position -2.2280074241617123 -5.580605140145203 2.3162055493170604
+  orientation -0.27927513680973415 0.7060797453620017 0.6507355769814918 1.0923073814684534
+  position -2.410520707608918 -6.2819503953037055 3.6157925800450657
 }
 TexturedBackground {
   texture "empty_office"
@@ -58,7 +59,7 @@ Floor {
 DEF TIAGO_ROBOT Tiago {
   translation -0.53683 -3.70906 0.0885438
   rotation 0.015624928760601675 -0.010480586407633047 -0.9998229937892898 1.601211204317911
-  controller "tiago_arm_api"
+  controller "tiago_controller"
   window "ai_interface"
   supervisor TRUE
 }
@@ -121,7 +122,7 @@ LJoint {
   rotation -0.577350278331609 0.577350264618634 0.577350264618634 2.094395086923155
 }
 Wrench {
-  translation -0.217739 -4.3478 0.758904
+  translation -1.32774 -4.3478 0.758978
   rotation -0.00017332615804954718 -0.00011643254743113207 -0.9999999782007523 1.5707953776397576
   name "wrench(1)"
 }
@@ -129,13 +130,13 @@ Wrench {
   translation 0.8606820022693907 -4.696689999467115 0.7489045030351815
   rotation 0.00015334618310468805 1.4481138780991155e-05 0.9999999881376221 -2.565635368271278
 }
-Hammer {
-  translation -1.3271016927267485 -4.403520407577431 0.7624927273156096
+DEF HAM Hammer {
+  translation -0.544929 -4.5081 0.754298
   rotation -0.005008287521517197 0.003294840334213932 -0.9999820303801832 2.0936302893946834
   name "hammer(1)"
 }
 DEF CAN Can {
-  translation -0.719879 -4.35998 0.811019
+  translation -0.799879 -4.38998 0.810949
   rotation 0.24790749190280933 -0.9687815659968583 0.0020378525789220693 0.0008252779164767827
 }
 Hammer {
@@ -149,6 +150,9 @@ WoodenPallet {
 Table {
   translation -0.23882837 -4.8402928 0
   size 4.5 1.5 0.75
+}
+DEF APP Apple {
+  translation -0.32 -4.41 0.79
 }
 CardboardBox {
   translation 2.2324987 -11.807743 0.31

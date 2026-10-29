@@ -102,7 +102,7 @@ depth_camera = robot.getDevice("Astra depth")
 rgb_camera.enable(TIME_STEP)
 depth_camera.enable(TIME_STEP)
 
-from ui_bridge import UIBridge
+from controllers.tiago_controller.ui_bridge import UIBridge
 bridge = UIBridge(robot, rgb_camera, period_ms=250, quality=60)
 
 _raw_step = robot.step

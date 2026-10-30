@@ -31,8 +31,8 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.27927513680973415 0.7060797453620017 0.6507355769814918 1.0923073814684534
-  position -2.410520707608918 -6.2819503953037055 3.6157925800450657
+  orientation -0.20921113244539802 0.6709249014378383 0.7114003645567952 0.8262198357291226
+  position -2.4641748676940143 -6.308662616885656 2.0951460638420794
 }
 TexturedBackground {
   texture "empty_office"
@@ -152,7 +152,7 @@ Table {
   size 4.5 1.5 0.75
 }
 DEF APP Apple {
-  translation -0.32 -4.41 0.79
+  translation -0.41 -4.44 0.83
 }
 CardboardBox {
   translation 2.2324987 -11.807743 0.31

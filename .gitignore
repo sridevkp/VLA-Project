@@ -1,7 +1,9 @@
 .env
 *.env
 .env.*
-.venv
+.venv/
+runs/
+*.egg-info/
 tiago_ikfast/*.cpp
 __pycache__/
 *.py[cod]

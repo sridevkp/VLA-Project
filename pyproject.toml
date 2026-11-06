@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vlarobot"
+version = "0.1.0"
+description = "Risk-aware world-model VLA robotics for TIAGo"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "typer>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "ruff>=0.11",
+    "ty>=0.0.99,<0.1.0",
+]
+
+[project.optional-dependencies]
+core = []
+sim = []
+perception = []
+vla = []
+dashboard = []
+# Keep the `dev` extra for the documented `uv sync --extra dev` command.
+dev = [
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "ruff>=0.11",
+    "ty>=0.0.99,<0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "webots: requires a local Webots installation and simulator",
+    "gpu: requires a supported GPU and GPU-enabled dependencies",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "controllers",
+    "model",
+    "tiago_ikfast",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,18 +1,27 @@
 """IKPy chain, bounded inverse kinematics, and tool-frame scoring."""
+
 import warnings
+
 import numpy as np
 from ikpy.chain import Chain
-from config import ARM_JOINTS, TOOL_OFFSET, URDF_PATH
+
+from vlarobot.backends.webots.config import ARM_JOINTS, TOOL_OFFSET, URDF_PATH
 
 warnings.filterwarnings("ignore", message=".*is of type 'fixed'.*")
+
 
 class Kinematics:
     def __init__(self):
         if not URDF_PATH.exists():
             raise FileNotFoundError(f"URDF not found: {URDF_PATH}")
         base_elements = [
-            "base_link", "base_link_Torso_joint", "Torso", "torso_lift_joint",
-            "torso_lift_link", "torso_lift_link_TIAGo front arm_joint", "TIAGo front arm",
+            "base_link",
+            "base_link_Torso_joint",
+            "Torso",
+            "torso_lift_joint",
+            "torso_lift_link",
+            "torso_lift_link_TIAGo front arm_joint",
+            "TIAGo front arm",
         ]
         self.chain = Chain.from_urdf_file(
             str(URDF_PATH), base_elements=base_elements, last_link_vector=TOOL_OFFSET
@@ -45,7 +54,7 @@ class Kinematics:
     def score(self, target, q):
         T = self.forward(q)
         error = float(np.linalg.norm(T[:3, 3] - target))
-        tool_dir = T[:3, :3] @ np.array([0., 0., -1.])
+        tool_dir = T[:3, :3] @ np.array([0.0, 0.0, -1.0])
         tilt = float(np.degrees(np.arccos(np.clip(-tool_dir[2], -1, 1))))
         return error, tilt
 
@@ -60,11 +69,13 @@ class Kinematics:
                     lo, hi = self.bounds(name)
                     candidate[self.idx[name]] = self.rng.uniform(lo, hi)
                 seeds.append(candidate)
-        best = None
+        best: tuple[float, np.ndarray, float, float] | None = None
         for candidate in seeds:
             q = self.chain.inverse_kinematics(
-                target, target_orientation=[0, 0, 1],
-                orientation_mode="Z", initial_position=candidate
+                target,
+                target_orientation=[0, 0, 1],
+                orientation_mode="Z",
+                initial_position=candidate,
             )
             error, tilt = self.score(target, q)
             cost = error + 0.002 * tilt
@@ -72,4 +83,6 @@ class Kinematics:
                 best = (cost, q, error, tilt)
             if error < 0.005 and tilt < 5:
                 break
+        if best is None:
+            raise RuntimeError("Inverse kinematics did not produce a candidate solution.")
         return best[1], best[2], best[3]

@@ -1,10 +1,31 @@
 """High-level pick-and-place state machine."""
+
+import json
+import os
+from pathlib import Path
+
 import numpy as np
-from config import (
-    PLACE_BASE, GRASP_Z, APPROACH_H, PLACE_CLEAR, ALIGN_TOL, SKIP_ALIGN_CHECK,
-    LIFT_MIN, MAX_RETRIES, STOP_AFTER, IK_TOL_GRASP, TORSO_HEIGHT,
-    HEAD_PAN, HEAD_TILT, HEAD_JOINTS, TOOL_OFFSET, GRIPPER_TEST, CALIBRATE_TOOL,
+
+from vlarobot.backends.webots.config import (
+    ALIGN_TOL,
+    APPROACH_H,
+    CALIBRATE_TOOL,
+    GRASP_Z,
+    GRIPPER_TEST,
+    HEAD_JOINTS,
+    HEAD_PAN,
+    HEAD_TILT,
+    IK_TOL_GRASP,
+    LIFT_MIN,
+    MAX_RETRIES,
+    PLACE_BASE,
+    PLACE_CLEAR,
+    SKIP_ALIGN_CHECK,
+    STOP_AFTER,
+    TOOL_OFFSET,
+    TORSO_HEIGHT,
 )
+
 
 class PickPlace:
     def __init__(self, robot_io, frames, kinematics, motion, gripper, visualization):
@@ -15,6 +36,15 @@ class PickPlace:
         self.gripper_primed = False
         self.home_q = None
         self.can_z0_world = None
+        self.cartesian_waypoints = {}
+
+    def _record_cartesian_waypoint(self, name, point):
+        coordinates = tuple(float(value) for value in point)
+        self.cartesian_waypoints[name] = coordinates
+        log_path = os.environ.get("VLAROBOT_WAYPOINT_LOG")
+        if log_path:
+            with Path(log_path).open("a", encoding="utf-8") as file:
+                file.write(json.dumps({"waypoint": name, "base_xyz_m": coordinates}) + "\n")
 
     def initialize_posture(self):
         if TORSO_HEIGHT is not None:
@@ -26,7 +56,7 @@ class PickPlace:
                     break
             print("Torso at", round(self.io.sensors["torso_lift_joint"].getValue(), 3))
 
-        for name, target in zip(HEAD_JOINTS, [HEAD_PAN, HEAD_TILT]):
+        for name, target in zip(HEAD_JOINTS, [HEAD_PAN, HEAD_TILT], strict=True):
             motor = self.io.robot.getDevice(name)
             if motor is None:
                 print(f"[warn] head motor {name} not found")
@@ -44,8 +74,10 @@ class PickPlace:
 
         if GRIPPER_TEST:
             for label, target in [
-                ("CLOSE", self.gripper.closed_pos), ("OPEN", self.gripper.open_pos),
-                ("CLOSE", self.gripper.closed_pos), ("OPEN", self.gripper.open_pos),
+                ("CLOSE", self.gripper.closed_pos),
+                ("OPEN", self.gripper.open_pos),
+                ("CLOSE", self.gripper.closed_pos),
+                ("OPEN", self.gripper.open_pos),
             ]:
                 for motor, _ in self.gripper.fingers:
                     motor.setPosition(target)
@@ -57,11 +89,13 @@ class PickPlace:
             return False
 
         if CALIBRATE_TOOL:
-            from calibration import calibrate_tool_offset
+            from vlarobot.backends.webots.calibration import calibrate_tool_offset
+
             self.gripper.open()
             calibrate_tool_offset(self.io, self.frames, self.ik)
 
         self.home_q = self.frames.current_q()
+        self._record_cartesian_waypoint("home", self.ik.forward(self.home_q)[:3, 3])
         return True
 
     def run(self):
@@ -77,6 +111,9 @@ class PickPlace:
                     [0, 0, GRASP_Z + PLACE_CLEAR]
                 )
                 self.place_above = self.place_tip + np.array([0, 0, APPROACH_H])
+                self._record_cartesian_waypoint("descend_grasp", self.grasp_tip)
+                self._record_cartesian_waypoint("pregrasp", self.pregrasp)
+                self._record_cartesian_waypoint("lift", self.pregrasp)
                 self.can_z0_world = self.io.can_node.getPosition()[2]
                 print("Can (base frame):", np.round(can_base, 3))
                 if not self.gripper.open(cycle=not self.gripper_primed):
@@ -95,7 +132,10 @@ class PickPlace:
                 print("  finger sensors:", self.gripper.values())
                 before = np.array(self.io.can_node.getPosition())
                 ok = self.motion.move_linear(self.grasp_tip, ik_tol=IK_TOL_GRASP)
-                print("  can moved by", np.round(np.array(self.io.can_node.getPosition()) - before, 4))
+                print(
+                    "  can moved by",
+                    np.round(np.array(self.io.can_node.getPosition()) - before, 4),
+                )
                 print("  finger sensors:", self.gripper.values())
                 self.state = "CLOSE" if ok else "FAILED"
 
@@ -105,8 +145,10 @@ class PickPlace:
                 error_base = self.frames.can_base_position() - transform[:3, 3]
                 error_base[2] = 0.0
                 error_local = transform[:3, :3].T @ error_base
-                print("  suggested TOOL_OFFSET (only if can is visibly between fingers):",
-                      np.round(np.array(TOOL_OFFSET) + error_local, 4).tolist())
+                print(
+                    "  suggested TOOL_OFFSET (only if can is visibly between fingers):",
+                    np.round(np.array(TOOL_OFFSET) + error_local, 4).tolist(),
+                )
                 xy_error = np.linalg.norm(
                     (self.frames.can_base_position() - self.frames.tool_position())[:2]
                 )
@@ -133,10 +175,14 @@ class PickPlace:
                 print(f"  can rose {rose:.3f} m, can-to-tool {distance:.3f} m")
                 if ok and rose > LIFT_MIN and distance < 0.10:
                     held = self.frames.tool_position() - self.frames.can_base_position()
-                    self.place_tip = np.asarray(PLACE_BASE, dtype=float) + np.array(
-                        [0, 0, PLACE_CLEAR]
-                    ) + held
+                    self.place_tip = (
+                        np.asarray(PLACE_BASE, dtype=float) + np.array([0, 0, PLACE_CLEAR]) + held
+                    )
                     self.place_above = self.place_tip + np.array([0, 0, APPROACH_H])
+                    self._record_cartesian_waypoint("transit", self.place_above)
+                    self._record_cartesian_waypoint("place_descend", self.place_tip)
+                    self._record_cartesian_waypoint("release", self.place_tip)
+                    self._record_cartesian_waypoint("retreat", self.place_above)
                     print("  held offset tool-can:", np.round(held, 4))
                     self.state = "TRANSIT"
                 else:
@@ -144,7 +190,9 @@ class PickPlace:
 
             elif self.state == "TRANSIT":
                 print("[TRANSIT]")
-                self.state = "PLACE_DESCEND" if self.motion.move_linear(self.place_above) else "FAILED"
+                self.state = (
+                    "PLACE_DESCEND" if self.motion.move_linear(self.place_above) else "FAILED"
+                )
 
             elif self.state == "PLACE_DESCEND":
                 print("[PLACE_DESCEND]")
@@ -182,6 +230,11 @@ class PickPlace:
                 print(f"Stopped after {finished}; next state would be {self.state}.")
                 break
 
+        if os.environ.get("VLAROBOT_WAYPOINT_LOG"):
+            for name, point in self.cartesian_waypoints.items():
+                self._record_cartesian_waypoint(name, point)
+            with Path(os.environ["VLAROBOT_WAYPOINT_LOG"]).open("a", encoding="utf-8") as file:
+                file.write(json.dumps({"terminal_state": self.state}) + "\n")
         print("Final state:", self.state)
         while self.vis.step() != -1:
             pass

@@ -1,0 +1,144 @@
+"""Deterministic fake backend for core and integration tests."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+
+import numpy as np
+
+from vlarobot.core.types import (
+    Action,
+    ApplyResult,
+    BaseGoal,
+    CameraInfo,
+    EEDelta,
+    EEPoseTarget,
+    GripperCmd,
+    GroundTruth,
+    JointTarget,
+    Observation,
+    Pose2D,
+    Pose3D,
+    RobotState,
+    ScenarioSpec,
+    Vec3,
+)
+from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
+
+_ARM_JOINTS = tuple(f"arm_{index}_joint" for index in range(1, 8))
+_CAMERA_INFO = CameraInfo(
+    K=((1.0, 0.0, 32.0), (0.0, 1.0, 24.0), (0.0, 0.0, 1.0)),
+    T_base_cam=(
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ),
+    width=64,
+    height=48,
+)
+
+
+class FakeBackend:
+    """Small deterministic backend with the same API as simulator clients."""
+
+    def __init__(
+        self,
+        safety_monitor: SafetyMonitor | None = None,
+        step_duration: float = 0.032,
+    ) -> None:
+        if step_duration <= 0.0:
+            raise ValueError("step_duration must be positive.")
+        self.safety_monitor = safety_monitor or SafetyMonitor(
+            SafetyLimits(
+                joint_position={name: (-3.14, 3.14) for name in _ARM_JOINTS},
+                joint_velocity={name: 1.0 for name in _ARM_JOINTS},
+            )
+        )
+        self.step_duration = step_duration
+        self._time = 0.0
+        self._seq = 0
+        self._stopped = False
+        self._scenario = ScenarioSpec()
+        self._rgb = np.zeros((48, 64, 3), dtype=np.uint8)
+        self._depth = np.zeros((48, 64), dtype=np.float32)
+        self._robot_state = self._initial_robot_state()
+
+    def reset(self, scenario: ScenarioSpec, seed: int) -> Observation:
+        if not isinstance(seed, int):
+            raise TypeError("seed must be an integer.")
+        if self._stopped:
+            raise RuntimeError("Cannot reset a stopped backend.")
+        self._scenario = deepcopy(scenario)
+        self._time = 0.0
+        self._seq = 0
+        self._rgb.fill(0)
+        self._depth.fill(0.0)
+        self._robot_state = self._initial_robot_state()
+        return self._observation()
+
+    def step(self, n_steps: int = 1) -> Observation:
+        if self._stopped:
+            raise RuntimeError("Cannot step a stopped backend.")
+        if not isinstance(n_steps, int) or n_steps <= 0:
+            raise ValueError("n_steps must be a positive integer.")
+        self._time += n_steps * self.step_duration
+        self._seq += n_steps
+        self._robot_state.joint_vel = {name: 0.0 for name in self._robot_state.joint_pos}
+        return self._observation()
+
+    def apply(self, action: Action) -> ApplyResult:
+        if self._stopped:
+            raise RuntimeError("Cannot apply an action to a stopped backend.")
+        validation = self.safety_monitor.validate(action, self._robot_state)
+        if not validation.accepted:
+            return validation
+        if isinstance(action, JointTarget):
+            self._robot_state.joint_pos.update(action.q)
+        elif isinstance(action, EEPoseTarget):
+            self._robot_state.ee_pose = action.pose
+            if action.gripper is not None:
+                self._robot_state.gripper_opening = action.gripper
+        elif isinstance(action, EEDelta):
+            position = self._robot_state.ee_pose.position
+            self._robot_state.ee_pose = Pose3D(
+                Vec3(
+                    position.x + action.dpos.x,
+                    position.y + action.dpos.y,
+                    position.z + action.dpos.z,
+                ),
+                self._robot_state.ee_pose.orientation,
+            )
+            self._robot_state.gripper_opening = action.gripper
+        elif isinstance(action, BaseGoal):
+            self._robot_state.base_pose = action.pose
+        elif isinstance(action, GripperCmd):
+            self._robot_state.gripper_opening = action.opening
+        else:
+            return ApplyResult(False, f"unsupported action type: {type(action).__name__}")
+        return ApplyResult(True)
+
+    def get_ground_truth(self) -> GroundTruth:
+        return GroundTruth()
+
+    def stop(self) -> None:
+        self._stopped = True
+
+    def _observation(self) -> Observation:
+        return Observation(
+            t=self._time,
+            rgb=self._rgb.copy(),
+            depth=self._depth.copy(),
+            cam_info=_CAMERA_INFO,
+            robot=deepcopy(self._robot_state),
+        )
+
+    @staticmethod
+    def _initial_robot_state() -> RobotState:
+        return RobotState(
+            joint_pos={name: 0.0 for name in _ARM_JOINTS},
+            joint_vel={name: 0.0 for name in _ARM_JOINTS},
+            base_pose=Pose2D(0.0, 0.0, 0.0),
+            ee_pose=Pose3D(Vec3(0.5, 0.0, 0.5), (0.0, 0.0, 0.0, 1.0)),
+            gripper_opening=0.045,
+        )

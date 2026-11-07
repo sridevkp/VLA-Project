@@ -1,5 +1,7 @@
 """Debug markers and optional UI bridge ticking."""
+
 import numpy as np
+
 
 class Visualization:
     def __init__(self, robot_io, frames, period_ms=250, quality=60):
@@ -9,7 +11,8 @@ class Visualization:
         self.tool_translation = self._marker("T_TOOL", "0 1 0")
         self.bridge = None
         try:
-            from ui_bridge import UIBridge
+            from vlarobot.backends.webots.ui_bridge import UIBridge
+
             rgb = self.io.robot.getDevice("Astra rgb")
             depth = self.io.robot.getDevice("Astra depth")
             if rgb is not None:
@@ -29,7 +32,7 @@ class Visualization:
                 -1,
                 f"DEF {name} Solid {{ children [ Shape {{ appearance PBRAppearance "
                 f"{{ baseColor {rgb} roughness 1 metalness 0 }} "
-                f"geometry Sphere {{ radius 0.015 }} }} ] }}"
+                f"geometry Sphere {{ radius 0.015 }} }} ] }}",
             )
             node = robot.getFromDef(name)
         return node.getField("translation")

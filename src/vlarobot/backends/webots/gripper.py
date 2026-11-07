@@ -1,5 +1,7 @@
 """Gripper open/close commands and a basic stall-based grasp heuristic."""
-from config import FINGER_SPEED, GRIP_FORCE, MIN_GRASP_OPEN
+
+from vlarobot.backends.webots.config import FINGER_SPEED, GRIP_FORCE, MIN_GRASP_OPEN
+
 
 class Gripper:
     def __init__(self, robot_io, visualization):

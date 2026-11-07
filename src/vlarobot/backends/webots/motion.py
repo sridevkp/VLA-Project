@@ -1,6 +1,9 @@
 """Joint-space moves and straight-line Cartesian moves."""
+
 import numpy as np
-from config import ARM_JOINTS, IK_TOL, IK_TOL_GRASP, MAX_TILT_DEG
+
+from vlarobot.backends.webots.config import ARM_JOINTS, IK_TOL, IK_TOL_GRASP, MAX_TILT_DEG
+
 
 class Motion:
     def __init__(self, robot_io, frames, kinematics, visualization):
@@ -18,11 +21,14 @@ class Motion:
             }
             if max(errors.values()) < tol:
                 return True
-        worst = max(ARM_JOINTS, key=lambda n: abs(
-            self.io.sensors[n].getValue() - q[self.ik.idx[n]]
-        ))
+        worst = max(
+            ARM_JOINTS, key=lambda n: abs(self.io.sensors[n].getValue() - q[self.ik.idx[n]])
+        )
         error = abs(self.io.sensors[worst].getValue() - q[self.ik.idx[worst]])
-        print(f"  [!] move timed out (possibly collision). Worst joint: {worst}, error {error:.3f} rad")
+        print(
+            f"  [!] move timed out (possibly collision). Worst joint: {worst}, "
+            f"error {error:.3f} rad"
+        )
         return False
 
     def go_to(self, target, tol=0.01, ik_tol=IK_TOL):
@@ -44,8 +50,10 @@ class Motion:
             point = (1 - alpha) * start + alpha * target
             q, error, tilt = self.ik.solve(point, q)
             if error > ik_tol or tilt > MAX_TILT_DEG:
-                print(f"  [!] linear move failed at waypoint {index}/{count}: "
-                      f"err={error:.4f} tilt={tilt:.1f}")
+                print(
+                    f"  [!] linear move failed at waypoint {index}/{count}: "
+                    f"err={error:.4f} tilt={tilt:.1f}"
+                )
                 return False
             final = index == count
             if not self.move_to_q(q, tol=0.01 if final else 0.03, max_steps=600):

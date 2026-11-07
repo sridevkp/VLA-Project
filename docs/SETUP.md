@@ -5,17 +5,17 @@ interpreter to Python 3.11.18 in `.python-version`. Install `uv`, then run these
 repository root:
 
 ```text
-uv sync --extra dev
+uv sync --extra sim --extra dev
 uv run ruff check .
 uv run ruff format --check .
 uv run ty check src
 uv run pytest -m "not webots"
 ```
 
-The `dev` extra contains Ruff, pytest, ty, and pre-commit. Optional runtime extras (`core`, `sim`,
-`perception`, `vla`, and `dashboard`) are declared in `pyproject.toml`; dependencies are added when
-their implementations are introduced. The `gpu` and `webots` pytest markers identify tests that
-require local hardware/simulator access.
+The `dev` extra contains Ruff, pytest, ty, and pre-commit. The `sim` extra installs IKPy for the
+Webots backend. The remaining optional runtime extras (`core`, `perception`, `vla`, and `dashboard`)
+are declared in `pyproject.toml`. The `gpu` and `webots` pytest markers identify tests that require
+local hardware/simulator access.
 
 ## Windows native
 
@@ -25,12 +25,23 @@ GUI, open `worlds/smoke.wbt`, and use the external-controller URL Webots display
 ```powershell
 $env:WEBOTS_HOME = "C:\Program Files\Webots"
 $env:WEBOTS_CONTROLLER_URL = "tcp://127.0.0.1:1234/TIAGo"
-uv sync --extra dev
+uv sync --extra sim --extra dev
 uv run python -m vlarobot.cli smoke
 ```
 
 Use the URL Webots actually prints/displays instead of the example URL above. The smoke command
 sets the controller API path in `PYTHONPATH` and `sys.path` using the host OS path separator.
+
+For the lockstep backend, open `worlds/factory.wbt` in Webots. The controller shim selects the
+repository's `.venv` Python (override with `WEBOTS_PYTHON` if needed) and starts the simulator
+server. In a second PowerShell window, set `WEBOTS_HOME` and run:
+
+```powershell
+uv run python -m vlarobot.cli brain --steps 10
+```
+
+The brain command resets the default scene, advances ten lockstep steps, and prints simulation time
+and RGB shape. It is a transport smoke test, not the M1 CAN regression.
 
 ### PyTorch CUDA on Windows
 
@@ -54,12 +65,21 @@ the terminal from which the CLI will connect. Example for the validated Fedora i
 ```bash
 export WEBOTS_HOME="$HOME/.local/opt/webots"
 export WEBOTS_CONTROLLER_URL="ipc://1234/TIAGo"
-uv sync --extra dev
+uv sync --extra sim --extra dev
 uv run python -m vlarobot.cli smoke
 ```
 
 The external-controller URL depends on the Webots session; use the URL it reports. `ipc://` is for
 local processes. Use the displayed `tcp://` URL when connecting over a network.
+
+For the lockstep backend, open `worlds/factory.wbt` in Webots, then run this in another terminal:
+
+```bash
+uv run python -m vlarobot.cli brain --steps 10
+```
+
+The controller shim uses `.venv/bin/python` when available. Set `WEBOTS_PYTHON` to a compatible
+Python 3.11 executable if Webots is launched outside the repository environment.
 
 ### PyTorch CUDA on Linux
 
@@ -84,7 +104,7 @@ controller URL displayed by Webots:
 ```bash
 export WEBOTS_HOME="$HOME/.local/opt/webots"
 export WEBOTS_CONTROLLER_URL="tcp://<windows-host-ip>:1234/TIAGo"
-uv sync --extra dev
+uv sync --extra sim --extra dev
 uv run python -m vlarobot.cli smoke
 ```
 

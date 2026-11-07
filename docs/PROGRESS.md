@@ -1,9 +1,10 @@
 # Project progress
 
-Current milestone: **M0 — Foundations**
+Current milestone: **M1 — Port controller behind interfaces**
 
-Last updated: **2026-11-07**. Summary: M0 scaffold, documentation, environment helper, and Linux
-Webots smoke test are implemented; no commit was created.
+Last updated: **2026-11-07**. M0 is committed; M1-01 through M1-05 are implemented. The M1-06
+workspace conflict is addressed using measured original-controller waypoints and two safety
+profiles; the brain-side seeded regression remains unverified.
 
 ## M0 — Foundations (P0)
 
@@ -17,8 +18,8 @@ Webots smoke test are implemented; no commit was created.
 - [x] Add Ubuntu/Windows GitHub Actions matrix for locked dependency sync, lint, type-check, and
   non-Webots tests.
 - [x] Leave controller migration in M1 as decided; no controller logic or files were changed.
-- **Local evidence:** `uv sync --locked --extra dev`, Ruff, ty, and non-Webots tests pass on Fedora
-  with Python 3.11.18; `uv lock --check` passes and pytest reports 7 passed.
+- **Local evidence:** M0 checks passed on Fedora with Python 3.11.18; M0 commits:
+  `ae3e874 Build M0 project foundation` and `1b2e4da Add project architecture and agent guidance`.
 - **Windows evidence:** CI is configured but has not yet run.
 
 ### M0-02: Document setup and version decisions
@@ -55,19 +56,63 @@ Webots smoke test are implemented; no commit was created.
 - [x] Linux package/tool checks and Webots smoke command.
 - [ ] Windows CI green.
 - [ ] Webots smoke command verified by a human on Windows.
-- **Gate status:** Pending the two Windows checks above. Stop here until the human reports their
-  results and approves moving past M0.
+- **Gate status:** Windows checks remain pending at the user's request; the user explicitly
+  approved proceeding to M1 before Windows validation.
 
 ## M1 — Port controller behind interfaces (P0)
 
-- [ ] Move controller implementation into `src/vlarobot/backends/webots/` without behavior change.
-- [ ] Keep `controllers/tiago_controller/tiago_controller.py` as the Webots-required thin shim.
-- [ ] Implement core message types, protocols, and versioned wire serialization from §3.3–3.4.
-- [ ] Add the Webots `SimServer` and lockstep `ZmqBackendClient`.
-- [ ] Add `FakeBackend` and unit tests that do not require Webots.
-- [ ] Move controller configuration to typed YAML-backed settings with identical defaults.
-- [ ] Run the scripted CAN regression over at least ten seeded episodes.
+- [x] Move controller implementation into `src/vlarobot/backends/webots/`; retain the original
+  scripted controller as a comparison baseline.
+- [x] Keep `controllers/tiago_controller/tiago_controller.py` as a thin shim. It selects the
+  project `.venv` Python (or `WEBOTS_PYTHON`) and starts the server by default; set
+  `VLAROBOT_WEBOTS_MODE=legacy` to run the original script.
+- [x] Implement the core message types, protocols, and versioned wire serialization from §3.3–3.4.
+- [x] Add Webots `SimServer`, lockstep `ZmqBackendClient`, and `cli sim-server` / `cli brain`.
+- [x] Add deterministic `FakeBackend` and simulator-independent unit tests.
+- [x] Move controller defaults to typed YAML-backed settings with compatibility aliases.
+- [x] Implement safety validation for action types, finite values, workspace, joint position and
+  velocity, gripper limits, and malformed commands. Fake and Webots backends validate before apply.
+- [x] Derive `configs/safety.yaml` workspace profiles from the original PickPlace waypoints with a
+  0.10 m `original_envelope` margin and a tighter 0.02 m `strict` profile. The original controller
+  had no workspace limit; the envelope is a behavioral baseline, not a validated safety limit.
+- [x] Log validation rejection reasons and test waypoint acceptance under `original_envelope`,
+  strict-profile containment, and out-of-box rejection under both profiles.
+- [ ] Run the scripted CAN regression from the brain process and compare success with the original
+  controller over at least ten seeded episodes.
+  - **Actual result (Fedora/Webots R2025a):** `uv run python -m vlarobot.cli can-regression --seeds 10`
+    produced `success=0/10` and `rejections=9`.
+  - **Per-seed summary:** seed 0 final_distance=0.560m, seeds 1–9 terminal states were `INIT`,
+    `place_descend`, or `pregrasp` with a final rejection. The run completed successfully, but it
+    does not satisfy the M1-06 acceptance gate.
+- **Local checks:** `uv run ruff check .`, `uv run ruff format --check .`, `uv run ty check src
+  tests`, `uv run pytest -m "not webots"`, and `uv build` passed; pytest reported **36 passed**.
 
+- **Webots integration:** Fedora / Webots R2025a factory world, brain process:
+  `uv run python -m vlarobot.cli brain --steps 10`
+
+  ```text
+  sim_time=0.416s image_shape=(480, 640, 3)
+  ```
+
+- **Webots RPC evidence:** ping, reset, apply, step, get_gt, and shutdown completed successfully;
+  the returned ground-truth object key was `CAN`. This validates transport/backend operation, not
+  the M1-06 pick-and-place regression.
+
+- **M1-06 waypoint evidence:** an instrumented run of the original controller in
+  `worlds/factory.wbt` collected home `(0.203672298, -0.985455309, 0.963048983)`, descend/grasp
+  `(0.672736661, -0.213295065, 0.764821419)`, pregrasp/lift
+  `(0.672736661, -0.213295065, 0.884821419)`, transit/retreat
+  `(-1.077327982, -3.842045869, 0.936284755)` / `(-1.086885823, -3.858086446, 0.935119120)`,
+  and place-descend/release `(-1.077327982, -3.842045869, 0.816284755)` /
+  `(-1.086885823, -3.858086446, 0.815119120)`, all base-frame meters. These extrema include two
+  runs; the latest original run terminated `FAILED`. See ADR-0002 for profile bounds and rationale.
+- **M1-06 remaining:** The original behavior is observed through the waypoint flow, but the
+  brain-process ≥10-seed success comparison did not meet the acceptance threshold. Webots reset
+  replays the default scene, so repeated seeds are not varied scenarios. The latest original run
+  terminated `FAILED`; the current brain-side scripted CAN policy is safety-compliant but still fails
+  to reach the original controller's placement target across the ten-seed batch. No controller target
+  was changed.
+- **M1 gate status:** Blocked on M1-06 regression; Windows CI remains unverified.
 ## M2 — Evaluation and data harness (P0)
 
 - [ ] Define `ScenarioSpec` and a seeded scenario generator for objects and obstacles.

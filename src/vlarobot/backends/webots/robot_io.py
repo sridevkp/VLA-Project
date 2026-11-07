@@ -1,10 +1,20 @@
 """Webots device discovery and low-level simulation I/O."""
-from controller import Supervisor
-from config import TIME_STEP, ARM_JOINTS, FINGER_JOINTS, TORSO_JOINT, FINGER_SPEED, FINGERS_INVERTED
+
+import importlib
+
+from vlarobot.backends.webots.config import (
+    ARM_JOINTS,
+    FINGER_JOINTS,
+    FINGER_SPEED,
+    FINGERS_INVERTED,
+    TIME_STEP,
+    TORSO_JOINT,
+)
+
 
 class RobotIO:
     def __init__(self):
-        self.robot = Supervisor()
+        self.robot = importlib.import_module("controller").Supervisor()
         self.ts = int(self.robot.getBasicTimeStep()) or TIME_STEP
         self.motors, self.sensors, self.fingers = {}, {}, []
         for name in ARM_JOINTS + [TORSO_JOINT]:
@@ -34,7 +44,10 @@ class RobotIO:
         else:
             self.closed_pos, self.open_pos = 0.0, self.full_stroke
         print("Fingers found:", len(self.fingers))
-        print("Gripper limits:", [(m.getMinPosition(), m.getMaxPosition()) for m, _ in self.fingers])
+        print(
+            "Gripper limits:",
+            [(m.getMinPosition(), m.getMaxPosition()) for m, _ in self.fingers],
+        )
         self.me = self.robot.getSelf()
         self.can_node = None
         self.step_raw(2)  # allow position sensors to initialize

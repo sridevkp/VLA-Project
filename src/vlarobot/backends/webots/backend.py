@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 import numpy as np
 
-from vlarobot.backends.webots.config import ARM_JOINTS, CAN_DEF, SAFETY_PROFILE, SETTINGS
+from vlarobot.backends.webots.config import (
+    ARM_JOINTS,
+    CAN_DEF,
+    HEAD_JOINTS,
+    SAFETY_PROFILE,
+    SETTINGS,
+    TORSO_JOINT,
+)
 from vlarobot.backends.webots.frames import Frames
 from vlarobot.backends.webots.gripper import Gripper
 from vlarobot.backends.webots.kinematics import Kinematics
@@ -31,6 +39,8 @@ from vlarobot.core.types import (
 )
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 
+LOGGER = logging.getLogger(__name__)
+
 
 class WebotsBackend:
     """Adapt the existing TIAGo controller devices to the core backend interface."""
@@ -49,37 +59,64 @@ class WebotsBackend:
         if self.camera is None:
             raise RuntimeError("Required Webots camera not found: Astra rgb")
         self.camera.enable(self.io.ts)
+        LOGGER.info("Webots RGB camera noise field: %s", self.io.camera_noise_value(self.camera))
+        initial_positions = self.io.joint_positions_from_fields()
         self._initial_joint_pos = {
-            name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS
+            name: initial_positions[name] for name in ARM_JOINTS + [TORSO_JOINT] + HEAD_JOINTS
         }
-        self._initial_finger_positions = [float(sensor.getValue()) for _, sensor in self.io.fingers]
+        self._initial_finger_positions = [
+            initial_positions[motor.getName()] for motor, _ in self.io.fingers
+        ]
         self._initial_can_translation = self.can_node.getField("translation").getSFVec3f()
         self._initial_can_rotation = self.can_node.getField("rotation").getSFRotation()
+        self._initial_base_translation = self.io.me.getField("translation").getSFVec3f()
+        self._initial_base_rotation = self.io.me.getField("rotation").getSFRotation()
         self._last_joint_pos = self._joint_positions()
         self._last_time = float(self.io.robot.getTime())
+        self._episode_start_time = self._last_time
         self._safety = SafetyMonitor(self._safety_limits())
         self._stopped = False
 
     def reset(self, scenario: ScenarioSpec, seed: int) -> Observation:
         if self._stopped:
             raise RuntimeError("Cannot reset a stopped backend.")
+        if SETTINGS.reset_mode != "soft":
+            raise NotImplementedError(
+                "reset_mode='reload' requires restarting Webots and reconnecting the simulator "
+                "transport; only 'soft' reset is supported in the current server lifecycle."
+            )
         if not isinstance(seed, int):
             raise TypeError("seed must be an integer.")
         if scenario.objects:
             raise NotImplementedError("Webots scenario spawning is scheduled for M2.")
 
+        positions = dict(self._initial_joint_pos)
+        positions.update(
+            {
+                motor.getName(): position
+                for (motor, _), position in zip(
+                    self.io.fingers, self._initial_finger_positions, strict=True
+                )
+            }
+        )
+        self.io.set_joint_positions(positions)
         self.can_node.getField("translation").setSFVec3f(self._initial_can_translation)
         self.can_node.getField("rotation").setSFRotation(self._initial_can_rotation)
+        self.io.me.getField("translation").setSFVec3f(self._initial_base_translation)
+        self.io.me.getField("rotation").setSFRotation(self._initial_base_rotation)
         self.io.robot.simulationResetPhysics()
-        for name, position in self._initial_joint_pos.items():
-            self.io.motors[name].setPosition(position)
-        for (motor, _), position in zip(
-            self.io.fingers, self._initial_finger_positions, strict=True
-        ):
-            motor.setPosition(min(max(position, motor.getMinPosition()), motor.getMaxPosition()))
-
+        can_node = self.io.robot.getFromDef(CAN_DEF)
+        if can_node is None:
+            raise RuntimeError(f"No node with DEF {CAN_DEF} after resetting physics.")
+        self.can_node = can_node
+        self.io.can_node = can_node
+        if self.io.robot.step(self.io.ts) == -1:
+            raise RuntimeError("Webots simulation stopped while restoring the reset pose.")
+        self.gripper.last_close_stalled = None
+        self.gripper.last_close_opening = None
+        self._episode_start_time = float(self.io.robot.getTime())
         self._last_joint_pos = self._joint_positions()
-        self._last_time = float(self.io.robot.getTime())
+        self._last_time = self._episode_start_time
         return self._observation()
 
     def step(self, n_steps: int = 1) -> Observation:
@@ -185,7 +222,7 @@ class WebotsBackend:
             height=height,
         )
         return Observation(
-            t=float(self.io.robot.getTime()),
+            t=float(self.io.robot.getTime()) - self._episode_start_time,
             rgb=image,
             depth=None,
             cam_info=camera_info,
@@ -217,6 +254,10 @@ class WebotsBackend:
                 _rotation_to_quaternion(end_effector[:3, :3]),
             ),
             gripper_opening=opening,
+            base_pose_world=Pose3D(
+                Vec3(*map(float, base_position)),
+                _rotation_to_quaternion(base_rotation),
+            ),
         )
 
     def _joint_positions(self) -> dict[str, float]:

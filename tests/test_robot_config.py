@@ -15,8 +15,10 @@ from vlarobot.backends.webots.config import (
     HEAD_JOINTS,
     IK_TOL,
     IK_TOL_GRASP,
-    PLACE_BASE,
+    IK_TOL_TRANSIT,
+    MAX_JOINT_STEP_RAD,
     PLACE_CLEAR,
+    PLACE_WORLD,
     SAFETY_PROFILE,
     SAFETY_PROFILE_NAME,
     SAFETY_SETTINGS_PATH,
@@ -32,12 +34,14 @@ from vlarobot.backends.webots.config import (
 def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert TIME_STEP == 32
     assert CAN_DEF == "CAN"
-    assert PLACE_BASE == [-1.07, -3.9, 0.8]
+    assert PLACE_WORLD == [-1.0, -4.3, 0.821]
     assert GRASP_Z == 0.02
     assert APPROACH_H == 0.12
     assert PLACE_CLEAR == 0.01
     assert IK_TOL == 0.015
     assert IK_TOL_GRASP == 0.005
+    assert IK_TOL_TRANSIT == 0.015
+    assert MAX_JOINT_STEP_RAD == 0.15
     assert ALIGN_TOL == 0.005
     assert GRIP_FORCE is None
     assert FINGER_SPEED == 0.03
@@ -53,6 +57,7 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     )
     assert URDF_PATH == CONTROLLER_DIR / "tiago.urdf"
     assert SETTINGS_PATH == Path(__file__).parents[1] / "configs" / "robot.yaml"
+    assert SETTINGS.reset_mode == "soft"
     assert SETTINGS.skip_align_check is True
     assert SETTINGS.max_tilt_deg == 15
     assert SETTINGS.min_grasp_open == 0.004
@@ -69,14 +74,14 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert SAFETY_SETTINGS_PATH == Path(__file__).parents[1] / "configs" / "safety.yaml"
     assert SAFETY_PROFILE_NAME == "original_envelope"
     assert SAFETY_PROFILE.workspace_min == (
-        -1.186885822749492,
-        -3.9580864458899137,
-        0.6648214194162648,
+        0.10367229767278827,
+        -1.0854553087033255,
+        0.652413946369596,
     )
     assert SAFETY_PROFILE.workspace_max == (
-        0.7727366605590086,
-        -0.11329506483472998,
-        1.063048982572836,
+        0.7844717,
+        -0.12312418,
+        1.09241395,
     )
     assert SAFETY_PROFILE.margin_m == 0.1
 
@@ -87,3 +92,24 @@ def test_robot_settings_reject_missing_and_unknown_yaml_keys(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="Invalid robot settings keys"):
         RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_reject_unknown_reset_mode(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "reset_mode: soft", "reset_mode: restart_everything"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="reset_mode must be either"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_accept_reload_as_a_deferred_lifecycle_option(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "reset_mode: soft", "reset_mode: reload"
+    )
+    reload_settings = tmp_path / "robot.yaml"
+    reload_settings.write_text(config, encoding="utf-8")
+
+    assert RobotSettings.from_yaml(reload_settings).reset_mode == "reload"

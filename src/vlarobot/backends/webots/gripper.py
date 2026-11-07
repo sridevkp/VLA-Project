@@ -8,6 +8,8 @@ class Gripper:
         self.io, self.vis = robot_io, visualization
         self.fingers = robot_io.fingers
         self.open_pos, self.closed_pos = robot_io.open_pos, robot_io.closed_pos
+        self.last_close_stalled = None
+        self.last_close_opening = None
 
     def values(self):
         return self.io.current_finger_values()
@@ -46,13 +48,15 @@ class Gripper:
         return ok
 
     def close(self):
+        self.last_close_stalled = False
         if not self.fingers:
+            self.last_close_opening = 0.0
             return False, 0.0
         for motor, _ in self.fingers:
             if GRIP_FORCE is not None:
                 motor.setAvailableForce(GRIP_FORCE)
             motor.setPosition(self.closed_pos)
-        previous, still = self.opening(), 0
+        previous, still, stalled = self.opening(), 0, False
         for i in range(300):
             if self.vis.step() == -1:
                 return False, 0.0
@@ -60,7 +64,10 @@ class Gripper:
             still = still + 1 if abs(current - previous) < 2e-5 else 0
             previous = current
             if i > 10 and still >= 15:
+                stalled = True
                 break
         opening = self.opening()
-        print(f"  fingers stalled at opening={opening:.4f} m")
+        self.last_close_stalled = stalled
+        self.last_close_opening = opening
+        print(f"  fingers close ended opening={opening:.4f} m stalled={stalled}")
         return opening > MIN_GRASP_OPEN, opening

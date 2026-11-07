@@ -43,6 +43,7 @@ def _sample_observation() -> Observation:
             base_pose=Pose2D(0.0, 0.0, 0.0),
             ee_pose=Pose3D(Vec3(0.1, 0.2, 0.3), (0.0, 0.0, 0.0, 1.0)),
             gripper_opening=0.04,
+            base_pose_world=Pose3D(Vec3(1.0, 2.0, 3.0), (0.0, 0.0, 0.0, 1.0)),
         ),
     )
 
@@ -74,7 +75,7 @@ def test_action_round_trip_preserves_nested_tuple_types() -> None:
 
 def test_protocol_version_mismatch_is_rejected_on_encode_and_decode() -> None:
     message = make_message("ping", 0)
-    message["protocol_version"] = PROTOCOL_VERSION + 1
+    message["protocol_version"] = PROTOCOL_VERSION - 1
 
     with pytest.raises(ProtocolVersionError, match="expected"):
         encode_message(message)

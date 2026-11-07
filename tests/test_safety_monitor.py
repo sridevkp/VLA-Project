@@ -126,15 +126,16 @@ def test_invalid_safety_limit_configuration_is_rejected(limits) -> None:
         SafetyLimits(**limits)
 
 
-def test_original_pick_place_waypoints_fit_original_envelope() -> None:
+def test_corrected_pick_place_waypoints_fit_original_envelope() -> None:
     waypoints = (
         (0.20367229767278827, -0.9854553087033255, 0.963048982572836),
-        (0.6727366605590026, -0.21329506483472999, 0.7648214194162674),
-        (0.6727366605590026, -0.21329506483472999, 0.8848214194162674),
-        (-1.0773279823208584, -3.8420458694668804, 0.9362847553793852),
-        (-1.0773279823208584, -3.8420458694668804, 0.8162847553793852),
-        (-1.086885822749492, -3.8580864458899136, 0.9351191204798371),
-        (-1.086885822749492, -3.8580864458899136, 0.8151191204798371),
+        (0.6844717005347478, -0.2231241764543362, 0.752413946369596),
+        (0.6844717005347478, -0.2231241764543362, 0.872413946369596),
+        (0.6005129252484253, -0.4255440732239515, 0.7573453591024615),
+        (0.6005129252484253, -0.4255440732239515, 0.7773453591024615),
+        (0.6005129252484253, -0.4255440732239515, 0.8773453591024615),
+        (0.6005129252484253, -0.4255440732239515, 0.8973453591024615),
+        (0.6844717005347478, -0.2231241764543362, 0.992413946369596),
     )
     profile = SAFETY_SETTINGS.profiles["original_envelope"]
     monitor = SafetyMonitor(
@@ -161,7 +162,7 @@ def test_original_pick_place_waypoints_fit_original_envelope() -> None:
 
 
 @pytest.mark.parametrize("profile_name", ["original_envelope", "strict"])
-def test_out_of_box_target_is_rejected_for_each_profile(profile_name: str) -> None:
+def test_old_base_frame_target_is_rejected_for_each_profile(profile_name: str) -> None:
     profile = SAFETY_SETTINGS.profiles[profile_name]
     monitor = SafetyMonitor(
         SafetyLimits(
@@ -177,7 +178,7 @@ def test_out_of_box_target_is_rejected_for_each_profile(profile_name: str) -> No
         gripper_opening=0.02,
     )
     target = EEPoseTarget(
-        Pose3D(Vec3(0.0, 0.0, 0.8), (0.0, 0.0, 0.0, 1.0)),
+        Pose3D(Vec3(-1.07, -3.9, 0.8), (0.0, 0.0, 0.0, 1.0)),
         gripper=None,
         duration=0.5,
     )

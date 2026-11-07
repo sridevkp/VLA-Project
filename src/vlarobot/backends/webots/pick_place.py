@@ -16,10 +16,11 @@ from vlarobot.backends.webots.config import (
     HEAD_PAN,
     HEAD_TILT,
     IK_TOL_GRASP,
+    IK_TOL_TRANSIT,
     LIFT_MIN,
     MAX_RETRIES,
-    PLACE_BASE,
     PLACE_CLEAR,
+    PLACE_WORLD,
     SKIP_ALIGN_CHECK,
     STOP_AFTER,
     TOOL_OFFSET,
@@ -36,15 +37,71 @@ class PickPlace:
         self.gripper_primed = False
         self.home_q = None
         self.can_z0_world = None
-        self.cartesian_waypoints = {}
+        self.place_base = None
+        self.cartesian_waypoints = []
 
     def _record_cartesian_waypoint(self, name, point):
         coordinates = tuple(float(value) for value in point)
-        self.cartesian_waypoints[name] = coordinates
+        self.cartesian_waypoints.append((name, coordinates))
+        self._append_trace(
+            {
+                "event": "waypoint",
+                "state": self.state,
+                "waypoint": name,
+                "base_xyz_m": coordinates,
+            }
+        )
+
+    @staticmethod
+    def _append_trace(record):
         log_path = os.environ.get("VLAROBOT_WAYPOINT_LOG")
         if log_path:
-            with Path(log_path).open("a", encoding="utf-8") as file:
-                file.write(json.dumps({"waypoint": name, "base_xyz_m": coordinates}) + "\n")
+            path = Path(log_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as file:
+                file.write(json.dumps(record) + "\n")
+
+    def _record_state_boundary(self, phase, state, next_state):
+        if not os.environ.get("VLAROBOT_WAYPOINT_LOG"):
+            return
+        self._append_trace(
+            {
+                "event": "state_boundary",
+                "phase": phase,
+                "state": state,
+                "next_state": next_state,
+                "sim_time_s": float(self.io.robot.getTime()),
+                "can_world_xyz_m": tuple(float(value) for value in self.io.can_node.getPosition()),
+                "base_world_xyz_m": tuple(float(value) for value in self.io.me.getPosition()),
+                "base_world_orientation_matrix": tuple(
+                    float(value) for value in self.io.me.getOrientation()
+                ),
+                "joint_positions_rad": {
+                    name: float(sensor.getValue()) for name, sensor in self.io.sensors.items()
+                },
+                "head_joint_positions_rad": self._head_joint_positions(),
+                "tool_base_xyz_m": tuple(float(value) for value in self.frames.tool_position()),
+                "gripper_opening_m": float(self.gripper.opening()),
+                "finger_positions_m": self.gripper.values(),
+                "close_stalled": self.gripper.last_close_stalled,
+                "close_opening_m": self.gripper.last_close_opening,
+                "finger_can_contact": self.io.can_contact_detected(),
+                "ik_error_m": self.motion.last_ik_error,
+                "ik_tilt_deg": self.motion.last_ik_tilt,
+                "ik_waypoint_index": self.motion.last_waypoint_index,
+                "ik_waypoint_count": self.motion.last_waypoint_count,
+                "ik_target_base_xyz_m": self.motion.last_target,
+            }
+        )
+
+    def _head_joint_positions(self):
+        positions = {}
+        for name in HEAD_JOINTS:
+            motor = self.io.robot.getDevice(name)
+            sensor = None if motor is None else motor.getPositionSensor()
+            if sensor is not None:
+                positions[name] = float(sensor.getValue())
+        return positions
 
     def initialize_posture(self):
         if TORSO_HEIGHT is not None:
@@ -96,20 +153,28 @@ class PickPlace:
 
         self.home_q = self.frames.current_q()
         self._record_cartesian_waypoint("home", self.ik.forward(self.home_q)[:3, 3])
+        self.io.enable_can_contact_tracking()
         return True
 
     def run(self):
         print("Starting pick-and-place")
         while self.vis.step() != -1 and self.state not in ("DONE", "FAILED"):
             finished = self.state
+            self._record_state_boundary("enter", finished, self.state)
 
             if self.state == "INIT":
                 can_base = self.frames.can_base_position()
                 self.grasp_tip = can_base + np.array([0, 0, GRASP_Z])
                 self.pregrasp = self.grasp_tip + np.array([0, 0, APPROACH_H])
-                self.place_tip = np.asarray(PLACE_BASE, dtype=float) + np.array(
-                    [0, 0, GRASP_Z + PLACE_CLEAR]
+                self.place_base = self.frames.world_to_base(PLACE_WORLD)
+                self._append_trace(
+                    {
+                        "event": "placement_target",
+                        "target_world_xyz_m": tuple(float(value) for value in PLACE_WORLD),
+                        "target_base_xyz_m": tuple(float(value) for value in self.place_base),
+                    }
                 )
+                self.place_tip = self.place_base + np.array([0, 0, GRASP_Z + PLACE_CLEAR])
                 self.place_above = self.place_tip + np.array([0, 0, APPROACH_H])
                 self._record_cartesian_waypoint("descend_grasp", self.grasp_tip)
                 self._record_cartesian_waypoint("pregrasp", self.pregrasp)
@@ -119,6 +184,7 @@ class PickPlace:
                 if not self.gripper.open(cycle=not self.gripper_primed):
                     print("[!] gripper failed to open; aborting")
                     self.state = "FAILED"
+                    self._record_state_boundary("exit", finished, self.state)
                     continue
                 self.gripper_primed = True
                 self.state = "PREGRASP"
@@ -175,9 +241,7 @@ class PickPlace:
                 print(f"  can rose {rose:.3f} m, can-to-tool {distance:.3f} m")
                 if ok and rose > LIFT_MIN and distance < 0.10:
                     held = self.frames.tool_position() - self.frames.can_base_position()
-                    self.place_tip = (
-                        np.asarray(PLACE_BASE, dtype=float) + np.array([0, 0, PLACE_CLEAR]) + held
-                    )
+                    self.place_tip = self.place_base + np.array([0, 0, PLACE_CLEAR]) + held
                     self.place_above = self.place_tip + np.array([0, 0, APPROACH_H])
                     self._record_cartesian_waypoint("transit", self.place_above)
                     self._record_cartesian_waypoint("place_descend", self.place_tip)
@@ -191,7 +255,9 @@ class PickPlace:
             elif self.state == "TRANSIT":
                 print("[TRANSIT]")
                 self.state = (
-                    "PLACE_DESCEND" if self.motion.move_linear(self.place_above) else "FAILED"
+                    "PLACE_DESCEND"
+                    if self.motion.move_linear(self.place_above, ik_tol=IK_TOL_TRANSIT)
+                    else "FAILED"
                 )
 
             elif self.state == "PLACE_DESCEND":
@@ -206,11 +272,21 @@ class PickPlace:
 
             elif self.state == "RETREAT":
                 print("[RETREAT]")
-                self.state = "HOME" if self.motion.move_linear(self.place_above) else "FAILED"
+                self.state = (
+                    "HOME"
+                    if self.motion.move_linear(self.place_above, ik_tol=IK_TOL_TRANSIT)
+                    else "FAILED"
+                )
 
             elif self.state == "HOME":
                 print("[HOME]")
                 self.vis.set_target(None)
+                self.motion.last_target = self.ik.forward(self.home_q)[:3, 3].tolist()
+                self.motion.last_ik_error = None
+                self.motion.last_ik_tilt = None
+                self.motion.last_waypoint_index = None
+                self.motion.last_waypoint_count = None
+                # HOME is joint-space motion; no IK tolerance applies.
                 self.motion.move_to_q(self.home_q, tol=0.02)
                 self.state = "DONE"
 
@@ -221,20 +297,19 @@ class PickPlace:
                     self.state = "FAILED"
                 else:
                     self.gripper.open()
-                    self.motion.move_linear(
-                        self.frames.tool_position() + np.array([0, 0, APPROACH_H])
-                    )
+                    retry_retreat = self.frames.tool_position() + np.array([0, 0, APPROACH_H])
+                    self._record_cartesian_waypoint("retry_retreat", retry_retreat)
+                    self.motion.move_linear(retry_retreat)
                     self.state = "INIT"
+
+            self._record_state_boundary("exit", finished, self.state)
 
             if STOP_AFTER and finished == STOP_AFTER:
                 print(f"Stopped after {finished}; next state would be {self.state}.")
                 break
 
         if os.environ.get("VLAROBOT_WAYPOINT_LOG"):
-            for name, point in self.cartesian_waypoints.items():
-                self._record_cartesian_waypoint(name, point)
-            with Path(os.environ["VLAROBOT_WAYPOINT_LOG"]).open("a", encoding="utf-8") as file:
-                file.write(json.dumps({"terminal_state": self.state}) + "\n")
+            self._append_trace({"event": "terminal_state", "state": self.state})
         print("Final state:", self.state)
         while self.vis.step() != -1:
             pass

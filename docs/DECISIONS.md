@@ -58,14 +58,13 @@
 - **Decision:** Derive workspace profiles from the original PickPlace flow's measured base-frame
   waypoints instead of guessing bounds. The `original_envelope` margin is 0.10 m and the tighter
   `strict` profile margin is 0.02 m. The legacy `PLACE_BASE = [-1.07, -3.9, 0.8]` is confirmed
-  at `controllers/tiago_controller/config.py:6` in pre-M1 commit `1b2e4da` and remains unchanged
-  in `configs/robot.yaml`. The original controller had no workspace limit. Its observed
-  `original_envelope` is the measured axis-aligned waypoint bounds expanded by 0.10 m; `strict`
-  uses the same observed bounds expanded by 0.02 m. The observed transit/placement points varied
-  between two original-controller runs; the profiles include both runs' extrema. Neither profile
-  is a validated safety limit: the envelope is a behavioral baseline only. Joint, velocity,
-  IK-tolerance, and invalid-command checks remain enabled, and `SafetyMonitor.validate()` logs
-  each rejection reason.
+  at `controllers/tiago_controller/config.py:6` in pre-M1 commit `1b2e4da`; this was the active
+  target when ADR-0002 was recorded. The original controller had no workspace limit. Those
+  historical profile bounds were later found to reflect the suspect target and were replaced by
+  ADR-0004. Neither the old nor corrected profile is a validated safety limit.
+- **Diagnostic qualification:** The original and current pick-and-place flows had no demonstrated
+  successful placement in the documented trials. The earlier waypoint set is evidence of commands
+  issued, not successful placement or a reachability proof.
 - **Measured original waypoints (base-frame meters):** home
   `(0.203672298, -0.985455309, 0.963048983)`, descend/grasp
   `(0.672736661, -0.213295065, 0.764821419)`, pregrasp/lift
@@ -80,6 +79,205 @@
   brain comparison was executed with `uv run python -m vlarobot.cli can-regression --seeds 10`; it
   produced `success=0/10` and `rejections=9`, with the first and only near-success still 0.560m from
   the target and repeated safety rejections in the `INIT`, `pregrasp`, and `place_descend` phases.
+  That 0.560m value compared a world-frame CAN point directly to a base-frame target and is not a
+  valid baseline-compatible placement metric; ADR-0003 corrects the metric.
   Webots resets currently replay the default scene, so seed variation does not yet imply scenario
   randomization (scenario generation is M2). As of this date, the M1-06 gate is not met and no
   success claim is made.
+
+## ADR-0003: Preserve full base pose for frame-correct regression metrics
+
+- **Date:** 2026-11-07
+- **Status:** Accepted
+- **Supersedes:** ADR-0002's protocol-version-1 choice.
+- **Context:** The scripted brain regression compared the CAN's world-frame ground-truth position
+  directly with `PLACE_BASE`, although the original controller compares both in the robot base
+  frame. `RobotState` previously exposed only a planar base pose, which cannot reproduce the
+  original 3D transform over the simulator/brain boundary.
+- **Decision:** Add optional `RobotState.base_pose_world` as a full `Pose3D`, populate it from
+  Webots' base position and rotation, and increment the msgpack protocol version to 2. Compute
+  regression distance as
+  `norm(R_world_from_base.T @ (CAN_world - base_position_world) - target_base)`, matching
+  `Frames.world_to_base()` and the original baseline scoring formula.
+- **Consequences:** Protocol version 1 peers now fail fast as incompatible. Fake-backend and
+  round-trip tests cover the added pose and transform.
+
+## ADR-0004: Use an approved world-frame CAN placement target
+
+- **Date:** 2026-11-07
+- **Status:** Accepted; live regression blocked by existing IK threshold
+- **Context:** The historical `PLACE_BASE=[-1.07,-3.9,0.8]` was unreachable in the coded base frame.
+  The existing workspace profiles had been derived from that path and could not remain the active
+  profiles. The user approved the world target `(-1.0,-4.3,0.821)` m as a CAN-center target and
+  authorized regenerating the workspace profiles, while explicitly retaining all IK and safety
+  thresholds.
+- **Decision:** Store `place_world` in `configs/robot.yaml`; convert it at runtime through
+  `Frames.world_to_base()` in the Webots PickPlace flow and through `RobotState.base_pose_world` in
+  the brain regression. Score placement by transforming the final CAN world pose to the final robot
+  base frame and measuring its Euclidean distance to the same target transformed into base.
+  Preserve the old target only in historical controller sources.
+- **Geometry evidence:** In `worlds/factory.wbt`, the table top is z=0.75 m; the target CAN bottom
+  is z=0.7599 m. The target is 0.209707 m from the nearest tabletop edge, or 0.177957 m after
+  subtracting the CAN radius. Initial-CAN center distance is 0.219419 m horizontally and 0.219649 m
+  in 3D; for parallel cylinders the surface gap is 0.155919 m. Webots R2025a collision shapes give
+  conservative horizontal-projection surface-clearance lower bounds of 0.2826 m (wrench),
+  0.3290 m (hammer), 0.5246 m (apple), 0.7974 m (paint bucket), and 1.1517 m (screwdriver).
+  Darwin-op is also near the target; its articulated collision geometry is not included in these
+  prop-shape calculations. This is a geometric screen, not proof of dynamic collision clearance or
+  stable placement.
+- **Workspace profiles:** Replace both profiles using the corrected nominal commanded waypoints.
+  `original_envelope` is their axis-aligned bounds plus 0.10 m per axis; `strict` is the same bounds
+  plus 0.02 m. The original controller had no workspace limit. The envelope is a behavioral
+  baseline, not a validated safety limit. Joint limits, velocity limits, IK checks, and invalid
+  command rejection remain active, and rejection reasons remain logged.
+- **Reachability result:** With the configured torso at 0.35 m, IKPy reaches the CAN pregrasp,
+  grasp/descend, lift, and place-descend targets with <0.000001 m position error. The place-above
+  transit target has 0.010475 m error and 0.257 degrees tilt. `Motion.move_linear()` used the
+  then-current 0.005 m `IK_TOL_GRASP` and failed at waypoint 7/7. At the time of this ADR, no target,
+  IK tolerance, or safety threshold had been changed. ADR-0006 records the later approved,
+  state-specific transit tolerance decision.
+- **Diagnostics:** Add opt-in JSONL traces for controller and brain regression state boundaries,
+  commands/achieved poses, IK result and waypoint, gripper opening/stall/contact evidence, and CAN
+  world/base poses. Logging does not change the default action path. A live corrected-target
+  comparison remains unverified.
+
+## ADR-0005: Restore the default Webots scene between episodes
+
+- **Date:** 2026-11-07
+- **Status:** Accepted for soft-reset behavioral equivalence
+- **Context:** Repeated brain episodes exposed stale CAN-node references and state drift in the
+  robot, object, gripper telemetry, and simulation-time observations. Seeded episodes must begin
+  from the same default scene before their task results can be compared.
+- **Decision:** On reset, reacquire the CAN node by DEF, restore captured arm/torso/head and finger
+  joint positions through Supervisor joint fields, restore the robot base and CAN transforms,
+  reset physics, clear gripper close-stall telemetry, and report episode-relative observation
+  time. If an initial joint field is outside that motor's legal range, use the nearest legal limit
+  and emit a warning. Do not change task targets, safety bounds, or IK thresholds as part of reset
+  handling.
+- **Equivalence tolerance:** Compare reset poses, arm joints, and CAN pose at `1e-3 m` and
+  `1e-3 rad`. The former `1e-6` threshold was below meaningful repeatability for the live Webots
+  scene; observed transform drift was on the order of `1e-5 m` / `1e-5 rad`. The revised tolerance
+  remains tighter than the millimeter-scale waypoint comparison used by M1. RGB is reported
+  separately and is not used as a reset pass/fail threshold.
+- **Evidence:** Simulator-free reset tests pass. Webots R2025a reported the startup torso field as
+  `-0.0001722422` with legal range `[0.0, 0.35]`, so the baseline is normalized to `0.0` with a
+  warning. A live three-episode probe ran with one planned INIT/PREGRASP command sequence, replayed
+  unchanged in episodes 2 and 3. Both comparisons passed: worst reset arm-joint delta
+  `4.72e-10 rad`, base position `3.12e-8 m`, base orientation `2.96e-7 rad`, CAN position `0 m`,
+  commanded joint waypoint delta `0`, achieved waypoint position `2.22e-6 m`, and gripper opening
+  delta `1.80e-8 m`. The state sequence was `INIT, PREGRASP` for all three episodes.
+- **RGB diagnosis:** The camera's Webots `noise` field was `0.0`. Reset images are read after a
+  simulation step (`t=0` is episode-relative), not before the first step/render. Across the two
+  replay comparisons, reset RGB mean absolute differences were `0.00171` and `0.00206` (8x8-window
+  SSIM `0.999992` and `0.999971`). After 1, 3, and 5 warm-up steps, MAD remained below `0.0061`
+  and SSIM above `0.99993`; the difference does not strictly vanish, but it is sparse render
+  variation rather than camera noise or an early-frame read bug. Peak per-pixel differences ranged
+  from 54 to 92 levels while the image-wide MAD remained below `0.0061`.
+- **Reset mode:** `configs/robot.yaml` exposes `reset_mode: soft | reload`, defaulting to `soft`.
+  `reload` is intentionally deferred: reloading restarts the Webots controller/server process and
+  requires ZMQ client reconnection/retry semantics, so it is not a cheap in-process reset. Selecting
+  it currently fails explicitly. Measured soft reset calls took `0.666`, `0.704`, and `0.838 s`
+  (mean `0.736 s`) in the probe. Reload timing is unavailable because reload is not implemented.
+- **Consequences:** Multi-seed regression results cannot yet be treated as equivalent-start
+  comparisons solely on reset grounds; the live behavioral reset gate now passes at the revised
+  tolerance. Transit position tolerance is addressed separately in ADR-0006; M1-06 remains pending
+  live equivalence and completion runs.
+
+## ADR-0006: Scope relaxed position tolerance to held-object transit
+
+- **Date:** 2026-11-07
+- **Status:** Accepted; live regression verification pending
+- **Context:** The corrected place-above target has a repeatable IK position error near `0.010475 m`
+  with tilt near `0.257°`. The current `0.005 m` grasp tolerance rejects the final point of the
+  linear TRANSIT path even though point-level IK is within the existing `0.015 m` general tolerance.
+  Grasping, descent, and final placement still require precise positioning.
+- **Diagnostic evidence:** With torso at `0.35 m`, the lift endpoint error was `0.000000030 m`.
+  Seven straight-line transit waypoint errors were `0.000000158`, `0.000000227`, `0.000000005`,
+  `0`, `0`, `0.002703109`, and `0.010473834 m`; the final point is the first point beyond `0.005 m`.
+  The endpoint tilt was `0.256616°`. The minimum arm-joint-limit margin reached zero at the last
+  waypoints; arm 6 was at its `-1.39 rad` lower bound. The endpoint is within `0.015 m`.
+- **Ordered alternatives tested:** IK was warm-started from the preceding waypoint and deterministically
+  seeded. A seeded multi-start diagnostic selecting the nearest candidate within grasp tolerance
+  found no candidate at or below `0.005 m` at the endpoint. An elevated via-route was also evaluated;
+  its intermediate IK errors reached `0.091506345 m` and its final endpoint remained about
+  `0.010475 m`, so it did not solve the path under the original threshold. No new transit path was
+  adopted.
+- **Decision:** Warm-start each path waypoint from the previous joint solution. On an infeasible
+  warm start, use deterministic seeded restarts and select the nearest feasible joint solution.
+  Return a feasible warm-start solution immediately to avoid unnecessary restart cost. Add
+  `ik_tol_transit: 0.015` and use it only for TRANSIT and RETREAT IK. HOME is
+  joint-space motion and does not perform IK. Continue enforcing the existing `MAX_TILT_DEG=15`
+  limit during transit (including while the CAN is held). Keep `IK_TOL_GRASP=0.005 m` for
+  DESCEND, LIFT, PLACE_DESCEND, and other grasp-related moves.
+- **Rationale:** Held-object transit does not require the grasp/contact positioning precision needed
+  for approach, closure, or final placement. The final placement criterion remains unchanged:
+  CAN-to-target distance at most `0.10 m` in the base frame, and the complete episode must reach
+  DONE at HOME. This tolerance is not a placement-success substitute.
+- **Unchanged constraints:** No placement target, safety bound, joint/velocity limit, or tilt
+  threshold changed. M1-06a and M1-07 remain unverified pending their live runs.
+
+## ADR-0007: Bound sequential IK and compare swept transit paths
+
+- **Date:** 2026-11-07
+- **Status:** Implemented for Webots-free analysis; live verification pending
+- **Context:** The unbounded linear IK solver could jump between IK branches. In the seeded
+  full-flow profile, arm 7 jumped `3.159 rad` at DESCEND waypoint 2 and `3.908 rad` at TRANSIT
+  waypoint 5. Arm 6 reached its `-1.39 rad` lower limit during the final transit waypoints.
+- **Decision:** Add `max_joint_step_rad: 0.15` to `configs/robot.yaml`. Each linear IK waypoint is
+  solved within the intersection of real joint limits and a per-joint `q_previous ± 0.15 rad`
+  trust region. If no in-region IK solution satisfies the state's existing position and tilt
+  tolerances, fail the move with the best-error diagnostic rather than accepting a branch jump.
+  All joint-space motor targets, including PREGRASP and HOME, are interpolated with the same
+  maximum step. `Kinematics.interpolate_joint_path()` is shared by the Webots and brain paths.
+- **Regression evidence:** A reachable pregrasp target solved from a seed offset by `-0.5 rad` on
+  arm 1 had a feasible unrestricted solution requiring a `0.468583 rad` largest joint delta. The
+  bounded solve failed clearly with a best position error of `0.144119 m`. The real scripted
+  Cartesian sequence passed its IK checks with every adjacent joint step at or below `0.15 rad`.
+  The current target still has zero minimum joint-limit margin: arm 6 reaches its `-1.39 rad`
+  limit. The bounded solver prevents branch jumps but does not create limit margin.
+- **Continuity audit:** With the legal initial arm pose and seed 0, the full INIT-to-HOME IK profile
+  contained 48 records, including stationary INIT, CLOSE, and RELEASE records. No waypoint exceeded
+  `0.15 rad`; 16 were flagged because the joint-limit margin was below `0.05 rad` (including
+  stationary states at a limit). TRANSIT had seven such flags, with arm 6 at its lower limit from
+  waypoint 5 through 7. The full per-joint table is reproducible with
+  `uv run python scripts/audit_can_path.py`. This is a Webots-free IK profile, not a physical motion
+  or collision test.
+- **Metric reconciliation:** The latest seed-0 output from
+  `uv run python scripts/audit_can_path.py` is `0.010475481 m` endpoint error and `0.256656122°`
+  endpoint tilt. It supersedes earlier profile readings `0.010473834 m / 0.256616°` and
+  `0.010475343 m / 0.256653°`; those are historical results from prior solver/RNG executions, not
+  values from the current deterministic path audit.
+- **Transit comparison:** With the approved target and a 0.02-rad FK sweep resolution, the Cartesian path had
+  maximum command step `0.150000 rad`, minimum joint-limit margin approximately `0 rad`, maximum
+  tool tilt `0.263349°`, minimum payload/table clearance `0.120158 m`, and minimum projected
+  payload/object clearance `0.116168 m` (hammer). Joint-space interpolation used five segments,
+  maximum step `0.137162 rad`, minimum joint-limit margin approximately `0 rad`, maximum tilt
+  `2.192890°`, minimum payload/table clearance `0.112915 m`, and minimum projected
+  payload/object clearance `0.118443 m` (hammer). Both paths remain within the configured
+  `0.15 rad` step and `15°` tilt limits, with positive estimated payload clearances. Object checks
+  use horizontal projection proxies inferred from Webots R2025a scene geometry; the arm links,
+  dynamic collisions, and exact swept volumes are not modeled.
+- **Recommendation:** Keep the Cartesian line for now. It has about `7.2 mm` more estimated
+  tabletop clearance and about `1.93°` less peak tilt, while meeting the same joint-step cap. The
+  joint-space remedy is implemented in the shared interpolation helper and evaluated in the
+  Webots-free swept-path analysis, but is not selected as the default transit strategy.
+- **Placement search:** A 0.10-m grid over the factory tabletop applied a 0.10-m edge inset,
+  0.15-m spacing from the starting CAN, and 0.15-m projected surface clearance from other objects.
+  Of 534 geometrically eligible points, 16 passed the sampled IK/trust-region descent checks.
+  Excluding the fixed LIFT start pose when scoring target-specific route margin, the best three
+  (world coordinates in meters) were:
+  1. `(-0.188828, -4.190293, 0.821100)`: minimum margin `0.043619 rad`, maximum waypoint delta
+     `0.149989 rad`; base `(0.466393, 0.381651, 0.725361)`.
+  2. `(-0.688828, -4.190293, 0.821100)`: minimum margin `0.031087 rad`, maximum delta
+     `0.149961 rad`; base `(0.481472, -0.117945, 0.738648)`.
+  3. `(-0.588828, -4.190293, 0.821100)`: minimum margin `0.028296 rad`, maximum delta
+     `0.149998 rad`; base `(0.478456, -0.018026, 0.735990)`.
+  The current target does not have the requested `0.05 rad` margin; its target-route margin is
+  approximately zero. No candidate or target was applied. All candidates remain research
+  diagnostics, not validated safe placements.
+- **Comparison tooling:** `scripts/prepare_original_comparison.py` prepares a temporary original
+  worktree with the approved world target, frame conversion, IK seed 0, stop-after-LIFT behavior,
+  external-controller world setting, and JSONL state/waypoint trace schema. The CLI
+  `compare-traces` reports the first divergent state/waypoint. Synthetic trace tests cover match,
+  joint divergence, and waypoint-count mismatch. These tools do not constitute live M1-06a
+  evidence; M1-06a and M1-07 remain unverified.

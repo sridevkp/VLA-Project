@@ -6,7 +6,7 @@ import math
 import sys
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import yaml
 
@@ -60,12 +60,15 @@ class SafetySettings:
 class RobotSettings:
     time_step: int
     can_def: str
-    place_base: tuple[float, float, float]
+    reset_mode: Literal["soft", "reload"]
+    place_world: tuple[float, float, float]
     grasp_z: float
     approach_h: float
     place_clear: float
     ik_tol: float
     ik_tol_grasp: float
+    ik_tol_transit: float
+    max_joint_step_rad: float
     align_tol: float
     skip_align_check: bool
     max_tilt_deg: float
@@ -104,9 +107,11 @@ class RobotSettings:
             missing = sorted(expected - actual)
             extra = sorted(actual - expected)
             raise ValueError(f"Invalid robot settings keys; missing={missing}, extra={extra}")
+        if values.get("reset_mode") not in {"soft", "reload"}:
+            raise ValueError("reset_mode must be either 'soft' or 'reload'.")
 
         for key in (
-            "place_base",
+            "place_world",
             "tool_offset",
             "gripper_opening_limits",
             "arm_joints",
@@ -143,12 +148,14 @@ URDF_PATH = CONTROLLER_DIR / SETTINGS.urdf_filename
 # These names preserve the original controller module imports and values.
 TIME_STEP = SETTINGS.time_step
 CAN_DEF = SETTINGS.can_def
-PLACE_BASE = list(SETTINGS.place_base)
+PLACE_WORLD = list(SETTINGS.place_world)
 GRASP_Z = SETTINGS.grasp_z
 APPROACH_H = SETTINGS.approach_h
 PLACE_CLEAR = SETTINGS.place_clear
 IK_TOL = SETTINGS.ik_tol
 IK_TOL_GRASP = SETTINGS.ik_tol_grasp
+IK_TOL_TRANSIT = SETTINGS.ik_tol_transit
+MAX_JOINT_STEP_RAD = SETTINGS.max_joint_step_rad
 ALIGN_TOL = SETTINGS.align_tol
 SKIP_ALIGN_CHECK = SETTINGS.skip_align_check
 MAX_TILT_DEG = SETTINGS.max_tilt_deg

@@ -1,6 +1,6 @@
 # AGENTS.md — Rules for coding agents (VLA Robotics Project)
 
-Read `docs/ARCHITECTURE_AND_PLAN.md` before any task. It is the source of truth for architecture, interfaces, milestones and acceptance tests. If a task conflicts with it, stop and report the conflict instead of improvising.
+Read `docs/ARCHITECTURE.md` before any task. It is the source of truth for architecture, interfaces, milestones and acceptance tests. If a task conflicts with it, stop and report the conflict instead of improvising.
 
 ## Project in one paragraph
 Risk-aware, world-model-driven VLA system for a TIAGo robot in Webots. Pure-Python core (no sim/ROS imports), three processes (sim, brain, model server) over ZeroMQ+msgpack in deterministic lockstep. Must run on **Windows and Linux**.

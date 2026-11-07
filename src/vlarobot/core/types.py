@@ -56,6 +56,7 @@ class RobotState:
     ee_pose: Pose3D
     gripper_opening: float
     gripper_holding: bool | None = None
+    base_pose_world: Pose3D | None = None
 
 
 @dataclass

@@ -141,4 +141,5 @@ class FakeBackend:
             base_pose=Pose2D(0.0, 0.0, 0.0),
             ee_pose=Pose3D(Vec3(0.5, 0.0, 0.5), (0.0, 0.0, 0.0, 1.0)),
             gripper_opening=0.045,
+            base_pose_world=Pose3D(Vec3(0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
         )

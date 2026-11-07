@@ -117,6 +117,7 @@ class RobotState:
     joint_pos: dict[str, float]; joint_vel: dict[str, float]
     base_pose: Pose2D; ee_pose: Pose3D; gripper_opening: float
     gripper_holding: bool | None  # heuristic, may be None
+    base_pose_world: Pose3D | None # full robot-base pose in world frame, for exact frame transforms
 
 # Action = discriminated union; every action is in the BASE frame, SI units
 class Action: ...
@@ -154,7 +155,8 @@ class Verifier(Protocol):   def check(self, task, predicted, observed) -> Verify
 
 - ZeroMQ `REQ/REP` (lockstep) with `msgpack`; images as raw bytes with shape/dtype header (or JPEG for dashboard streaming only).
 - Messages: `reset`, `step`, `apply`, `get_gt`, `shutdown`, `ping`; every reply carries `sim_time`, `seq`, and `error?`.
-- Versioned: include `protocol_version`; mismatch ⇒ hard fail.
+- Versioned: include `protocol_version`; mismatch ⇒ hard fail. Protocol version 2 carries the
+  optional full 3D world-frame base pose in `RobotState`; peers using version 1 are incompatible.
 - Default `tcp://127.0.0.1:5555`; configurable so Windows-Webots ↔ WSL2-brain works.
 
 ### 3.5 World model contents (staged)
@@ -235,7 +237,20 @@ Each milestone has an **acceptance test** an agent can run; a milestone is not d
 ### M1 — Port controller behind interfaces (P0, ~1–2 weeks)
 - Move `controllers/tiago_controller/*` into `backends/webots/` unchanged in behaviour; build `SimServer` + `ZmqBackendClient` implementing `RobotBackend`; add `FakeBackend` (no sim) for tests.
 - Convert `config.py` constants to YAML-backed typed config (keep defaults identical).
-- **Acceptance:** regression test — scripted pick-and-place of `CAN` via the brain process succeeds at the same rate as the original controller over ≥10 seeded runs; `FakeBackend` unit tests pass in CI.
+- **M1-06a refactor equivalence:** run the original controller from a temporary worktree and the
+  brain-driven policy with the approved `PLACE_WORLD` target in the same factory world. Compare only
+  the prefix the original actually completes: `INIT → PREGRASP → DESCEND → CLOSE → LIFT`. Require
+  the same state sequence and per-state commanded joint and end-effector waypoints within
+  `1e-3 rad` / `1e-3 m`, over at least five runs of each implementation with deterministic IK
+  seeding. Report the first divergent state or waypoint. This is a prefix equivalence test, not a
+  successful-placement claim.
+- **M1-07 scripted-expert hardening (required before M2):** execute the complete
+  `INIT → PREGRASP → DESCEND → CLOSE → LIFT → TRANSIT → PLACE_DESCEND → RELEASE → RETREAT → HOME`
+  flow in 20 Webots episodes. At least 80% must finish at `DONE` after reaching `HOME` and place the
+  CAN within `0.10 m` of the target, measured in the robot base frame. Preserve JSONL state-boundary,
+  commanded/achieved pose, IK, joint, gripper/stall/contact, and CAN world/base trace evidence.
+- **Acceptance:** M1-06a and M1-07 live evidence meet the criteria above; `FakeBackend` unit tests
+  pass in CI. Keep M1-06 pending live runs and do not start M2 until both gates are accepted.
 
 ### M2 — Evaluation & data harness (P0, ~1 week)
 - `ScenarioSpec` + seeded scenario generator (object poses/colours/types, obstacles; Webots Supervisor spawns/moves nodes).

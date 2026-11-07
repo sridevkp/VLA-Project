@@ -1,15 +1,21 @@
 """Webots device discovery and low-level simulation I/O."""
 
 import importlib
+import logging
+import math
+from typing import Any
 
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     FINGER_JOINTS,
     FINGER_SPEED,
     FINGERS_INVERTED,
+    HEAD_JOINTS,
     TIME_STEP,
     TORSO_JOINT,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class RobotIO:
@@ -17,7 +23,7 @@ class RobotIO:
         self.robot = importlib.import_module("controller").Supervisor()
         self.ts = int(self.robot.getBasicTimeStep()) or TIME_STEP
         self.motors, self.sensors, self.fingers = {}, {}, []
-        for name in ARM_JOINTS + [TORSO_JOINT]:
+        for name in ARM_JOINTS + [TORSO_JOINT] + HEAD_JOINTS:
             motor = self.robot.getDevice(name)
             if motor is None:
                 raise RuntimeError(f"Required Webots motor not found: {name}")
@@ -65,5 +71,86 @@ class RobotIO:
         self.step_raw(1)
         return self.can_node
 
+    def enable_can_contact_tracking(self):
+        if self.me is None or self.can_node is None:
+            raise RuntimeError("Robot and CAN nodes must be initialized before contact tracking.")
+        self.me.enableContactPointsTracking(self.ts, includeDescendants=True)
+
+    def can_contact_detected(self):
+        if self.me is None or self.can_node is None:
+            raise RuntimeError("Robot and CAN nodes must be initialized before contact queries.")
+        can_id = self.can_node.getId()
+        return any(
+            contact.getNodeId() == can_id
+            for contact in self.me.getContactPoints(includeDescendants=True)
+        )
+
     def current_finger_values(self):
         return [round(s.getValue(), 4) for _, s in self.fingers]
+
+    def camera_noise_value(self, camera: Any) -> float | None:
+        node = self.robot.getFromDevice(camera._tag)
+        if node is None:
+            raise RuntimeError("No Webots node found for the RGB camera.")
+        noise_field = node.getField("noise")
+        return None if noise_field is None else float(noise_field.getSFFloat())
+
+    def joint_positions_from_fields(self) -> dict[str, float]:
+        motors = dict(self.motors)
+        motors.update({motor.getName(): motor for motor, _ in self.fingers})
+        positions = {}
+        for name, motor in motors.items():
+            position = self._joint_position_field(motor, name).getSFFloat()
+            if not math.isfinite(position):
+                raise RuntimeError(f"Non-finite reset baseline for joint {name!r}: {position}.")
+            minimum = motor.getMinPosition()
+            maximum = motor.getMaxPosition()
+            valid_position = min(max(position, minimum), maximum)
+            if valid_position != position:
+                LOGGER.warning(
+                    "Reset baseline for joint %s (%s) is outside [%s, %s]; "
+                    "using nearest legal limit %s.",
+                    name,
+                    position,
+                    minimum,
+                    maximum,
+                    valid_position,
+                )
+            positions[name] = valid_position
+        return positions
+
+    def set_joint_positions(self, positions: dict[str, float]) -> None:
+        motors = dict(self.motors)
+        motors.update({motor.getName(): motor for motor, _ in self.fingers})
+        for name, position in positions.items():
+            motor = motors.get(name)
+            if motor is None:
+                raise ValueError(f"Unknown joint motor {name!r}.")
+            if (
+                not math.isfinite(position)
+                or not motor.getMinPosition() <= position <= motor.getMaxPosition()
+            ):
+                raise ValueError(f"Invalid reset position for joint {name!r}: {position}.")
+            position_field = self._joint_position_field(motor, name)
+            position_field.setSFFloat(position)
+            motor.setPosition(position)
+
+    def _joint_position_field(self, motor: Any, name: str) -> Any:
+        node = self.robot.getFromDevice(motor._tag)
+        if node is None:
+            raise RuntimeError(f"No Webots node for joint motor {name!r}.")
+        node = node.getParentNode()
+        while node is not None:
+            if node.getTypeName() in {"HingeJoint", "SliderJoint"}:
+                parameters = node.getField("jointParameters")
+                parameter_node = parameters.getSFNode() if parameters is not None else None
+                position_field = (
+                    parameter_node.getField("position")
+                    if parameter_node is not None
+                    else node.getField("position")
+                )
+                if position_field is None:
+                    break
+                return position_field
+            node = node.getParentNode()
+        raise RuntimeError(f"No writable Webots joint position field for {name!r}.")

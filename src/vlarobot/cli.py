@@ -1,5 +1,6 @@
 """Command-line entry point for project tools."""
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -74,17 +75,31 @@ def can_regression(
         Literal["interpolated", "safe_via"] | None,
         typer.Option(help="PREGRASP route; defaults to configs/robot.yaml."),
     ] = None,
+    pregrasp_realign: Annotated[
+        bool | None,
+        typer.Option(
+            "--pregrasp-realign/--no-pregrasp-realign",
+            help="Re-align PREGRASP after base tilt; defaults to configs/robot.yaml.",
+        ),
+    ] = None,
     stop_after: Annotated[
         Literal["PREGRASP", "LIFT"] | None,
         typer.Option(help="Stop this watched diagnostic run after PREGRASP or LIFT."),
     ] = None,
+    timings: bool = typer.Option(
+        False,
+        "--timings",
+        help="Print opt-in wall-time counters for IK, transport, trace writes, and diagnostics.",
+    ),
 ) -> None:
     """Run a brain-side scripted CAN policy over repeated seeds and summarize the outcome."""
     client = ZmqBackendClient(endpoint)
     policy = ScriptedCanPolicy(
         trace_path=trace_log,
         pregrasp_route=pregrasp_route,
+        pregrasp_realign=pregrasp_realign,
         stop_after=stop_after,
+        timing_enabled=timings,
     )
     results = []
     try:
@@ -95,7 +110,18 @@ def can_regression(
             typer.echo(
                 f"seed={seed} success={result.success} rejections={result.rejections} "
                 f"final_distance={result.final_target_distance:.3f}m state={result.final_state} "
-                f"failure_state={result.failure_state} failure_reason={result.failure_reason}"
+                f"failure_state={result.failure_state} failure_reason={result.failure_reason} "
+                f"pregrasp_realign={result.pregrasp_realign} "
+                f"home_reached={result.home_reached} "
+                f"place_distance_ok={result.place_distance_ok} "
+                f"can_height_ok={result.can_height_ok} can_tilt_ok={result.can_tilt_ok} "
+                f"can_height_error_m={_optional_float(result.can_height_error_m, 4)} "
+                f"can_tilt_deg={_optional_float(result.can_tilt_deg, 2)} "
+                f"max_base_drift_m={_optional_float(result.max_base_drift_m, 6)} "
+                f"max_base_drift_yaw_deg={_optional_float(result.max_base_drift_yaw_deg, 3)} "
+                f"max_base_tilt_deg={_optional_float(result.max_base_tilt_deg, 3)} "
+                f"torso_start_rad={_optional_float(result.torso_start_rad, 6)} "
+                f"torso_end_rad={_optional_float(result.torso_end_rad, 6)}"
             )
             for state, sim_seconds in policy.state_sim_durations.items():
                 settle_seconds = policy.state_settle_durations.get(state, 0.0)
@@ -104,9 +130,105 @@ def can_regression(
                     f"  timing {state}: sim={sim_seconds:.3f}s "
                     f"settle={settle_seconds:.3f}s wall={wall_seconds:.3f}s"
                 )
+            if timings:
+                _print_timing_summary(policy)
         successes = sum(1 for result in results if result.success)
         rejections = sum(result.rejections for result in results)
         typer.echo(f"summary success={successes}/{seeds} rejections={rejections}")
+    finally:
+        client.close()
+
+
+@app.command("repeat-check")
+def repeat_check(
+    endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
+    episodes: int = typer.Option(2, min=2, help="Consecutive episodes in one server session."),
+    seed: int = typer.Option(0, help="Same seed for every episode."),
+    stop_after: Annotated[
+        Literal["PREGRASP", "LIFT"] | None,
+        typer.Option(help="Stop each episode after PREGRASP or LIFT."),
+    ] = "PREGRASP",
+    pregrasp_route: Annotated[
+        Literal["interpolated", "safe_via"] | None,
+        typer.Option(help="PREGRASP route; defaults to configs/robot.yaml."),
+    ] = None,
+    pregrasp_realign: Annotated[
+        bool | None,
+        typer.Option(
+            "--pregrasp-realign/--no-pregrasp-realign",
+            help="Re-align PREGRASP after base tilt; defaults to configs/robot.yaml.",
+        ),
+    ] = None,
+    trace_log: Annotated[
+        Path | None, typer.Option(help="Append per-state trace records to this JSONL.")
+    ] = None,
+    measured_tolerance: float = typer.Option(
+        1e-3,
+        min=0.0,
+        help="Allowed change in measured sensors/poses between episodes (m, rad, or matrix units).",
+    ),
+    timings: bool = typer.Option(
+        False,
+        "--timings",
+        help="Print opt-in wall-time counters for each episode.",
+    ),
+) -> None:
+    """Repeat the same seeded episode in one server session and diff reset fingerprints."""
+    client = ZmqBackendClient(endpoint)
+    policy = ScriptedCanPolicy(
+        trace_path=trace_log,
+        pregrasp_route=pregrasp_route,
+        pregrasp_realign=pregrasp_realign,
+        stop_after=stop_after,
+        timing_enabled=timings,
+    )
+    results = []
+    try:
+        client.ping()
+        for episode in range(episodes):
+            result = policy.execute(client, seed)
+            results.append(result)
+            typer.echo(
+                f"episode={episode} seed={seed} final_state={result.final_state} "
+                f"success={result.success} pregrasp_realign={result.pregrasp_realign} "
+                f"max_base_drift_m={_optional_float(result.max_base_drift_m, 6)} "
+                f"max_base_drift_yaw_deg={_optional_float(result.max_base_drift_yaw_deg, 3)} "
+                f"max_base_tilt_deg={_optional_float(result.max_base_tilt_deg, 3)} "
+                f"torso_start_rad={_optional_float(result.torso_start_rad, 6)} "
+                f"torso_end_rad={_optional_float(result.torso_end_rad, 6)} "
+                f"fingerprint={'present' if result.reset_fingerprint is not None else 'missing'}"
+            )
+            if timings:
+                _print_timing_summary(policy)
+
+        first = results[0]
+        comparisons = []
+        for index, result in enumerate(results[1:], start=1):
+            comparison = _fingerprint_comparison(
+                first.reset_fingerprint,
+                result.reset_fingerprint,
+                measured_tolerance,
+            )
+            comparisons.append(comparison)
+            typer.echo(
+                f"fingerprint_diff episode=0->{index} "
+                f"commanded={len(comparison.commanded)} "
+                f"measured={len(comparison.measured)} "
+                f"transient={len(comparison.transient)} "
+                f"max_measured_delta={_optional_float(comparison.max_measured_delta, 9)} "
+                f"max_transient_delta={_optional_float(comparison.max_transient_delta, 9)}"
+            )
+            for difference in comparison.commanded:
+                typer.echo(f"  commanded {difference}")
+            for difference in comparison.measured:
+                typer.echo(f"  measured {difference}")
+            for difference in comparison.transient:
+                typer.echo(f"  transient {difference}")
+
+        passed = all(comparison.passed for comparison in comparisons)
+        typer.echo(f"repeat-check result={'PASS' if passed else 'FAIL'} episodes={episodes}")
+        if not passed:
+            raise typer.Exit(code=1)
     finally:
         client.close()
 
@@ -249,6 +371,156 @@ def compare_trace_files(
         f"FAIL: first divergence state={result.state} waypoint={result.waypoint}: {result.reason}"
     )
     raise typer.Exit(code=1)
+
+
+def _print_timing_summary(policy: ScriptedCanPolicy) -> None:
+    summary = policy.timing_summary()
+    if not summary.get("enabled"):
+        return
+    totals = summary["totals"]
+    total_wall = float(summary["total_wall_s"])
+    if total_wall > 0.0:
+        shares = " ".join(
+            f"{component}={float(seconds):.6f}s ({100.0 * float(seconds) / total_wall:.1f}%)"
+            for component, seconds in sorted(totals.items())
+        )
+        typer.echo(f"  timings total_wall={total_wall:.6f}s {shares}")
+    for state, components in sorted(summary["by_state"].items()):
+        state_total = sum(float(value) for value in components.values())
+        detail = " ".join(
+            f"{component}={float(seconds):.6f}s"
+            for component, seconds in sorted(components.items())
+        )
+        typer.echo(f"  timings {state}: total={state_total:.6f}s {detail}")
+
+
+def _optional_float(value: float | None, digits: int) -> str:
+    return "None" if value is None else f"{value:.{digits}f}"
+
+
+@dataclass(frozen=True)
+class _FingerprintComparison:
+    """Classified differences between two reset fingerprints."""
+
+    commanded: list[str]
+    measured: list[str]
+    transient: list[str]
+    max_measured_delta: float | None
+    max_transient_delta: float | None
+
+    @property
+    def passed(self) -> bool:
+        return not self.commanded and not self.measured
+
+
+_TRANSIENT_FINGERPRINT_PREFIXES = (
+    "base.velocity_world_xyz_m_s",
+    "base.angular_velocity_world_xyz_rad_s",
+)
+
+
+def _fingerprint_leaves(value: object, path: str = "") -> dict[str, object]:
+    leaves: dict[str, object] = {}
+    if isinstance(value, dict):
+        for key in sorted(value):
+            child = f"{path}.{key}" if path else str(key)
+            leaves.update(_fingerprint_leaves(value[key], child))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            leaves.update(_fingerprint_leaves(item, f"{path}[{index}]"))
+    else:
+        leaves[path] = value
+    return leaves
+
+
+def _numeric_delta(first: object, second: object) -> float | None:
+    if (
+        isinstance(first, (int, float))
+        and isinstance(second, (int, float))
+        and not isinstance(first, bool)
+        and not isinstance(second, bool)
+    ):
+        return abs(float(first) - float(second))
+    return None
+
+
+def _is_transient_fingerprint_path(path: str) -> bool:
+    return any(
+        path == prefix or path.startswith(prefix + ".") or path.startswith(prefix + "[")
+        for prefix in _TRANSIENT_FINGERPRINT_PREFIXES
+    )
+
+
+def _is_commanded_fingerprint_path(path: str) -> bool:
+    return path.startswith("motors.")
+
+
+def _fingerprint_comparison(
+    first: object,
+    second: object,
+    measured_tolerance: float,
+) -> _FingerprintComparison:
+    """Classify fingerprint differences into commanded, measured, and transient state.
+
+    Motor targets/velocities/control modes are the deterministic reset contract and must match
+    exactly. Joint sensors and poses are physical measurements, so they may differ by up to
+    ``measured_tolerance``. Base and CAN velocities captured at reset are world-load transients;
+    they are reported but never fail the check.
+    """
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return _FingerprintComparison(
+            commanded=["fingerprint: missing in one run"],
+            measured=[],
+            transient=[],
+            max_measured_delta=None,
+            max_transient_delta=None,
+        )
+    first_leaves = _fingerprint_leaves(first)
+    second_leaves = _fingerprint_leaves(second)
+    commanded: list[str] = []
+    measured: list[str] = []
+    transient: list[str] = []
+    max_measured_delta = 0.0
+    max_transient_delta = 0.0
+    for path in sorted(set(first_leaves) | set(second_leaves)):
+        if path not in first_leaves or path not in second_leaves:
+            description = f"{path}: missing in one run"
+            if _is_transient_fingerprint_path(path):
+                transient.append(description)
+            else:
+                commanded.append(description)
+            continue
+        first_value = first_leaves[path]
+        second_value = second_leaves[path]
+        delta = _numeric_delta(first_value, second_value)
+        if delta is None:
+            if first_value == second_value:
+                continue
+            description = f"{path}: {first_value!r} != {second_value!r}"
+            if _is_transient_fingerprint_path(path):
+                transient.append(description)
+            else:
+                commanded.append(description)
+            continue
+        if delta == 0.0:
+            continue
+        description = f"{path}: {first_value!r} != {second_value!r} (delta {delta:.6g})"
+        if _is_transient_fingerprint_path(path):
+            transient.append(description)
+            max_transient_delta = max(max_transient_delta, delta)
+        elif _is_commanded_fingerprint_path(path):
+            commanded.append(description)
+        else:
+            max_measured_delta = max(max_measured_delta, delta)
+            if delta > measured_tolerance:
+                measured.append(description)
+    return _FingerprintComparison(
+        commanded=commanded,
+        measured=measured,
+        transient=transient,
+        max_measured_delta=max_measured_delta if max_measured_delta > 0.0 else None,
+        max_transient_delta=max_transient_delta if max_transient_delta > 0.0 else None,
+    )
 
 
 def _compare_reset_probes(

@@ -10,8 +10,15 @@ ik_tol_grasp: 0.005
 ik_tol_transit: 0.015
 max_joint_step_rad: 0.15
 align_tol: 0.005
+close_align_tol: 0.008
 skip_align_check: true
 max_tilt_deg: 15
+# Final CAN acceptance criteria, reported separately by can-regression and the trace.
+# Place distance is the unchanged 0.10 m base-frame threshold; the CAN must also be within
+# 0.02 m of its table-rest height and less than 15 deg from upright.
+place_tolerance_m: 0.10
+can_place_z_tolerance_m: 0.02
+can_tilt_limit_deg: 15
 grip_force: null
 min_grasp_open: 0.004
 lift_min: 0.04
@@ -19,6 +26,8 @@ max_retries: 2
 stop_after: null
 torso_height: 0.35
 finger_speed: 0.03
+# Time allowed for the INIT finger open, mirroring the original open_gripper default.
+gripper_open_timeout_s: 4.0
 calibrate_tool: false
 fingers_inverted: false
 gripper_test: false
@@ -52,9 +61,28 @@ linear_final_settle_tolerance_rad: 0.01
 linear_waypoint_spacing_m: 0.03
 joint_move_timeout_steps: 800
 linear_move_timeout_steps: 600
-base_drift_position_tolerance_m: 0.005
-base_drift_yaw_tolerance_deg: 0.5
+# Provisional base-drift invariant pending evidence from the original-controller fixture.
+# Warn at 5 mm / 0.5 deg (trace event only); fail at 15 mm / 0.5 deg or when drift grows
+# faster than 10 mm/s sustained over 0.5 s.
+base_drift_warn_position_m: 0.005
+base_drift_warn_yaw_deg: 0.5
+base_drift_fail_position_m: 0.015
+base_drift_fail_yaw_deg: 0.5
+base_drift_rate_limit_m_per_s: 0.010
+base_drift_rate_window_s: 0.5
+# none keeps the Webots PROTO default (wheel position hold at 0).
+# wheels_zero_velocity switches both wheels to velocity control with target 0 at INIT/reset.
+hold_base: none
+# Reset posture semantics copied from the original controller INIT:
+# torso target, torso settle tolerance/timeout, then head settle window.
+reset_torso_settle_tolerance_m: 0.002
+reset_torso_timeout_steps: 1000
+reset_head_settle_ms: 2000
 pregrasp_route: interpolated
+# Re-derive the PREGRASP approach pose from the live base pose after the arm extension
+# rocks the base, then refresh LIFT from it (ADR-0016). true for M1-07; set false for
+# M1-06a equivalence runs that must match the original controller semantics.
+pregrasp_realign: true
 # Table geometry, read from the `Table` instance in worlds/factory.wbt
 # (translation/size) and the Webots R2025a Table.proto: the top surface sits at
 # size.z and the footprint is size.x by size.y centred on the translation.

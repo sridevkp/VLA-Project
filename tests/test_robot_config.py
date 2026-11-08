@@ -7,6 +7,9 @@ from vlarobot.backends.webots.config import (
     APPROACH_H,
     ARM_JOINTS,
     CAN_DEF,
+    CAN_PLACE_Z_TOLERANCE_M,
+    CAN_TILT_LIMIT_DEG,
+    CLOSE_ALIGN_TOL,
     CONTROLLER_DIR,
     FINGER_JOINTS,
     FINGER_SPEED,
@@ -27,7 +30,9 @@ from vlarobot.backends.webots.config import (
     LINEAR_WAYPOINT_SPACING_M,
     MAX_JOINT_STEP_RAD,
     PLACE_CLEAR,
+    PLACE_TOLERANCE_M,
     PLACE_WORLD,
+    PREGRASP_REALIGN,
     PREGRASP_SETTLE_TOLERANCE_RAD,
     SAFETY_PROFILE,
     SAFETY_PROFILE_NAME,
@@ -95,9 +100,24 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert LINEAR_WAYPOINT_SPACING_M == 0.03
     assert JOINT_MOVE_TIMEOUT_STEPS == 800
     assert LINEAR_MOVE_TIMEOUT_STEPS == 600
-    assert SETTINGS.base_drift_position_tolerance_m == 0.005
-    assert SETTINGS.base_drift_yaw_tolerance_deg == 0.5
+    assert SETTINGS.base_drift_warn_position_m == 0.005
+    assert SETTINGS.base_drift_warn_yaw_deg == 0.5
+    assert SETTINGS.base_drift_fail_position_m == 0.015
+    assert SETTINGS.base_drift_fail_yaw_deg == 0.5
+    assert SETTINGS.base_drift_rate_limit_m_per_s == 0.010
+    assert SETTINGS.base_drift_rate_window_s == 0.5
+    assert SETTINGS.hold_base == "none"
     assert SETTINGS.pregrasp_route == "interpolated"
+    assert SETTINGS.pregrasp_realign is True
+    assert PREGRASP_REALIGN is True
+    assert SETTINGS.close_align_tol == 0.008
+    assert CLOSE_ALIGN_TOL == 0.008
+    assert SETTINGS.place_tolerance_m == 0.10
+    assert PLACE_TOLERANCE_M == 0.10
+    assert SETTINGS.can_place_z_tolerance_m == 0.02
+    assert CAN_PLACE_Z_TOLERANCE_M == 0.02
+    assert SETTINGS.can_tilt_limit_deg == 15
+    assert CAN_TILT_LIMIT_DEG == 15
     assert TABLE_TOP_HEIGHT_M == 0.75
     assert TABLE_FOOTPRINT_CENTRE_XY_M == (-0.23882837, -4.8402928)
     assert TABLE_FOOTPRINT_SIZE_XY_M == (4.5, 1.5)
@@ -145,3 +165,47 @@ def test_robot_settings_accept_reload_as_a_deferred_lifecycle_option(tmp_path: P
     reload_settings.write_text(config, encoding="utf-8")
 
     assert RobotSettings.from_yaml(reload_settings).reset_mode == "reload"
+
+
+def test_robot_settings_reject_non_boolean_pregrasp_realign(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "pregrasp_realign: true", "pregrasp_realign: 1"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="pregrasp_realign must be a boolean"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_reject_non_positive_close_align_tol(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "close_align_tol: 0.008", "close_align_tol: 0.0"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="close_align_tol must be positive"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_reject_unknown_hold_base(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "hold_base: none", "hold_base: magnetic"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="hold_base must be"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_require_fail_tier_above_warn_tier(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "base_drift_fail_position_m: 0.015", "base_drift_fail_position_m: 0.004"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be greater than"):
+        RobotSettings.from_yaml(bad_settings)

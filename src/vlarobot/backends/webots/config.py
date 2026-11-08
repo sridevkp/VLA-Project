@@ -70,8 +70,12 @@ class RobotSettings:
     ik_tol_transit: float
     max_joint_step_rad: float
     align_tol: float
+    close_align_tol: float
     skip_align_check: bool
     max_tilt_deg: float
+    place_tolerance_m: float
+    can_place_z_tolerance_m: float
+    can_tilt_limit_deg: float
     grip_force: float | None
     min_grasp_open: float
     lift_min: float
@@ -79,6 +83,7 @@ class RobotSettings:
     stop_after: str | None
     torso_height: float | None
     finger_speed: float
+    gripper_open_timeout_s: float
     calibrate_tool: bool
     fingers_inverted: bool
     gripper_test: bool
@@ -101,9 +106,18 @@ class RobotSettings:
     linear_waypoint_spacing_m: float
     joint_move_timeout_steps: int
     linear_move_timeout_steps: int
-    base_drift_position_tolerance_m: float
-    base_drift_yaw_tolerance_deg: float
+    base_drift_warn_position_m: float
+    base_drift_warn_yaw_deg: float
+    base_drift_fail_position_m: float
+    base_drift_fail_yaw_deg: float
+    base_drift_rate_limit_m_per_s: float
+    base_drift_rate_window_s: float
+    hold_base: Literal["none", "wheels_zero_velocity"]
+    reset_torso_settle_tolerance_m: float
+    reset_torso_timeout_steps: int
+    reset_head_settle_ms: int
     pregrasp_route: Literal["interpolated", "safe_via"]
+    pregrasp_realign: bool
     table_top_height_m: float
     table_footprint_centre_xy_m: tuple[float, float]
     table_footprint_size_xy_m: tuple[float, float]
@@ -131,6 +145,8 @@ class RobotSettings:
         for key in (
             "joint_move_timeout_steps",
             "linear_move_timeout_steps",
+            "reset_torso_timeout_steps",
+            "reset_head_settle_ms",
         ):
             if not isinstance(values.get(key), int) or values[key] <= 0:
                 raise ValueError(f"{key} must be a positive integer.")
@@ -141,15 +157,44 @@ class RobotSettings:
             "linear_settle_tolerance_rad",
             "linear_final_settle_tolerance_rad",
             "linear_waypoint_spacing_m",
+            "reset_torso_settle_tolerance_m",
+            "gripper_open_timeout_s",
         ):
             if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
                 raise ValueError(f"{key} must be positive.")
 
         if values.get("pregrasp_route") not in {"interpolated", "safe_via"}:
             raise ValueError("pregrasp_route must be 'interpolated' or 'safe_via'.")
-        for key in ("base_drift_position_tolerance_m", "base_drift_yaw_tolerance_deg"):
+        if not isinstance(values.get("pregrasp_realign"), bool):
+            raise ValueError("pregrasp_realign must be a boolean.")
+        for key in (
+            "close_align_tol",
+            "place_tolerance_m",
+            "can_place_z_tolerance_m",
+            "can_tilt_limit_deg",
+        ):
             if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
                 raise ValueError(f"{key} must be positive.")
+        for key in (
+            "base_drift_warn_position_m",
+            "base_drift_warn_yaw_deg",
+            "base_drift_fail_position_m",
+            "base_drift_fail_yaw_deg",
+            "base_drift_rate_limit_m_per_s",
+            "base_drift_rate_window_s",
+        ):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
+        if values["base_drift_fail_position_m"] <= values["base_drift_warn_position_m"]:
+            raise ValueError(
+                "base_drift_fail_position_m must be greater than base_drift_warn_position_m."
+            )
+        if values["base_drift_fail_yaw_deg"] < values["base_drift_warn_yaw_deg"]:
+            raise ValueError(
+                "base_drift_fail_yaw_deg must be greater than or equal to base_drift_warn_yaw_deg."
+            )
+        if values.get("hold_base") not in {"none", "wheels_zero_velocity"}:
+            raise ValueError("hold_base must be 'none' or 'wheels_zero_velocity'.")
         for key in (
             "table_top_height_m",
             "table_clearance_required_m",
@@ -217,8 +262,12 @@ IK_TOL_GRASP = SETTINGS.ik_tol_grasp
 IK_TOL_TRANSIT = SETTINGS.ik_tol_transit
 MAX_JOINT_STEP_RAD = SETTINGS.max_joint_step_rad
 ALIGN_TOL = SETTINGS.align_tol
+CLOSE_ALIGN_TOL = SETTINGS.close_align_tol
 SKIP_ALIGN_CHECK = SETTINGS.skip_align_check
 MAX_TILT_DEG = SETTINGS.max_tilt_deg
+PLACE_TOLERANCE_M = SETTINGS.place_tolerance_m
+CAN_PLACE_Z_TOLERANCE_M = SETTINGS.can_place_z_tolerance_m
+CAN_TILT_LIMIT_DEG = SETTINGS.can_tilt_limit_deg
 GRIP_FORCE = SETTINGS.grip_force
 MIN_GRASP_OPEN = SETTINGS.min_grasp_open
 LIFT_MIN = SETTINGS.lift_min
@@ -226,6 +275,8 @@ MAX_RETRIES = SETTINGS.max_retries
 STOP_AFTER = SETTINGS.stop_after
 TORSO_HEIGHT = SETTINGS.torso_height
 FINGER_SPEED = SETTINGS.finger_speed
+GRIPPER_OPEN = SETTINGS.gripper_opening_limits[1]
+GRIPPER_OPEN_TIMEOUT_S = SETTINGS.gripper_open_timeout_s
 CALIBRATE_TOOL = SETTINGS.calibrate_tool
 FINGERS_INVERTED = SETTINGS.fingers_inverted
 GRIPPER_TEST = SETTINGS.gripper_test
@@ -245,9 +296,18 @@ LINEAR_FINAL_SETTLE_TOLERANCE_RAD = SETTINGS.linear_final_settle_tolerance_rad
 LINEAR_WAYPOINT_SPACING_M = SETTINGS.linear_waypoint_spacing_m
 JOINT_MOVE_TIMEOUT_STEPS = SETTINGS.joint_move_timeout_steps
 LINEAR_MOVE_TIMEOUT_STEPS = SETTINGS.linear_move_timeout_steps
-BASE_DRIFT_POSITION_TOLERANCE_M = SETTINGS.base_drift_position_tolerance_m
-BASE_DRIFT_YAW_TOLERANCE_DEG = SETTINGS.base_drift_yaw_tolerance_deg
+BASE_DRIFT_WARN_POSITION_M = SETTINGS.base_drift_warn_position_m
+BASE_DRIFT_WARN_YAW_DEG = SETTINGS.base_drift_warn_yaw_deg
+BASE_DRIFT_FAIL_POSITION_M = SETTINGS.base_drift_fail_position_m
+BASE_DRIFT_FAIL_YAW_DEG = SETTINGS.base_drift_fail_yaw_deg
+BASE_DRIFT_RATE_LIMIT_M_PER_S = SETTINGS.base_drift_rate_limit_m_per_s
+BASE_DRIFT_RATE_WINDOW_S = SETTINGS.base_drift_rate_window_s
+HOLD_BASE = SETTINGS.hold_base
+RESET_TORSO_SETTLE_TOLERANCE_M = SETTINGS.reset_torso_settle_tolerance_m
+RESET_TORSO_TIMEOUT_STEPS = SETTINGS.reset_torso_timeout_steps
+RESET_HEAD_SETTLE_MS = SETTINGS.reset_head_settle_ms
 PREGRASP_ROUTE = SETTINGS.pregrasp_route
+PREGRASP_REALIGN = SETTINGS.pregrasp_realign
 TABLE_TOP_HEIGHT_M = SETTINGS.table_top_height_m
 TABLE_FOOTPRINT_CENTRE_XY_M = SETTINGS.table_footprint_centre_xy_m
 TABLE_FOOTPRINT_SIZE_XY_M = SETTINGS.table_footprint_size_xy_m

@@ -1,13 +1,19 @@
 import json
+import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 
 from vlarobot.backends.fake import FakeBackend
 from vlarobot.backends.webots.config import (
+    ALIGN_TOL,
     APPROACH_H,
     ARM_JOINTS,
+    CLOSE_ALIGN_TOL,
+    FINGER_SPEED,
     GRASP_Z,
+    GRIPPER_OPEN,
     IK_TOL,
     IK_TOL_GRASP,
     IK_TOL_TRANSIT,
@@ -19,9 +25,10 @@ from vlarobot.backends.webots.config import (
     TORSO_JOINT,
 )
 from vlarobot.backends.webots.kinematics import IKTrustRegionError, Kinematics
-from vlarobot.core.types import ApplyResult, GroundTruth, JointTarget, Pose3D, Vec3
+from vlarobot.core.types import ApplyResult, GripperCmd, GroundTruth, JointTarget, Pose3D, Vec3
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_can import (
+    CanSuccessCriteria,
     ScriptedCanPolicy,
     _ik_tolerance_for_state,
     _world_to_base,
@@ -122,15 +129,500 @@ class RateLimitedCanBackend(FakeCanBackend):
 
 
 class BaseDriftCanBackend(RateLimitedCanBackend):
+    def __init__(
+        self,
+        kinematics,
+        *,
+        drift_m: float = 0.006,
+        yaw_deg: float = 0.1,
+        rate_m_per_s: float | None = None,
+        contact_nodes: list[dict[str, object]] | None = None,
+    ):
+        super().__init__(kinematics)
+        self.drift_m = drift_m
+        self.yaw_deg = yaw_deg
+        self.rate_m_per_s = rate_m_per_s
+        self.contact_nodes = contact_nodes or []
+
     def step(self, n_steps=1):
         observation = super().step(n_steps)
-        observation.robot.diagnostics = {
-            "base_drift_distance_m": 0.006,
-            "base_drift_yaw_deg": 0.6,
-            "contact_nodes": [{"node_name": "TABLE"}],
+        drift_m = self.drift_m if self.rate_m_per_s is None else self.rate_m_per_s * observation.t
+        diagnostics: dict[str, object] = {
+            "base_drift_distance_m": drift_m,
+            "base_drift_yaw_deg": self.yaw_deg,
+            "contact_nodes": self.contact_nodes,
         }
+        observation.robot.diagnostics = diagnostics
+        self._robot_state.diagnostics = diagnostics
+        return observation
+
+
+class FingerprintCanBackend(RateLimitedCanBackend):
+    """Injects a deterministic reset fingerprint, like the Webots backend does."""
+
+    def reset(self, scenario, seed):
+        observation = super().reset(scenario, seed)
+        fingerprint = {
+            "motors": {
+                name: {
+                    "target_position_rad": float(value),
+                    "velocity_rad_s": 0.0,
+                    "control_mode": "position",
+                }
+                for name, value in sorted(observation.robot.joint_pos.items())
+            },
+            "joint_sensors_rad": {
+                name: float(value) for name, value in sorted(observation.robot.joint_pos.items())
+            },
+            "base": {
+                "world_xyz_m": observation.robot.base_pose_world.position.as_array().tolist(),
+                "world_orientation_matrix": [1.0] * 9,
+            },
+            "can": {"world_xyz_m": [1.0, 2.0, 3.0], "world_orientation_matrix": [1.0] * 9},
+            "torso_sensor_after_rad": TORSO_HEIGHT,
+            "torso_commanded_rad": TORSO_HEIGHT,
+        }
+        observation.robot.diagnostics["reset_fingerprint"] = fingerprint
+        observation.robot.diagnostics["reset_torso_before_rad"] = 0.0
+        observation.robot.diagnostics["reset_torso_after_rad"] = TORSO_HEIGHT
         self._robot_state.diagnostics = observation.robot.diagnostics
         return observation
+
+
+class ClosedGripperCanBackend(RateLimitedCanBackend):
+    """Start with closed fingers and ramp the opening at the configured finger speed."""
+
+    def __init__(self, kinematics):
+        super().__init__(kinematics)
+        self.gripper_target = 0.0
+        self.gripper_commands: list[float] = []
+
+    def reset(self, scenario, seed):
+        super().reset(scenario, seed)
+        self._robot_state.gripper_opening = 0.0
+        self.gripper_target = 0.0
+        self.gripper_commands.clear()
+        return self._sync_observation()
+
+    def apply(self, action):
+        if isinstance(action, GripperCmd):
+            result = self.safety_monitor.validate(action, self._robot_state)
+            if not result.accepted:
+                return result
+            self.gripper_commands.append(action.opening)
+            self.gripper_target = action.opening
+            return ApplyResult(True)
+        return super().apply(action)
+
+    def step(self, n_steps=1):
+        for _ in range(n_steps):
+            current = self._robot_state.gripper_opening
+            delta = self.gripper_target - current
+            limit = FINGER_SPEED * self.step_duration
+            self._robot_state.gripper_opening = (
+                self.gripper_target
+                if abs(delta) <= limit
+                else current + math.copysign(limit, delta)
+            )
+            super().step(1)
+        return self._sync_observation()
+
+
+class StuckGripperCanBackend(ClosedGripperCanBackend):
+    """Accept gripper commands without ever moving the fingers."""
+
+    def apply(self, action):
+        if isinstance(action, GripperCmd):
+            return ApplyResult(True)
+        return super().apply(action)
+
+
+def test_policy_opens_gripper_at_init_before_descend(tmp_path) -> None:
+    backend = ClosedGripperCanBackend(Kinematics())
+    trace = tmp_path / "gripper-open.jsonl"
+    result = ScriptedCanPolicy(backend.kinematics, trace_path=trace, stop_after="DESCEND").execute(
+        backend, seed=0
+    )
+
+    assert backend.gripper_commands[0] == pytest.approx(GRIPPER_OPEN)
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    init_exit = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "INIT"
+        and row.get("phase") == "exit"
+    )
+    descend_enter = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "DESCEND"
+        and row.get("phase") == "enter"
+    )
+    assert init_exit["gripper_opening_m"] == pytest.approx(GRIPPER_OPEN, abs=0.002)
+    assert descend_enter["gripper_opening_m"] == pytest.approx(GRIPPER_OPEN, abs=0.002)
+    assert result.final_state == "grasp"
+
+
+def test_policy_fails_init_when_gripper_cannot_open(tmp_path) -> None:
+    backend = StuckGripperCanBackend(Kinematics())
+    trace = tmp_path / "gripper-stuck.jsonl"
+    result = ScriptedCanPolicy(backend.kinematics, trace_path=trace).execute(backend, seed=0)
+
+    assert result.success is False
+    assert result.failure_state == "INIT"
+    assert result.failure_reason == "gripper failed to open"
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert any(row.get("event") == "gripper_timeout" for row in rows)
+
+
+def _quaternion_multiply(
+    first: tuple[float, float, float, float], second: tuple[float, float, float, float]
+) -> tuple[float, float, float, float]:
+    ax, ay, az, aw = first
+    bx, by, bz, bw = second
+    return (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+
+
+def _quaternion_from_rpy_deg(
+    roll_deg: float, pitch_deg: float, yaw_deg: float
+) -> tuple[float, float, float, float]:
+    roll, pitch, yaw = map(math.radians, (roll_deg, pitch_deg, yaw_deg))
+    cr, sr = math.cos(roll / 2.0), math.sin(roll / 2.0)
+    cp, sp = math.cos(pitch / 2.0), math.sin(pitch / 2.0)
+    cy, sy = math.cos(yaw / 2.0), math.sin(yaw / 2.0)
+    return (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
+
+
+class TiltingCanBackend(RateLimitedCanBackend):
+    """Rock the base by a fixed roll/pitch mid-PREGRASP, like the real robot does."""
+
+    def __init__(
+        self,
+        kinematics,
+        *,
+        tilt_at_s: float = 2.5,
+        roll_deg: float = -1.3,
+        pitch_deg: float = 1.5,
+    ):
+        super().__init__(kinematics)
+        self.tilt_at_s = tilt_at_s
+        self.roll_deg = roll_deg
+        self.pitch_deg = pitch_deg
+        self.tilted = False
+
+    def reset(self, scenario, seed):
+        observation = super().reset(scenario, seed)
+        self.tilted = False
+        return observation
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        if not self.tilted and observation.t >= self.tilt_at_s:
+            self.tilted = True
+            base = self._robot_state.base_pose_world
+            assert base is not None
+            self._robot_state.base_pose_world = Pose3D(
+                base.position,
+                _quaternion_multiply(
+                    base.orientation,
+                    _quaternion_from_rpy_deg(self.roll_deg, self.pitch_deg, 0.0),
+                ),
+            )
+            observation = self._sync_observation()
+        return observation
+
+
+def _rotation_from_quaternion(quaternion: tuple[float, float, float, float]) -> np.ndarray:
+    x, y, z, w = quaternion
+    return np.asarray(
+        (
+            (1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)),
+            (2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)),
+            (2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)),
+        )
+    )
+
+
+def _tip_world(observation) -> np.ndarray:
+    base = observation.robot.base_pose_world
+    assert base is not None
+    rotation = _rotation_from_quaternion(base.orientation)
+    return rotation @ observation.robot.ee_pose.position.as_array() + base.position.as_array()
+
+
+class NudgedCanBackend(TiltingCanBackend):
+    """Rock the base, then nudge the CAN once when the fingertip reaches grasp height."""
+
+    def __init__(self, kinematics, *, nudge_m: float = 0.012):
+        super().__init__(kinematics)
+        self.nudge_m = nudge_m
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+        self.nudged = False
+
+    def reset(self, scenario, seed):
+        observation = super().reset(scenario, seed)
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+        self.nudged = False
+        return observation
+
+    def get_ground_truth(self) -> GroundTruth:
+        return GroundTruth(
+            object_poses={"CAN": Pose3D(Vec3(*map(float, self.can_world)), (0.0, 0.0, 0.0, 1.0))}
+        )
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        tip = _tip_world(observation)
+        if not self.nudged and tip[2] < self.can_world[2] + 0.04:
+            self.nudged = True
+            self.can_world[0] += self.nudge_m
+        return observation
+
+
+class DraggedCanBackend(TiltingCanBackend):
+    """Rock the base, then let the CAN stick to the fingertip at a fixed lateral offset."""
+
+    def __init__(self, kinematics, *, drag_offset_m: float = 0.012):
+        super().__init__(kinematics)
+        self.drag_offset_m = drag_offset_m
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+        self.contacted = False
+
+    def reset(self, scenario, seed):
+        observation = super().reset(scenario, seed)
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+        self.contacted = False
+        return observation
+
+    def get_ground_truth(self) -> GroundTruth:
+        return GroundTruth(
+            object_poses={"CAN": Pose3D(Vec3(*map(float, self.can_world)), (0.0, 0.0, 0.0, 1.0))}
+        )
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        tip = _tip_world(observation)
+        if tip[2] < self.can_world[2] + 0.04:
+            self.contacted = True
+        if self.contacted:
+            self.can_world[0] = tip[0] + self.drag_offset_m
+            self.can_world[1] = tip[1]
+        return observation
+
+
+def _tip_to_can_xy_m(record: dict[str, object]) -> float:
+    quaternion = record["base_world_orientation_xyzw"]
+    assert isinstance(quaternion, (list, tuple)) and len(quaternion) == 4
+    x, y, z, w = (float(value) for value in quaternion)
+    rotation = np.asarray(
+        (
+            (1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)),
+            (2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)),
+            (2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)),
+        )
+    )
+    tip_world = rotation @ np.asarray(record["achieved_ee_base_xyz_m"], dtype=float) + np.asarray(
+        record["base_world_xyz_m"], dtype=float
+    )
+    can_world = np.asarray(record["can_world_xyz_m"], dtype=float)
+    return float(np.linalg.norm((tip_world - can_world)[:2]))
+
+
+def test_pregrasp_realign_corrects_tilt_induced_offset(tmp_path) -> None:
+    kin = Kinematics()
+    backend = TiltingCanBackend(kin)
+    trace = tmp_path / "pregrasp-realign.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace, stop_after="DESCEND").execute(backend, seed=0)
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    realign = next(row for row in rows if row.get("event") == "pregrasp_realign")
+    assert result.max_base_tilt_deg == pytest.approx(1.5, abs=0.05)
+    assert realign["xy_error_m"] > ALIGN_TOL
+    realigned = next(row for row in rows if row.get("event") == "pregrasp_realigned")
+    assert realigned["xy_error_after_m"] < ALIGN_TOL
+    assert any(row.get("event") == "lift_target_refreshed" for row in rows)
+    descend_enter = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "DESCEND"
+        and row.get("phase") == "enter"
+    )
+    assert _tip_to_can_xy_m(descend_enter) < ALIGN_TOL
+
+
+def test_pregrasp_realign_is_skipped_without_base_tilt(tmp_path) -> None:
+    kin = Kinematics()
+    backend = RateLimitedCanBackend(kin)
+    trace = tmp_path / "pregrasp-no-tilt.jsonl"
+
+    ScriptedCanPolicy(kin, trace_path=trace, stop_after="DESCEND").execute(backend, seed=0)
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    realign = next(row for row in rows if row.get("event") == "pregrasp_realign")
+    assert realign["xy_error_m"] <= ALIGN_TOL
+    assert not any(row.get("event") == "pregrasp_realigned" for row in rows)
+
+
+def test_pregrasp_realign_flag_is_recorded_and_can_be_disabled(tmp_path) -> None:
+    kin = Kinematics()
+    backend = TiltingCanBackend(kin)
+    enabled_trace = tmp_path / "realign-on.jsonl"
+    enabled = ScriptedCanPolicy(
+        kin,
+        trace_path=enabled_trace,
+        pregrasp_realign=True,
+        stop_after="DESCEND",
+    ).execute(backend, seed=0)
+
+    disabled_trace = tmp_path / "realign-off.jsonl"
+    disabled = ScriptedCanPolicy(
+        kin,
+        trace_path=disabled_trace,
+        pregrasp_realign=False,
+        stop_after="DESCEND",
+    ).execute(backend, seed=0)
+
+    assert enabled.pregrasp_realign is True
+    assert disabled.pregrasp_realign is False
+    enabled_rows = [
+        json.loads(line) for line in enabled_trace.read_text(encoding="utf-8").splitlines()
+    ]
+    disabled_rows = [
+        json.loads(line) for line in disabled_trace.read_text(encoding="utf-8").splitlines()
+    ]
+    enabled_init = next(
+        row
+        for row in enabled_rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "INIT"
+        and row.get("phase") == "exit"
+    )
+    disabled_init = next(
+        row
+        for row in disabled_rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "INIT"
+        and row.get("phase") == "exit"
+    )
+    assert enabled_init["pregrasp_realign"] is True
+    assert disabled_init["pregrasp_realign"] is False
+    assert any(row.get("event") == "pregrasp_realign" for row in enabled_rows)
+    assert any(row.get("event") == "pregrasp_realigned" for row in enabled_rows)
+    assert not any(row.get("event") == "pregrasp_realign" for row in disabled_rows)
+    assert not any(row.get("event") == "pregrasp_realigned" for row in disabled_rows)
+    assert not any(row.get("event") == "lift_target_refreshed" for row in disabled_rows)
+
+
+def test_close_guard_redescends_once_when_can_is_nudged(tmp_path) -> None:
+    kin = Kinematics()
+    backend = NudgedCanBackend(kin)
+    trace = tmp_path / "close-guard-success.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace, pregrasp_realign=True).execute(
+        backend, seed=0
+    )
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    check = next(row for row in rows if row.get("event") == "close_alignment_check")
+    realigned = next(row for row in rows if row.get("event") == "close_realign")
+    assert check["xy_error_m"] > CLOSE_ALIGN_TOL
+    assert realigned["xy_error_after_m"] <= CLOSE_ALIGN_TOL
+    assert not any(row.get("event") == "close_misaligned" for row in rows)
+    assert result.failure_state != "CLOSE"
+    assert result.final_state == "home"
+
+
+def test_close_guard_fails_when_can_stays_dragged(tmp_path) -> None:
+    kin = Kinematics()
+    backend = DraggedCanBackend(kin)
+    trace = tmp_path / "close-guard-failure.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace, pregrasp_realign=True).execute(
+        backend, seed=0
+    )
+
+    assert result.success is False
+    assert result.failure_state == "CLOSE"
+    assert result.failure_reason == "misaligned at close"
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    realigned = next(row for row in rows if row.get("event") == "close_realign")
+    assert realigned["xy_error_after_m"] > CLOSE_ALIGN_TOL
+    misaligned = next(row for row in rows if row.get("event") == "close_misaligned")
+    assert misaligned["reason"] == "misaligned at close"
+    assert misaligned["xy_error_m"] > CLOSE_ALIGN_TOL
+
+
+def test_success_criteria_are_reported_separately(tmp_path) -> None:
+    backend = FakeCanBackend()
+    trace = tmp_path / "criteria.jsonl"
+    result = ScriptedCanPolicy(backend.kinematics, trace_path=trace).execute(backend, seed=0)
+
+    assert result.home_reached is True
+    assert result.place_distance_ok is False
+    assert result.can_height_ok is True
+    assert result.can_tilt_ok is True
+    assert result.can_height_error_m == pytest.approx(0.0, abs=1e-9)
+    assert result.can_tilt_deg == pytest.approx(0.0, abs=1e-9)
+    assert result.final_can_world_xyz_m == pytest.approx((-0.799879, -4.38998, 0.810949))
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    done = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "DONE"
+        and row.get("phase") == "exit"
+    )
+    for key in (
+        "distance_m",
+        "can_world_xyz_m",
+        "rest_height_m",
+        "height_error_m",
+        "tilt_deg",
+        "home_reached",
+        "place_distance_ok",
+        "can_height_ok",
+        "can_tilt_ok",
+        "success",
+    ):
+        assert key in done
+    assert done["home_reached"] is True
+    assert done["place_distance_ok"] is False
+    assert done["can_height_ok"] is True
+    assert done["can_tilt_ok"] is True
+    assert done["success"] is False
+
+
+def test_can_success_criteria_require_every_criterion() -> None:
+    base = CanSuccessCriteria(
+        distance_m=0.0,
+        can_world_xyz_m=(0.0, 0.0, 0.0),
+        rest_height_m=0.0,
+        height_error_m=0.0,
+        tilt_deg=0.0,
+        home_reached=True,
+        place_distance_ok=True,
+        can_height_ok=True,
+        can_tilt_ok=True,
+    )
+    assert base.success is True
+    assert replace(base, home_reached=False).success is False
+    assert replace(base, place_distance_ok=False).success is False
+    assert replace(base, can_height_ok=False).success is False
+    assert replace(base, can_tilt_ok=False).success is False
 
 
 def test_scripted_can_policy_allows_transit_ik_with_specific_tolerance(tmp_path) -> None:
@@ -177,7 +669,7 @@ def test_watched_pregrasp_stop_leaves_later_states_unexecuted(tmp_path) -> None:
 class ArmLinkDiagnosticsBackend(RateLimitedCanBackend):
     def step(self, n_steps=1):
         observation = super().step(n_steps)
-        observation.robot.diagnostics = {
+        diagnostics: dict[str, object] = {
             "arm_link_world_xyz_m": {
                 "elbow": [-1.1, -4.5, 0.95],
                 "wrist": [-1.2, -4.4, 0.90],
@@ -185,7 +677,8 @@ class ArmLinkDiagnosticsBackend(RateLimitedCanBackend):
             },
             "arm_7_joint_fk_ground_truth_mismatch": False,
         }
-        self._robot_state.diagnostics = observation.robot.diagnostics
+        observation.robot.diagnostics = diagnostics
+        self._robot_state.diagnostics = diagnostics
         return observation
 
 
@@ -355,9 +848,14 @@ def test_joint_stall_watchdog_fails_the_active_state(monkeypatch) -> None:
     assert backend.rejections == 0
 
 
-def test_base_invariant_fails_with_contact_context(tmp_path) -> None:
+def test_base_invariant_fails_above_the_hard_limit_with_contact_context(tmp_path) -> None:
     kin = Kinematics()
-    backend = BaseDriftCanBackend(kin)
+    backend = BaseDriftCanBackend(
+        kin,
+        drift_m=0.016,
+        yaw_deg=0.1,
+        contact_nodes=[{"node_name": "TABLE"}],
+    )
     trace_path = tmp_path / "base-drift.jsonl"
 
     result = ScriptedCanPolicy(kin, trace_path=trace_path).execute(backend, seed=0)
@@ -367,6 +865,139 @@ def test_base_invariant_fails_with_contact_context(tmp_path) -> None:
     records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
     event = next(row for row in records if row.get("event") == "base_moved")
     assert event["contact_nodes"] == [{"node_name": "TABLE"}]
+    assert event["position_exceeded"] is True
+    assert event["rate_exceeded"] is False
+
+
+def test_base_drift_between_tiers_warns_once_per_state_without_failing(tmp_path) -> None:
+    kin = Kinematics()
+    backend = BaseDriftCanBackend(kin, drift_m=0.006, yaw_deg=0.1)
+    trace_path = tmp_path / "base-drift-warning.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace_path, stop_after="PREGRASP").execute(
+        backend, seed=0
+    )
+
+    assert result.final_state == "pregrasp"
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    warnings = [
+        row
+        for row in records
+        if row.get("event") == "base_drift_warning" and row.get("state") == "PREGRASP"
+    ]
+    assert len(warnings) == 1
+    assert not any(row.get("event") == "base_moved" for row in records)
+    assert warnings[0]["warn_position_m"] == pytest.approx(0.005)
+    assert warnings[0]["fail_position_m"] == pytest.approx(0.015)
+
+
+def test_base_drift_below_the_warning_tier_is_silent(tmp_path) -> None:
+    kin = Kinematics()
+    backend = BaseDriftCanBackend(kin, drift_m=0.003, yaw_deg=0.05)
+    trace_path = tmp_path / "base-drift-silent.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace_path, stop_after="PREGRASP").execute(
+        backend, seed=0
+    )
+
+    assert result.final_state == "pregrasp"
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    assert not any(row.get("event") == "base_drift_warning" for row in records)
+    assert not any(row.get("event") == "base_moved" for row in records)
+
+
+def test_base_drift_rate_limit_fails_a_fast_shove(tmp_path) -> None:
+    kin = Kinematics()
+    backend = BaseDriftCanBackend(kin, rate_m_per_s=0.025, yaw_deg=0.0)
+    trace_path = tmp_path / "base-drift-rate.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace_path).execute(backend, seed=0)
+
+    assert result.failure_state == "PREGRASP"
+    assert result.failure_reason == "base moved"
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    event = next(row for row in records if row.get("event") == "base_moved")
+    assert event["rate_exceeded"] is True
+    assert event["position_exceeded"] is False
+    assert event["base_drift_distance_m"] < 0.015
+
+
+def test_repeat_episodes_have_identical_reset_fingerprints_and_torso(tmp_path) -> None:
+    backend = FingerprintCanBackend(Kinematics())
+    policy = ScriptedCanPolicy(
+        backend.kinematics,
+        trace_path=tmp_path / "repeat.jsonl",
+        stop_after="PREGRASP",
+    )
+
+    first = policy.execute(backend, seed=0)
+    second = policy.execute(backend, seed=0)
+
+    assert first.reset_fingerprint is not None
+    assert first.reset_fingerprint == second.reset_fingerprint
+    assert first.torso_start_rad == pytest.approx(TORSO_HEIGHT)
+    assert first.torso_end_rad == pytest.approx(TORSO_HEIGHT)
+    assert second.torso_start_rad == pytest.approx(TORSO_HEIGHT)
+    assert second.torso_end_rad == pytest.approx(TORSO_HEIGHT)
+    assert first.max_base_drift_m == pytest.approx(0.0)
+
+
+def test_trace_records_reset_fingerprint_and_controller_reset_state(tmp_path) -> None:
+    backend = FingerprintCanBackend(Kinematics())
+    trace = tmp_path / "fingerprint.jsonl"
+    ScriptedCanPolicy(backend.kinematics, trace_path=trace, stop_after="PREGRASP").execute(
+        backend, seed=0
+    )
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line]
+    init_enter = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "INIT"
+        and row.get("phase") == "enter"
+    )
+    assert init_enter["reset_fingerprint"] is not None
+    assert init_enter["reset_fingerprint"]["torso_commanded_rad"] == pytest.approx(TORSO_HEIGHT)
+    assert init_enter["controller_reset_state"]["ik_seed"] == 0
+    assert init_enter["controller_reset_state"]["torso_command_rad"] == pytest.approx(TORSO_HEIGHT)
+    assert init_enter["base_drift_rate_m_per_s"] == pytest.approx(0.0)
+
+
+def test_opt_in_timings_record_ik_transport_and_trace_components(tmp_path) -> None:
+    backend = RateLimitedCanBackend(Kinematics())
+    policy = ScriptedCanPolicy(
+        backend.kinematics,
+        trace_path=tmp_path / "timings.jsonl",
+        stop_after="PREGRASP",
+        timing_enabled=True,
+    )
+
+    policy.execute(backend, seed=0)
+    summary = policy.timing_summary()
+
+    assert summary["enabled"] is True
+    totals = summary["totals"]
+    assert totals["backend_reset_s"] >= 0.0
+    assert totals["ik_solve_s"] > 0.0
+    assert totals["backend_apply_s"] > 0.0
+    assert totals["backend_step_s"] > 0.0
+    assert totals["trace_write_s"] > 0.0
+    assert "PREGRASP" in summary["by_state"]
+
+
+def test_timings_are_disabled_by_default(tmp_path) -> None:
+    backend = RateLimitedCanBackend(Kinematics())
+    policy = ScriptedCanPolicy(
+        backend.kinematics,
+        trace_path=tmp_path / "no-timings.jsonl",
+        stop_after="PREGRASP",
+    )
+
+    policy.execute(backend, seed=0)
+
+    assert policy.timing_summary()["enabled"] is False
+    assert policy.state_timings == {}
 
 
 def test_failed_boundary_uses_last_observation_not_reset_observation(tmp_path, monkeypatch) -> None:
@@ -392,8 +1023,10 @@ def test_failed_boundary_uses_last_observation_not_reset_observation(tmp_path, m
     assert exit_record["sim_time_s"] == pytest.approx(backend._time)
     assert exit_record["measured_joint_positions_rad"] == backend._robot_state.joint_pos
     assert exit_record["final_target_distance_m"] == pytest.approx(result.final_target_distance)
+    base_pose_world = backend._robot_state.base_pose_world
+    assert base_pose_world is not None
     assert exit_record["base_world_xyz_m"] == pytest.approx(
-        backend._robot_state.base_pose_world.position.as_array().tolist()
+        base_pose_world.position.as_array().tolist()
     )
 
 

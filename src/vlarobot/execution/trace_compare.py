@@ -69,7 +69,7 @@ def compare_traces(
             None,
             None,
             f"pregrasp_realign differs: A={first_flag} B={second_flag}; "
-            "realign on/off is a documented deviation (ADR-0016)",
+            "realign off keeps original semantics, on adds waypoints/events (ADR-0016)",
             first_flag,
             second_flag,
         )

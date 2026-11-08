@@ -106,6 +106,57 @@ def test_reset_baseline_uses_nearest_limit_for_out_of_range_joint_field(caplog):
     assert "using nearest legal limit 0.0" in caplog.text
 
 
+def test_contact_tracking_reports_external_node_and_world_contact_points():
+    class FakeNode:
+        def __init__(self, node_id, def_name, type_name, parent=None):
+            self.node_id = node_id
+            self.def_name = def_name
+            self.type_name = type_name
+            self.parent = parent
+
+        def getId(self):
+            return self.node_id
+
+        def getDef(self):
+            return self.def_name
+
+        def getTypeName(self):
+            return self.type_name
+
+        def getField(self, name):
+            return None
+
+        def getParentNode(self):
+            return self.parent
+
+    class FakeContact:
+        def getNodeId(self):
+            return 22
+
+        def getPoint(self):
+            return [-1.2, -4.1, 0.73]
+
+    class FakeSupervisor:
+        def getFromId(self, node_id):
+            return external if node_id == 22 else None
+
+    robot_node = FakeNode(11, "TIAGo", "Robot")
+    external = FakeNode(22, "TABLE", "Solid")
+    io = RobotIO.__new__(RobotIO)
+    io.me = robot_node
+    io.robot = FakeSupervisor()
+    robot_node.getContactPoints = lambda **_: [FakeContact()]
+
+    assert io.contact_nodes() == [
+        {
+            "node_id": 22,
+            "node_name": "TABLE",
+            "node_type": "Solid",
+            "contact_points_world_xyz_m": [[-1.2, -4.1, 0.73]],
+        }
+    ]
+
+
 class FakeRobot:
     def __init__(self, can_node, me):
         self.can_node = can_node
@@ -277,10 +328,11 @@ def test_reset_twice_reacquires_can_and_restores_identical_episode_state():
     assert backend.can_node is backend.io.robot.can_node
     assert backend.io.me.getField("translation").getSFVec3f() == [0.1, 0.2, 0.3]
     assert all(
-        motor.position_field.value == position
+        backend.io.joint_positions[name].position_field.value == position
         for name, position in backend._initial_joint_pos.items()
-        for motor in [backend.io.joint_positions[name]]
+        if name != TORSO_JOINT
     )
+    assert backend.io.joint_positions[TORSO_JOINT].position_field.value == 0.35
     assert backend.io.robot.lookup_count == 2
     assert backend.gripper.last_close_stalled is None
     assert backend.gripper.last_close_opening is None

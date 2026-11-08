@@ -11,7 +11,7 @@ import numpy as np
 
 from vlarobot.core import types
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 _ARRAY_EXT = 1
 _TYPE_REGISTRY = {
     item.__name__: item

@@ -92,6 +92,18 @@ class RobotSettings:
     gripper_opening_limits: tuple[float, float]
     gripper_force_max: float
     safety_command_horizon: float
+    joint_stall_steps: int
+    joint_progress_epsilon_rad: float
+    pregrasp_settle_tolerance_rad: float
+    home_settle_tolerance_rad: float
+    linear_settle_tolerance_rad: float
+    linear_final_settle_tolerance_rad: float
+    linear_waypoint_spacing_m: float
+    joint_move_timeout_steps: int
+    linear_move_timeout_steps: int
+    base_drift_position_tolerance_m: float
+    base_drift_yaw_tolerance_deg: float
+    pregrasp_route: Literal["interpolated", "safe_via"]
     urdf_filename: str
 
     @classmethod
@@ -109,6 +121,30 @@ class RobotSettings:
             raise ValueError(f"Invalid robot settings keys; missing={missing}, extra={extra}")
         if values.get("reset_mode") not in {"soft", "reload"}:
             raise ValueError("reset_mode must be either 'soft' or 'reload'.")
+        if not isinstance(values.get("joint_stall_steps"), int) or values["joint_stall_steps"] <= 0:
+            raise ValueError("joint_stall_steps must be a positive integer.")
+        for key in (
+            "joint_move_timeout_steps",
+            "linear_move_timeout_steps",
+        ):
+            if not isinstance(values.get(key), int) or values[key] <= 0:
+                raise ValueError(f"{key} must be a positive integer.")
+        for key in (
+            "joint_progress_epsilon_rad",
+            "pregrasp_settle_tolerance_rad",
+            "home_settle_tolerance_rad",
+            "linear_settle_tolerance_rad",
+            "linear_final_settle_tolerance_rad",
+            "linear_waypoint_spacing_m",
+        ):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
+
+        if values.get("pregrasp_route") not in {"interpolated", "safe_via"}:
+            raise ValueError("pregrasp_route must be 'interpolated' or 'safe_via'.")
+        for key in ("base_drift_position_tolerance_m", "base_drift_yaw_tolerance_deg"):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
 
         for key in (
             "place_world",
@@ -176,3 +212,15 @@ FINGER_JOINTS = list(SETTINGS.finger_joints)
 TORSO_JOINT = SETTINGS.torso_joint
 HEAD_JOINTS = list(SETTINGS.head_joints)
 TOOL_OFFSET = list(SETTINGS.tool_offset)
+JOINT_STALL_STEPS = SETTINGS.joint_stall_steps
+JOINT_PROGRESS_EPSILON_RAD = SETTINGS.joint_progress_epsilon_rad
+PREGRASP_SETTLE_TOLERANCE_RAD = SETTINGS.pregrasp_settle_tolerance_rad
+HOME_SETTLE_TOLERANCE_RAD = SETTINGS.home_settle_tolerance_rad
+LINEAR_SETTLE_TOLERANCE_RAD = SETTINGS.linear_settle_tolerance_rad
+LINEAR_FINAL_SETTLE_TOLERANCE_RAD = SETTINGS.linear_final_settle_tolerance_rad
+LINEAR_WAYPOINT_SPACING_M = SETTINGS.linear_waypoint_spacing_m
+JOINT_MOVE_TIMEOUT_STEPS = SETTINGS.joint_move_timeout_steps
+LINEAR_MOVE_TIMEOUT_STEPS = SETTINGS.linear_move_timeout_steps
+BASE_DRIFT_POSITION_TOLERANCE_M = SETTINGS.base_drift_position_tolerance_m
+BASE_DRIFT_YAW_TOLERANCE_DEG = SETTINGS.base_drift_yaw_tolerance_deg
+PREGRASP_ROUTE = SETTINGS.pregrasp_route

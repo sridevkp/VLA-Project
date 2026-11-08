@@ -43,4 +43,16 @@ tool_offset: [0.0, 0.0, -0.1741]
 gripper_opening_limits: [0.0, 0.045]
 gripper_force_max: 100.0
 safety_command_horizon: 1.0
+joint_stall_steps: 10
+joint_progress_epsilon_rad: 0.000001
+pregrasp_settle_tolerance_rad: 0.01
+home_settle_tolerance_rad: 0.02
+linear_settle_tolerance_rad: 0.03
+linear_final_settle_tolerance_rad: 0.01
+linear_waypoint_spacing_m: 0.03
+joint_move_timeout_steps: 800
+linear_move_timeout_steps: 600
+base_drift_position_tolerance_m: 0.005
+base_drift_yaw_tolerance_deg: 0.5
+pregrasp_route: interpolated
 urdf_filename: tiago.urdf

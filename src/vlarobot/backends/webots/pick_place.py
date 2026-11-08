@@ -9,6 +9,7 @@ import numpy as np
 from vlarobot.backends.webots.config import (
     ALIGN_TOL,
     APPROACH_H,
+    ARM_JOINTS,
     CALIBRATE_TOOL,
     GRASP_Z,
     GRIPPER_TEST,
@@ -64,6 +65,16 @@ class PickPlace:
     def _record_state_boundary(self, phase, state, next_state):
         if not os.environ.get("VLAROBOT_WAYPOINT_LOG"):
             return
+        commanded_target = {
+            "PREGRASP": getattr(self, "pregrasp", None),
+            "DESCEND": getattr(self, "grasp_tip", None),
+            "LIFT": getattr(self, "pregrasp", None),
+            "TRANSIT": getattr(self, "place_above", None),
+            "PLACE_DESCEND": getattr(self, "place_tip", None),
+            "RETREAT": getattr(self, "place_above", None),
+            "HOME": None if self.home_q is None else self.ik.forward(self.home_q)[:3, 3],
+        }.get(state)
+        commanded_joints = {name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS}
         self._append_trace(
             {
                 "event": "state_boundary",
@@ -79,6 +90,10 @@ class PickPlace:
                 "joint_positions_rad": {
                     name: float(sensor.getValue()) for name, sensor in self.io.sensors.items()
                 },
+                "commanded_joint_positions_rad": commanded_joints,
+                "commanded_ee_base_xyz_m": None
+                if commanded_target is None
+                else tuple(float(value) for value in commanded_target),
                 "head_joint_positions_rad": self._head_joint_positions(),
                 "tool_base_xyz_m": tuple(float(value) for value in self.frames.tool_position()),
                 "gripper_opening_m": float(self.gripper.opening()),

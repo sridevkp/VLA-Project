@@ -44,6 +44,7 @@ def _sample_observation() -> Observation:
             ee_pose=Pose3D(Vec3(0.1, 0.2, 0.3), (0.0, 0.0, 0.0, 1.0)),
             gripper_opening=0.04,
             base_pose_world=Pose3D(Vec3(1.0, 2.0, 3.0), (0.0, 0.0, 0.0, 1.0)),
+            diagnostics={"torso_lift_joint_sensor_rad": 0.35, "contact_nodes": []},
         ),
     )
 

@@ -11,6 +11,8 @@ from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
     HEAD_JOINTS,
+    HEAD_PAN,
+    HEAD_TILT,
     SAFETY_PROFILE,
     SETTINGS,
     TORSO_JOINT,
@@ -51,6 +53,7 @@ class WebotsBackend:
         if can_node is None:
             raise RuntimeError(f"No node with DEF {CAN_DEF} in the world.")
         self.can_node = can_node
+        self.io.enable_contact_tracking()
         self.kinematics = Kinematics()
         self.frames = Frames(self.io, self.kinematics)
         self.visualization = Visualization(self.io, self.frames)
@@ -71,6 +74,8 @@ class WebotsBackend:
         self._initial_can_rotation = self.can_node.getField("rotation").getSFRotation()
         self._initial_base_translation = self.io.me.getField("translation").getSFVec3f()
         self._initial_base_rotation = self.io.me.getField("rotation").getSFRotation()
+        self._reset_base_position = np.asarray(self._initial_base_translation, dtype=float)
+        self._reset_base_yaw = 0.0
         self._last_joint_pos = self._joint_positions()
         self._last_time = float(self.io.robot.getTime())
         self._episode_start_time = self._last_time
@@ -91,6 +96,10 @@ class WebotsBackend:
             raise NotImplementedError("Webots scenario spawning is scheduled for M2.")
 
         positions = dict(self._initial_joint_pos)
+        positions[TORSO_JOINT] = float(SETTINGS.torso_height or 0.0)
+        if all(name in self.io.motors for name in HEAD_JOINTS):
+            positions[HEAD_JOINTS[0]] = HEAD_PAN
+            positions[HEAD_JOINTS[1]] = HEAD_TILT
         positions.update(
             {
                 motor.getName(): position
@@ -112,6 +121,12 @@ class WebotsBackend:
         self.io.can_node = can_node
         if self.io.robot.step(self.io.ts) == -1:
             raise RuntimeError("Webots simulation stopped while restoring the reset pose.")
+        if all(name in self.io.motors for name in HEAD_JOINTS):
+            self._settle_reset_posture()
+        reset_position = self.io.me.getPosition()
+        reset_rotation = np.asarray(self.io.me.getOrientation()).reshape((3, 3))
+        self._reset_base_position = np.asarray(reset_position, dtype=float)
+        self._reset_base_yaw = math.atan2(reset_rotation[1, 0], reset_rotation[0, 0])
         self.gripper.last_close_stalled = None
         self.gripper.last_close_opening = None
         self._episode_start_time = float(self.io.robot.getTime())
@@ -244,9 +259,44 @@ class WebotsBackend:
         base_rotation = np.asarray(self.io.me.getOrientation()).reshape((3, 3))
         base_yaw = math.atan2(base_rotation[1, 0], base_rotation[0, 0])
         end_effector = self.kinematics.forward(self.frames.current_q())
+        base_position_array = np.asarray(base_position, dtype=float)
+        base_drift = base_position_array - self._reset_base_position
+        base_yaw_delta = _wrap_angle(base_yaw - self._reset_base_yaw)
+        full_q = self.frames.current_q()
+        arm7_world = None
+        try:
+            transforms = self.kinematics.chain.forward_kinematics(full_q, full_kinematics=True)
+            arm7_local = np.asarray(transforms[self.kinematics.idx["arm_7_joint"]])[:3, 3]
+            arm7_world = base_rotation @ arm7_local + base_position_array
+        except (AttributeError, IndexError, KeyError):
+            pass
+        endpoint_lookup = getattr(self.io, "joint_endpoint_world_position", None)
+        arm7_ground_truth = endpoint_lookup("arm_7_joint") if endpoint_lookup else None
+        contact_lookup = getattr(self.io, "contact_nodes", None)
+        contacts = contact_lookup() if contact_lookup else []
+        wheel_lookup = getattr(self.io, "wheel_status", None)
+        diagnostics: dict[str, object] = {
+            "torso_lift_joint_sensor_rad": float(self.io.sensors[TORSO_JOINT].getValue()),
+            "base_drift_world_xyz_m": base_drift.tolist(),
+            "base_drift_distance_m": float(np.linalg.norm(base_drift[:2])),
+            "base_drift_yaw_rad": base_yaw_delta,
+            "base_drift_yaw_deg": math.degrees(base_yaw_delta),
+            "wheel_motors": wheel_lookup() if wheel_lookup else {},
+            "contact_nodes": contacts,
+            "arm_7_joint_fk_world_xyz_m": arm7_world.tolist() if arm7_world is not None else None,
+            "arm_7_joint_ground_truth_world_xyz_m": arm7_ground_truth,
+            "arm_7_joint_fk_ground_truth_error_m": (
+                float(np.linalg.norm(arm7_world - arm7_ground_truth))
+                if arm7_ground_truth is not None and arm7_world is not None
+                else None
+            ),
+        }
         opening = self.gripper.opening()
         return RobotState(
-            joint_pos=joint_pos,
+            joint_pos={
+                **joint_pos,
+                TORSO_JOINT: float(self.io.sensors[TORSO_JOINT].getValue()),
+            },
             joint_vel=joint_vel,
             base_pose=Pose2D(float(base_position[0]), float(base_position[1]), base_yaw),
             ee_pose=Pose3D(
@@ -258,10 +308,41 @@ class WebotsBackend:
                 Vec3(*map(float, base_position)),
                 _rotation_to_quaternion(base_rotation),
             ),
+            diagnostics=diagnostics,
         )
 
     def _joint_positions(self) -> dict[str, float]:
-        return {name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS}
+        return {
+            **{name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS},
+            TORSO_JOINT: float(self.io.sensors[TORSO_JOINT].getValue()),
+        }
+
+    def _settle_reset_posture(self) -> None:
+        if TORSO_JOINT not in self.io.sensors:
+            return
+        for name in HEAD_JOINTS:
+            self.io.motors[name].setVelocity(0.5)
+        target = {
+            TORSO_JOINT: float(SETTINGS.torso_height or 0.0),
+            HEAD_JOINTS[0]: HEAD_PAN,
+            HEAD_JOINTS[1]: HEAD_TILT,
+        }
+        for name, value in target.items():
+            self.io.motors[name].setPosition(value)
+        # The legacy initialize_posture waits for torso error < 0.002 m and
+        # gives the commanded head pose two seconds to settle.
+        head_steps = max(1, int(math.ceil(2.0 * 1000.0 / self.io.ts)))
+        torso_settled = False
+        for step in range(max(1000, head_steps)):
+            if self.visualization.step() == -1:
+                raise RuntimeError("Webots stopped while initializing torso/head posture.")
+            torso_settled = (
+                abs(self.io.sensors[TORSO_JOINT].getValue() - target[TORSO_JOINT]) < 0.002
+            )
+            if torso_settled and step + 1 >= head_steps:
+                break
+        if not torso_settled:
+            raise RuntimeError("Torso did not settle within 0.002 of the configured height.")
 
     def _set_gripper(self, opening: float, force: float | None = None) -> None:
         full_stroke = max(self.io.full_stroke, 1e-9)
@@ -327,3 +408,7 @@ def _quaternion_distance(
 ) -> float:
     dot = abs(sum(a * b for a, b in zip(first, second, strict=True)))
     return 2.0 * math.acos(min(1.0, dot))
+
+
+def _wrap_angle(value: float) -> float:
+    return math.atan2(math.sin(value), math.cos(value))

@@ -13,12 +13,21 @@ from vlarobot.backends.webots.config import (
     GRASP_Z,
     GRIP_FORCE,
     HEAD_JOINTS,
+    HOME_SETTLE_TOLERANCE_RAD,
     IK_TOL,
     IK_TOL_GRASP,
     IK_TOL_TRANSIT,
+    JOINT_MOVE_TIMEOUT_STEPS,
+    JOINT_PROGRESS_EPSILON_RAD,
+    JOINT_STALL_STEPS,
+    LINEAR_FINAL_SETTLE_TOLERANCE_RAD,
+    LINEAR_MOVE_TIMEOUT_STEPS,
+    LINEAR_SETTLE_TOLERANCE_RAD,
+    LINEAR_WAYPOINT_SPACING_M,
     MAX_JOINT_STEP_RAD,
     PLACE_CLEAR,
     PLACE_WORLD,
+    PREGRASP_SETTLE_TOLERANCE_RAD,
     SAFETY_PROFILE,
     SAFETY_PROFILE_NAME,
     SAFETY_SETTINGS_PATH,
@@ -71,6 +80,19 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert SETTINGS.gripper_opening_limits == (0.0, 0.045)
     assert SETTINGS.gripper_force_max == 100.0
     assert SETTINGS.safety_command_horizon == 1.0
+    assert SETTINGS.joint_stall_steps == 10
+    assert JOINT_STALL_STEPS == 10
+    assert JOINT_PROGRESS_EPSILON_RAD == 1e-6
+    assert PREGRASP_SETTLE_TOLERANCE_RAD == 0.01
+    assert HOME_SETTLE_TOLERANCE_RAD == 0.02
+    assert LINEAR_SETTLE_TOLERANCE_RAD == 0.03
+    assert LINEAR_FINAL_SETTLE_TOLERANCE_RAD == 0.01
+    assert LINEAR_WAYPOINT_SPACING_M == 0.03
+    assert JOINT_MOVE_TIMEOUT_STEPS == 800
+    assert LINEAR_MOVE_TIMEOUT_STEPS == 600
+    assert SETTINGS.base_drift_position_tolerance_m == 0.005
+    assert SETTINGS.base_drift_yaw_tolerance_deg == 0.5
+    assert SETTINGS.pregrasp_route == "interpolated"
     assert SAFETY_SETTINGS_PATH == Path(__file__).parents[1] / "configs" / "safety.yaml"
     assert SAFETY_PROFILE_NAME == "original_envelope"
     assert SAFETY_PROFILE.workspace_min == (

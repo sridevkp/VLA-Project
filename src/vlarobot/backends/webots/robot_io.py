@@ -3,7 +3,9 @@
 import importlib
 import logging
 import math
-from typing import Any
+from typing import Any, cast
+
+import numpy as np
 
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
@@ -23,6 +25,7 @@ class RobotIO:
         self.robot = importlib.import_module("controller").Supervisor()
         self.ts = int(self.robot.getBasicTimeStep()) or TIME_STEP
         self.motors, self.sensors, self.fingers = {}, {}, []
+        self.wheels = {}
         for name in ARM_JOINTS + [TORSO_JOINT] + HEAD_JOINTS:
             motor = self.robot.getDevice(name)
             if motor is None:
@@ -43,6 +46,13 @@ class RobotIO:
             sensor.enable(self.ts)
             motor.setVelocity(FINGER_SPEED)
             self.fingers.append((motor, sensor))
+        for name in ("wheel_left_joint", "wheel_right_joint"):
+            motor = self.robot.getDevice(name)
+            if motor is not None:
+                sensor = motor.getPositionSensor()
+                if sensor is not None:
+                    sensor.enable(self.ts)
+                self.wheels[name] = (motor, sensor)
         maxes = [m.getMaxPosition() for m, _ in self.fingers]
         self.full_stroke = min([x for x in maxes if x > 0] + [0.045])
         if FINGERS_INVERTED:
@@ -75,6 +85,98 @@ class RobotIO:
         if self.me is None or self.can_node is None:
             raise RuntimeError("Robot and CAN nodes must be initialized before contact tracking.")
         self.me.enableContactPointsTracking(self.ts, includeDescendants=True)
+
+    def enable_contact_tracking(self):
+        if self.me is None:
+            raise RuntimeError("Robot node must be initialized before contact tracking.")
+        self.me.enableContactPointsTracking(self.ts, includeDescendants=True)
+
+    def contact_nodes(self) -> list[dict[str, object]]:
+        """Return deduplicated non-robot contact nodes with stable identifying labels."""
+        contacts = self.me.getContactPoints(includeDescendants=True)
+        result: dict[int, dict[str, object]] = {}
+        robot_id = self.me.getId()
+        for contact in contacts:
+            node_id = int(contact.getNodeId())
+            node = self.robot.getFromId(node_id)
+            if node is None or node_id == robot_id:
+                continue
+            parent = node
+            belongs_to_robot = False
+            while parent is not None:
+                if int(parent.getId()) == robot_id:
+                    belongs_to_robot = True
+                    break
+                parent = parent.getParentNode()
+            if belongs_to_robot:
+                continue
+            def_name = node.getDef()
+            type_name = node.getTypeName()
+            name_field = node.getField("name")
+            name = name_field.getSFString() if name_field is not None else ""
+            label = def_name or name or f"{type_name}#{node_id}"
+            point_getter = getattr(contact, "getPoint", None)
+            point = point_getter() if point_getter is not None else getattr(contact, "point", None)
+            item = result.setdefault(
+                node_id,
+                {
+                    "node_id": node_id,
+                    "node_name": label,
+                    "node_type": type_name,
+                    "contact_points_world_xyz_m": [],
+                },
+            )
+            if point is not None:
+                points = cast(list[list[float]], item["contact_points_world_xyz_m"])
+                points.append([float(value) for value in point])
+        return list(result.values())
+
+    def wheel_status(self) -> dict[str, dict[str, float | str | None]]:
+        status = {}
+        for name, (motor, sensor) in self.wheels.items():
+            target = float(motor.getTargetPosition())
+            status[name] = {
+                "control_mode": "velocity" if math.isinf(target) else "position",
+                "target_position_rad": target if math.isfinite(target) else None,
+                "target_velocity_rad_s": float(motor.getVelocity()),
+                "sensor_position_rad": float(sensor.getValue()) if sensor is not None else None,
+            }
+        return status
+
+    def joint_endpoint_world_position(self, name: str) -> list[float] | None:
+        motor = self.motors.get(name)
+        if motor is None:
+            return None
+        node = self.robot.getFromDevice(motor._tag)
+        while node is not None and node.getTypeName() not in {"HingeJoint", "SliderJoint"}:
+            node = node.getParentNode()
+        if node is None:
+            return None
+        parent = node.getParentNode()
+        parameters_field = node.getField("jointParameters")
+        parameters = parameters_field.getSFNode() if parameters_field is not None else None
+        offset_field = parameters.getField("position") if parameters is not None else None
+        if parent is not None and offset_field is not None:
+            try:
+                parent_position = np.asarray(parent.getPosition(), dtype=float)
+                parent_rotation = np.asarray(parent.getOrientation(), dtype=float).reshape((3, 3))
+                local_offset = np.asarray(offset_field.getSFVec3f(), dtype=float)
+                world_position = parent_position + parent_rotation @ local_offset
+                if np.all(np.isfinite(world_position)):
+                    return world_position.tolist()
+            except (AttributeError, TypeError, ValueError):
+                pass
+        try:
+            position = node.getPosition()
+            if position is not None and all(math.isfinite(float(value)) for value in position):
+                return [float(value) for value in position]
+        except (AttributeError, TypeError, ValueError):
+            pass
+        endpoint_field = node.getField("endPoint")
+        endpoint = endpoint_field.getSFNode() if endpoint_field is not None else None
+        if endpoint is None:
+            return None
+        return [float(value) for value in endpoint.getPosition()]
 
     def can_contact_detected(self):
         if self.me is None or self.can_node is None:

@@ -57,6 +57,8 @@ class RobotState:
     gripper_opening: float
     gripper_holding: bool | None = None
     base_pose_world: Pose3D | None = None
+    # Backend diagnostics are read-only telemetry; action and safety interfaces ignore them.
+    diagnostics: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

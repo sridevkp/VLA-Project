@@ -2,7 +2,11 @@ import json
 
 import pytest
 
-from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
+from vlarobot.execution.trace_compare import (
+    base_drift_by_state,
+    compare_traces,
+    joint_diagnostics,
+)
 
 PREFIX = ("INIT", "PREGRASP", "DESCEND", "CLOSE", "LIFT")
 
@@ -16,7 +20,11 @@ def _trace(
     descend_x=0.2,
     lift_x=0.1,
     tilt=1.0,
+    init_torso=0.35,
+    init_head=None,
+    pregrasp_realign=None,
 ):
+    head = {"head_1_joint": 0.0, "head_2_joint": -0.77} if init_head is None else init_head
     records = []
     targets = {
         "INIT": None,
@@ -77,6 +85,9 @@ def _trace(
                 "achieved_ee_base_xyz_m": achieved_target,
                 "joint_limits_rad": {"arm_1_joint": [-2.0, 2.0]},
                 "ik_tilt_deg": None if state == "INIT" else tilt,
+                "torso_lift_joint_sensor_rad": init_torso,
+                "head_joint_sensor_rad": head,
+                "pregrasp_realign": pregrasp_realign,
             }
         )
     return records
@@ -156,6 +167,40 @@ def test_compare_allows_brain_trace_to_continue_after_compared_prefix(tmp_path):
     result = _compare(tmp_path, original, brain)
 
     assert result.passed
+
+
+def test_compare_reports_matching_pregrasp_realign_flags(tmp_path):
+    result = _compare(
+        tmp_path,
+        _trace(pregrasp_realign=True),
+        _trace(pregrasp_realign=True),
+    )
+
+    assert result.passed
+    assert result.first_pregrasp_realign is True
+    assert result.second_pregrasp_realign is True
+
+
+def test_compare_rejects_mixed_pregrasp_realign_flags(tmp_path):
+    result = _compare(
+        tmp_path,
+        _trace(pregrasp_realign=True),
+        _trace(pregrasp_realign=False),
+    )
+
+    assert not result.passed
+    assert result.first_pregrasp_realign is True
+    assert result.second_pregrasp_realign is False
+    assert "pregrasp_realign differs" in result.reason
+    assert "ADR-0016" in result.reason
+
+
+def test_compare_allows_missing_pregrasp_realign_flag(tmp_path):
+    result = _compare(tmp_path, _trace(), _trace())
+
+    assert result.passed
+    assert result.first_pregrasp_realign is None
+    assert result.second_pregrasp_realign is None
 
 
 def test_compare_enforces_existing_tilt_limit(tmp_path):
@@ -243,3 +288,115 @@ def test_joint_diagnostics_prefers_explicit_command_target_over_measured_alias(t
     result = joint_diagnostics(path)
 
     assert result.max_step_by_joint_rad == {"arm_7_joint": 0.15}
+
+
+def test_compare_checks_init_torso_and_head_posture(tmp_path):
+    result = _compare(tmp_path, _trace(), _trace(init_torso=0.20))
+
+    assert not result.passed
+    assert result.state == "INIT"
+    assert "INIT torso sensor delta" in result.reason
+
+    head_result = _compare(
+        tmp_path,
+        _trace(),
+        _trace(init_head={"head_1_joint": 0.0, "head_2_joint": 0.0}),
+    )
+    assert not head_result.passed
+    assert head_result.state == "INIT"
+    assert "INIT head joint head_2_joint" in head_result.reason
+
+
+def test_base_drift_by_state_reports_planar_and_yaw_drift(tmp_path):
+    path = tmp_path / "drift.jsonl"
+    _write_trace(
+        path,
+        [
+            {
+                "event": "state_boundary",
+                "phase": "enter",
+                "state": "INIT",
+                "sim_time_s": 0.0,
+                "base_world_xyz_m": [0.0, 0.0, 0.0],
+                "base_world_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+            },
+            {
+                "event": "state_boundary",
+                "phase": "exit",
+                "state": "PREGRASP",
+                "sim_time_s": 2.0,
+                "base_world_xyz_m": [0.003, 0.004, 0.0],
+                "base_world_orientation_xyzw": [0.0, 0.0, 0.0087265, 0.9999619],
+            },
+        ],
+    )
+
+    drift = base_drift_by_state(path)
+
+    assert set(drift) == {"INIT", "PREGRASP"}
+    assert drift["PREGRASP"].max_distance_m == pytest.approx(0.005)
+    assert drift["PREGRASP"].max_yaw_deg == pytest.approx(1.0, abs=1e-3)
+    assert drift["PREGRASP"].rate_m_per_s == pytest.approx(0.0025)
+
+
+def test_base_drift_by_state_reports_base_tilt(tmp_path):
+    path = tmp_path / "tilt.jsonl"
+    _write_trace(
+        path,
+        [
+            {
+                "event": "state_boundary",
+                "phase": "enter",
+                "state": "PREGRASP",
+                "sim_time_s": 0.0,
+                "base_world_xyz_m": [0.0, 0.0, 0.0],
+                "base_world_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                "base_tilt_roll_deg": -0.4,
+                "base_tilt_pitch_deg": 0.3,
+            },
+            {
+                "event": "state_boundary",
+                "phase": "exit",
+                "state": "PREGRASP",
+                "sim_time_s": 2.0,
+                "base_world_xyz_m": [0.001, 0.0, 0.0],
+                "base_world_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                "base_tilt_roll_deg": -1.3,
+                "base_tilt_pitch_deg": 1.5,
+            },
+        ],
+    )
+
+    drift = base_drift_by_state(path)
+
+    assert drift["PREGRASP"].max_tilt_deg == pytest.approx(1.5)
+    assert drift["PREGRASP"].max_distance_m == pytest.approx(0.001)
+
+
+def test_base_drift_by_state_reads_fixture_orientation_matrices(tmp_path):
+    path = tmp_path / "fixture-drift.jsonl"
+    _write_trace(
+        path,
+        [
+            {
+                "event": "state_boundary",
+                "phase": "enter",
+                "state": "INIT",
+                "base_world_xyz_m": [0.0, 0.0, 0.0],
+                "base_world_orientation_matrix": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            },
+            {
+                "event": "state_boundary",
+                "phase": "exit",
+                "state": "LIFT",
+                "base_world_xyz_m": [0.0, 0.01, 0.0],
+                "base_world_orientation_matrix": [0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            },
+        ],
+    )
+
+    drift = base_drift_by_state(path)
+
+    assert drift["LIFT"].max_distance_m == pytest.approx(0.01)
+    assert drift["LIFT"].max_yaw_deg == pytest.approx(90.0)
+    assert drift["LIFT"].rate_m_per_s == 0.0

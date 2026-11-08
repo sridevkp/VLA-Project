@@ -19,7 +19,8 @@ from vlarobot.backends.webots.config import (
     TORSO_JOINT,
 )
 from vlarobot.backends.webots.kinematics import IKTrustRegionError, Kinematics
-from vlarobot.core.types import GroundTruth, Pose3D, Vec3
+from vlarobot.core.types import ApplyResult, GroundTruth, JointTarget, Pose3D, Vec3
+from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_can import (
     ScriptedCanPolicy,
     _ik_tolerance_for_state,
@@ -28,6 +29,10 @@ from vlarobot.execution.scripted_can import (
 
 
 class FakeCanBackend(FakeBackend):
+    def __init__(self, *args, **kwargs):
+        self.kinematics = Kinematics()
+        super().__init__(*args, **kwargs)
+
     def reset(self, scenario, seed):
         super().reset(scenario, seed)
         self._robot_state.base_pose_world = Pose3D(
@@ -38,6 +43,27 @@ class FakeCanBackend(FakeBackend):
                 -0.717650835270671,
                 0.6962721492163582,
             ),
+        )
+        return self._sync_observation()
+
+    def apply(self, action):
+        result = super().apply(action)
+        self._sync_observation()
+        return result
+
+    def step(self, n_steps=1):
+        super().step(n_steps)
+        return self._sync_observation()
+
+    def _sync_observation(self):
+        q = np.zeros(len(self.kinematics.chain.links), dtype=float)
+        for name, value in self._robot_state.joint_pos.items():
+            q[self.kinematics.idx[name]] = value
+        q[self.kinematics.idx[TORSO_JOINT]] = TORSO_HEIGHT
+        transform = self.kinematics.forward(q)
+        self._robot_state.ee_pose = Pose3D(
+            Vec3(*map(float, transform[:3, 3])),
+            (0.0, 0.0, 0.0, 1.0),
         )
         return self._observation()
 
@@ -52,10 +78,65 @@ class FakeCanBackend(FakeBackend):
         )
 
 
+class RateLimitedCanBackend(FakeCanBackend):
+    def __init__(self, kinematics, *, stuck=False):
+        limits = SafetyLimits(
+            joint_position={name: kinematics.bounds(name) for name in ARM_JOINTS},
+            joint_velocity={name: 1.76 for name in ARM_JOINTS},
+            command_horizon=1.0,
+        )
+        super().__init__(SafetyMonitor(limits), step_duration=0.032)
+        self.kinematics = kinematics
+        self.stuck = stuck
+        self.motor_targets = dict(self._robot_state.joint_pos)
+        self.rejections = 0
+
+    def reset(self, scenario, seed):
+        super().reset(scenario, seed)
+        for name in ARM_JOINTS:
+            lo, hi = self.kinematics.bounds(name)
+            self._robot_state.joint_pos[name] = min(max(0.0, lo + 0.001), hi)
+        self.motor_targets = dict(self._robot_state.joint_pos)
+        return self._sync_observation()
+
+    def apply(self, action):
+        if isinstance(action, JointTarget):
+            result = self.safety_monitor.validate(action, self._robot_state)
+            if not result.accepted:
+                self.rejections += 1
+                return result
+            self.motor_targets.update(action.q)
+            return ApplyResult(True)
+        return super().apply(action)
+
+    def step(self, n_steps=1):
+        for _ in range(n_steps):
+            if not self.stuck:
+                max_delta = 0.5 * self.step_duration
+                for name, target in self.motor_targets.items():
+                    current = self._robot_state.joint_pos[name]
+                    delta = max(-max_delta, min(max_delta, target - current))
+                    self._robot_state.joint_pos[name] = current + delta
+            super().step(1)
+        return self._sync_observation()
+
+
+class BaseDriftCanBackend(RateLimitedCanBackend):
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        observation.robot.diagnostics = {
+            "base_drift_distance_m": 0.006,
+            "base_drift_yaw_deg": 0.6,
+            "contact_nodes": [{"node_name": "TABLE"}],
+        }
+        self._robot_state.diagnostics = observation.robot.diagnostics
+        return observation
+
+
 def test_scripted_can_policy_allows_transit_ik_with_specific_tolerance(tmp_path) -> None:
     backend = FakeCanBackend()
     trace_path = tmp_path / "trace.jsonl"
-    policy = ScriptedCanPolicy(trace_path=trace_path)
+    policy = ScriptedCanPolicy(kinematics=backend.kinematics, trace_path=trace_path)
 
     result = policy.execute(backend, seed=0)
 
@@ -79,6 +160,20 @@ def test_scripted_can_policy_allows_transit_ik_with_specific_tolerance(tmp_path)
     )
 
 
+def test_watched_pregrasp_stop_leaves_later_states_unexecuted(tmp_path) -> None:
+    backend = RateLimitedCanBackend(Kinematics())
+    trace = tmp_path / "pregrasp-only.jsonl"
+    result = ScriptedCanPolicy(backend.kinematics, trace_path=trace, stop_after="PREGRASP").execute(
+        backend, seed=0
+    )
+
+    assert result.final_state == "pregrasp"
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    states = [row["state"] for row in rows if row.get("event") == "state_boundary"]
+    assert "PREGRASP" in states
+    assert "DESCEND" not in states
+
+
 def test_full_ik_vector_uses_configured_torso_height() -> None:
     policy = ScriptedCanPolicy()
 
@@ -95,6 +190,173 @@ def test_kinematics_seed_reproduces_random_restart_sequence() -> None:
     second = kin.rng.uniform(-1.0, 1.0, size=8)
 
     np.testing.assert_array_equal(first, second)
+
+
+def test_fixture_seed_zero_matches_original_restart_stream_and_torso() -> None:
+    kin = Kinematics()
+    kin.set_seed(0)
+    actual = np.asarray(
+        [[kin.rng.uniform(*kin.bounds(name)) for name in ARM_JOINTS] for _ in range(20)]
+    )
+    rng = np.random.default_rng(0)
+    expected = np.asarray(
+        [[rng.uniform(*kin.bounds(name)) for name in ARM_JOINTS] for _ in range(20)]
+    )
+    np.testing.assert_array_equal(actual, expected)
+    seed = ScriptedCanPolicy(kin)._full_joint_vector({name: 0.0 for name in ARM_JOINTS})
+    assert seed[kin.idx[TORSO_JOINT]] == TORSO_HEIGHT
+
+
+def test_unpaced_rate_limited_joint_waypoints_eventually_hit_velocity_rejection() -> None:
+    kin = Kinematics()
+    backend = RateLimitedCanBackend(kin)
+    observation = backend.reset(None, 0)
+    start = np.zeros(len(kin.chain.links), dtype=float)
+    for name, value in observation.robot.joint_pos.items():
+        start[kin.idx[name]] = value
+    start[kin.idx[TORSO_JOINT]] = TORSO_HEIGHT
+    goal = start.copy()
+    goal[kin.idx["arm_7_joint"]] = 2.0
+    steps = kin.interpolate_joint_path(start, goal, MAX_JOINT_STEP_RAD, min_steps=2)
+
+    rejected = False
+    for waypoint in steps:
+        target = {name: float(waypoint[kin.idx[name]]) for name in ARM_JOINTS}
+        result = backend.apply(JointTarget(target))
+        if not result.accepted:
+            rejected = True
+            break
+        observation = backend.step(1)
+
+    assert rejected
+    assert backend.rejections == 1
+    assert "violates velocity limits" in (result.reason or "")
+    assert observation.t > 0.0
+
+
+def test_paced_policy_settles_prefix_and_seeds_descend_from_pregrasp(monkeypatch, tmp_path) -> None:
+    import vlarobot.execution.scripted_can as scripted_can
+
+    monkeypatch.setattr(scripted_can, "STOP_AFTER", "LIFT")
+    kin = Kinematics()
+    kin.set_seed(0)
+    original_solve = kin.solve
+    solve_calls = []
+
+    def recording_solve(
+        target: np.ndarray,
+        seed: np.ndarray,
+        restarts: bool = False,
+        n_random: int = 20,
+        position_tolerance: float = IK_TOL_GRASP,
+        max_joint_step_rad: float | None = None,
+    ):
+        result = original_solve(
+            target,
+            seed,
+            restarts=restarts,
+            n_random=n_random,
+            position_tolerance=position_tolerance,
+            max_joint_step_rad=max_joint_step_rad,
+        )
+        solve_calls.append((np.asarray(seed).copy(), np.asarray(result[0]).copy()))
+        return result
+
+    kin.solve = recording_solve
+    backend = RateLimitedCanBackend(kin)
+    trace_path = tmp_path / "paced-prefix.jsonl"
+    policy = ScriptedCanPolicy(kin, trace_path=trace_path)
+
+    result = policy.execute(backend, seed=0)
+
+    assert result.final_state == "lift"
+    assert backend.rejections == 0
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    entered = [
+        record["state"]
+        for record in records
+        if record.get("event") == "state_boundary" and record.get("phase") == "enter"
+    ]
+    assert entered[:5] == ["INIT", "PREGRASP", "DESCEND", "CLOSE", "LIFT"]
+    assert not any(record.get("event") == "safety_rejection" for record in records)
+    for state, tolerance in (("PREGRASP", 0.01), ("DESCEND", 0.01), ("LIFT", 0.01)):
+        boundary = next(
+            record
+            for record in records
+            if record.get("event") == "state_boundary"
+            and record.get("state") == state
+            and record.get("phase") == "exit"
+        )
+        measured = boundary["measured_joint_positions_rad"]
+        commanded = boundary["commanded_joint_target_rad"]
+        assert max(abs(measured[name] - commanded[name]) for name in ARM_JOINTS) < tolerance
+    assert len(solve_calls) > 2
+    initial_seed, pregrasp_solution = solve_calls[0]
+    descend_seed = solve_calls[1][0]
+    for name in ARM_JOINTS:
+        lo, hi = kin.bounds(name)
+        assert initial_seed[kin.idx[name]] == pytest.approx(min(max(0.0, lo + 0.001), hi))
+    assert initial_seed[kin.idx[TORSO_JOINT]] == TORSO_HEIGHT
+    np.testing.assert_allclose(descend_seed, pregrasp_solution, atol=0.0, rtol=0.0)
+    assert policy.state_sim_durations["PREGRASP"] == pytest.approx(
+        policy.state_settle_durations["PREGRASP"]
+    )
+
+
+def test_joint_stall_watchdog_fails_the_active_state(monkeypatch) -> None:
+    import vlarobot.execution.scripted_can as scripted_can
+
+    monkeypatch.setattr(scripted_can, "JOINT_STALL_STEPS", 4)
+    kin = Kinematics()
+    backend = RateLimitedCanBackend(kin, stuck=True)
+    result = ScriptedCanPolicy(kin).execute(backend, seed=0)
+
+    assert result.final_state == "FAILED"
+    assert result.failure_state == "PREGRASP"
+    assert result.failure_reason == "joint stall"
+    assert backend.rejections == 0
+
+
+def test_base_invariant_fails_with_contact_context(tmp_path) -> None:
+    kin = Kinematics()
+    backend = BaseDriftCanBackend(kin)
+    trace_path = tmp_path / "base-drift.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace_path).execute(backend, seed=0)
+
+    assert result.failure_state == "PREGRASP"
+    assert result.failure_reason == "base moved"
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    event = next(row for row in records if row.get("event") == "base_moved")
+    assert event["contact_nodes"] == [{"node_name": "TABLE"}]
+
+
+def test_failed_boundary_uses_last_observation_not_reset_observation(tmp_path, monkeypatch) -> None:
+    import vlarobot.execution.scripted_can as scripted_can
+
+    monkeypatch.setattr(scripted_can, "JOINT_STALL_STEPS", 4)
+    kin = Kinematics()
+    backend = RateLimitedCanBackend(kin, stuck=True)
+    trace_path = tmp_path / "failed-last-observation.jsonl"
+
+    result = ScriptedCanPolicy(kin, trace_path=trace_path).execute(backend, seed=0)
+
+    assert result.failure_reason == "joint stall"
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    exit_record = next(
+        record
+        for record in records
+        if record.get("event") == "state_boundary"
+        and record.get("state") == "PREGRASP"
+        and record.get("phase") == "exit"
+    )
+    assert exit_record["sim_time_s"] > 0.0
+    assert exit_record["sim_time_s"] == pytest.approx(backend._time)
+    assert exit_record["measured_joint_positions_rad"] == backend._robot_state.joint_pos
+    assert exit_record["final_target_distance_m"] == pytest.approx(result.final_target_distance)
+    assert exit_record["base_world_xyz_m"] == pytest.approx(
+        backend._robot_state.base_pose_world.position.as_array().tolist()
+    )
 
 
 def test_kinematics_prefers_nearest_feasible_joint_solution() -> None:
@@ -131,6 +393,36 @@ def test_joint_interpolation_respects_configured_maximum_step() -> None:
         ) <= (MAX_JOINT_STEP_RAD + 1e-12)
         previous = waypoint
     np.testing.assert_array_equal(waypoints[-1], target)
+
+
+def test_safe_via_is_selected_by_fk_and_both_joint_segments_clear_table() -> None:
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kin)
+    policy._seed = 0
+    start = np.zeros(len(kin.chain.links), dtype=float)
+    goal = start.copy()
+    start[kin.idx[TORSO_JOINT]] = goal[kin.idx[TORSO_JOINT]] = 0.35
+    for name, value in {
+        "arm_1_joint": 0.7123,
+        "arm_2_joint": 0.7360,
+        "arm_3_joint": -0.7142,
+        "arm_4_joint": 1.0956,
+        "arm_5_joint": 0.9456,
+        "arm_6_joint": -1.2348,
+        "arm_7_joint": 0.5786,
+    }.items():
+        goal[kin.idx[name]] = value
+    base = Pose3D(
+        Vec3(-0.53679259, -3.70923266, 0.08531599),
+        (0.01175238, -0.00664384, -0.71763008, 0.69629363),
+    )
+
+    via = policy._find_safe_via(start, goal, base)
+
+    assert via is not None
+    assert not np.allclose(via, start)
+    assert policy._joint_path_table_clear(start, via, base)
+    assert policy._joint_path_table_clear(via, goal, base)
 
 
 def test_ik_tolerance_is_relaxed_only_for_non_grasp_states() -> None:

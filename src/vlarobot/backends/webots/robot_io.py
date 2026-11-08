@@ -11,6 +11,7 @@ from vlarobot.backends.webots.config import (
     FINGER_SPEED,
     FINGERS_INVERTED,
     HEAD_JOINTS,
+    HOLD_BASE,
     TIME_STEP,
     TORSO_JOINT,
 )
@@ -29,12 +30,32 @@ def _finite_position(position: Any) -> list[float] | None:
     return values if all(math.isfinite(value) for value in values) else None
 
 
+def _finite_or_none(value: Any) -> float | None:
+    """Return a finite float or ``None`` for infinities, NaNs, and bad values."""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _flatten_matrix(values: Any) -> list[float] | None:
+    """Return a finite row-major 3x3 matrix from a Webots orientation field."""
+    finite = _finite_position(values)
+    if finite is None or len(finite) != 9:
+        return None
+    return finite
+
+
 class RobotIO:
     def __init__(self):
         self.robot = importlib.import_module("controller").Supervisor()
         self.ts = int(self.robot.getBasicTimeStep()) or TIME_STEP
         self.motors, self.sensors, self.fingers = {}, {}, []
         self.wheels = {}
+        self._lookup_failures: dict[str, str] = {}
         for name in ARM_JOINTS + [TORSO_JOINT] + HEAD_JOINTS:
             motor = self.robot.getDevice(name)
             if motor is None:
@@ -147,6 +168,14 @@ class RobotIO:
             }
         return status
 
+    def apply_hold_base(self) -> None:
+        """Optionally brake the base wheels; ``none`` leaves the PROTO position hold alone."""
+        if HOLD_BASE != "wheels_zero_velocity":
+            return
+        for motor, _ in self.wheels.values():
+            motor.setPosition(float("inf"))
+            motor.setVelocity(0.0)
+
     def _joint_node(self, name: str) -> Any | None:
         motor = self.motors.get(name)
         if motor is None:
@@ -156,35 +185,160 @@ class RobotIO:
             node = node.getParentNode()
         return node
 
-    def joint_anchor_world_position(self, name: str) -> list[float] | None:
-        """World position of a joint anchor, the frame origin used by forward kinematics.
+    def _warn_lookup_once(self, key: str, message: str, *args: object) -> None:
+        """Log a Supervisor lookup failure once and remember it for later calls."""
+        failures = self.__dict__.setdefault("_lookup_failures", {})
+        if key in failures:
+            return
+        failures[key] = message
+        LOGGER.warning(message, *args)
 
-        ``WebotsBackend`` compares this value against the IKPy chain's transform for the
-        same joint, so it must be the joint anchor rather than the joint's end point.
-        """
-        node = self._joint_node(name)
-        if node is None:
-            return None
-        try:
-            position = node.getPosition()
-        except (AttributeError, TypeError, ValueError):
-            return None
-        return _finite_position(position)
+    def _lookup_failed(self, key: str) -> bool:
+        return key in self.__dict__.setdefault("_lookup_failures", {})
 
     def joint_endpoint_world_position(self, name: str) -> list[float] | None:
-        """World position of the node attached to a joint's ``endPoint`` field."""
+        """World position of the Pose-derived node in a joint's ``endPoint`` field.
+
+        Webots only supports ``getPosition()`` on Pose-derived nodes (``Solid``, ``Robot``,
+        ``Pose``, ...). A ``HingeJoint`` or ``SliderJoint`` node is not Pose-derived and calling
+        ``getPosition()`` on it emits
+        ``wb_supervisor_node_get_position() can exclusively be used with Pose`` for every call.
+        The child Solid attached through ``endPoint`` is Pose-derived, so it is the only valid
+        Supervisor reference for arm-link telemetry. Failures are cached and warned once per
+        distinct lookup.
+        """
+        key = f"joint_endpoint:{name}"
+        if self._lookup_failed(key):
+            return None
         node = self._joint_node(name)
         if node is None:
+            self._warn_lookup_once(
+                key,
+                "No HingeJoint/SliderJoint node found for joint %s; link telemetry is None.",
+                name,
+            )
             return None
         endpoint_field = node.getField("endPoint")
         endpoint = endpoint_field.getSFNode() if endpoint_field is not None else None
         if endpoint is None:
+            self._warn_lookup_once(
+                key, "Joint %s has no endPoint Solid; link telemetry is None.", name
+            )
             return None
         try:
             position = endpoint.getPosition()
-        except (AttributeError, TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+            self._warn_lookup_once(
+                key,
+                "Joint %s endPoint position lookup failed (%s); link telemetry is None.",
+                name,
+                error,
+            )
             return None
-        return _finite_position(position)
+        finite = _finite_position(position)
+        if finite is None:
+            self._warn_lookup_once(
+                key,
+                "Joint %s endPoint returned a non-finite position; link telemetry is None.",
+                name,
+            )
+        return finite
+
+    def reset_fingerprint(self) -> dict[str, object]:
+        """Capture every Webots state value the soft reset is expected to restore.
+
+        The fingerprint is emitted only on the reset observation. It records motor targets and
+        velocities (position and velocity control modes), all joint sensors, base pose and
+        Supervisor velocity, and the CAN pose. Non-finite values are serialized as ``None`` so the
+        JSONL trace remains valid.
+        """
+        motors = dict(self.motors)
+        motors.update({motor.getName(): motor for motor, _ in self.fingers})
+        motors.update({name: motor for name, (motor, _) in self.wheels.items()})
+        motor_state: dict[str, object] = {}
+        for name, motor in sorted(motors.items()):
+            target_raw = self._safe_motor_call(motor, "getTargetPosition", name)
+            target = _finite_or_none(target_raw)
+            velocity = _finite_or_none(self._safe_motor_call(motor, "getVelocity", name))
+            control_mode = (
+                "velocity"
+                if target_raw is not None and math.isinf(float(target_raw))
+                else "position"
+            )
+            motor_state[name] = {
+                "target_position_rad": target,
+                "velocity_rad_s": velocity,
+                "control_mode": control_mode,
+            }
+
+        sensors = dict(self.sensors)
+        sensors.update({motor.getName(): sensor for motor, sensor in self.fingers})
+        sensors.update(
+            {name: sensor for name, (_, sensor) in self.wheels.items() if sensor is not None}
+        )
+        sensor_state = {
+            name: _finite_or_none(sensor.getValue()) for name, sensor in sorted(sensors.items())
+        }
+
+        base_pose: dict[str, object] = {
+            "world_xyz_m": None,
+            "world_orientation_matrix": None,
+            "velocity_world_xyz_m_s": None,
+            "angular_velocity_world_xyz_rad_s": None,
+        }
+        if self.me is not None:
+            base_pose["world_xyz_m"] = _finite_position(self.me.getPosition())
+            base_pose["world_orientation_matrix"] = _flatten_matrix(self.me.getOrientation())
+            velocity = self._safe_supervisor_call(self.me, "getVelocity", "base")
+            if velocity is not None:
+                values = _finite_position(velocity)
+                if values is not None and len(values) >= 6:
+                    base_pose["velocity_world_xyz_m_s"] = values[:3]
+                    base_pose["angular_velocity_world_xyz_rad_s"] = values[3:6]
+
+        can_pose: dict[str, object] = {"world_xyz_m": None, "world_orientation_matrix": None}
+        if self.can_node is not None:
+            can_pose["world_xyz_m"] = _finite_position(self.can_node.getPosition())
+            can_pose["world_orientation_matrix"] = _flatten_matrix(self.can_node.getOrientation())
+
+        return {
+            "motors": motor_state,
+            "joint_sensors_rad": sensor_state,
+            "base": base_pose,
+            "can": can_pose,
+        }
+
+    def _safe_motor_call(self, motor: Any, attribute: str, name: str) -> Any:
+        key = f"motor:{name}:{attribute}"
+        if self._lookup_failed(key):
+            return None
+        try:
+            return getattr(motor, attribute)()
+        except (AttributeError, TypeError, ValueError) as error:
+            self._warn_lookup_once(
+                key,
+                "Motor %s %s lookup failed (%s); fingerprint value is None.",
+                name,
+                attribute,
+                error,
+            )
+            return None
+
+    def _safe_supervisor_call(self, node: Any, attribute: str, name: str) -> Any:
+        key = f"supervisor:{name}:{attribute}"
+        if self._lookup_failed(key):
+            return None
+        try:
+            return getattr(node, attribute)()
+        except (AttributeError, TypeError, ValueError) as error:
+            self._warn_lookup_once(
+                key,
+                "Supervisor %s %s lookup failed (%s); fingerprint value is None.",
+                name,
+                attribute,
+                error,
+            )
+            return None
 
     def can_contact_detected(self):
         if self.me is None or self.can_node is None:

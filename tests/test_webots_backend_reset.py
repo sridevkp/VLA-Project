@@ -114,6 +114,7 @@ def test_contact_tracking_reports_external_node_and_world_contact_points():
             self.def_name = def_name
             self.type_name = type_name
             self.parent = parent
+            self.contact_points = []
 
         def getId(self):
             return self.node_id
@@ -129,6 +130,9 @@ def test_contact_tracking_reports_external_node_and_world_contact_points():
 
         def getParentNode(self):
             return self.parent
+
+        def getContactPoints(self, **_kwargs):
+            return list(self.contact_points)
 
     class FakeContact:
         def getNodeId(self):
@@ -146,7 +150,7 @@ def test_contact_tracking_reports_external_node_and_world_contact_points():
     io = RobotIO.__new__(RobotIO)
     io.me = robot_node
     io.robot = FakeSupervisor()
-    robot_node.getContactPoints = lambda **_: [FakeContact()]
+    robot_node.contact_points = [FakeContact()]
 
     assert io.contact_nodes() == [
         {
@@ -260,6 +264,9 @@ def _make_backend():
                 motor.position_field.setSFFloat(position)
                 motor.setPosition(position)
 
+        def apply_hold_base(self):
+            return None
+
     backend = WebotsBackend.__new__(WebotsBackend)
     backend.io = cast(RobotIO, FakeIO())
     backend.can_node = can_node
@@ -362,25 +369,37 @@ class _FakeEndpointField:
 
 
 class _FakeJointNode:
-    def __init__(self, position, endpoint=None):
-        self.position = position
+    """HingeJoint stand-in; ``getPosition`` raises like the real Supervisor."""
+
+    def __init__(self, endpoint=None, position_error=None):
         self.endpoint = endpoint
+        self.position_error = position_error
+        self.position_calls = 0
 
     def getTypeName(self):
         return "HingeJoint"
 
     def getPosition(self):
-        return None if self.position is None else list(self.position)
+        self.position_calls += 1
+        raise self.position_error or RuntimeError(
+            "wb_supervisor_node_get_position() can exclusively be used with Pose"
+        )
 
     def getField(self, name):
         return _FakeEndpointField(self.endpoint) if name == "endPoint" else None
 
 
 class _FakeEndpointNode:
-    def __init__(self, position):
+    def __init__(self, position=None, error=None):
         self.position = position
+        self.error = error
+        self.position_calls = 0
 
     def getPosition(self):
+        self.position_calls += 1
+        if self.error is not None:
+            raise self.error
+        assert self.position is not None
         return list(self.position)
 
 
@@ -401,37 +420,56 @@ def _make_joint_io(joint):
     io = RobotIO.__new__(RobotIO)
     io.robot = _FakeDeviceRobot(joint)
     io.motors = {"arm_7_joint": _FakeTaggedMotor(7)}
+    io._lookup_failures = {}
     return io
 
 
-def test_joint_anchor_returns_the_supervisor_joint_position():
-    joint = _FakeJointNode([0.5, -0.2, 0.9], endpoint=_FakeEndpointNode([9.0, 9.0, 9.0]))
+def test_joint_endpoint_uses_the_pose_derived_child_solid(caplog):
+    joint = _FakeJointNode(endpoint=_FakeEndpointNode([9.0, 9.0, 9.0]))
     io = _make_joint_io(joint)
 
-    assert io.joint_anchor_world_position("arm_7_joint") == [0.5, -0.2, 0.9]
-
-
-def test_joint_anchor_does_not_substitute_the_endpoint_when_position_is_unavailable():
-    joint = _FakeJointNode(None, endpoint=_FakeEndpointNode([9.0, 9.0, 9.0]))
-    io = _make_joint_io(joint)
-
-    assert io.joint_anchor_world_position("arm_7_joint") is None
     assert io.joint_endpoint_world_position("arm_7_joint") == [9.0, 9.0, 9.0]
+    assert joint.position_calls == 0
+    assert "getPosition" not in caplog.text
 
 
-def test_joint_anchor_returns_none_for_unknown_joint():
-    io = _make_joint_io(_FakeJointNode([0.0, 0.0, 0.0]))
+def test_joint_endpoint_returns_none_and_warns_once_for_missing_endpoint(caplog):
+    joint = _FakeJointNode(endpoint=None)
+    io = _make_joint_io(joint)
 
-    assert io.joint_anchor_world_position("missing_joint") is None
+    assert io.joint_endpoint_world_position("arm_7_joint") is None
+    assert io.joint_endpoint_world_position("arm_7_joint") is None
+    assert caplog.text.count("has no endPoint Solid") == 1
+    assert joint.position_calls == 0
+
+
+def test_joint_endpoint_returns_none_and_caches_a_non_pose_position_failure(caplog):
+    endpoint = _FakeEndpointNode(error=RuntimeError("not Pose-derived"))
+    joint = _FakeJointNode(endpoint=endpoint)
+    io = _make_joint_io(joint)
+
+    assert io.joint_endpoint_world_position("arm_7_joint") is None
+    assert io.joint_endpoint_world_position("arm_7_joint") is None
+    assert endpoint.position_calls == 1
+    assert caplog.text.count("endPoint position lookup failed") == 1
+
+
+def test_joint_endpoint_returns_none_for_unknown_joint(caplog):
+    io = _make_joint_io(_FakeJointNode(endpoint=_FakeEndpointNode([0.0, 0.0, 0.0])))
+
+    assert io.joint_endpoint_world_position("missing_joint") is None
+    assert caplog.text.count("No HingeJoint/SliderJoint node found") == 1
 
 
 class _StubChain:
-    def __init__(self, local_position):
+    def __init__(self, local_position, rotation=None):
         self.local_position = np.asarray(local_position, dtype=float)
+        self.rotation = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
 
     def forward_kinematics(self, _q, full_kinematics=False):
         assert full_kinematics is True
         matrices = [np.eye(4) for _ in range(3)]
+        matrices[1][:3, :3] = self.rotation
         matrices[1][:3, 3] = self.local_position
         return matrices
 
@@ -439,50 +477,215 @@ class _StubChain:
 class _StubKinematics:
     idx = {"arm_7_joint": 1}
 
-    def __init__(self, local_position):
-        self.chain = _StubChain(local_position)
+    def __init__(self, local_position, rotation=None):
+        self.chain = _StubChain(local_position, rotation)
 
     def forward(self, _q):
         return np.eye(4)
 
 
-def _diagnostics_backend(fk_local, ground_truth_world):
+def _diagnostics_backend(fk_local, reset_endpoint, current_endpoint):
     backend = _make_backend()
     backend._reset_base_position = np.asarray([0.1, 0.2, 0.3])
     backend._reset_base_yaw = 0.0
     backend.kinematics = cast(Kinematics, _StubKinematics(fk_local))
-    backend.io.joint_anchor_world_position = lambda _name: list(ground_truth_world)
-    backend.io.joint_endpoint_world_position = lambda _name: list(ground_truth_world)
+    backend.io.joint_endpoint_world_position = lambda _name: (
+        None if current_endpoint is None else list(current_endpoint)
+    )
+    fk_world = np.asarray([0.1, 0.2, 0.3]) + np.asarray(fk_local, dtype=float)
+    backend._arm7_endpoint_offset_world = (
+        None if reset_endpoint is None else np.asarray(reset_endpoint) - fk_world
+    )
+    backend._arm7_reset_link_rotation = np.eye(3)
     backend._last_joint_pos = backend._joint_positions()
     return backend
 
 
-def test_fk_ground_truth_diagnostics_report_zero_error_for_identical_points():
+def test_fk_ground_truth_diagnostics_report_zero_error_for_a_stable_offset():
     # Base is [0.1, 0.2, 0.3], so FK world = base + local = [0.6, 0.0, 1.2].
-    backend = _diagnostics_backend([0.5, -0.2, 0.9], [0.6, 0.0, 1.2])
+    endpoint = [0.6, 0.0, 1.2]
+    backend = _diagnostics_backend([0.5, -0.2, 0.9], endpoint, endpoint)
 
     diagnostics = backend._robot_state().diagnostics
 
     assert diagnostics["arm_7_joint_fk_world_xyz_m"] == pytest.approx([0.6, 0.0, 1.2])
+    assert diagnostics["arm_7_joint_ground_truth_world_xyz_m"] == pytest.approx(endpoint)
+    assert diagnostics["arm_7_joint_ground_truth_source"] == "endPointSolid"
     assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] == pytest.approx(0.0, abs=1e-12)
     assert diagnostics["arm_7_joint_fk_ground_truth_mismatch"] is False
+    assert diagnostics["arm_7_joint_endpoint_fk_validation_available"] is True
 
 
-def test_fk_ground_truth_diagnostics_flag_a_five_centimetre_offset():
-    backend = _diagnostics_backend([0.5, -0.2, 0.9], [0.65, 0.0, 1.2])
+def test_fk_ground_truth_diagnostics_flag_a_five_centimetre_offset_change():
+    backend = _diagnostics_backend([0.5, -0.2, 0.9], [0.6, 0.0, 1.2], [0.65, 0.0, 1.2])
 
     diagnostics = backend._robot_state().diagnostics
 
     assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] == pytest.approx(0.05)
     assert diagnostics["arm_7_joint_fk_ground_truth_mismatch"] is True
+    assert diagnostics["arm_7_joint_endpoint_offset_change_world_xyz_m"] == pytest.approx(
+        [0.05, 0.0, 0.0]
+    )
 
 
 def test_fk_ground_truth_diagnostics_mark_unavailable_points_as_none():
-    backend = _diagnostics_backend([0.5, -0.2, 0.9], [0.6, 0.0, 1.2])
-    backend.io.joint_anchor_world_position = lambda _name: None
+    backend = _diagnostics_backend([0.5, -0.2, 0.9], [0.6, 0.0, 1.2], None)
 
     diagnostics = backend._robot_state().diagnostics
 
     assert diagnostics["arm_7_joint_ground_truth_world_xyz_m"] is None
     assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] is None
     assert diagnostics["arm_7_joint_fk_ground_truth_mismatch"] is None
+    assert diagnostics["arm_7_joint_endpoint_fk_validation_available"] is False
+
+
+def test_fk_ground_truth_ignores_a_constant_endpoint_offset():
+    # The endPoint Solid sits 6.7 cm beyond FK(arm_7); a constant offset must not be an error.
+    fk_local = [0.5, -0.2, 0.9]
+    fk_world = np.asarray([0.1, 0.2, 0.3]) + np.asarray(fk_local)
+    endpoint = fk_world + np.asarray([0.0, 0.0, 0.067725])
+    backend = _diagnostics_backend(fk_local, endpoint, endpoint)
+
+    diagnostics = backend._robot_state().diagnostics
+
+    assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] == pytest.approx(0.0, abs=1e-12)
+    assert diagnostics["arm_7_joint_endpoint_offset_world_xyz_m"] == pytest.approx(
+        [0.0, 0.0, 0.067725]
+    )
+
+
+def test_fk_ground_truth_rotates_the_reset_offset_with_the_wrist():
+    # The tool offset is constant in the arm_7 link frame, so a wrist rotation must not look like
+    # an FK error once the reset-time offset is rotated into the current link frame.
+    fk_local = np.asarray([0.5, -0.2, 0.9])
+    fk_world = np.asarray([0.1, 0.2, 0.3]) + fk_local
+    local_offset = np.asarray([0.0, 0.0, 0.067725])
+    reset_rotation = np.eye(3)
+    backend = _make_backend()
+    backend._reset_base_position = np.asarray([0.1, 0.2, 0.3])
+    backend._reset_base_yaw = 0.0
+    kinematics = _StubKinematics(fk_local, reset_rotation)
+    backend.kinematics = cast(Kinematics, kinematics)
+    backend._arm7_endpoint_offset_world = reset_rotation @ local_offset
+    backend._arm7_reset_link_rotation = reset_rotation
+    backend._last_joint_pos = backend._joint_positions()
+
+    rotation = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            [0.0, 1.0, 0.0],
+        ]
+    )
+    kinematics.chain.rotation = rotation
+    endpoint = fk_world + rotation @ local_offset
+    backend.io.joint_endpoint_world_position = lambda _name: endpoint.tolist()
+
+    diagnostics = backend._robot_state().diagnostics
+
+    assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] == pytest.approx(0.0, abs=1e-12)
+    assert diagnostics["arm_7_joint_fk_ground_truth_mismatch"] is False
+
+
+def test_fk_ground_truth_flags_an_offset_that_does_not_rotate_with_the_wrist():
+    fk_local = np.asarray([0.5, -0.2, 0.9])
+    fk_world = np.asarray([0.1, 0.2, 0.3]) + fk_local
+    local_offset = np.asarray([0.0, 0.0, 0.067725])
+    backend = _make_backend()
+    backend._reset_base_position = np.asarray([0.1, 0.2, 0.3])
+    backend._reset_base_yaw = 0.0
+    kinematics = _StubKinematics(fk_local, np.eye(3))
+    backend.kinematics = cast(Kinematics, kinematics)
+    backend._arm7_endpoint_offset_world = local_offset
+    backend._arm7_reset_link_rotation = np.eye(3)
+    backend._last_joint_pos = backend._joint_positions()
+
+    kinematics.chain.rotation = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            [0.0, 1.0, 0.0],
+        ]
+    )
+    endpoint = fk_world + local_offset  # offset did not rotate with the link
+    backend.io.joint_endpoint_world_position = lambda _name: endpoint.tolist()
+
+    diagnostics = backend._robot_state().diagnostics
+
+    assert diagnostics["arm_7_joint_fk_ground_truth_error_m"] == pytest.approx(
+        np.linalg.norm(local_offset - kinematics.chain.rotation @ local_offset)
+    )
+    assert diagnostics["arm_7_joint_fk_ground_truth_mismatch"] is True
+
+
+def test_reset_fingerprint_is_identical_for_two_same_seed_resets():
+    backend = _make_backend()
+    backend.io.reset_fingerprint = lambda: {
+        "motors": {
+            name: {
+                "target_position_rad": sensor.getValue(),
+                "velocity_rad_s": 0.0,
+                "control_mode": "position",
+            }
+            for name, sensor in backend.io.sensors.items()
+        },
+        "joint_sensors_rad": {
+            name: sensor.getValue() for name, sensor in backend.io.sensors.items()
+        },
+        "base": {"world_xyz_m": [0.1, 0.2, 0.3], "world_orientation_matrix": [1.0] * 9},
+        "can": {"world_xyz_m": [1.0, 2.0, 3.0], "world_orientation_matrix": [1.0] * 9},
+    }
+
+    first = backend.reset(ScenarioSpec(), seed=0)
+    first_fingerprint = first.robot.diagnostics["reset_fingerprint"]
+    second = backend.reset(ScenarioSpec(), seed=0)
+    second_fingerprint = second.robot.diagnostics["reset_fingerprint"]
+
+    assert first_fingerprint == second_fingerprint
+    assert first_fingerprint["torso_sensor_after_rad"] == pytest.approx(0.35)
+    assert first_fingerprint["torso_commanded_rad"] == pytest.approx(0.35)
+    assert first.robot.diagnostics["reset_torso_after_rad"] == pytest.approx(0.35)
+
+
+class _FakeWheelMotor:
+    def __init__(self):
+        self.position = None
+        self.velocity = None
+
+    def setPosition(self, position):
+        self.position = position
+
+    def setVelocity(self, velocity):
+        self.velocity = velocity
+
+
+def test_hold_base_none_leaves_the_wheel_proto_hold_untouched(monkeypatch):
+    import vlarobot.backends.webots.robot_io as robot_io
+
+    monkeypatch.setattr(robot_io, "HOLD_BASE", "none")
+    io = object.__new__(RobotIO)
+    motor = _FakeWheelMotor()
+    io.wheels = {"wheel_left_joint": (motor, None), "wheel_right_joint": (motor, None)}
+
+    io.apply_hold_base()
+
+    assert motor.position is None
+    assert motor.velocity is None
+
+
+def test_hold_base_wheels_zero_velocity_switches_to_velocity_control(monkeypatch):
+    import math
+
+    import vlarobot.backends.webots.robot_io as robot_io
+
+    monkeypatch.setattr(robot_io, "HOLD_BASE", "wheels_zero_velocity")
+    io = object.__new__(RobotIO)
+    left, right = _FakeWheelMotor(), _FakeWheelMotor()
+    io.wheels = {"wheel_left_joint": (left, None), "wheel_right_joint": (right, None)}
+
+    io.apply_hold_base()
+
+    for motor in (left, right):
+        assert motor.position is not None
+        assert math.isinf(motor.position)
+        assert motor.velocity == 0.0

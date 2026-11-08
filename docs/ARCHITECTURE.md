@@ -158,7 +158,9 @@ class Verifier(Protocol):   def check(self, task, predicted, observed) -> Verify
 - Messages: `reset`, `step`, `apply`, `get_gt`, `shutdown`, `ping`; every reply carries `sim_time`, `seq`, and `error?`.
 - Versioned: include `protocol_version`; mismatch ⇒ hard fail. Protocol version 3 carries the
   optional full 3D world-frame base pose and optional read-only backend `diagnostics` mapping in
-  `RobotState`; peers using versions 1 or 2 are incompatible.
+  `RobotState` (torso sensor, base drift, wheel state, contact nodes, Supervisor arm-link world
+  positions, and arm_7 FK versus ground-truth error/flag); peers using versions 1 or 2 are
+  incompatible.
 - Default `tcp://127.0.0.1:5555`; configurable so Windows-Webots ↔ WSL2-brain works.
 
 ### 3.5 World model contents (staged)

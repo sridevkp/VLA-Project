@@ -10,6 +10,7 @@ import numpy as np
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
+    FK_GROUND_TRUTH_TOLERANCE_M,
     HEAD_JOINTS,
     HEAD_PAN,
     HEAD_TILT,
@@ -271,7 +272,16 @@ class WebotsBackend:
         except (AttributeError, IndexError, KeyError):
             pass
         endpoint_lookup = getattr(self.io, "joint_endpoint_world_position", None)
-        arm7_ground_truth = endpoint_lookup("arm_7_joint") if endpoint_lookup else None
+        anchor_lookup = getattr(self.io, "joint_anchor_world_position", None)
+        arm7_ground_truth = anchor_lookup("arm_7_joint") if anchor_lookup else None
+        arm_links: dict[str, object] = {
+            "elbow": anchor_lookup("arm_4_joint") if anchor_lookup else None,
+            "wrist": anchor_lookup("arm_6_joint") if anchor_lookup else None,
+            "tool": endpoint_lookup("arm_7_joint") if endpoint_lookup else None,
+        }
+        fk_error_m, fk_mismatch = _fk_ground_truth_mismatch(
+            arm7_world, arm7_ground_truth, FK_GROUND_TRUTH_TOLERANCE_M
+        )
         contact_lookup = getattr(self.io, "contact_nodes", None)
         contacts = contact_lookup() if contact_lookup else []
         wheel_lookup = getattr(self.io, "wheel_status", None)
@@ -283,13 +293,11 @@ class WebotsBackend:
             "base_drift_yaw_deg": math.degrees(base_yaw_delta),
             "wheel_motors": wheel_lookup() if wheel_lookup else {},
             "contact_nodes": contacts,
+            "arm_link_world_xyz_m": arm_links,
             "arm_7_joint_fk_world_xyz_m": arm7_world.tolist() if arm7_world is not None else None,
             "arm_7_joint_ground_truth_world_xyz_m": arm7_ground_truth,
-            "arm_7_joint_fk_ground_truth_error_m": (
-                float(np.linalg.norm(arm7_world - arm7_ground_truth))
-                if arm7_ground_truth is not None and arm7_world is not None
-                else None
-            ),
+            "arm_7_joint_fk_ground_truth_error_m": fk_error_m,
+            "arm_7_joint_fk_ground_truth_mismatch": fk_mismatch,
         }
         opening = self.gripper.opening()
         return RobotState(
@@ -372,6 +380,22 @@ class WebotsBackend:
             gripper_force_max=SETTINGS.gripper_force_max,
             command_horizon=SETTINGS.safety_command_horizon,
         )
+
+
+def _fk_ground_truth_mismatch(
+    fk_world: np.ndarray | None,
+    ground_truth_world: list[float] | None,
+    tolerance_m: float,
+) -> tuple[float | None, bool | None]:
+    """Compare an FK point with the Supervisor position of the same joint anchor."""
+    if fk_world is None or ground_truth_world is None:
+        return None, None
+    error = float(
+        np.linalg.norm(
+            np.asarray(fk_world, dtype=float) - np.asarray(ground_truth_world, dtype=float)
+        )
+    )
+    return error, error > tolerance_m
 
 
 def _rotation_to_quaternion(rotation: np.ndarray) -> tuple[float, float, float, float]:

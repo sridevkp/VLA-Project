@@ -407,6 +407,39 @@ planning, and active perception.
   its planar drift is about 10.4 mm; the larger 12.9 cm / about 42 degree change occurs by 26.08 s.
   This confirms base motion but not the user's inferred onset time or contact cause.
 - Webots-free FK sweep against the verified table box predicts both motion semantics clear the
-  `top+0.03 m` envelope at torso 0.35 m; with torso 0.0 m, the 0.08 m hand envelope intersects
-  near the table edge in both paths. `safe_via` metrics are kinematic estimates only. No live route,
-  posture, torso, base, IK, safety, or placement candidate experiment has been run.
+  configured clearance envelope at torso 0.35 m; with torso 0.0 m, the 0.08 m hand envelope
+  intersects near the table edge in both paths. `safe_via` metrics are kinematic estimates only. No
+  live route, posture, torso, base, IK, safety, or placement candidate experiment has been run.
+
+## 2026-11-08 handoff commit and diagnostic corrections
+
+- Recorded the M1 handoff in three commits on `m1-checkpoint-ik-transit`: `a2a2d68` (read-only
+  diagnostics, wire protocol v3), `227b7a5` (pacing and guarded PREGRASP route), and `5df8cbc`
+  (comparison tooling, scripts and docs). `runs/` was not modified.
+- Fixed the arm_7 FK-versus-ground-truth diagnostic. It now compares the IKPy `arm_7_joint` link
+  origin with the Supervisor world position of the same HingeJoint anchor through
+  `RobotIO.joint_anchor_world_position`, and the dead `jointParameters.position` + `getSFVec3f()`
+  branch is removed. A configurable 0.01 m tolerance sets
+  `arm_7_joint_fk_ground_truth_mismatch`. Webots-free tests cover a 0.05 m offset (flagged) and
+  identical inputs (zero error); unavailability is `None`, not zero. Live alignment is still
+  unverified.
+- Unified table geometry and clearance in `configs/robot.yaml`: `table_top_height_m` 0.75,
+  `table_footprint_centre_xy_m` `[-0.23882837, -4.8402928]`, `table_footprint_size_xy_m`
+  `[4.5, 1.5]`, and `table_clearance_required_m` 0.05. The runtime guard and
+  `scripts/analyze_pregrasp_table.py` read the same values; the hardcoded `0.80 m` plane and the
+  analysis script's separate `0.03 m` threshold are gone. Re-running the analysis on
+  `m1-watched-paced-02.jsonl` at torso 0.35 m gives 0.041478 m (synchronized) and 0.054233 m
+  (independent-rate) above the 0.05 m requirement; torso 0.0 m intrudes at sample 3
+  (-0.246566 m) and sample 10 (-0.171349 m). These are 0.02 m below the previously reported values
+  because the threshold changed, not because the geometry or paths changed.
+- Corrected ADR-0010 (PREGRASP/HOME settle at 0.01/0.02 rad; protocol v3 exposes torso readback)
+  and deduplicated the identical `enable_can_contact_tracking`/`enable_contact_tracking` methods.
+- Trace additions for the watched runs: per boundary and waypoint,
+  `supervisor_arm_link_world_xyz_m` (elbow `arm_4_joint`, wrist `arm_6_joint`, tool
+  `arm_7_joint` endPoint), `supervisor_min_table_clearance_m`, the FK mismatch flag, and the
+  configured table thresholds. Every field is `null` when the Supervisor value is unavailable.
+- Webots-free checks: Ruff check and format pass, `ty check src` passes, and
+  `pytest -m "not webots"` reports **80 passed** (73 baseline plus 3 joint-anchor tests, 3 FK
+  mismatch tests and 1 Supervisor-link trace test). No live Webots behaviour has been validated;
+  M1-06a and M1-07 remain **UNVERIFIED** and no posture, torso, base, or placement experiment has
+  been run.

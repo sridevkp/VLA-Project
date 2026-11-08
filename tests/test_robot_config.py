@@ -10,6 +10,7 @@ from vlarobot.backends.webots.config import (
     CONTROLLER_DIR,
     FINGER_JOINTS,
     FINGER_SPEED,
+    FK_GROUND_TRUTH_TOLERANCE_M,
     GRASP_Z,
     GRIP_FORCE,
     HEAD_JOINTS,
@@ -33,6 +34,10 @@ from vlarobot.backends.webots.config import (
     SAFETY_SETTINGS_PATH,
     SETTINGS,
     SETTINGS_PATH,
+    TABLE_CLEARANCE_REQUIRED_M,
+    TABLE_FOOTPRINT_CENTRE_XY_M,
+    TABLE_FOOTPRINT_SIZE_XY_M,
+    TABLE_TOP_HEIGHT_M,
     TIME_STEP,
     TOOL_OFFSET,
     URDF_PATH,
@@ -93,6 +98,11 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert SETTINGS.base_drift_position_tolerance_m == 0.005
     assert SETTINGS.base_drift_yaw_tolerance_deg == 0.5
     assert SETTINGS.pregrasp_route == "interpolated"
+    assert TABLE_TOP_HEIGHT_M == 0.75
+    assert TABLE_FOOTPRINT_CENTRE_XY_M == (-0.23882837, -4.8402928)
+    assert TABLE_FOOTPRINT_SIZE_XY_M == (4.5, 1.5)
+    assert TABLE_CLEARANCE_REQUIRED_M == 0.05
+    assert FK_GROUND_TRUTH_TOLERANCE_M == 0.01
     assert SAFETY_SETTINGS_PATH == Path(__file__).parents[1] / "configs" / "safety.yaml"
     assert SAFETY_PROFILE_NAME == "original_envelope"
     assert SAFETY_PROFILE.workspace_min == (

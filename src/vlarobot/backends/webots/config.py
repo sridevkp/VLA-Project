@@ -104,6 +104,11 @@ class RobotSettings:
     base_drift_position_tolerance_m: float
     base_drift_yaw_tolerance_deg: float
     pregrasp_route: Literal["interpolated", "safe_via"]
+    table_top_height_m: float
+    table_footprint_centre_xy_m: tuple[float, float]
+    table_footprint_size_xy_m: tuple[float, float]
+    table_clearance_required_m: float
+    fk_ground_truth_tolerance_m: float
     urdf_filename: str
 
     @classmethod
@@ -145,6 +150,23 @@ class RobotSettings:
         for key in ("base_drift_position_tolerance_m", "base_drift_yaw_tolerance_deg"):
             if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
                 raise ValueError(f"{key} must be positive.")
+        for key in (
+            "table_top_height_m",
+            "table_clearance_required_m",
+            "fk_ground_truth_tolerance_m",
+        ):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
+        for key, length in (("table_footprint_centre_xy_m", 2), ("table_footprint_size_xy_m", 2)):
+            value = values.get(key)
+            if (
+                not isinstance(value, (list, tuple))
+                or len(value) != length
+                or any(not isinstance(item, (int, float)) for item in value)
+            ):
+                raise ValueError(f"{key} must be a list of {length} numbers.")
+        if any(size <= 0.0 for size in values["table_footprint_size_xy_m"]):
+            raise ValueError("table_footprint_size_xy_m entries must be positive.")
 
         for key in (
             "place_world",
@@ -153,6 +175,8 @@ class RobotSettings:
             "arm_joints",
             "finger_joints",
             "head_joints",
+            "table_footprint_centre_xy_m",
+            "table_footprint_size_xy_m",
         ):
             values[key] = tuple(values[key])
         return cls(**values)
@@ -224,3 +248,8 @@ LINEAR_MOVE_TIMEOUT_STEPS = SETTINGS.linear_move_timeout_steps
 BASE_DRIFT_POSITION_TOLERANCE_M = SETTINGS.base_drift_position_tolerance_m
 BASE_DRIFT_YAW_TOLERANCE_DEG = SETTINGS.base_drift_yaw_tolerance_deg
 PREGRASP_ROUTE = SETTINGS.pregrasp_route
+TABLE_TOP_HEIGHT_M = SETTINGS.table_top_height_m
+TABLE_FOOTPRINT_CENTRE_XY_M = SETTINGS.table_footprint_centre_xy_m
+TABLE_FOOTPRINT_SIZE_XY_M = SETTINGS.table_footprint_size_xy_m
+TABLE_CLEARANCE_REQUIRED_M = SETTINGS.table_clearance_required_m
+FK_GROUND_TRUTH_TOLERANCE_M = SETTINGS.fk_ground_truth_tolerance_m

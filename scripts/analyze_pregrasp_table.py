@@ -9,19 +9,24 @@ from pathlib import Path
 
 import numpy as np
 
-from vlarobot.backends.webots.config import ARM_JOINTS, MAX_JOINT_STEP_RAD, TORSO_JOINT
+from vlarobot.backends.webots.config import (
+    ARM_JOINTS,
+    MAX_JOINT_STEP_RAD,
+    TABLE_CLEARANCE_REQUIRED_M,
+    TABLE_FOOTPRINT_CENTRE_XY_M,
+    TABLE_FOOTPRINT_SIZE_XY_M,
+    TABLE_TOP_HEIGHT_M,
+    TORSO_JOINT,
+)
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.core.types import Pose3D, Vec3
 from vlarobot.execution.scripted_can import (
     ScriptedCanPolicy,
     _arm_clearance_points,
     _base_to_world,
+    _table_footprint_bounds,
 )
 
-TABLE_X = (-2.48882837, 2.01117163)
-TABLE_Y = (-5.5902928, -4.0902928)
-TABLE_TOP_M = 0.75
-REQUIRED_CLEARANCE_M = 0.05
 DT_S = 0.032
 MOTOR_SPEED_RAD_S = 0.5
 SETTLE_TOLERANCE_RAD = 0.01
@@ -67,18 +72,20 @@ def _table_metrics(
     first = None
     minimum = math.inf
     minimum_detail = None
+    x_min, x_max, y_min, y_max = _table_footprint_bounds()
+    required_z = TABLE_TOP_HEIGHT_M + TABLE_CLEARANCE_REQUIRED_M
     for step_index, sample in enumerate(samples, start=1):
         q = sample.copy()
         q[kin.idx[TORSO_JOINT]] = torso
         for point_name, point_base, radius in _arm_clearance_points(kin, q):
             point_world = _base_to_world(point_base, base)
             inside = (
-                TABLE_X[0] - radius <= point_world[0] <= TABLE_X[1] + radius
-                and TABLE_Y[0] - radius <= point_world[1] <= TABLE_Y[1] + radius
+                x_min - radius <= point_world[0] <= x_max + radius
+                and y_min - radius <= point_world[1] <= y_max + radius
             )
             if not inside:
                 continue
-            clearance = float(point_world[2] - radius - (TABLE_TOP_M + 0.03))
+            clearance = float(point_world[2] - radius - required_z)
             if clearance < minimum:
                 minimum = clearance
                 minimum_detail = {
@@ -197,14 +204,20 @@ def analyze(trace_path: Path) -> dict[str, object]:
     rows = _record_rows(trace_path)
     kin = Kinematics()
     start, goal, base = _read_start_goal(rows, kin)
+    x_min, x_max, y_min, y_max = _table_footprint_bounds()
     result: dict[str, object] = {
         "trace": str(trace_path),
         "geometry": {
-            "source": "worlds/factory.wbt Table instance and Webots R2025a Table.proto",
-            "footprint_x_m": list(TABLE_X),
-            "footprint_y_m": list(TABLE_Y),
-            "top_z_m": TABLE_TOP_M,
-            "clearance_threshold_m": 0.03,
+            "source": (
+                "configs/robot.yaml; table values read from the worlds/factory.wbt Table "
+                "instance and the Webots R2025a Table.proto"
+            ),
+            "footprint_centre_xy_m": list(TABLE_FOOTPRINT_CENTRE_XY_M),
+            "footprint_size_xy_m": list(TABLE_FOOTPRINT_SIZE_XY_M),
+            "footprint_x_m": [x_min, x_max],
+            "footprint_y_m": [y_min, y_max],
+            "top_z_m": TABLE_TOP_HEIGHT_M,
+            "clearance_threshold_m": TABLE_CLEARANCE_REQUIRED_M,
             "hand_radius_m": 0.08,
         },
         "paths": {},

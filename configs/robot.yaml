@@ -55,4 +55,16 @@ linear_move_timeout_steps: 600
 base_drift_position_tolerance_m: 0.005
 base_drift_yaw_tolerance_deg: 0.5
 pregrasp_route: interpolated
+# Table geometry, read from the `Table` instance in worlds/factory.wbt
+# (translation/size) and the Webots R2025a Table.proto: the top surface sits at
+# size.z and the footprint is size.x by size.y centred on the translation.
+table_top_height_m: 0.75
+table_footprint_centre_xy_m: [-0.23882837, -4.8402928]
+table_footprint_size_xy_m: [4.5, 1.5]
+# Policy value, not read from the world: required route clearance above the table top.
+# source: UNVERIFIED (inferred route requirement from ADR-0011)
+table_clearance_required_m: 0.05
+# Diagnostic threshold for FK versus Supervisor joint-anchor agreement.
+# source: UNVERIFIED (inferred tolerance)
+fk_ground_truth_tolerance_m: 0.01
 urdf_filename: tiago.urdf

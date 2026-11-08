@@ -174,6 +174,44 @@ def test_watched_pregrasp_stop_leaves_later_states_unexecuted(tmp_path) -> None:
     assert "DESCEND" not in states
 
 
+class ArmLinkDiagnosticsBackend(RateLimitedCanBackend):
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        observation.robot.diagnostics = {
+            "arm_link_world_xyz_m": {
+                "elbow": [-1.1, -4.5, 0.95],
+                "wrist": [-1.2, -4.4, 0.90],
+                "tool": [-1.25, -4.35, 0.86],
+            },
+            "arm_7_joint_fk_ground_truth_mismatch": False,
+        }
+        self._robot_state.diagnostics = observation.robot.diagnostics
+        return observation
+
+
+def test_trace_records_supervisor_arm_links_and_table_clearance(tmp_path) -> None:
+    backend = ArmLinkDiagnosticsBackend(Kinematics())
+    trace = tmp_path / "supervisor-links.jsonl"
+    ScriptedCanPolicy(backend.kinematics, trace_path=trace, stop_after="PREGRASP").execute(
+        backend, seed=0
+    )
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line]
+    pregrasp = [
+        row
+        for row in rows
+        if row.get("event") == "state_boundary" and row.get("state") == "PREGRASP"
+    ]
+    assert pregrasp
+    record = pregrasp[-1]
+    assert record["supervisor_arm_link_world_xyz_m"]["tool"] == [-1.25, -4.35, 0.86]
+    # The tool link is the lowest inside the footprint: 0.86 m - 0.75 m table top.
+    assert record["supervisor_min_table_clearance_m"] == pytest.approx(0.11)
+    assert record["arm_7_joint_fk_ground_truth_mismatch"] is False
+    assert record["table_top_height_m"] == 0.75
+    assert record["table_clearance_required_m"] == 0.05
+
+
 def test_full_ik_vector_uses_configured_torso_height() -> None:
     policy = ScriptedCanPolicy()
 

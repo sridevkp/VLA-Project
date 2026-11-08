@@ -352,7 +352,8 @@
   per step while commanded targets advanced about 0.149 rad. The safety layer compared each next
   target against measured position and rejected the accumulated tracking error.
 - **Decision:** Match the original wait semantics. Joint-space PREGRASP/HOME waypoints wait until
-  every arm joint is within 0.01 rad, with the original 800-step timeout. Cartesian linear paths use
+  every arm joint is within 0.01 rad (PREGRASP) or 0.02 rad (HOME), with the original 800-step
+  timeout. Cartesian linear paths use
   3 cm waypoints and wait to 0.03 rad at intermediate waypoints and 0.01 rad at the final waypoint,
   with the original 600-step timeout. Every wait checks measured `RobotState.joint_pos`. A
   configurable `joint_stall_steps` watchdog (default 10) fails the active state with the exact
@@ -369,8 +370,10 @@
   with seed 0 and resets the same `default_rng(0)`. Both first PREGRASP solves use the same reset
   arm posture and the configured 0.35 m torso target: the original settles the torso to within
   0.002 m before capturing `home_q`, and the brain constructs its IK vector from reset arm sensors
-  plus configured torso height. The brain wire observation does not expose torso sensor readback,
-  so exact physical torso equality is not independently trace-verifiable. Random restart candidates
+  plus configured torso height. Protocol v3 now exposes the torso position sensor as
+  `RobotState.diagnostics["torso_lift_joint_sensor_rad"]`, so a live trace can check the physical
+  torso against the configured height; this was not traceable when this decision was recorded.
+  Random restart candidates
   are drawn in the same arm-joint order. IK candidate stopping and selection rules differ and remain
   an intentional implementation difference.
 - **Trace semantics:** `measured_joint_positions_rad` is sensor feedback and
@@ -395,10 +398,20 @@
   established from telemetry.
 - **Decision:** Preserve the default `pregrasp_route: interpolated`; add opt-in `safe_via`, which
   deterministically searches joint configurations using FK and requires both joint-interpolated
-  segments to keep the sampled elbow, wrist, tool, and hand points at least 0.05 m above the table
-  plane when inside the footprint. No safety thresholds, command horizon, IK tolerances, targets,
-  or motor speed are changed. Add a config-driven reset-pose invariant (0.005 m planar, 0.5 deg
-  yaw) that fails the active state with `base moved` and includes observed contact-node context.
+  segments to keep the sampled elbow, wrist, tool, and hand points at least
+  `table_clearance_required_m` (default 0.05 m) above the table plane when inside the footprint. No
+  safety thresholds, command horizon, IK tolerances, targets, or motor speed are changed. Add a
+  config-driven reset-pose invariant (0.005 m planar, 0.5 deg yaw) that fails the active state with
+  `base moved` and includes observed contact-node context.
+- **Single table geometry source:** `configs/robot.yaml` now holds `table_top_height_m` (0.75),
+  `table_footprint_centre_xy_m` `[-0.23882837, -4.8402928]`, `table_footprint_size_xy_m`
+  `[4.5, 1.5]`, and `table_clearance_required_m` (0.05). The runtime guard in
+  `scripted_can.py` and `scripts/analyze_pregrasp_table.py` both read these values, which removes
+  the previous split where the analysis script used `top + 0.03 m` and the runtime guard used a
+  hardcoded `0.80 m` plane. Centre, size, and top are read from the `Table` instance in
+  `worlds/factory.wbt` and the R2025a `Table.proto` (top surface at `size.z`, footprint
+  `size.x x size.y`). The 0.05 m requirement itself is a policy value and remains
+  **UNVERIFIED (inferred)**.
 - **Reset posture:** The checked-in Webots TIAGo PROTO leaves the torso joint-position field at its
   default 0.0 m, while `torso_height` is 0.35 m. Brain reset now commands torso/head and waits for
   the torso sensor to be within 0.002 m; the head receives the configured pan/tilt and a two-second
@@ -410,31 +423,48 @@
   alignment, grasp-verification, and recovery flow.
 - **Telemetry contract:** `RobotState.diagnostics` is optional read-only backend telemetry and does
   not affect safety validation. It carries torso sensor, base drift, wheel mode/target/velocity/
-  encoder, non-robot contact node/type/world points, and arm_7 FK versus Supervisor node position.
+  encoder, non-robot contact node/type/world points, and arm_7 FK versus Supervisor joint position.
   The failure boundary now uses the last stepped observation. Added telemetry changes strict
   dataclass wire fields, so protocol version advances from 2 to 3. Protocol v1/v2 peers are
   incompatible until both processes are restarted together.
+- **FK versus ground truth:** The arm_7 comparison now uses `RobotIO.joint_anchor_world_position`,
+  i.e. the world position of the `arm_7_joint` HingeJoint node. IKPy's full forward kinematics
+  returns the transform of that joint's link frame, whose origin is the same joint anchor, so the
+  two values describe the same point and can disagree. The previous implementation read the
+  `jointParameters.position` field with `getSFVec3f()`; that field is an `SFFloat`, so the read
+  always raised and the value silently came from the same Supervisor node, making the comparison
+  unable to fail. The `endPoint` node is a different point and is used only as the Supervisor
+  tool reference (`arm_link_world_xyz_m["tool"]`), never as FK ground truth. A configurable
+  `fk_ground_truth_tolerance_m` (default 0.01 m) drives an explicit
+  `arm_7_joint_fk_ground_truth_mismatch` flag; unavailability is reported as `None`, not zero.
 - **Geometry and Webots-free analysis:** The factory table is at
   `(-0.23882837,-4.8402928)` with footprint `4.5 x 1.5 m` and top `z=0.75 m` from
   `worlds/factory.wbt` plus the R2025a `Table.proto`. FK sweeps using the existing PREGRASP joint
   endpoints and reset base pose predict that at torso 0.35 m the synchronized path has minimum
-  hand-adjusted clearance margin 0.0615 m relative to `top + 0.03 m`, and original-rate independent
-  motion has 0.0741 m; neither crosses the table. At torso 0.0 m, both paths penetrate the clearance
-  threshold: synchronized first at sample 3 (hand-adjusted margin -0.2266 m; world
-  `(-1.4895,-4.0504,0.6334)`), original-rate first at sample 10 (margin -0.1513 m; world
-  `(-1.5226,-4.0213,0.7087)`). The nominal trace lacks torso feedback, so the torso-0.0 sweep is a
-  plausible explanation of the observed low EE height, not proof of the actual contact cause.
+  hand-adjusted clearance margin 0.041478 m relative to `top + 0.05 m`, and original-rate
+  independent motion has 0.054233 m; neither crosses the table. At torso 0.0 m both paths penetrate
+  the clearance threshold: synchronized first at sample 3 (hand-adjusted margin -0.246566 m; world
+  `(-1.4895,-4.0504,0.6334)`), original-rate first at sample 10 (margin -0.171349 m; world
+  `(-1.5226,-4.0213,0.7087)`). These margins were previously reported against `top + 0.03 m` and are
+  0.02 m smaller under the unified requirement; no geometry or path changed. The nominal trace lacks
+  torso feedback, so the torso-0.0 sweep is a plausible explanation of the observed low EE height,
+  not proof of the actual contact cause.
 - **Candidate route estimate:** On the recorded reset pose, FK selected via target
   `(1.958,0.860,-1.714,1.910,0.356,-0.913,1.236) rad`. Estimates at torso 0.35 m: interpolated
-  route minimum clearance 0.0615 m above the `top+0.03 m` threshold, max joint step 0.1372 rad,
+  route minimum clearance 0.041478 m above the `top+0.05 m` threshold, max joint step 0.1372 rad,
   minimum arm joint-limit margin 0.000953 rad, simulated motor-time estimate 2.304 s. `safe_via`
-  minimum clearance 0.0652 m, max joint step 0.1469 rad, minimum limit margin 0.000953 rad, estimated
-  motor time 6.336 s. The unchanged reset posture is arm_1's limiting point for both routes.
-  Estimates ignore Webots collision dynamics and table/arm collision geometry beyond the sampled
-  points; they are not evidence of safe execution.
-- **Evidence and status:** `scripts/analyze_pregrasp_table.py` reproduces the sweep. Existing
+  minimum clearance 0.045238 m, max joint step 0.1469 rad, minimum limit margin 0.000953 rad,
+  estimated motor time 6.336 s. The unchanged reset posture is arm_1's limiting point for both
+  routes. Estimates ignore Webots collision dynamics and table/arm collision geometry beyond the
+  sampled points; they are not evidence of safe execution.
+- **Evidence and status:** `scripts/analyze_pregrasp_table.py` reproduces the sweep using the same
+  configured table geometry and clearance value as the runtime guard. Existing
   `m1-watched-paced-02.jsonl` confirms the old failure boundary incorrectly used reset time 0.0
   and reset base/joint values; no existing run includes contact, wheel, torso, or joint-node
-  telemetry. Instrumentation is testable without Webots; live traces must validate contact
-  tracking, FK/ground-truth alignment, torso reset, and the invariant. All M1 gates remain
-  **UNVERIFIED**.
+  telemetry. Brain traces now also record, per boundary and waypoint,
+  `supervisor_arm_link_world_xyz_m` (elbow `arm_4_joint`, wrist `arm_6_joint`, tool
+  `arm_7_joint` endPoint), `supervisor_min_table_clearance_m` for links inside the footprint,
+  `arm_7_joint_fk_ground_truth_mismatch`, and the table threshold values. Each field is `None`
+  when the Supervisor value is unavailable. Instrumentation is testable without Webots; live
+  traces must validate contact tracking, FK/ground-truth alignment, torso reset, the invariant,
+  and the table geometry. All M1 gates remain **UNVERIFIED**.

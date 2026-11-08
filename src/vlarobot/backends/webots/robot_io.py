@@ -5,8 +5,6 @@ import logging
 import math
 from typing import Any, cast
 
-import numpy as np
-
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     FINGER_JOINTS,
@@ -18,6 +16,17 @@ from vlarobot.backends.webots.config import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _finite_position(position: Any) -> list[float] | None:
+    """Return a finite world position as floats, or ``None`` when unavailable."""
+    if position is None:
+        return None
+    try:
+        values = [float(value) for value in position]
+    except (TypeError, ValueError):
+        return None
+    return values if all(math.isfinite(value) for value in values) else None
 
 
 class RobotIO:
@@ -81,11 +90,6 @@ class RobotIO:
         self.step_raw(1)
         return self.can_node
 
-    def enable_can_contact_tracking(self):
-        if self.me is None or self.can_node is None:
-            raise RuntimeError("Robot and CAN nodes must be initialized before contact tracking.")
-        self.me.enableContactPointsTracking(self.ts, includeDescendants=True)
-
     def enable_contact_tracking(self):
         if self.me is None:
             raise RuntimeError("Robot node must be initialized before contact tracking.")
@@ -143,40 +147,44 @@ class RobotIO:
             }
         return status
 
-    def joint_endpoint_world_position(self, name: str) -> list[float] | None:
+    def _joint_node(self, name: str) -> Any | None:
         motor = self.motors.get(name)
         if motor is None:
             return None
         node = self.robot.getFromDevice(motor._tag)
         while node is not None and node.getTypeName() not in {"HingeJoint", "SliderJoint"}:
             node = node.getParentNode()
+        return node
+
+    def joint_anchor_world_position(self, name: str) -> list[float] | None:
+        """World position of a joint anchor, the frame origin used by forward kinematics.
+
+        ``WebotsBackend`` compares this value against the IKPy chain's transform for the
+        same joint, so it must be the joint anchor rather than the joint's end point.
+        """
+        node = self._joint_node(name)
         if node is None:
             return None
-        parent = node.getParentNode()
-        parameters_field = node.getField("jointParameters")
-        parameters = parameters_field.getSFNode() if parameters_field is not None else None
-        offset_field = parameters.getField("position") if parameters is not None else None
-        if parent is not None and offset_field is not None:
-            try:
-                parent_position = np.asarray(parent.getPosition(), dtype=float)
-                parent_rotation = np.asarray(parent.getOrientation(), dtype=float).reshape((3, 3))
-                local_offset = np.asarray(offset_field.getSFVec3f(), dtype=float)
-                world_position = parent_position + parent_rotation @ local_offset
-                if np.all(np.isfinite(world_position)):
-                    return world_position.tolist()
-            except (AttributeError, TypeError, ValueError):
-                pass
         try:
             position = node.getPosition()
-            if position is not None and all(math.isfinite(float(value)) for value in position):
-                return [float(value) for value in position]
         except (AttributeError, TypeError, ValueError):
-            pass
+            return None
+        return _finite_position(position)
+
+    def joint_endpoint_world_position(self, name: str) -> list[float] | None:
+        """World position of the node attached to a joint's ``endPoint`` field."""
+        node = self._joint_node(name)
+        if node is None:
+            return None
         endpoint_field = node.getField("endPoint")
         endpoint = endpoint_field.getSFNode() if endpoint_field is not None else None
         if endpoint is None:
             return None
-        return [float(value) for value in endpoint.getPosition()]
+        try:
+            position = endpoint.getPosition()
+        except (AttributeError, TypeError, ValueError):
+            return None
+        return _finite_position(position)
 
     def can_contact_detected(self):
         if self.me is None or self.can_node is None:

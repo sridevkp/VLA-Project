@@ -34,6 +34,10 @@ from vlarobot.backends.webots.config import (
     PREGRASP_ROUTE,
     PREGRASP_SETTLE_TOLERANCE_RAD,
     STOP_AFTER,
+    TABLE_CLEARANCE_REQUIRED_M,
+    TABLE_FOOTPRINT_CENTRE_XY_M,
+    TABLE_FOOTPRINT_SIZE_XY_M,
+    TABLE_TOP_HEIGHT_M,
     TORSO_HEIGHT,
     TORSO_JOINT,
 )
@@ -879,6 +883,14 @@ class ScriptedCanPolicy:
         record["arm_7_joint_fk_ground_truth_error_m"] = observation.robot.diagnostics.get(
             "arm_7_joint_fk_ground_truth_error_m"
         )
+        record["arm_7_joint_fk_ground_truth_mismatch"] = observation.robot.diagnostics.get(
+            "arm_7_joint_fk_ground_truth_mismatch"
+        )
+        arm_links = observation.robot.diagnostics.get("arm_link_world_xyz_m")
+        record["supervisor_arm_link_world_xyz_m"] = arm_links
+        record["supervisor_min_table_clearance_m"] = _table_clearance(arm_links)
+        record["table_top_height_m"] = TABLE_TOP_HEIGHT_M
+        record["table_clearance_required_m"] = TABLE_CLEARANCE_REQUIRED_M
         record.update(details)
         self._write_trace(record)
 
@@ -998,13 +1010,15 @@ class ScriptedCanPolicy:
         self, start: np.ndarray, goal: np.ndarray, base_pose: Pose3D
     ) -> bool:
         path = self.kinematics.interpolate_joint_path(start, goal, MAX_JOINT_STEP_RAD)
+        x_min, x_max, y_min, y_max = _table_footprint_bounds()
+        required_z = TABLE_TOP_HEIGHT_M + TABLE_CLEARANCE_REQUIRED_M
         for q in [start, *path]:
             for _point_name, point, radius in _arm_clearance_points(self.kinematics, q):
                 world = _base_to_world(point, base_pose)
                 if (
-                    -2.48882837 - radius <= world[0] <= 2.01117163 + radius
-                    and -5.5902928 - radius <= world[1] <= -4.0902928 + radius
-                    and world[2] - radius < 0.80
+                    x_min - radius <= world[0] <= x_max + radius
+                    and y_min - radius <= world[1] <= y_max + radius
+                    and world[2] - radius < required_z
                 ):
                     return False
         return True
@@ -1073,6 +1087,36 @@ def _base_to_world(point: np.ndarray, base_pose_world: Pose3D) -> np.ndarray:
         _quaternion_to_matrix(base_pose_world.orientation) @ np.asarray(point, dtype=float)
         + base_pose_world.position.as_array()
     )
+
+
+def _table_footprint_bounds() -> tuple[float, float, float, float]:
+    """Return the table footprint as ``(x_min, x_max, y_min, y_max)`` in world metres."""
+    centre_x, centre_y = TABLE_FOOTPRINT_CENTRE_XY_M
+    size_x, size_y = TABLE_FOOTPRINT_SIZE_XY_M
+    return (
+        centre_x - 0.5 * size_x,
+        centre_x + 0.5 * size_x,
+        centre_y - 0.5 * size_y,
+        centre_y + 0.5 * size_y,
+    )
+
+
+def _table_clearance(links: object) -> float | None:
+    """Minimum Supervisor link height above the table top, for links inside the footprint."""
+    if not isinstance(links, dict):
+        return None
+    x_min, x_max, y_min, y_max = _table_footprint_bounds()
+    clearances = []
+    for position in links.values():
+        if not isinstance(position, (list, tuple)) or len(position) != 3:
+            continue
+        try:
+            x, y, z = (float(value) for value in position)
+        except (TypeError, ValueError):
+            continue
+        if x_min <= x <= x_max and y_min <= y <= y_max:
+            clearances.append(z - TABLE_TOP_HEIGHT_M)
+    return min(clearances) if clearances else None
 
 
 def _arm_clearance_points(

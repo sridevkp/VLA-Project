@@ -168,7 +168,7 @@ class PickPlace:
 
         self.home_q = self.frames.current_q()
         self._record_cartesian_waypoint("home", self.ik.forward(self.home_q)[:3, 3])
-        self.io.enable_can_contact_tracking()
+        self.io.enable_contact_tracking()
         return True
 
     def run(self):

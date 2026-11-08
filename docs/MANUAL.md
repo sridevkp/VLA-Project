@@ -367,7 +367,19 @@ Print base drift against simulation time and the torso readback with `jq`:
 jq -r 'select(.state == "PREGRASP" and .event == "state_boundary") | [.sim_time_s, .phase, .base_drift_distance_m, .base_drift_yaw_deg, .base_drift_world_xyz_m] | @tsv' runs/m1-pregrasp-interpolated-01.jsonl
 jq -r 'select(.state == "PREGRASP" and .event == "state_boundary") | [.sim_time_s, .phase, .torso_lift_joint_sensor_rad] | @tsv' runs/m1-pregrasp-interpolated-01.jsonl
 jq -c 'select(.event == "unexpected_contact") | {sim_time_s, state, node_name, node_type, contact_points_world_xyz_m}' runs/m1-pregrasp-interpolated-01.jsonl
+jq -r 'select(.state == "PREGRASP") | [.sim_time_s, .phase, .supervisor_min_table_clearance_m] | @tsv' runs/m1-pregrasp-interpolated-01.jsonl
+jq -c 'select(.state == "PREGRASP") | {sim_time_s, phase, supervisor_arm_link_world_xyz_m, supervisor_min_table_clearance_m}' runs/m1-pregrasp-interpolated-01.jsonl
+jq -r 'select(.state == "PREGRASP") | [.sim_time_s, .phase, .arm_7_joint_fk_ground_truth_error_m, .arm_7_joint_fk_ground_truth_mismatch] | @tsv' runs/m1-pregrasp-interpolated-01.jsonl
 ```
+
+Table geometry and the clearance requirement come from `configs/robot.yaml`
+(`table_top_height_m`, `table_footprint_centre_xy_m`, `table_footprint_size_xy_m`,
+`table_clearance_required_m`). The table values were read from `worlds/factory.wbt` and the R2025a
+`Table.proto`; the 0.05 m clearance requirement is a policy value. A `null`
+`supervisor_min_table_clearance_m` means no Supervisor arm link was inside the table footprint, and
+`null` FK fields mean the Supervisor position was unavailable. The FK error compares the arm_7 joint
+anchor against the Supervisor position of the same joint node; a value above
+`fk_ground_truth_tolerance_m` (0.01 m) sets `arm_7_joint_fk_ground_truth_mismatch` to `true`.
 
 Equivalent `rg` filters for a quick line-level view:
 

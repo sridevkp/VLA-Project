@@ -468,3 +468,251 @@
   when the Supervisor value is unavailable. Instrumentation is testable without Webots; live
   traces must validate contact tracking, FK/ground-truth alignment, torso reset, the invariant,
   and the table geometry. All M1 gates remain **UNVERIFIED**.
+
+## ADR-0012: Pose-only Supervisor lookups, reset fingerprint, and INIT posture replication
+
+- **Date:** 2026-11-08
+- **Status:** Accepted for instrumentation; live Webots behavior unverified
+- **Context:** The arm_7 FK ground-truth diagnostic called `getPosition()` on the joint node,
+  which Webots rejects for non-Pose nodes. The soft reset restores many but not all Webots state
+  values, and there was no single record proving two same-seed episodes start identically. The
+  torso is raised by the reset path rather than by brain INIT, and the original ordering and
+  settle thresholds were not yet reproduced exactly.
+- **Decision — Pose-only lookups:** Remove `RobotIO.joint_anchor_world_position`. Arm-link
+  telemetry uses the Pose-derived child `Solid` in the joint's `endPoint` field. Lookup failures
+  (`AttributeError`, `TypeError`, `ValueError`, `RuntimeError`, missing node/field, non-finite
+  value) return `None` and are cached so each distinct failure warns once. At reset the backend
+  records the world offset `endPoint - FK(arm_7)`; each sample reports the change in that offset,
+  so a constant tool offset is not an error and only offset change flags an FK mismatch.
+- **Decision — Reset fingerprint:** `RobotIO.reset_fingerprint()` captures every motor target,
+  velocity, and control mode (arm, torso, head, fingers, wheels), every joint sensor, the base
+  world pose plus `getVelocity()`, and the CAN world pose. It is emitted only on the reset
+  observation and written by the INIT-enter boundary. The torso "before" value is exposed
+  separately as `reset_torso_before_rad` because it legitimately differs between resets; the
+  fingerprint records the post-settle torso value and commanded target. Two same-seed episodes in
+  one server session must produce identical fingerprints; `cli repeat-check` enforces this.
+- **Decision — INIT posture:** Reproduce the original ordering exactly. Torso is commanded first
+  and stepped up to 1000 times until within 0.002 m; the head is then clamped to its limits, set
+  to velocity 0.5, and given a two-second settle. Sources:
+  `controllers/tiago_arm_api/tiago_arm_api.py:357-364` (torso) and `:366-374` (head); packaged
+  copy `src/vlarobot/backends/webots/pick_place.py:121-145`. Implementation:
+  `src/vlarobot/backends/webots/backend.py` reset plus `_settle_reset_posture`. New config keys
+  are `reset_torso_settle_tolerance_m: 0.002`, `reset_torso_timeout_steps: 1000`, and
+  `reset_head_settle_ms: 2000`. Brain INIT seeds IK from the settled torso sensor. A completed
+  soft reset with default config always re-commands 0.35 m; ~0 is possible only if reset is never
+  called, aborted before/during the settle (which raises), the torso joint is absent, or
+  `torso_height` is configured to 0/None.
+- **Decision — Drift analysis and thresholds:** Add `trace_compare.base_drift_by_state()` and
+  `scripts/analyze_base_drift.py` (Webots-free). Available-trace evidence: healthy runs drift
+  ≤3.37 mm / 0.08°; the watched paced runs drift 120.71 mm / 43.27° and 129.55 mm / 42.51°.
+  Keep the hard invariant at 0.005 m / 0.5° until the user approves a change; optionally add a
+  4 mm / 0.1° soft warning. Drift rate is diagnostic only because the pathological runs drift at
+  2.19 mm/s, lower than a short-window healthy sample.
+- **Decision — Opt-in timings:** Wall-time counters are off by default and change no behavior.
+  Enable with `ScriptedCanPolicy(timing_enabled=True)`, `can-regression`/`repeat-check --timings`,
+  or `VLAROBOT_BACKEND_TIMINGS=1` for the backend diagnostics counter. Buckets are
+  `backend_reset_s`, `ik_solve_s`, `backend_apply_s`, `backend_step_s`, `trace_write_s`, and
+  `supervisor_s`; ZMQ round trips are included in apply/step, not broken out. No live share is
+  claimed.
+- **Decision — Fixture additions:** The original-comparison fixture stays under
+  `VLAROBOT_COMPARISON_FIXTURE_V2` and additionally logs torso/head sensors and base linear/angular
+  velocity. No v3 base logging is needed because fixture v2 already logs
+  `base_world_xyz_m`/`base_world_orientation_matrix`. `compare_traces()` checks INIT torso
+  (2e-3 m) and head (0.02 rad) posture.
+- **Evidence and status:** `ruff`/format pass, `ty` has no new errors in touched files, and
+  `pytest -m "not webots"` reports 90 passed. No live Webots run was performed; warning-free
+  Supervisor calls, torso/reset posture, fingerprint identity, repeatability, drift, and timing
+  shares remain **UNVERIFIED**. M1-06a, M1-07, and all M1 gates remain **UNVERIFIED**.
+
+## ADR-0013: Rotating FK offsets and classified reset-fingerprint comparison
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; live confirmation pending
+- **Context:** The first live repeat run showed `arm_7_joint_fk_ground_truth_mismatch: true` with
+  an error growing from 0 to 0.065779936 m, essentially the 0.067725 m tool offset. The reset-time
+  offset `endPoint − FK(arm_7)` was stored in world coordinates and compared with a later world
+  offset without rotating it with the wrist. The same run showed that two same-seed consecutive
+  episodes are not bit-identical: commanded motor state matches exactly, while joint sensors and
+  poses differ by ~1.5e-4 and base/CAN velocities differ by up to 7.2e-3 because the first reset
+  follows world load.
+- **Decision — rotate the FK offset:** `_arm7_fk_world_pose()` returns the arm_7 link world
+  position and rotation. Reset stores both the world offset and `_arm7_reset_link_rotation`; each
+  sample predicts the current offset as `(R_now @ R_reset.T) @ reset_offset` and reports the
+  residual. A constant tool offset cancels under wrist rotation. A 90° wrist rotation with a
+  correctly rotating endpoint yields zero error; an endpoint that does not rotate is flagged. The
+  trace now also records the offset, reset offset, offset change, ground-truth source,
+  validation-availability flag, and INIT `reset_torso_before_rad`/`reset_torso_after_rad`.
+- **Decision — classified fingerprint comparison:** `repeat-check` classifies each fingerprint
+  leaf. `motors.*` (targets, motor velocities, control modes) is the deterministic contract and
+  must match exactly. Sensors and poses are measured and fail only above `--measured-tolerance`
+  (default 1e-3). `base.velocity_*` and `base.angular_velocity_*` are world-load transients and are
+  reported via `max_transient_delta` but never fail. Observed two-episode result:
+  `commanded=0 measured=0 transient=6 max_measured_delta≈1.5e-4 max_transient_delta≈7.2e-3`
+  (PASS). This changes the comparison semantics, not reset behaviour.
+- **Decision — drift thresholds unchanged:** Three fresh-world interpolated runs drift
+  3.36/3.41/3.41 mm at 0.076° with torso 0.349745→0.349747 rad. `safe_via` failed at 5.0016 mm
+  (1.56 µm over 5 mm) at 2.816 s with no contacts; drift is monotonic at ~1.78 mm/s vs ~0.98 mm/s
+  for interpolated. The 5 mm / 0.5° invariant is kept until the user approves a change. Options
+  recorded: keep 5 mm and reject `safe_via`; raise to 8 mm (still ~15x below the 120 mm watched
+  failure); or use route-specific thresholds (not recommended).
+- **Evidence and status:** Fresh runs confirm the Pose-only lookup produced no
+  `wb_supervisor_node_get_position` warning; remaining console messages are expected reset-baseline
+  clamps and Webots' unrelated `Unsupported file type` warning. `ruff`/format pass, `ty` has no
+  errors in touched files, and `pytest -m "not webots"` reports 97 passed. Live confirmation that
+  the FK error returns to ~0 after the rotation fix is still required. M1-06a, M1-07, and all M1
+  gates remain **UNVERIFIED**.
+
+## ADR-0014: Two-tier base-drift invariant, wheel hold, and per-state target refresh
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; thresholds provisional pending original-controller fixture evidence
+- **Context:** A single 5 mm base-drift limit failed `safe_via` by 1.56 µm at PREGRASP even though
+  the drift was monotonic creep (~1.78 mm/s), not a collision. The trace also showed both wheel
+  motors in Webots position control at target 0 with a 10.1523 rad/s velocity limit, and the
+  original controller never acquires or commands a wheel device (device setup at
+  `controllers/tiago_arm_api/tiago_arm_api.py:57-76`). The brain converted world-anchored CAN and
+  place targets to the base frame once at INIT, while the original re-reads `can_base_pos()` in
+  INIT, CLOSE, and LIFT (`:354-355`, used at `:406`, `:436`, `:441`, `:459`, `:464`).
+- **Decision — two tiers plus a rate guard:** warn at 5 mm / 0.5° once per state via
+  `base_drift_warning` and never fail on the warning alone; fail at 15 mm / 0.5° with reason
+  `base moved`; fail when the mean drift rate over at least 0.5 s exceeds 10 mm/s. All six values
+  are config keys (`base_drift_warn_*`, `base_drift_fail_*`, `base_drift_rate_*`) and remain
+  provisional until the original-controller fixture confirms them. `base_drift_rate_m_per_s` on
+  `state_boundary` is now the window rate, not the episode-average rate.
+- **Decision — optional wheel hold:** `hold_base: none | wheels_zero_velocity` (default `none`).
+  `wheels_zero_velocity` switches both wheels to velocity control at target 0 and is applied after
+  `simulationResetPhysics()` and re-asserted after the reset settle. The default preserves the
+  PROTO position hold and changes no behaviour.
+- **Decision — per-state target refresh:** `_base_frame_targets()` re-derives the world-anchored
+  CAN/place targets from the current base pose before each state. LIFT keeps the INIT pregrasp to
+  match the original's fixed lift target. The safe-via planner uses the current base pose. With
+  zero drift the targets are identical; under drift they track the world anchors. IK tolerances
+  and safety limits are unchanged.
+- **Evidence:** Existing `--stop-after PREGRASP` traces report interpolated max drift
+  3.36/3.41/3.41 mm at 0.08° with max boundary rate 1.11–1.24 mm/s, and `safe_via` 5.00 mm at
+  0.07° with max rate 2.50 mm/s. Under the new invariant interpolated is silent and `safe_via`
+  warns without failing. `ruff`/format pass, `ty` has no errors in touched files, and
+  `pytest -m "not webots"` reports 102 passed.
+- **Remaining evidence:** Live drift with `hold_base: wheels_zero_velocity`, full-flow per-state
+  drift, original-controller fixture traces, and confirmation that the FK error returns to ~0
+  after the rotation fix all require operator Webots runs. M1-06a, M1-07, and all M1 gates remain
+  **UNVERIFIED**.
+- **Supersedes:** The drift-threshold portion of ADR-0013 (5 mm hard limit). The FK-offset
+  rotation and classified fingerprint decisions in ADR-0013 remain in force.
+
+## ADR-0015: Open the gripper at INIT before PREGRASP
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; full flow confirmed 1/1 in `hold_base: none` (`runs/hold-none-02.jsonl`)
+- **Context:** The M1 full flow failed `can-regression` (`success=0/1`, final distance 0.246 m)
+  with the base-drift invariant silent. `runs/hold-none-01.jsonl` shows finger sensors at ~1.4e-6 m
+  at INIT, `can_displacement_world_xyz_m ≈ [0.0199, -0.0198, 0]` during DESCEND, a CLOSE opening
+  of ~6.3e-6 m, and a LIFT height of ~0. `ScriptedCanPolicy` only commanded `GripperCmd(0.0)` at
+  CLOSE and `GripperCmd(GRIPPER_OPEN)` at RELEASE, so DESCEND pushed the can instead of straddling
+  it. The original opens the gripper at INIT (`controllers/tiago_arm_api/tiago_arm_api.py:414`,
+  `open_gripper(cycle=not gripper_primed)`) and aborts the run if a finger does not reach
+  `OPEN_POS` within 2 mm (`:303-326`).
+- **Decision:** `ScriptedCanPolicy._open_gripper()` runs at INIT before `_base_frame_targets()`:
+  sends `GripperCmd(GRIPPER_OPEN)` where `GRIPPER_OPEN = gripper_opening_limits[1]` (0.045 m), steps
+  up to the new `gripper_open_timeout_s` config key (default 4.0 s), and accepts the opening within
+  `GRIPPER_OPEN_TOLERANCE_M = 0.002` m. A rejected command fails INIT with the safety reason; a
+  timeout fails INIT with `gripper failed to open` plus a `gripper_timeout` trace event. The
+  hard-coded `0.045` in the RELEASE command is replaced by `GRIPPER_OPEN`.
+- **Scope:** The drift veto still starts at PREGRASP. INIT open steps update `max_base_drift_m`
+  and `max_base_drift_yaw_deg` but are not vetoed, matching the original's pre-motion open. No IK
+  tolerance, safety limit, or workspace bound changes.
+- **Evidence:** `ruff check .` and `ruff format --check .` pass; `ty check` adds no diagnostics in
+  touched files; `pytest -m "not webots"` reports 106 passed, including
+  `test_policy_opens_gripper_at_init_before_descend` (closed-finger fake backend ramping at
+  `FINGER_SPEED`; opening is within 2 mm of `GRIPPER_OPEN` at INIT exit and DESCEND enter) and
+  `test_policy_fails_init_when_gripper_cannot_open` (stuck fingers abort INIT).
+- **Remaining evidence:** Confirmed in `hold_base: none` (`runs/hold-none-02.jsonl`: 1/1, CAN lifts
+  40.7 mm). `hold_base: wheels_zero_velocity` still fails, but for the base-tilt reason recorded in
+  ADR-0016, not the gripper. The original-controller fixture, final drift thresholds, and the FK
+  diagnostic frame remain **UNVERIFIED**, as do M1-06a, M1-07, and all M1 gates.
+- **Supersedes:** Nothing. Extends ADR-0014, which remains in force.
+
+## ADR-0016: Re-align the approach pose after the base tilt settles
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; live `can-regression` confirmation pending operator run
+- **Context:** The post-fix full flow succeeds in `hold_base: none` (1/1, final distance 0.042 m)
+  but still pushes the CAN 42 mm during DESCEND. `runs/hold-none-02.jsonl` and
+  `runs/hold-velocity-02.jsonl` show why: the base rocks by −1.30° roll / +1.48° pitch while the
+  arm extends during PREGRASP, while planar drift stays at 3.35 mm and yaw at 0.08°. Because the
+  arm is commanded in the base frame, that rock moves the CAN 27.9 mm in base coordinates, so the
+  fingertip finishes PREGRASP 32.6 mm off-centre. The open gripper has only 13.3 mm per-side
+  clearance around the 63.5 mm CAN. The per-state target refresh (ADR-0014) makes DESCEND target
+  the live CAN position, but the arm starts the descent from the stale PREGRASP pose, so it
+  approaches diagonally and clips the CAN. The successful run's final distance is 0.0415 m and its
+  total CAN displacement is 0.2484 m; the two are not equal (the earlier "0.042 = 0.042" claim
+  compared the final placement residual with only the x component of the displacement). Both are
+  nevertheless produced by the same eccentric grasp: the tip is 43.1 mm off-centre at CLOSE and
+  the DESCEND push is 42.3 mm. LIFT also reused the INIT pregrasp, dragging the CAN sideways.
+- **Decision — re-align at the end of PREGRASP:** `_realign_pregrasp()` re-derives the pregrasp
+  point from the live base pose, records `pregrasp_realign` with the XY error, and when the error
+  exceeds the existing `align_tol` (5 mm) solves IK for the refreshed point and moves there
+  (`pregrasp_realigned` with before/after error). It runs after the arm extension, where the tilt
+  has settled, so DESCEND starts centred. If IK fails the run fails with the existing IK reason.
+- **Decision — the realign path is behind `pregrasp_realign`:** the YAML key (default `true` for
+  M1-07) and CLI `--pregrasp-realign/--no-pregrasp-realign` gate the PREGRASP re-align, the
+  refreshed LIFT, and the CLOSE guard together. `false` preserves the original controller
+  semantics for M1-06a equivalence runs: no extra waypoints or events. Traces record the flag on
+  every `state_boundary`; `compare-traces` reports both flags and rejects a mixed pair as a
+  documented deviation rather than a mismatch.
+- **Decision — CLOSE guard:** before the fingers close, `_guard_close_alignment()` measures the
+  live base-frame fingertip→CAN xy error (`close_alignment_check`). If it exceeds
+  `close_align_tol` (0.008 m) the policy performs exactly one refined descent from the refreshed
+  grasp target (`close_realign`, before/after error); if the residual is still over tolerance the
+  episode fails with `failure_reason=misaligned at close` (`close_misaligned`). This is a
+  measurement-based veto derived from the same live pose as the realign, not a new tolerance on
+  the arm.
+- **Decision — LIFT rises from the refreshed pregrasp:** the LIFT target is re-derived from the
+  current base pose after the realign and recorded as `lift_target_refreshed`. This supersedes the
+  "LIFT keeps the INIT pregrasp" portion of ADR-0014, which dragged the CAN by the same offset.
+- **Decision — success is four separate criteria:** `home_reached`, `place_distance_ok`
+  (base-frame distance ≤ `place_tolerance_m` = 0.10 m), `can_height_ok` (CAN z within
+  `can_place_z_tolerance_m` = 0.02 m of the INIT table-rest height), and `can_tilt_ok` (CAN tilt
+  < `can_tilt_limit_deg` = 15°). All four are required and each is printed by `can-regression` and
+  written on the `DONE` trace. No threshold was relaxed.
+- **Decision — tilt is telemetry, not a veto:** every `state_boundary` records
+  `base_tilt_roll_deg` / `base_tilt_pitch_deg` since reset, `base_drift_warning` and `base_moved`
+  carry them, `ScriptedCanResult.max_base_tilt_deg` is printed by `can-regression`, and
+  `scripts/analyze_base_drift.py` reports a `tilt=` column. The veto keeps using planar drift and
+  yaw only: a 1.5° tilt is normal for this route, so reusing the 0.5° yaw limit would fail every
+  episode. Whether a separate tilt threshold is needed remains open.
+- **Evidence:** `ruff check .` and `ruff format --check .` pass; `uv run ty check src tests` is
+  clean (0 diagnostics); `pytest -m "not webots"` reports 119 passed, including a fake backend
+  that rocks the base 1.3°/1.5° mid-PREGRASP (realign fires, residual < 5 mm, DESCEND starts
+  < 5 mm from the CAN in world), ON/OFF flag traces, a no-tilt case (no extra move), a nudged-CAN
+  guard success, a dragged-CAN `misaligned at close` failure, and the four-criterion result and
+  comparer flag tests.
+- **Remaining evidence:** Operator re-run of `can-regression` with `hold_base: none` to confirm the
+  CAN is no longer pushed during DESCEND and the final distance drops from 42 mm. The
+  original-controller fixture, final drift thresholds, and the FK diagnostic frame remain
+  **UNVERIFIED**, as do M1-06a, M1-07, and all M1 gates.
+- **Supersedes:** The LIFT-target portion of ADR-0014. The two-tier drift invariant, `hold_base`
+  default, and per-state refresh remain in force.
+
+## ADR-0017: `ty` scope is `src tests`, not the whole repository
+
+- **Date:** 2026-11-08
+- **Status:** Accepted
+- **Context:** The "22 diagnostics" baseline was produced by whole-repository
+  `uv run ty check`. All 22 are in files this project does not own as library code: 15 in
+  `controllers/`, 3 in `model/`, and 4 in `scripts/analyze_pregrasp_table.py` (Webots
+  controller/proto and standalone scripts). At `ff041ff`, the scoped command
+  `uv run ty check src tests` reported **4 diagnostics, all in tests**: 3 in
+  `tests/test_scripted_can_policy.py` (two `diagnostics` assignment types and a `Pose3D | None`
+  attribute) and 1 in `tests/test_webots_backend_reset.py` (`FakeNode.getContactPoints`). The
+  current tree reports **0** for the same command; the pre-existing whole-repo 22 are unchanged
+  unless a change touches those files.
+- **Decision:** The per-task gate is `uv run ty check src tests`. A whole-repo run is reported as
+  a separate baseline, and any new diagnostic in `src` or `tests` is a regression to fix. Adding
+  diagnostics to `controllers/`, `model/`, or `scripts/` is not silently accepted: if a change
+  touches one of those files, that file's diagnostics are reported by name.
+- **Evidence:** `uv run ty check src tests` → 0 diagnostics after the ADR-0016 work, down from
+  the `ff041ff` baseline of 4 test-file diagnostics. Whole-repo `uv run ty check` → 22
+  diagnostics, unchanged in the untouched `controllers/`, `model/`, and
+  `scripts/analyze_pregrasp_table.py` files.
+- **Supersedes:** Nothing.

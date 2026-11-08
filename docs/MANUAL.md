@@ -132,22 +132,27 @@ do not reuse an existing output path.
 **Linux**
 
 ```bash
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-01.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-02.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-03.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-04.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-05.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-01.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-02.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-03.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-04.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-05.jsonl
 ```
 
 **Windows PowerShell**
 
 ```powershell
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-01.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-02.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-03.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-04.jsonl
-uv run python -m vlarobot.cli can-regression --seeds 1 --trace-log runs/m1-06a-brain-paced-05.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-01.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-02.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-03.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-04.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-06a-brain-paced-05.jsonl
 ```
+
+`--no-pregrasp-realign` is required for M1-06a equivalence: it keeps the original semantics
+(no PREGRASP re-align, no refreshed LIFT, no CLOSE guard). The comparer reports both traces'
+`pregrasp_realign` flags and rejects a mixed ON/OFF pair as a documented deviation (ADR-0016).
+The M1-07 full-flow runs use the default `pregrasp_realign: true` (or `--pregrasp-realign`).
 
 #### B. Prepare and capture the original fixture-v2 batch
 
@@ -264,6 +269,55 @@ uv run python -m vlarobot.cli compare-traces ../VLA-Project-m1-original-v2/runs/
 The comparator reports the first state/EE/Cartesian/tilt divergence and prints per-trace joint
 diagnostics. M1-06a passes only when five clean matched pairs pass the task-space/state gate; joint
 diagnostics are reported without an equality threshold.
+
+## 3a. M1-07 realign ON/OFF batches and analysis
+
+Every run below starts from a **fresh world** (close and reopen `worlds/factory.wbt`, or use the
+documented reset procedure) and uses seed 0. Keep `hold_base: none`. Do not reuse an output path.
+The ON batch is the M1-07 candidate; the OFF batch is the original-semantics control.
+
+**Realign ON, three runs (default `pregrasp_realign: true`)**
+
+```bash
+uv run python -m vlarobot.cli can-regression --seeds 1 --pregrasp-realign --trace-log runs/m1-07-realign-on-01.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --pregrasp-realign --trace-log runs/m1-07-realign-on-02.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --pregrasp-realign --trace-log runs/m1-07-realign-on-03.jsonl
+```
+
+**Realign OFF, three runs (original semantics)**
+
+```bash
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-07-realign-off-01.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-07-realign-off-02.jsonl
+uv run python -m vlarobot.cli can-regression --seeds 1 --no-pregrasp-realign --trace-log runs/m1-07-realign-off-03.jsonl
+```
+
+**Per-state report** (CAN displacement, lift, live-base tip→CAN xy error, realign before/after,
+tilt, and the four final criteria). Run once per trace; replace the filename.
+
+```bash
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-on-01.jsonl
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-on-02.jsonl
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-on-03.jsonl
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-off-01.jsonl
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-off-02.jsonl
+uv run python scripts/analyze_can_run.py runs/m1-07-realign-off-03.jsonl
+```
+
+On Windows PowerShell use the same commands with `runs\...` paths; the script uses `pathlib` and
+has no shell dependency.
+
+**jq equivalents** (one line per state; `runs/m1-07-realign-on-01.jsonl`):
+
+```bash
+jq -r 'select(.event=="state_boundary" and .phase=="exit") | [.state, (.can_world_xyz_m|@json), (.can_displacement_world_xyz_m|@json), .lift_height_m, .pregrasp_realign, .base_tilt_roll_deg, .base_tilt_pitch_deg] | @tsv' runs/m1-07-realign-on-01.jsonl
+jq -c 'select(.event=="pregrasp_realign" or .event=="pregrasp_realigned" or .event=="close_alignment_check" or .event=="close_realign" or .event=="close_misaligned")' runs/m1-07-realign-on-01.jsonl
+jq -c 'select(.event=="state_boundary" and .state=="DONE") | {pregrasp_realign, distance_m, height_error_m, tilt_deg, home_reached, place_distance_ok, can_height_ok, can_tilt_ok, success}' runs/m1-07-realign-on-01.jsonl
+```
+
+`tip->can_xy_mm` is computed from the live base pose in the Python script, not stored directly in
+the trace. The CLOSE guard's own measurement is `close_alignment_check.xy_error_m` (and
+`close_realign.xy_error_after_m`). Report the ON and OFF batches separately; do not average them.
 
 ## 4. Capture controller-side diagnostics
 

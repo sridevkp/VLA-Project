@@ -55,8 +55,8 @@ def prepare(worktree: Path) -> None:
     pick_text = pick_text.replace("PLACE_BASE,", "PLACE_WORLD,", 1)
     pick_text = pick_text.replace(
         "    PLACE_WORLD, GRASP_Z, APPROACH_H, PLACE_CLEAR, ALIGN_TOL, SKIP_ALIGN_CHECK,",
-        "    PLACE_WORLD, ARM_JOINTS, GRASP_Z, APPROACH_H, PLACE_CLEAR, "
-        "ALIGN_TOL, SKIP_ALIGN_CHECK,",
+        "    PLACE_WORLD, ARM_JOINTS, HEAD_JOINTS, TORSO_JOINT, GRASP_Z, APPROACH_H, "
+        "PLACE_CLEAR, ALIGN_TOL, SKIP_ALIGN_CHECK,",
         1,
     )
     pick_text = pick_text.replace(
@@ -116,6 +116,14 @@ def prepare(worktree: Path) -> None:
         joint_positions = {
             name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS
         }
+        torso_sensor = self.io.sensors.get(TORSO_JOINT)
+        torso_position = None if torso_sensor is None else float(torso_sensor.getValue())
+        head_positions = {}
+        for name in HEAD_JOINTS:
+            head_sensor = self.io.sensors.get(name)
+            if head_sensor is not None:
+                head_positions[name] = float(head_sensor.getValue())
+        base_velocity = [float(value) for value in self.io.me.getVelocity()]
         return {
             "can_world_xyz_m": can_world.tolist(),
             "can_base_xyz_m": self.frames.world_to_base(can_world).tolist(),
@@ -125,6 +133,10 @@ def prepare(worktree: Path) -> None:
             "can_base_orientation_matrix": (base_rotation.T @ can_rotation).reshape(-1).tolist(),
             "base_world_xyz_m": [float(value) for value in self.io.me.getPosition()],
             "base_world_orientation_matrix": base_rotation.reshape(-1).tolist(),
+            "base_velocity_world_xyz_m_s": base_velocity[:3],
+            "base_angular_velocity_world_xyz_rad_s": base_velocity[3:6],
+            "torso_lift_joint_sensor_rad": torso_position,
+            "head_joint_sensor_rad": head_positions,
             "tool_base_xyz_m": self.frames.tool_position().tolist(),
             "joint_limits_rad": joint_limits,
             "measured_joint_positions_rad": joint_positions,

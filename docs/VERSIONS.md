@@ -10,6 +10,7 @@
 | ty | 0.0.99 (lockfile) | Installed and type-check passed on Fedora/Linux; Windows CI pending |
 | uv | Lockfile managed by uv | `uv lock --check` passes in this environment |
 | msgpack | 1.2.4 (lockfile) | Installed; wire round-trip tests pass |
+| Simulator/brain protocol | Version 3 | Backend diagnostics added; Windows and live Webots pairing unverified |
 | NumPy | 2.4.6 (lockfile) | Installed; array wire tests and live Webots RGB transfer pass |
 | PyYAML | 6.0.3 (lockfile) | Installed; typed robot settings tests pass |
 | pyzmq | 27.3.0 (lockfile) | Installed; FakeBackend transport and live Webots RPCs pass |

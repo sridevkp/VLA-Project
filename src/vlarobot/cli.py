@@ -1,7 +1,7 @@
 """Command-line entry point for project tools."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import numpy as np
 import typer
@@ -11,7 +11,7 @@ from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
 from vlarobot.core.types import ScenarioSpec
 from vlarobot.execution.scripted_can import ResetProbeResult, ScriptedCanPolicy
-from vlarobot.execution.trace_compare import compare_traces
+from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -70,10 +70,22 @@ def can_regression(
     trace_log: Annotated[
         Path | None, typer.Option(help="Append per-state trace records to this JSONL.")
     ] = None,
+    pregrasp_route: Annotated[
+        Literal["interpolated", "safe_via"] | None,
+        typer.Option(help="PREGRASP route; defaults to configs/robot.yaml."),
+    ] = None,
+    stop_after: Annotated[
+        Literal["PREGRASP", "LIFT"] | None,
+        typer.Option(help="Stop this watched diagnostic run after PREGRASP or LIFT."),
+    ] = None,
 ) -> None:
     """Run a brain-side scripted CAN policy over repeated seeds and summarize the outcome."""
     client = ZmqBackendClient(endpoint)
-    policy = ScriptedCanPolicy(trace_path=trace_log)
+    policy = ScriptedCanPolicy(
+        trace_path=trace_log,
+        pregrasp_route=pregrasp_route,
+        stop_after=stop_after,
+    )
     results = []
     try:
         client.ping()
@@ -85,6 +97,13 @@ def can_regression(
                 f"final_distance={result.final_target_distance:.3f}m state={result.final_state} "
                 f"failure_state={result.failure_state} failure_reason={result.failure_reason}"
             )
+            for state, sim_seconds in policy.state_sim_durations.items():
+                settle_seconds = policy.state_settle_durations.get(state, 0.0)
+                wall_seconds = policy.state_wall_durations.get(state, 0.0)
+                typer.echo(
+                    f"  timing {state}: sim={sim_seconds:.3f}s "
+                    f"settle={settle_seconds:.3f}s wall={wall_seconds:.3f}s"
+                )
         successes = sum(1 for result in results if result.success)
         rejections = sum(result.rejections for result in results)
         typer.echo(f"summary success={successes}/{seeds} rejections={rejections}")
@@ -191,19 +210,40 @@ def compare_trace_files(
     prefix: str = typer.Option(
         "INIT,PREGRASP,DESCEND,CLOSE,LIFT", help="Comma-separated required state prefix."
     ),
-    tol_joint: float = typer.Option(1e-3, min=0.0, help="Maximum joint target delta in radians."),
-    tol_pos: float = typer.Option(1e-3, min=0.0, help="Maximum commanded EE delta in meters."),
+    tol_pos: float = typer.Option(
+        1e-3, min=0.0, help="Maximum commanded/achieved boundary and Cartesian EE delta in meters."
+    ),
+    max_tilt_deg: float = typer.Option(15.0, min=0.0, help="Maximum permitted tool tilt."),
 ) -> None:
     """Compare original-controller and brain waypoint traces."""
     result = compare_traces(
         trace_a,
         trace_b,
         tuple(state.strip() for state in prefix.split(",") if state.strip()),
-        tol_joint,
         tol_pos,
+        max_tilt_deg,
     )
+    compared_states = tuple(state.strip() for state in prefix.split(",") if state.strip())
+    for label, path in (("A", trace_a), ("B", trace_b)):
+        diagnostics = joint_diagnostics(path, compared_states)
+        max_step = max(diagnostics.max_step_by_joint_rad.values(), default=0.0)
+        wrist = (
+            "none"
+            if not diagnostics.wrist_roll_excursions
+            else "; ".join(diagnostics.wrist_roll_excursions)
+        )
+        margin = (
+            "unavailable"
+            if diagnostics.min_limit_margin_rad is None
+            else f"{diagnostics.min_limit_margin_rad:.6g} rad"
+        )
+        typer.echo(
+            f"trace {label} joint diagnostics: max_step={max_step:.6g} rad, "
+            f"min_limit_margin={margin}, arm_7_step_excursions_over_1_rad={wrist}, "
+            f"per_joint_max={diagnostics.max_step_by_joint_rad}"
+        )
     if result.passed:
-        typer.echo(f"PASS: traces match prefix={prefix}")
+        typer.echo(f"PASS: {result.reason}; prefix={prefix}")
         return
     typer.echo(
         f"FAIL: first divergence state={result.state} waypoint={result.waypoint}: {result.reason}"

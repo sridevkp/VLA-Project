@@ -1,4 +1,4 @@
-"""Compare controller and brain JSONL waypoint traces."""
+"""Compare original-controller and brain traces at M1-06a contract points."""
 
 from __future__ import annotations
 
@@ -16,36 +16,76 @@ class TraceComparison:
     reason: str
 
 
+@dataclass(frozen=True)
+class JointDiagnostics:
+    max_step_by_joint_rad: dict[str, float]
+    min_limit_margin_rad: float | None
+    wrist_roll_excursions: tuple[str, ...]
+
+
 def compare_traces(
     first_path: Path,
     second_path: Path,
     prefix: tuple[str, ...],
-    tol_joint: float,
     tol_pos: float,
+    max_tilt_deg: float = 15.0,
 ) -> TraceComparison:
     if not prefix or any(not state for state in prefix):
         raise ValueError("prefix must contain one or more state names.")
-    if tol_joint < 0.0 or tol_pos < 0.0:
-        raise ValueError("comparison tolerances must be non-negative.")
+    if tol_pos < 0.0 or max_tilt_deg < 0.0:
+        raise ValueError("position and tilt limits must be non-negative.")
     first = _load_trace(first_path)
     second = _load_trace(second_path)
 
     for label, records in (("A", first), ("B", second)):
         states = _state_sequence(records)
-        for index, expected in enumerate(prefix):
+        valid_sequence = states == prefix if label == "A" else states[: len(prefix)] == prefix
+        if not valid_sequence:
+            index = next(
+                (
+                    i
+                    for i, (actual, expected) in enumerate(zip(states, prefix, strict=False))
+                    if actual != expected
+                ),
+                min(len(states), len(prefix)),
+            )
+            expected = prefix[index] if index < len(prefix) else None
             actual = states[index] if index < len(states) else None
-            if actual != expected:
-                return TraceComparison(
-                    False,
-                    expected,
-                    None,
-                    f"trace {label} differs at state {index + 1}: expected {expected!r}, "
-                    f"found {actual!r}",
-                )
+            return TraceComparison(
+                False,
+                expected or actual,
+                None,
+                f"trace {label} state sequence differs at position {index + 1}: "
+                f"expected {expected!r}, found {actual!r}; full sequence={states!r}",
+            )
 
     for state in prefix:
-        first_waypoints = _waypoints(first, state)
-        second_waypoints = _waypoints(second, state)
+        first_boundary = _boundary(first, state)
+        second_boundary = _boundary(second, state)
+        for field in ("commanded_ee_base_xyz_m", "achieved_ee_base_xyz_m"):
+            first_value = first_boundary.get(field)
+            second_value = second_boundary.get(field)
+            if first_value is None and second_value is None and field.startswith("commanded_"):
+                continue
+            if first_value is None or second_value is None:
+                return TraceComparison(False, state, None, f"boundary {field} is missing")
+            delta = _position_delta(
+                {"commanded_base_xyz_m": first_value},
+                {"commanded_base_xyz_m": second_value},
+            )
+            if delta > tol_pos:
+                return TraceComparison(
+                    False,
+                    state,
+                    None,
+                    f"boundary {field} delta {delta:.9g} m exceeds {tol_pos:.9g} m",
+                )
+
+    for state in ("DESCEND", "LIFT"):
+        if state not in prefix:
+            continue
+        first_waypoints = _cartesian_waypoints(first, state)
+        second_waypoints = _cartesian_waypoints(second, state)
         if len(first_waypoints) != len(second_waypoints):
             return TraceComparison(
                 False,
@@ -56,23 +96,105 @@ def compare_traces(
         for index, (first_point, second_point) in enumerate(
             zip(first_waypoints, second_waypoints, strict=True), start=1
         ):
-            delta = _joint_delta(first_point, second_point)
-            if delta is not None and delta > tol_joint:
+            delta = _position_delta(first_point, second_point)
+            if delta > tol_pos:
                 return TraceComparison(
                     False,
                     state,
                     index,
-                    f"joint waypoint delta {delta:.9g} rad exceeds {tol_joint:.9g} rad",
+                    f"EE waypoint delta {delta:.9g} m exceeds {tol_pos:.9g} m",
                 )
-            position_delta = _position_delta(first_point, second_point)
-            if position_delta > tol_pos:
+
+    for label, records in (("A", first), ("B", second)):
+        tilts = [
+            (record.get("state"), float(record["ik_tilt_deg"]))
+            for record in records
+            if record.get("state") in prefix and isinstance(record.get("ik_tilt_deg"), (int, float))
+        ]
+        if not tilts:
+            return TraceComparison(False, None, None, f"trace {label} has no IK tilt diagnostics")
+        for state, tilt in tilts:
+            if abs(tilt) > max_tilt_deg:
                 return TraceComparison(
                     False,
-                    state,
-                    index,
-                    f"EE waypoint delta {position_delta:.9g} m exceeds {tol_pos:.9g} m",
+                    state if isinstance(state, str) else None,
+                    None,
+                    f"trace {label} tool tilt {tilt:.9g} deg exceeds {max_tilt_deg:.9g} deg",
                 )
-    return TraceComparison(True, None, None, "matched")
+
+    return TraceComparison(
+        True,
+        None,
+        None,
+        "matched state sequence, commanded/achieved boundary EE positions, and "
+        "DESCEND/LIFT Cartesian targets; "
+        "all recorded IK tilts are within the configured limit; joint values are diagnostics",
+    )
+
+
+def joint_diagnostics(path: Path, states: tuple[str, ...] | None = None) -> JointDiagnostics:
+    """Summarize consecutive joint command steps and margins from a JSONL trace."""
+    records = _load_trace(path)
+    previous: dict[str, float] | None = None
+    previous_state: str | None = None
+    maximum: dict[str, float] = {}
+    wrist_excursions: list[str] = []
+    min_margin: float | None = None
+
+    for record in records:
+        if states is not None and record.get("state") not in states:
+            continue
+        sample = _joint_sample(record)
+        if sample is None:
+            continue
+        if previous is not None:
+            deltas = {
+                name: abs(value - previous[name])
+                for name, value in sample.items()
+                if name in previous
+            }
+            for name, delta in deltas.items():
+                maximum[name] = max(maximum.get(name, 0.0), delta)
+            if deltas.get("arm_7_joint", 0.0) > 1.0:
+                wrist_excursions.append(
+                    f"{previous_state or '?'}->{record.get('state', '?')}: "
+                    f"{deltas['arm_7_joint']:.6g} rad"
+                )
+        previous = sample
+        previous_state = str(record.get("state", "?"))
+
+        limits = record.get("joint_limits_rad")
+        measured = record.get("measured_joint_positions_rad")
+        if not isinstance(measured, dict):
+            measured = record.get("joint_positions_rad")
+        if not isinstance(measured, dict):
+            measured = sample
+        if isinstance(limits, dict):
+            for name, value in measured.items():
+                if name not in limits:
+                    continue
+                bound = limits.get(name)
+                if isinstance(bound, list) and len(bound) == 2:
+                    margin = min(value - float(bound[0]), float(bound[1]) - value)
+                    min_margin = margin if min_margin is None else min(min_margin, margin)
+
+    return JointDiagnostics(maximum, min_margin, tuple(wrist_excursions))
+
+
+def _joint_sample(record: dict[str, Any]) -> dict[str, float] | None:
+    target = record.get("commanded_joint_target_rad", record.get("joint_target"))
+    if isinstance(target, dict):
+        return {name: float(value) for name, value in target.items()}
+    measured = record.get("measured_joint_positions_rad")
+    if isinstance(measured, dict):
+        return {name: float(value) for name, value in measured.items()}
+    if record.get("event") == "state_boundary" and record.get("phase") == "enter":
+        positions = record.get("measured_joint_positions_rad")
+        if not isinstance(positions, dict):
+            positions = record.get("commanded_joint_positions_rad")
+        if isinstance(positions, dict):
+            return {name: float(value) for name, value in positions.items()}
+    return None
 
 
 def _load_trace(path: Path) -> list[dict[str, Any]]:
@@ -87,49 +209,55 @@ def _load_trace(path: Path) -> list[dict[str, Any]]:
                 raise ValueError(f"{path}:{line_number}: invalid JSON: {error}") from error
             if not isinstance(record, dict):
                 raise ValueError(f"{path}:{line_number}: trace record must be a JSON object.")
-            if record.get("event") == "state_boundary":
+            if record.get("event") in {"state_boundary", "waypoint"}:
                 records.append(record)
     return records
 
 
 def _state_sequence(records: list[dict[str, Any]]) -> tuple[str, ...]:
-    states: list[str] = []
-    for record in records:
-        state = record.get("state")
-        if record.get("phase") == "enter" and isinstance(state, str):
-            if not states or states[-1] != state:
-                states.append(state)
-    return tuple(states)
-
-
-def _waypoints(records: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
-    return [
-        record
+    return tuple(
+        str(record["state"])
         for record in records
-        if record.get("state") == state and record.get("phase") == "waypoint"
-    ]
-
-
-def _joint_delta(first: dict[str, Any], second: dict[str, Any]) -> float:
-    first_joints = first.get("joint_target")
-    second_joints = second.get("joint_target")
-    if not isinstance(first_joints, dict) or not isinstance(second_joints, dict):
-        raise ValueError("waypoint records must include joint_target mappings.")
-    if first_joints.keys() != second_joints.keys():
-        return float("inf")
-    return max(
-        (abs(float(first_joints[name]) - float(second_joints[name])) for name in first_joints),
-        default=0.0,
+        if record.get("event") == "state_boundary"
+        and record.get("phase") == "enter"
+        and isinstance(record.get("state"), str)
     )
 
 
+def _boundary(records: list[dict[str, Any]], state: str) -> dict[str, Any]:
+    exits = [
+        record
+        for record in records
+        if record.get("state") == state
+        and record.get("event") == "state_boundary"
+        and record.get("phase") == "exit"
+    ]
+    return exits[-1] if exits else {}
+
+
+def _cartesian_waypoints(records: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
+    names = {"DESCEND": {"descend_grasp", "DESCEND"}, "LIFT": {"lift", "LIFT"}}[state]
+    result = []
+    for record in records:
+        if record.get("event") != "waypoint":
+            continue
+        if record.get("waypoint") not in names and record.get("state") != state:
+            continue
+        point = record.get("base_xyz_m", record.get("commanded_base_xyz_m"))
+        if isinstance(point, list) and len(point) == 3:
+            result.append({"commanded_base_xyz_m": point})
+    return result
+
+
 def _position_delta(first: dict[str, Any], second: dict[str, Any]) -> float:
-    first_position = first.get("commanded_base_xyz_m")
-    second_position = second.get("commanded_base_xyz_m")
-    if not isinstance(first_position, list) or not isinstance(second_position, list):
-        raise ValueError("waypoint records must include commanded_base_xyz_m arrays.")
+    first_position = first.get("commanded_base_xyz_m", first.get("commanded_ee_base_xyz_m"))
+    second_position = second.get("commanded_base_xyz_m", second.get("commanded_ee_base_xyz_m"))
+    if not isinstance(first_position, (list, tuple)) or not isinstance(
+        second_position, (list, tuple)
+    ):
+        raise ValueError("position records must include a three-coordinate target.")
     if len(first_position) != 3 or len(second_position) != 3:
-        raise ValueError("commanded_base_xyz_m must contain three coordinates.")
+        raise ValueError("position targets must contain three coordinates.")
     return (
         sum(
             (float(first_position[index]) - float(second_position[index])) ** 2

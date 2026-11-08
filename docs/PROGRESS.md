@@ -2,7 +2,7 @@
 
 Current milestone: **M1 — Port controller behind interfaces**
 
-Last updated: **2026-11-07**. M0 is committed. M1-01 through M1-05 are implemented. The approved
+Last updated: **2026-11-08**. M0 is committed. M1-01 through M1-05 are implemented. The approved
 world-frame placement target and corrected safety profiles are in place. The latest seed-0
 Webots-free IK audit reports a place-above endpoint error of `0.010475481 m` and tilt of
 `0.256656122°`; the transit-only 0.015 m tolerance remains configured, with the 0.005 m grasp
@@ -89,17 +89,18 @@ gate.
   keep joint, velocity, IK-tolerance, gripper, and invalid-command checks enabled.
 - [x] Add optional controller and brain JSONL diagnostics; tracing is disabled unless requested.
 - [x] Bound each sequential linear IK step to `max_joint_step_rad: 0.15`; interpolate PREGRASP and
-  HOME joint commands by the same step, and fail a linear move with the trust-region reason if no
-  in-region solution meets the existing tolerance.
+  HOME joint commands by the same step. Each commanded point now waits for measured joint settling
+  using original tolerances/timeouts; linear states use 3 cm Cartesian waypoints with the trust
+  region, and a configurable no-progress watchdog fails with `joint stall`.
 - [x] Add Webots-free full-flow continuity, swept-transit, and placement-grid analysis at
   `scripts/audit_can_path.py`; no target or safety parameter was changed.
 - [x] Add original-worktree comparison fixture and `compare-traces` CLI for M1-06a; live comparison
   remains pending.
-- [ ] **M1-06a refactor equivalence (PENDING LIVE RUNS):** use an original-controller temporary
-  worktree and the brain policy with the same approved `PLACE_WORLD` target/world. Compare only
-  `INIT → PREGRASP → DESCEND → CLOSE → LIFT`, which the original actually completes: require equal
-  state sequences and per-state joint/EE waypoints within `1e-3 rad` / `1e-3 m` over at least five
-  deterministic-seed runs of each implementation. Report the first divergence.
+- [ ] **M1-06a refactor equivalence (UNVERIFIED):** compare the original stop-after-LIFT trace's
+  exact `INIT → PREGRASP → DESCEND → CLOSE → LIFT` sequence to the matching brain prefix. Require
+  commanded/achieved EE boundary positions and named DESCEND/LIFT Cartesian targets within `1e-3 m`, and all
+  prefix IK tilts within the existing limit. Report per-run joint-step and limit-margin diagnostics;
+  do not gate on joint equality (withdrawn in ADR-0009).
 - [ ] **M1-07 scripted-expert hardening (UNVERIFIED; required before M2):** complete
   `TRANSIT → PLACE_DESCEND → RELEASE → RETREAT → HOME` and reach `DONE`; at least 16 of 20 live
   episodes must place the CAN within `0.10 m` of the target in the robot base frame. Preserve and
@@ -159,7 +160,7 @@ gate.
   target has 0.010475 m error and 0.257° tilt. Before ADR-0006, the 0.005 m grasp tolerance rejected
   transit at waypoint 7/7. ADR-0006 records the measured, state-specific transit tolerance decision;
   the target, grasp tolerance, safety bounds, and tilt cap remain unchanged.
-- **Placement geometry check:** `Table.proto` defines a 0.75 m top; the CAN bottom at the approved
+- **Historical placement geometry check (clearance results superseded; UNVERIFIED (assumed radii)):** `Table.proto` defines a 0.75 m top; the CAN bottom at the approved
   center height is 0.7599 m. The target is 0.209707 m from the nearest tabletop edge, leaving
   0.177957 m after subtracting the CAN radius. The initial CAN-to-target center distance is
   0.219419 m horizontally (0.219649 m in 3D); parallel-cylinder surface gap is 0.155919 m. Based
@@ -245,7 +246,7 @@ gate.
   kept all measured adjacent commands at or below `0.15 rad`. A reachable pregrasp target requiring
   an unrestricted `0.468583 rad` change from a deliberately displaced seed now fails explicitly
   inside the `0.15 rad` trust region (best position error `0.144119 m`).
-- **Swept transit comparison:** Cartesian line: max joint step `0.150000 rad`, minimum joint-limit
+- **Historical swept transit comparison (object-clearance values superseded; UNVERIFIED (assumed radii)):** Cartesian line: max joint step `0.150000 rad`, minimum joint-limit
   margin approximately zero, peak tilt `0.263349°`, estimated minimum payload/table clearance
   `0.120158 m`, estimated minimum payload/object clearance `0.116168 m` (hammer). Joint-space
   interpolation: max step `0.137162 rad`, margin approximately zero, peak tilt `2.192890°`, table
@@ -253,18 +254,43 @@ gate.
   and held-CAN proxy, not arm-link collision or dynamic Webots evidence. Cartesian transit is
   recommended for its roughly `7.2 mm` greater tabletop clearance and `1.93°` lower peak tilt;
   neither route removes the arm-6 limit-margin issue.
-- **Placement grid search:** At 0.10 m grid spacing, 534 tabletop points passed the documented
+- **Historical placement grid search (geometry screen superseded; UNVERIFIED (assumed radii)):** At 0.10 m grid spacing, 534 tabletop points passed the documented
   geometric filters and 16 passed sampled IK descent. The best route margin excluding the fixed
   LIFT start state was `0.043619 rad` at world `(-0.188828,-4.190293,0.821100)` m / base
   `(0.466393,0.381651,0.725361)` m. The next two margins were `0.031087` and `0.028296 rad`;
   see ADR-0007 for their coordinates. No placement candidate was applied.
-- **M1-06a tooling:** `scripts/prepare_original_comparison.py` prepares the original temporary
-  worktree with world-frame target conversion, seed 0, stop-after-LIFT, extern-controller mode, and
-  JSONL tracing. `uv run python -m vlarobot.cli compare-traces A.jsonl B.jsonl` compares state and
-  waypoint prefixes and reports the first divergence. Synthetic comparer tests pass. Original
-  fixture files compile, but no live original-vs-brain runs have been made.
-- **M1 gate status:** M1-06a and M1-07 are pending/unverified until their required live Webots runs
-  are completed. M2 has not started. Windows CI remains unverified.
+- **M1-06a original-only noise-floor audit (2026-11-08):** Ran all six old-rule `compare-traces`
+  pairings over clean original traces 01, 02, 03, and 05. Five pairs first failed the joint check
+  at PREGRASP; pair 02-05 passed. Maximum pairwise joint deltas by state were `0.319572 rad`
+  (PREGRASP), `4.078076 rad` (DESCEND), `4.095043 rad` (CLOSE), and `4.139445 rad` (LIFT), all
+  largest on arm_7. Boundary EE targets and both Cartesian waypoints differed by at most
+  `8.1e-15 m`; achieved boundary EE differences were at most `6.78e-6 m`. Fixture v1 seeds its IK restart RNG to 0 before the first PREGRASP solve. The
+  original trace does not record torso state, so the physical cause of the solver branch variation
+  is not known. See ADR-0009.
+- **M1-06a revised gate and fixture v2:** Joint equality is withdrawn. The gate checks the expected
+  state prefix, commanded/achieved EE boundary positions and DESCEND/LIFT Cartesian targets within `1e-3 m`,
+  and the existing tilt limit. It reports per-run max joint step per joint, minimum joint-limit
+  margin, and arm_7 steps over `1 rad` as diagnostics. Fixture v2 adds opt-in CAN, gripper, grasp,
+  stall, IK, tilt, and joint-limit measurements. Existing run 04 remains untouched and labelled
+  **anomalous: CLOSE->RETRY, CAN displaced**; v1 traces are not reused for the revised five-run
+  batch. No v2 live runs or brain M1-06a traces have been collected.
+- **M1 gate status:** M1-06a and M1-07 remain **UNVERIFIED** pending their required live evidence.
+  M2 has not started. Windows CI remains unverified.
+
+### 2026-11-08 pacing repair
+
+- Implemented original per-command settling semantics in the brain: PREGRASP/HOME joint waypoints
+  use 0.01/0.02 rad tolerances and 800-step timeouts; DESCEND/LIFT/TRANSIT/PLACE_DESCEND/RETREAT
+  use 3 cm Cartesian points with 0.03 rad intermediate and 0.01 rad final tolerances, each with a
+  600-step timeout. A 10-step configurable no-progress watchdog fails the active state as `joint
+  stall`.
+- Added explicit measured and commanded-target trace fields; the legacy
+  `commanded_joint_positions_rad` is retained as a deprecated measured-feedback alias. Fixture v2
+  and diagnostics use the explicit names.
+- Webots-free tests cover the previously rejected unpaced rate-limited path, the paced
+  PREGRASP→DESCEND→CLOSE→LIFT prefix, stall handling, and DESCEND seeding from the settled
+  PREGRASP command. Live Webots timing and M1 gate evidence remain **UNVERIFIED**; collect fresh
+  traces before making equivalence claims.
 ## M2 — Evaluation and data harness (P0)
 
 - [ ] Define `ScenarioSpec` and a seeded scenario generator for objects and obstacles.
@@ -339,3 +365,48 @@ gate.
 Not started and out of scope until M10: ROS 2 adapter, MoveIt 2/Nav2, IKFast, latent/video world
 models, RL fine-tuning, sim-to-real preparation, multi-robot support, CBF/chance-constrained
 planning, and active perception.
+
+## 2026-11-08 analysis addendum
+
+- **M1-06a semantics:** ADR-0008's joint-equality criterion is superseded by ADR-0009. The gate
+  compares the state prefix, commanded/achieved EE boundary positions and named DESCEND/LIFT Cartesian targets
+  within `1e-3 m`, and the existing tilt limit; joint values remain per-run diagnostics. The
+  original-only noise floor is `4.139445 rad` on arm_7 at LIFT despite `8.1e-15 m` commanded and
+  `6.78e-6 m` achieved EE-position variation. Live v2 comparisons remain pending.
+- **Geometry:** The Webots-free audit now uses radii derived from the R2025a collision geometry
+  where the PROTO was available. PaintBucket.proto could not be retrieved, so its exclusion radius
+  is conservatively assumed as 0.20 m. Clearance and placement geometry screens are marked
+  `UNVERIFIED (assumed radii)`. The refreshed baseline grid has 505 geometrically
+  eligible points; no candidate was applied.
+- **Posture study (analysis only, 100 deterministic pregrasp restarts):** Current behavior at torso
+  0.35 m: full-flow minimum margin `0 rad`, maximum joint step `0.150000 rad`, maximum IK error
+  `0.010727 m`, maximum tilt `0.263349°`. Selected pregrasp at torso 0.35 m: `0 rad`, `0.150000 rad`,
+  `0.010474 m`, and `0.256619°`. Torso sweep 0.00–0.35 m: only 0.35 m completed the full flow;
+  its selected-posture result was `0 rad`, `0.150000 rad`, `0.010506 m`, and `0.257334°`.
+- **Margin target limitation:** The fixed initial/home arm posture places `arm_1_joint` at its lower
+  bound (`0.070 rad`; margin `0 rad`). Torso height and world-frame base offsets do not change that
+  joint value or limit. Therefore a full-flow minimum margin of `0.05 rad` cannot be achieved by
+  the requested PREGRASP/torso/base sweeps alone. The full 1,960-setting base/torso sweep and the
+  dependent candidate search have not been run; no base/torso/posture change or place candidate was
+  applied. M1-06a and M1-07 remain unverified.
+- **Candidate-search sequencing:** The existing combined audit emitted one baseline-setting search
+  before the posture sweep. Its results are not accepted as the requested best-setting search. The
+  default audit no longer runs candidates; `posture_study.py` defers that search until a best base
+  setting is established. No candidate was applied.
+
+## 2026-11-08 PREGRASP diagnostics addendum
+
+- Fixed failed state-exit tracing to use the latest stepped observation and added a synthetic
+  regression test. The untouched old `m1-watched-paced-02.jsonl` confirms its PREGRASP exit at row
+  16 incorrectly used simulation time 0.0 and reset joints/base; its final waypoint was at 26.08 s.
+- Added protocol-v3 read-only backend diagnostics for torso sensor, base drift, wheel state,
+  contact point/node identity, and arm_7 FK/Supervisor position. Added 5 mm / 0.5 degree base
+  invariant and default-preserving `pregrasp_route` flag. The new physical telemetry has not been
+  verified in Webots; M1 gates remain **UNVERIFIED**.
+- The saved run 02 does not show the cited 13 cm / about 42 degree base drift by 1.4 s. At 1.376 s
+  its planar drift is about 10.4 mm; the larger 12.9 cm / about 42 degree change occurs by 26.08 s.
+  This confirms base motion but not the user's inferred onset time or contact cause.
+- Webots-free FK sweep against the verified table box predicts both motion semantics clear the
+  `top+0.03 m` envelope at torso 0.35 m; with torso 0.0 m, the 0.08 m hand envelope intersects
+  near the table edge in both paths. `safe_via` metrics are kinematic estimates only. No live route,
+  posture, torso, base, IK, safety, or placement candidate experiment has been run.

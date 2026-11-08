@@ -116,7 +116,7 @@
   the brain regression. Score placement by transforming the final CAN world pose to the final robot
   base frame and measuring its Euclidean distance to the same target transformed into base.
   Preserve the old target only in historical controller sources.
-- **Geometry evidence:** In `worlds/factory.wbt`, the table top is z=0.75 m; the target CAN bottom
+- **Historical geometry evidence (clearances superseded; UNVERIFIED (assumed radii)):** In `worlds/factory.wbt`, the table top is z=0.75 m; the target CAN bottom
   is z=0.7599 m. The target is 0.209707 m from the nearest tabletop edge, or 0.177957 m after
   subtracting the CAN radius. Initial-CAN center distance is 0.219419 m horizontally and 0.219649 m
   in 3D; for parallel cylinders the surface gap is 0.155919 m. Webots R2025a collision shapes give
@@ -247,7 +247,7 @@
   endpoint tilt. It supersedes earlier profile readings `0.010473834 m / 0.256616°` and
   `0.010475343 m / 0.256653°`; those are historical results from prior solver/RNG executions, not
   values from the current deterministic path audit.
-- **Transit comparison:** With the approved target and a 0.02-rad FK sweep resolution, the Cartesian path had
+- **Historical transit comparison (object-clearance numbers superseded; UNVERIFIED (assumed radii)):** With the approved target and a 0.02-rad FK sweep resolution, the Cartesian path had
   maximum command step `0.150000 rad`, minimum joint-limit margin approximately `0 rad`, maximum
   tool tilt `0.263349°`, minimum payload/table clearance `0.120158 m`, and minimum projected
   payload/object clearance `0.116168 m` (hammer). Joint-space interpolation used five segments,
@@ -261,7 +261,7 @@
   tabletop clearance and about `1.93°` less peak tilt, while meeting the same joint-step cap. The
   joint-space remedy is implemented in the shared interpolation helper and evaluated in the
   Webots-free swept-path analysis, but is not selected as the default transit strategy.
-- **Placement search:** A 0.10-m grid over the factory tabletop applied a 0.10-m edge inset,
+- **Historical placement search (geometry screen superseded; UNVERIFIED (assumed radii)):** A 0.10-m grid over the factory tabletop applied a 0.10-m edge inset,
   0.15-m spacing from the starting CAN, and 0.15-m projected surface clearance from other objects.
   Of 534 geometrically eligible points, 16 passed the sampled IK/trust-region descent checks.
   Excluding the fixed LIFT start pose when scoring target-specific route margin, the best three
@@ -281,3 +281,160 @@
   `compare-traces` reports the first divergent state/waypoint. Synthetic trace tests cover match,
   joint divergence, and waypoint-count mismatch. These tools do not constitute live M1-06a
   evidence; M1-06a and M1-07 remain unverified.
+
+## ADR-0008: Define M1-06a equivalence at state boundaries and Cartesian targets
+
+- **Date:** 2026-11-07
+- **Status:** Superseded by ADR-0009
+- **Context:** The brain path splits PREGRASP and HOME joint-space moves into commands no larger than
+  `0.15 rad`, while the original controller issued each joint-space target as one command. Comparing
+  every command makes the regression fail on a known execution-shape difference rather than a
+  difference in the commanded state outcome. DESCEND and LIFT remain Cartesian moves with shared
+  targets.
+- **Decision:** M1-06a compares the state sequence, final commanded joint positions and commanded
+  end-effector target at each state boundary, plus the named Cartesian targets for DESCEND and LIFT.
+  Intermediate PREGRASP and HOME joint interpolation count and intermediate commands are intentional
+  deviations and are excluded from equivalence. The final PREGRASP/HOME boundary targets remain
+  compared. The trust-region cap and Cartesian transit behavior are retained.
+- **Geometry decision:** The audit uses collision geometry from Webots R2025a `Can.proto`,
+  `Wrench.proto`, `Hammer.proto`, `Apple.proto`, and `Screwdriver.proto`. The remote
+  `PaintBucket.proto` could not be retrieved during this task, so its candidate exclusion uses the
+  conservative 0.20 m radius around the object center. Geometry-screen clearances and candidate
+  exclusions that include this assumed radius are explicitly marked
+  `UNVERIFIED (assumed radii)`. No placement target or candidate is changed or applied.
+- **Housekeeping:** Ignore `worlds/.factory.wbproj`, which Webots writes as local user state.
+- **Consequences:** M1-06a trace tooling now validates behavior at the documented contract points;
+  this changes the acceptance comparison semantics, not controller behavior or safety thresholds.
+  M1-06a and M1-07 remain unverified until their live evidence is reviewed.
+
+## ADR-0009: Withdraw M1-06a joint-equality criterion
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; live v2 batch pending
+- **Context:** Six pairwise `compare-traces` runs over clean original traces 01, 02, 03, and 05
+  showed the old `1e-3 rad` boundary-joint equality requirement was not self-consistent. Five of
+  six pairs first diverged at PREGRASP, during the first IK solve. Across the clean originals, the
+  maximum pairwise joint differences were `0.319572 rad` at PREGRASP, `4.078076 rad` at DESCEND,
+  `4.095043 rad` at CLOSE, and `4.139445 rad` at LIFT. The largest differences were arm_7. In
+  contrast, all commanded boundary EE target and DESCEND/LIFT Cartesian waypoint differences were
+  at most `8.1e-15 m`; achieved boundary EE position differences were at most `6.78e-6 m`. The
+  `02-05` pair was bit-for-bit equal in recorded joints.
+- **Seed audit:** Fixture v1 sets `self.rng = np.random.default_rng(0)` in `Kinematics.__init__`.
+  `tiago_controller.py` constructs `Kinematics` before the task run; no solve occurs before
+  PREGRASP; and `Motion.go_to()` calls `solve(..., restarts=True)`. Thus random restart candidates
+  for the first PREGRASP solve are drawn from the seeded generator. The first observed joint
+  divergence is at that PREGRASP boundary, not a later Cartesian state. The trace does not record
+  torso state, so the exact physical source of the solver branch variation is not established.
+- **Decision:** Withdraw joint equality as an M1-06a acceptance criterion. Equivalence requires the
+  original trace to have exactly the expected stop-after-LIFT prefix and the brain trace to start
+  with that prefix; commanded and achieved EE boundary positions and named DESCEND/LIFT Cartesian
+  targets must match within `1e-3 m`; all recorded prefix IK tilts must remain within the existing configured
+  tilt limit. Report per-run maximum absolute joint step per joint, minimum joint-limit margin, and
+  arm_7 consecutive-command excursions over `1 rad` as diagnostics, without a joint-equality gate.
+- **Fixture v2:** Keep the original IK, controller behavior, posture, torso/base settings, target,
+  limits, and tolerances unchanged. Extend opt-in traces with CAN world/base positions, displacement
+  and lift height, gripper/grasp/stall diagnostics, joint limits, IK error, and tool tilt. The old
+  run 04 trace remains untouched and labelled **anomalous: CLOSE->RETRY, CAN displaced**. Failed or
+  anomalous traces are renamed and retained, never deleted. Recollect the five-run original batch
+  under new `m1-06a-original-v2-01` through `-05` filenames because v1 traces lack these fields and
+  run 04 is not an isolated clean episode.
+- **Guarantees and status:** This gate still checks prefix state progression, task-space command
+  targets, Cartesian approach/lift geometry, and the existing tilt cap. It does not assert joint
+  posture equivalence, grasp success, lift success, placement success, or collision safety. M1-06a
+  and M1-07 remain unverified; posture/torso/base studies remain unapplied and M2 has not started.
+
+## ADR-0010: Pace joint waypoints using measured completion
+
+- **Date:** 2026-11-08
+- **Status:** Accepted; Webots verification pending
+- **Context:** The brain sent a new interpolated joint target after one 32 ms simulator step even
+  when arm motors were configured to move at 0.5 rad/s. Measured arm_7 motion was about 0.016 rad
+  per step while commanded targets advanced about 0.149 rad. The safety layer compared each next
+  target against measured position and rejected the accumulated tracking error.
+- **Decision:** Match the original wait semantics. Joint-space PREGRASP/HOME waypoints wait until
+  every arm joint is within 0.01 rad, with the original 800-step timeout. Cartesian linear paths use
+  3 cm waypoints and wait to 0.03 rad at intermediate waypoints and 0.01 rad at the final waypoint,
+  with the original 600-step timeout. Every wait checks measured `RobotState.joint_pos`. A
+  configurable `joint_stall_steps` watchdog (default 10) fails the active state with the exact
+  reason `joint stall` when no arm joint moves for that many steps. Safety limits, command horizon,
+  IK tolerances, target poses, and motor velocity settings are unchanged.
+- **Intentional motion deviations:** PREGRASP and HOME retain the brain's 0.15 rad joint
+  interpolation, now settling every command; the original issued one joint target and waited for
+  completion. DESCEND, LIFT, TRANSIT, PLACE_DESCEND, and RETREAT use 3 cm Cartesian waypoints,
+  sequential warm starts, and the already accepted 0.15 rad IK trust region. The original linear
+  solver did not impose that trust region or use random restarts. The brain also has a fixed scripted
+  sequence rather than the original retry/alignment/grasp-verification state machine. These
+  differences are documented; this repair does not claim full controller equivalence.
+- **Seed parity:** The comparison fixture seeds the original IK RNG at 0; the brain M1 trace runs
+  with seed 0 and resets the same `default_rng(0)`. Both first PREGRASP solves use the same reset
+  arm posture and the configured 0.35 m torso target: the original settles the torso to within
+  0.002 m before capturing `home_q`, and the brain constructs its IK vector from reset arm sensors
+  plus configured torso height. The brain wire observation does not expose torso sensor readback,
+  so exact physical torso equality is not independently trace-verifiable. Random restart candidates
+  are drawn in the same arm-joint order. IK candidate stopping and selection rules differ and remain
+  an intentional implementation difference.
+- **Trace semantics:** `measured_joint_positions_rad` is sensor feedback and
+  `commanded_joint_target_rad` is the latest requested joint target. The old
+  `commanded_joint_positions_rad` remains a deprecated measured-position alias for older trace
+  readers. Original fixture v2 writes all three fields; the comparer prefers explicit values.
+- **Timing:** Policy and CLI report per-state simulation duration, cumulative waypoint-settle
+  simulation duration, and wall-clock duration. Wall time includes IK and transport overhead. No
+  live Webots timing claim is made before recaptured traces are reviewed.
+- **Consequences:** Webots-free rate-limited tests reproduce the old safety rejection and exercise
+  paced PREGRASP→DESCEND→CLOSE→LIFT, a stalled-joint failure, and DESCEND seed continuity. Original
+  and brain trace batches must be recollected before a new equivalence claim. All M1 gates remain
+  unverified.
+
+## ADR-0011: PREGRASP contact and base diagnostics; guarded clearance route
+
+- **Date:** 2026-11-08
+- **Status:** Accepted for instrumentation; guarded route and Webots behavior unverified
+- **Context:** A paced PREGRASP trace showed substantial base displacement and an end-effector
+  position near/below the factory table. Existing traces do not contain torso sensor values,
+  contacts, or arm-link ground truth, so the proposed joint-sweep/table-contact cause was not yet
+  established from telemetry.
+- **Decision:** Preserve the default `pregrasp_route: interpolated`; add opt-in `safe_via`, which
+  deterministically searches joint configurations using FK and requires both joint-interpolated
+  segments to keep the sampled elbow, wrist, tool, and hand points at least 0.05 m above the table
+  plane when inside the footprint. No safety thresholds, command horizon, IK tolerances, targets,
+  or motor speed are changed. Add a config-driven reset-pose invariant (0.005 m planar, 0.5 deg
+  yaw) that fails the active state with `base moved` and includes observed contact-node context.
+- **Reset posture:** The checked-in Webots TIAGo PROTO leaves the torso joint-position field at its
+  default 0.0 m, while `torso_height` is 0.35 m. Brain reset now commands torso/head and waits for
+  the torso sensor to be within 0.002 m; the head receives the configured pan/tilt and a two-second
+  settle window. Existing traces do not include the torso sensor, so physical reset behavior is
+  still unverified until a watched run records it. Original `initialize_posture` captures home arm
+  posture and enables contact tracking after optional tool calibration. Task `INIT` builds
+  waypoints, records initial CAN height, and opens/primes the gripper. The brain still skips explicit
+  gripper priming, optional calibration/gripper test, initial-height bookkeeping, and later retry,
+  alignment, grasp-verification, and recovery flow.
+- **Telemetry contract:** `RobotState.diagnostics` is optional read-only backend telemetry and does
+  not affect safety validation. It carries torso sensor, base drift, wheel mode/target/velocity/
+  encoder, non-robot contact node/type/world points, and arm_7 FK versus Supervisor node position.
+  The failure boundary now uses the last stepped observation. Added telemetry changes strict
+  dataclass wire fields, so protocol version advances from 2 to 3. Protocol v1/v2 peers are
+  incompatible until both processes are restarted together.
+- **Geometry and Webots-free analysis:** The factory table is at
+  `(-0.23882837,-4.8402928)` with footprint `4.5 x 1.5 m` and top `z=0.75 m` from
+  `worlds/factory.wbt` plus the R2025a `Table.proto`. FK sweeps using the existing PREGRASP joint
+  endpoints and reset base pose predict that at torso 0.35 m the synchronized path has minimum
+  hand-adjusted clearance margin 0.0615 m relative to `top + 0.03 m`, and original-rate independent
+  motion has 0.0741 m; neither crosses the table. At torso 0.0 m, both paths penetrate the clearance
+  threshold: synchronized first at sample 3 (hand-adjusted margin -0.2266 m; world
+  `(-1.4895,-4.0504,0.6334)`), original-rate first at sample 10 (margin -0.1513 m; world
+  `(-1.5226,-4.0213,0.7087)`). The nominal trace lacks torso feedback, so the torso-0.0 sweep is a
+  plausible explanation of the observed low EE height, not proof of the actual contact cause.
+- **Candidate route estimate:** On the recorded reset pose, FK selected via target
+  `(1.958,0.860,-1.714,1.910,0.356,-0.913,1.236) rad`. Estimates at torso 0.35 m: interpolated
+  route minimum clearance 0.0615 m above the `top+0.03 m` threshold, max joint step 0.1372 rad,
+  minimum arm joint-limit margin 0.000953 rad, simulated motor-time estimate 2.304 s. `safe_via`
+  minimum clearance 0.0652 m, max joint step 0.1469 rad, minimum limit margin 0.000953 rad, estimated
+  motor time 6.336 s. The unchanged reset posture is arm_1's limiting point for both routes.
+  Estimates ignore Webots collision dynamics and table/arm collision geometry beyond the sampled
+  points; they are not evidence of safe execution.
+- **Evidence and status:** `scripts/analyze_pregrasp_table.py` reproduces the sweep. Existing
+  `m1-watched-paced-02.jsonl` confirms the old failure boundary incorrectly used reset time 0.0
+  and reset base/joint values; no existing run includes contact, wheel, torso, or joint-node
+  telemetry. Instrumentation is testable without Webots; live traces must validate contact
+  tracking, FK/ground-truth alignment, torso reset, and the invariant. All M1 gates remain
+  **UNVERIFIED**.

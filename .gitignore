@@ -3,6 +3,7 @@
 .env.*
 .venv/
 runs/
+worlds/.factory.wbproj
 *.egg-info/
 tiago_ikfast/*.cpp
 __pycache__/

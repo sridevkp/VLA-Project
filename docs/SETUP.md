@@ -43,6 +43,11 @@ uv run python -m vlarobot.cli brain --steps 10
 The brain command resets the default scene, advances ten lockstep steps, and prints simulation time
 and RGB shape. It is a transport smoke test, not the M1 CAN regression.
 
+The simulator/brain wire protocol is version 3. Restart both processes after protocol changes;
+peers with different versions fail fast. Backend reset initializes torso/head posture and traces
+include read-only diagnostics. `pregrasp_route` in `configs/robot.yaml` selects `interpolated`
+(default) or the experimental `safe_via` route.
+
 ### PyTorch CUDA on Windows
 
 Choose **Windows / Pip / Python / CUDA** in the [official PyTorch selector](https://pytorch.org/get-started/locally/).

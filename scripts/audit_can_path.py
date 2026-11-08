@@ -36,7 +36,7 @@ TABLE_CENTER_XY = (-0.23882837, -4.8402928)
 TABLE_SIZE_XY = (4.5, 1.5)
 TABLE_TOP_M = 0.75
 CAN_HALF_HEIGHT_M = 0.0611
-CAN_RADIUS_M = 0.032
+CAN_RADIUS_M = 0.03175
 HELD_TOOL_OFFSET_M = 0.02
 GRID_STEP_M = 0.10
 TABLE_EDGE_MARGIN_M = 0.10
@@ -44,11 +44,26 @@ OBJECT_CLEARANCE_M = 0.15
 CAN_START_CLEARANCE_M = 0.15
 SWEEP_STEP_RAD = 0.02
 OBJECTS = (
-    ("wrench", (-1.32774, -4.3478), 0.0166074),
-    ("hammer", (-0.544929, -4.5081), 0.1393951),
-    ("apple", (-0.41, -4.44), 0.0497827),
-    ("paint bucket", (-0.721679391155155, -5.178214147629225), 0.0918613),
-    ("screwdriver", (-0.07122996395380227, -5.200859419546002), 0.1101939),
+    ("wrench", (-1.32774, -4.3478), 0.095, "Wrench.proto collision boxes; circumscribed XY radius"),
+    (
+        "hammer",
+        (-0.544929, -4.5081),
+        0.151,
+        "Hammer.proto collision boxes/cylinder; circumscribed XY radius",
+    ),
+    ("apple", (-0.41, -4.44), 0.05, "Apple.proto bounding Sphere radius"),
+    (
+        "paint bucket",
+        (-0.721679391155155, -5.178214147629225),
+        0.20,
+        "UNVERIFIED: conservative 0.20 m exclusion radius; remote PaintBucket.proto unavailable",
+    ),
+    (
+        "screwdriver",
+        (-0.07122996395380227, -5.200859419546002),
+        0.115,
+        "Screwdriver.proto collision cylinders; circumscribed XY radius",
+    ),
 )
 
 
@@ -116,7 +131,7 @@ def _clearance_metrics(
     max_tilt = 0.0
     min_margin = math.inf
     min_table = math.inf
-    min_objects = {name: math.inf for name, _, _ in OBJECTS}
+    min_objects = {name: math.inf for name, _, _, _ in OBJECTS}
     max_step = 0.0
     for first, second in zip(path, path[1:], strict=False):
         joint_delta = max(_joint_delta(kinematics, first, second))
@@ -138,7 +153,7 @@ def _clearance_metrics(
                 min_table,
                 payload_world[2] - CAN_HALF_HEIGHT_M - TABLE_TOP_M,
             )
-            for name, (object_x, object_y), object_radius in OBJECTS:
+            for name, (object_x, object_y), object_radius, _ in OBJECTS:
                 clearance = (
                     math.hypot(payload_world[0] - object_x, payload_world[1] - object_y)
                     - object_radius
@@ -173,7 +188,7 @@ def _candidate_scores(
                 continue
             if any(
                 math.dist((x, y), object_xy) - object_radius < OBJECT_CLEARANCE_M
-                for _, object_xy, object_radius in OBJECTS
+                for _, object_xy, object_radius, _ in OBJECTS
             ):
                 continue
             geometric_count += 1
@@ -302,20 +317,26 @@ def run_audit() -> None:
         f"transit_endpoint error_m={endpoint_error:.9f} tilt_deg={endpoint_tilt:.9f} "
         f"lift_to_place_above_max_dq_rad={max(_joint_delta(kinematics, lift_q, above_q)):.9f}"
     )
-    print("cartesian_transit_sweep", _clearance_metrics(kinematics, cartesian_path, base_rotation))
-    print("joint_transit_sweep", _clearance_metrics(kinematics, joint_path, base_rotation))
-
-    geometric_count, candidates = _candidate_scores(kinematics, lift_q, base_pose, CAN_WORLD)
     print(
-        f"placement_search geometric_candidates={geometric_count} "
-        f"ik_candidates={len(candidates)} grid_step_m={GRID_STEP_M:.2f}"
+        "geometry_clearances status='UNVERIFIED (assumed radii)' "
+        "paint_bucket_exclusion_radius_m=0.20"
     )
-    for index, (margin, step, world) in enumerate(candidates[:3], start=1):
-        target_base = _world_to_base(world, base_pose)
+    for name, _, radius, source in OBJECTS:
+        print(f"geometry_object name={name!r} exclusion_radius_m={radius:.6f} source={source}")
+    for label, path in (
+        ("cartesian_transit_sweep", cartesian_path),
+        ("joint_transit_sweep", joint_path),
+    ):
+        metrics = _clearance_metrics(kinematics, path, base_rotation)
         print(
-            f"candidate={index} min_margin_rad={margin:.6f} max_step_rad={step:.6f} "
-            f"world_m={world.tolist()} base_m={target_base.tolist()}"
+            f"{label} motion_max_dq_rad={metrics['max_joint_step_rad']:.9f} "
+            f"min_joint_margin_rad={metrics['min_joint_margin_rad']:.9f} "
+            f"max_tilt_deg={metrics['max_tool_tilt_deg']:.9f}"
         )
+        for name, value in metrics.items():
+            if "clearance" in name:
+                print(f"{label} {name} status='UNVERIFIED (assumed radii)' value_m={value:.9f}")
+
     current_route_margin = min(_min_limit_margin(kinematics, point) for point in cartesian_path[1:])
     print(f"current_target_route_margin_rad={current_route_margin:.9g} target_applied=false")
 

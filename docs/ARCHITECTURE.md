@@ -118,6 +118,7 @@ class RobotState:
     base_pose: Pose2D; ee_pose: Pose3D; gripper_opening: float
     gripper_holding: bool | None  # heuristic, may be None
     base_pose_world: Pose3D | None # full robot-base pose in world frame, for exact frame transforms
+    diagnostics: dict[str, object] # optional read-only backend telemetry; safety ignores it
 
 # Action = discriminated union; every action is in the BASE frame, SI units
 class Action: ...
@@ -155,8 +156,9 @@ class Verifier(Protocol):   def check(self, task, predicted, observed) -> Verify
 
 - ZeroMQ `REQ/REP` (lockstep) with `msgpack`; images as raw bytes with shape/dtype header (or JPEG for dashboard streaming only).
 - Messages: `reset`, `step`, `apply`, `get_gt`, `shutdown`, `ping`; every reply carries `sim_time`, `seq`, and `error?`.
-- Versioned: include `protocol_version`; mismatch ⇒ hard fail. Protocol version 2 carries the
-  optional full 3D world-frame base pose in `RobotState`; peers using version 1 are incompatible.
+- Versioned: include `protocol_version`; mismatch ⇒ hard fail. Protocol version 3 carries the
+  optional full 3D world-frame base pose and optional read-only backend `diagnostics` mapping in
+  `RobotState`; peers using versions 1 or 2 are incompatible.
 - Default `tcp://127.0.0.1:5555`; configurable so Windows-Webots ↔ WSL2-brain works.
 
 ### 3.5 World model contents (staged)
@@ -237,13 +239,16 @@ Each milestone has an **acceptance test** an agent can run; a milestone is not d
 ### M1 — Port controller behind interfaces (P0, ~1–2 weeks)
 - Move `controllers/tiago_controller/*` into `backends/webots/` unchanged in behaviour; build `SimServer` + `ZmqBackendClient` implementing `RobotBackend`; add `FakeBackend` (no sim) for tests.
 - Convert `config.py` constants to YAML-backed typed config (keep defaults identical).
-- **M1-06a refactor equivalence:** run the original controller from a temporary worktree and the
-  brain-driven policy with the approved `PLACE_WORLD` target in the same factory world. Compare only
-  the prefix the original actually completes: `INIT → PREGRASP → DESCEND → CLOSE → LIFT`. Require
-  the same state sequence and per-state commanded joint and end-effector waypoints within
-  `1e-3 rad` / `1e-3 m`, over at least five runs of each implementation with deterministic IK
-  seeding. Report the first divergent state or waypoint. This is a prefix equivalence test, not a
-  successful-placement claim.
+- **M1-06a refactor equivalence:** run the original controller from a clean temporary worktree and
+  the brain-driven policy with the approved `PLACE_WORLD` target in the same factory world. Compare
+  only `INIT → PREGRASP → DESCEND → CLOSE → LIFT`. Require the same state prefix, commanded and
+  achieved boundary EE positions, and named DESCEND/LIFT Cartesian targets within `1e-3 m`; every recorded IK
+  tool tilt must remain within the existing configured limit. Joint values are diagnostics, not an
+  equality criterion: the original-only noise-floor audit found an arm_7 difference of `4.139445`
+  rad at LIFT while its task-space targets differed by less than `1e-14 m`. Report per-run maximum
+  joint step per joint, minimum joint-limit margin, and arm_7 steps over `1 rad`. Require five clean
+  runs from each implementation, preserve anomalous runs, and report the first task-space/state
+  divergence. This prefix test is not a successful-placement claim.
 - **M1-07 scripted-expert hardening (required before M2):** execute the complete
   `INIT → PREGRASP → DESCEND → CLOSE → LIFT → TRANSIT → PLACE_DESCEND → RELEASE → RETREAT → HOME`
   flow in 20 Webots episodes. At least 80% must finish at `DONE` after reaching `HOME` and place the
@@ -251,6 +256,16 @@ Each milestone has an **acceptance test** an agent can run; a milestone is not d
   commanded/achieved pose, IK, joint, gripper/stall/contact, and CAN world/base trace evidence.
 - **Acceptance:** M1-06a and M1-07 live evidence meet the criteria above; `FakeBackend` unit tests
   pass in CI. Keep M1-06 pending live runs and do not start M2 until both gates are accepted.
+
+**M1 motion pacing contract:** Every arm waypoint is followed by lockstep `step(1)` calls until
+all measured arm joints are within the original controller's settle tolerance, or its per-move
+timeout is reached. Joint-space PREGRASP/HOME commands use 0.01/0.02 rad tolerances respectively
+and an 800-step timeout. Cartesian paths use 3 cm waypoints, 0.03 rad intermediate and 0.01 rad
+final tolerances, and a 600-step timeout. `configs/robot.yaml:joint_stall_steps` bounds consecutive
+steps without measurable progress; a stall fails the active state. The established 0.15 rad
+Cartesian IK trust region remains active. These changes pace execution without changing safety,
+IK, target, or motor velocity settings. See ADR-0010 for intentional differences from the original
+controller and trace field semantics.
 
 ### M2 — Evaluation & data harness (P0, ~1 week)
 - `ScenarioSpec` + seeded scenario generator (object poses/colours/types, obstacles; Webots Supervisor spawns/moves nodes).

@@ -8,11 +8,14 @@ from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
     CAN_PLACE_Z_TOLERANCE_M,
+    CAN_RADIUS_M,
     CAN_TILT_LIMIT_DEG,
     CLOSE_ALIGN_TOL,
+    CLOSED_LOOP_WAYPOINTS,
     CONTROLLER_DIR,
     FINGER_JOINTS,
     FINGER_SPEED,
+    FINGER_TIP_OFFSET_M,
     FK_GROUND_TRUTH_TOLERANCE_M,
     GRASP_Z,
     GRIP_FORCE,
@@ -123,6 +126,12 @@ def test_yaml_backed_settings_preserve_original_controller_defaults() -> None:
     assert TABLE_FOOTPRINT_SIZE_XY_M == (4.5, 1.5)
     assert TABLE_CLEARANCE_REQUIRED_M == 0.05
     assert FK_GROUND_TRUTH_TOLERANCE_M == 0.01
+    assert SETTINGS.closed_loop_waypoints is True
+    assert CLOSED_LOOP_WAYPOINTS is True
+    assert SETTINGS.finger_tip_offset_m == pytest.approx(0.1741)
+    assert FINGER_TIP_OFFSET_M == pytest.approx(0.1741)
+    assert SETTINGS.can_radius_m == pytest.approx(0.03175)
+    assert CAN_RADIUS_M == pytest.approx(0.03175)
     assert SAFETY_SETTINGS_PATH == Path(__file__).parents[1] / "configs" / "safety.yaml"
     assert SAFETY_PROFILE_NAME == "original_envelope"
     assert SAFETY_PROFILE.workspace_min == (
@@ -175,6 +184,35 @@ def test_robot_settings_reject_non_boolean_pregrasp_realign(tmp_path: Path) -> N
     bad_settings.write_text(config, encoding="utf-8")
 
     with pytest.raises(ValueError, match="pregrasp_realign must be a boolean"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+def test_robot_settings_reject_non_boolean_closed_loop_waypoints(tmp_path: Path) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8").replace(
+        "closed_loop_waypoints: true", "closed_loop_waypoints: 0"
+    )
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="closed_loop_waypoints must be a boolean"):
+        RobotSettings.from_yaml(bad_settings)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), (("finger_tip_offset_m", "0"), ("can_radius_m", "-0.03175"))
+)
+def test_robot_settings_reject_non_positive_tool_geometry(
+    tmp_path: Path, key: str, value: str
+) -> None:
+    config = SETTINGS_PATH.read_text(encoding="utf-8")
+    needle = f"{key}: "
+    start = config.index(needle)
+    end = config.index("\n", start)
+    config = config[:start] + f"{key}: {value}" + config[end:]
+    bad_settings = tmp_path / "robot.yaml"
+    bad_settings.write_text(config, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"{key} must be positive"):
         RobotSettings.from_yaml(bad_settings)
 
 

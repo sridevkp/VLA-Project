@@ -49,6 +49,22 @@ def _flatten_matrix(values: Any) -> list[float] | None:
     return finite
 
 
+def offset_point_world(
+    position: Any, orientation: Any, local_offset: tuple[float, float, float]
+) -> list[float] | None:
+    """Apply a local offset, rotated by a row-major 3x3 orientation, to a world point."""
+    point = _finite_position(position)
+    matrix = _flatten_matrix(orientation)
+    if point is None or matrix is None:
+        return None
+    x, y, z = local_offset
+    return [
+        point[0] + matrix[0] * x + matrix[1] * y + matrix[2] * z,
+        point[1] + matrix[3] * x + matrix[4] * y + matrix[5] * z,
+        point[2] + matrix[6] * x + matrix[7] * y + matrix[8] * z,
+    ]
+
+
 class RobotIO:
     def __init__(self):
         self.robot = importlib.import_module("controller").Supervisor()
@@ -180,6 +196,9 @@ class RobotIO:
         motor = self.motors.get(name)
         if motor is None:
             return None
+        return self._device_joint_node(motor)
+
+    def _device_joint_node(self, motor: Any) -> Any | None:
         node = self.robot.getFromDevice(motor._tag)
         while node is not None and node.getTypeName() not in {"HingeJoint", "SliderJoint"}:
             node = node.getParentNode()
@@ -243,6 +262,55 @@ class RobotIO:
                 name,
             )
         return finite
+
+    def finger_tip_world_positions(self, offset_m: float) -> dict[str, list[float]] | None:
+        """World position of each finger pad centre, from the Pose-derived endPoint Solid.
+
+        The finger ``SliderJoint`` node is not Pose-derived, but its ``endPoint`` child Solid
+        (``gripper_left_finger_link`` / ``gripper_right_finger_link``) is. Its origin sits at the
+        slider joint; the pad centre is ``offset_m`` along the Solid's local -z axis. Returns
+        ``None`` if either finger is unavailable so a midpoint is never built from one side.
+        """
+        if not self.fingers:
+            return None
+        positions: dict[str, list[float]] = {}
+        for motor, _ in self.fingers:
+            name = motor.getName()
+            key = f"finger_tip:{name}"
+            if self._lookup_failed(key):
+                return None
+            node = self._device_joint_node(motor)
+            if node is None:
+                self._warn_lookup_once(
+                    key, "No SliderJoint node found for finger %s; finger telemetry is None.", name
+                )
+                return None
+            endpoint_field = node.getField("endPoint")
+            endpoint = endpoint_field.getSFNode() if endpoint_field is not None else None
+            if endpoint is None:
+                self._warn_lookup_once(
+                    key, "Finger %s has no endPoint Solid; finger telemetry is None.", name
+                )
+                return None
+            try:
+                position = endpoint.getPosition()
+                orientation = endpoint.getOrientation()
+            except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+                self._warn_lookup_once(
+                    key,
+                    "Finger %s endPoint lookup failed (%s); finger telemetry is None.",
+                    name,
+                    error,
+                )
+                return None
+            tip = offset_point_world(position, orientation, (0.0, 0.0, -abs(offset_m)))
+            if tip is None:
+                self._warn_lookup_once(
+                    key, "Finger %s returned a non-finite tip; finger telemetry is None.", name
+                )
+                return None
+            positions[name] = tip
+        return positions
 
     def reset_fingerprint(self) -> dict[str, object]:
         """Capture every Webots state value the soft reset is expected to restore.

@@ -83,6 +83,14 @@ pregrasp_route: interpolated
 # rocks the base, then refresh LIFT from it (ADR-0016). true for M1-07; set false for
 # M1-06a equivalence runs that must match the original controller semantics.
 pregrasp_realign: true
+# Recompute each DESCEND/LIFT waypoint target from the live base pose every waypoint
+# instead of once per state (ADR-0018). true for M1-07; set false for M1-06a.
+closed_loop_waypoints: true
+# Local z offset from the finger endPoint Solid origin (slider joint) to the pad centre.
+# Matches tool_offset and the TiagoGripper.proto finger geometry (m).
+finger_tip_offset_m: 0.1741
+# CAN radius for per-side finger clearance telemetry, from CAN.proto (m).
+can_radius_m: 0.03175
 # Table geometry, read from the `Table` instance in worlds/factory.wbt
 # (translation/size) and the Webots R2025a Table.proto: the top surface sits at
 # size.z and the footprint is size.x by size.y centred on the translation.

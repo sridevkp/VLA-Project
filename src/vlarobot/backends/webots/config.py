@@ -118,6 +118,9 @@ class RobotSettings:
     reset_head_settle_ms: int
     pregrasp_route: Literal["interpolated", "safe_via"]
     pregrasp_realign: bool
+    closed_loop_waypoints: bool
+    finger_tip_offset_m: float
+    can_radius_m: float
     table_top_height_m: float
     table_footprint_centre_xy_m: tuple[float, float]
     table_footprint_size_xy_m: tuple[float, float]
@@ -167,6 +170,11 @@ class RobotSettings:
             raise ValueError("pregrasp_route must be 'interpolated' or 'safe_via'.")
         if not isinstance(values.get("pregrasp_realign"), bool):
             raise ValueError("pregrasp_realign must be a boolean.")
+        if not isinstance(values.get("closed_loop_waypoints"), bool):
+            raise ValueError("closed_loop_waypoints must be a boolean.")
+        for key in ("finger_tip_offset_m", "can_radius_m"):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
         for key in (
             "close_align_tol",
             "place_tolerance_m",
@@ -308,6 +316,9 @@ RESET_TORSO_TIMEOUT_STEPS = SETTINGS.reset_torso_timeout_steps
 RESET_HEAD_SETTLE_MS = SETTINGS.reset_head_settle_ms
 PREGRASP_ROUTE = SETTINGS.pregrasp_route
 PREGRASP_REALIGN = SETTINGS.pregrasp_realign
+CLOSED_LOOP_WAYPOINTS = SETTINGS.closed_loop_waypoints
+FINGER_TIP_OFFSET_M = SETTINGS.finger_tip_offset_m
+CAN_RADIUS_M = SETTINGS.can_radius_m
 TABLE_TOP_HEIGHT_M = SETTINGS.table_top_height_m
 TABLE_FOOTPRINT_CENTRE_XY_M = SETTINGS.table_footprint_centre_xy_m
 TABLE_FOOTPRINT_SIZE_XY_M = SETTINGS.table_footprint_size_xy_m

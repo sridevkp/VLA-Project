@@ -12,6 +12,7 @@ import numpy as np
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
+    FINGER_TIP_OFFSET_M,
     FK_GROUND_TRUTH_TOLERANCE_M,
     HEAD_JOINTS,
     HEAD_PAN,
@@ -320,6 +321,14 @@ class WebotsBackend:
             None if arm7_offset_change is None else float(np.linalg.norm(arm7_offset_change))
         )
         fk_mismatch = None if fk_error_m is None else fk_error_m > FK_GROUND_TRUTH_TOLERANCE_M
+        ee_fk_world = base_rotation @ end_effector[:3, 3] + base_position_array
+        finger_lookup = getattr(self.io, "finger_tip_world_positions", None)
+        finger_tips = finger_lookup(FINGER_TIP_OFFSET_M) if finger_lookup is not None else None
+        finger_midpoint = None
+        finger_offset = None
+        if isinstance(finger_tips, dict) and len(finger_tips) == 2:
+            finger_midpoint = np.mean(np.asarray(list(finger_tips.values()), dtype=float), axis=0)
+            finger_offset = finger_midpoint - ee_fk_world
         arm_links: dict[str, object] = {
             "elbow": endpoint_lookup("arm_4_joint") if endpoint_lookup else None,
             "wrist": endpoint_lookup("arm_6_joint") if endpoint_lookup else None,
@@ -352,6 +361,18 @@ class WebotsBackend:
             "arm_7_joint_fk_ground_truth_error_m": fk_error_m,
             "arm_7_joint_fk_ground_truth_mismatch": fk_mismatch,
             "arm_7_joint_endpoint_fk_validation_available": fk_error_m is not None,
+            "ee_fk_world_xyz_m": ee_fk_world.tolist(),
+            "finger_tip_world_xyz_m": finger_tips,
+            "finger_midpoint_world_xyz_m": (
+                finger_midpoint.tolist() if finger_midpoint is not None else None
+            ),
+            "finger_midpoint_source": "endPointSolid",
+            "finger_midpoint_fk_offset_world_xyz_m": (
+                finger_offset.tolist() if finger_offset is not None else None
+            ),
+            "finger_midpoint_fk_offset_m": (
+                float(np.linalg.norm(finger_offset)) if finger_offset is not None else None
+            ),
         }
         pending_fingerprint = getattr(self, "_reset_fingerprint_pending", None)
         if pending_fingerprint is not None:
@@ -484,7 +505,10 @@ class WebotsBackend:
         )
         for motor, _ in self.io.fingers:
             if force is not None:
-                motor.setAvailableForce(force)
+                max_force = (
+                    float(motor.getMaxForce()) if hasattr(motor, "getMaxForce") else float(force)
+                )
+                motor.setAvailableForce(min(float(force), max_force))
             motor.setPosition(position)
 
     def _safety_limits(self) -> SafetyLimits:

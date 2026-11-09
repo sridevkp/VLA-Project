@@ -54,7 +54,12 @@ class Gripper:
             return False, 0.0
         for motor, _ in self.fingers:
             if GRIP_FORCE is not None:
-                motor.setAvailableForce(GRIP_FORCE)
+                max_force = (
+                    float(motor.getMaxForce())
+                    if hasattr(motor, "getMaxForce")
+                    else float(GRIP_FORCE)
+                )
+                motor.setAvailableForce(min(float(GRIP_FORCE), max_force))
             motor.setPosition(self.closed_pos)
         previous, still, stalled = self.opening(), 0, False
         for i in range(300):

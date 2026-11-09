@@ -23,8 +23,11 @@ from vlarobot.backends.webots.config import (
     BASE_DRIFT_WARN_POSITION_M,
     BASE_DRIFT_WARN_YAW_DEG,
     CAN_PLACE_Z_TOLERANCE_M,
+    CAN_RADIUS_M,
     CAN_TILT_LIMIT_DEG,
     CLOSE_ALIGN_TOL,
+    CLOSED_LOOP_WAYPOINTS,
+    FINGER_TIP_OFFSET_M,
     GRASP_Z,
     GRIPPER_OPEN,
     GRIPPER_OPEN_TIMEOUT_S,
@@ -69,6 +72,9 @@ from vlarobot.core.types import (
 # The original accepts a finger as open within 2 mm of OPEN_POS
 # (``controllers/tiago_arm_api/tiago_arm_api.py:326``).
 GRIPPER_OPEN_TOLERANCE_M = 0.002
+# A GT finger midpoint further than this from the FK tool tip means the configured TOOL_OFFSET
+# does not describe the real pads; report it, never silently re-calibrate the control loop.
+TOOL_OFFSET_CALIBRATION_TOLERANCE_M = 0.005
 
 
 class TimingSummary(TypedDict):
@@ -78,6 +84,8 @@ class TimingSummary(TypedDict):
     total_wall_s: float
     totals: dict[str, float]
     by_state: dict[str, dict[str, float]]
+    steps: int
+    wall_per_step_s: float | None
 
 
 @dataclass(frozen=True)
@@ -96,6 +104,7 @@ class ScriptedCanResult:
     torso_end_rad: float | None = None
     reset_fingerprint: dict[str, object] | None = None
     pregrasp_realign: bool = True
+    closed_loop_waypoints: bool = True
     home_reached: bool = False
     place_distance_ok: bool = False
     can_height_ok: bool = False
@@ -178,6 +187,7 @@ class ScriptedCanPolicy:
         trace_path: Path | None = None,
         pregrasp_route: str | None = None,
         pregrasp_realign: bool | None = None,
+        closed_loop_waypoints: bool | None = None,
         stop_after: str | None = None,
         timing_enabled: bool = False,
     ) -> None:
@@ -186,6 +196,9 @@ class ScriptedCanPolicy:
         self.pregrasp_route = PREGRASP_ROUTE if pregrasp_route is None else pregrasp_route
         self.pregrasp_realign = (
             PREGRASP_REALIGN if pregrasp_realign is None else bool(pregrasp_realign)
+        )
+        self.closed_loop_waypoints = (
+            CLOSED_LOOP_WAYPOINTS if closed_loop_waypoints is None else bool(closed_loop_waypoints)
         )
         self.stop_after = STOP_AFTER if stop_after is None else stop_after
         if self.pregrasp_route not in {"interpolated", "safe_via"}:
@@ -215,6 +228,7 @@ class ScriptedCanPolicy:
         self._torso_start_rad: float | None = None
         self._torso_end_rad: float | None = None
         self._torso_command_rad = float(TORSO_HEIGHT or 0.0)
+        self._step_count = 0
         self.state_timings: dict[str, dict[str, float]] = {}
 
     def execute(self, backend, seed: int) -> ScriptedCanResult:
@@ -228,6 +242,7 @@ class ScriptedCanPolicy:
             torso_end_rad=self._torso_end_rad,
             reset_fingerprint=self._reset_fingerprint,
             pregrasp_realign=self.pregrasp_realign,
+            closed_loop_waypoints=self.closed_loop_waypoints,
         )
 
     def _execute_impl(self, backend, seed: int) -> ScriptedCanResult:
@@ -247,6 +262,7 @@ class ScriptedCanPolicy:
         self._torso_start_rad = None
         self._torso_end_rad = None
         self._torso_command_rad = float(TORSO_HEIGHT or 0.0)
+        self._step_count = 0
         self.state_timings.clear()
         if self.trace_path is not None:
             self.trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -329,13 +345,26 @@ class ScriptedCanPolicy:
             self._state_wall_start[state] = perf_counter()
             trace_target = self.kinematics.forward(home_q)[:3, 3] if name == "home" else target
             self._trace_boundary(backend, observation, state, "enter", trace_target)
+            if state == "DESCEND":
+                self._trace_gt_tip(backend, observation, "DESCEND", "enter")
             if name == "home":
                 movement = self._move_to_joint_target(backend, current_q, home_q, state)
             elif (
                 state in {"DESCEND", "LIFT", "TRANSIT", "PLACE_DESCEND", "RETREAT"}
                 and target is not None
             ):
-                movement = self._move_linear(backend, observation, target, state)
+                provider = None
+                if self.closed_loop_waypoints and state == "DESCEND":
+                    provider = self._waypoint_target_provider(backend, "grasp")
+                elif self.closed_loop_waypoints and state == "LIFT":
+                    # The CAN is grasped during LIFT, so its live pose moves with the arm. Anchor
+                    # the lift point to the entry world pose and only re-express it in the live
+                    # base frame, otherwise the target would chase the rising CAN.
+                    can_world = self._can_pose(backend.get_ground_truth()).copy()
+                    provider = self._waypoint_target_provider(backend, "lift", can_world=can_world)
+                movement = self._move_linear(
+                    backend, observation, target, state, target_provider=provider
+                )
             elif target is not None:
                 movement = self._move_to(backend, current_q, target, state)
             else:
@@ -388,6 +417,8 @@ class ScriptedCanPolicy:
             self.state_wall_durations[state] = perf_counter() - self._state_wall_start[state]
             final_state = name
             self._trace_boundary(backend, observation, state, "exit", trace_target)
+            if state == "PREGRASP":
+                self._trace_gt_tip(backend, observation, "PREGRASP", "exit")
 
             if state == self.stop_after:
                 final_distance = self._placement_distance(backend, observation)
@@ -400,6 +431,9 @@ class ScriptedCanPolicy:
                 )
 
             if name == "grasp":
+                self._state_sim_start["CLOSE"] = observation.t
+                self._state_wall_start["CLOSE"] = perf_counter()
+                self._trace_gt_tip(backend, observation, "CLOSE", "enter")
                 if self.pregrasp_realign:
                     assert target is not None
                     guarded = self._guard_close_alignment(backend, observation, current_q, target)
@@ -474,6 +508,10 @@ class ScriptedCanPolicy:
                         failure_reason=self._last_failure_reason,
                     )
                 self._trace_boundary(backend, observation, "CLOSE", "exit", target)
+                self.state_sim_durations["CLOSE"] = observation.t - self._state_sim_start["CLOSE"]
+                self.state_wall_durations["CLOSE"] = (
+                    perf_counter() - self._state_wall_start["CLOSE"]
+                )
             elif name == "release":
                 self._trace_boundary(backend, observation, "RELEASE", "command", target)
                 response = backend.apply(GripperCmd(GRIPPER_OPEN, force=50.0))
@@ -800,7 +838,12 @@ class ScriptedCanPolicy:
             return current_q, observation, target
 
         refined = self._base_frame_targets(backend, observation)["grasp"]
-        moved = self._move_linear(backend, observation, refined, "DESCEND")
+        provider = (
+            self._waypoint_target_provider(backend, "grasp") if self.closed_loop_waypoints else None
+        )
+        # The re-descent belongs to CLOSE, not DESCEND, so DESCEND settle/sim accounting is not
+        # inflated by a state that already exited (ADR-0018).
+        moved = self._move_linear(backend, observation, refined, "CLOSE", target_provider=provider)
         if moved is None:
             self._last_failure_reason = "misaligned at close"
             self._trace_event(
@@ -871,18 +914,31 @@ class ScriptedCanPolicy:
         place_base = _world_to_base(np.asarray(PLACE_WORLD, dtype=float), base_pose_world)
         return float(np.linalg.norm(can_base - place_base))
 
-    def _base_frame_targets(self, backend, observation: Observation) -> dict[str, np.ndarray]:
+    def _base_frame_targets(
+        self,
+        backend,
+        observation: Observation,
+        can_world: np.ndarray | None = None,
+    ) -> dict[str, np.ndarray]:
         """Re-derive the world-anchored targets from the current base pose.
 
         Mirrors the original controller's per-state ``can_base_pos()`` re-read
         (``controllers/tiago_arm_api/tiago_arm_api.py:354-355`` used at ``:436`` and ``:459``).
         LIFT is the pregrasp point, so it rises vertically from the pose the arm actually
         reached after the PREGRASP re-align (see ADR-0016).
+
+        ``can_world`` overrides the live CAN pose. Closed-loop LIFT uses the CAN pose captured at
+        LIFT entry so a grasped rising CAN cannot create a target feedback loop (ADR-0018).
         """
         base_pose_world = observation.robot.base_pose_world
         if base_pose_world is None:
             raise RuntimeError("RobotState is missing the 3D world-frame base pose.")
-        can_base = _world_to_base(self._can_pose(backend.get_ground_truth()), base_pose_world)
+        can_world_live = (
+            self._can_pose(backend.get_ground_truth())
+            if can_world is None
+            else np.asarray(can_world, dtype=float)
+        )
+        can_base = _world_to_base(can_world_live, base_pose_world)
         grasp_tip = can_base + np.array((0.0, 0.0, GRASP_Z), dtype=float)
         pregrasp = grasp_tip + np.array((0.0, 0.0, APPROACH_H), dtype=float)
         place_base = _world_to_base(np.asarray(PLACE_WORLD, dtype=float), base_pose_world)
@@ -898,6 +954,24 @@ class ScriptedCanPolicy:
             "release": place_tip,
             "retreat": place_above,
         }
+
+    def _waypoint_target_provider(
+        self,
+        backend,
+        name: str,
+        can_world: np.ndarray | None = None,
+    ):
+        """Return a callback that re-expresses one world-anchored target in the live base frame.
+
+        The callback is evaluated once per Cartesian waypoint, not once per state. DESCEND passes
+        no ``can_world`` so it tracks the live CAN; LIFT passes the CAN pose captured at entry so
+        the grasped CAN's own motion does not move the target (ADR-0018).
+        """
+
+        def provider(observation: Observation) -> np.ndarray:
+            return self._base_frame_targets(backend, observation, can_world=can_world)[name]
+
+        return provider
 
     def _move_to(
         self,
@@ -1025,8 +1099,15 @@ class ScriptedCanPolicy:
         observation: Observation,
         target: np.ndarray,
         state: str,
+        target_provider=None,
     ) -> tuple[np.ndarray, Observation] | None:
-        """Follow the original 3 cm Cartesian path, settling each trust-region IK waypoint."""
+        """Follow the original 3 cm Cartesian path, settling each trust-region IK waypoint.
+
+        When ``target_provider`` is given, the target is re-derived from the live base pose at
+        every waypoint and the remaining fraction of the path is re-interpolated from the achieved
+        position. With a fixed target this telescopes to the original ``alpha`` schedule, so the
+        closed-loop-off path is byte-for-byte the same arithmetic as before (ADR-0018).
+        """
         self._last_failure_is_safety = False
         ik_tolerance = _ik_tolerance_for_state(state)
         start = observation.robot.ee_pose.position.as_array()
@@ -1035,7 +1116,14 @@ class ScriptedCanPolicy:
         q = self._commanded_vector()
         observation_now = observation
         for index, alpha in enumerate(np.linspace(0.0, 1.0, count + 1)[1:], start=1):
-            point = (1.0 - alpha) * start + alpha * target
+            live_target: np.ndarray | None = None
+            if target_provider is None:
+                point = (1.0 - alpha) * start + alpha * target
+            else:
+                current = observation_now.robot.ee_pose.position.as_array()
+                live_target = np.asarray(target_provider(observation_now), dtype=float)
+                remaining = count - index + 1
+                point = current + (live_target - current) / float(remaining)
             previous_q = q.copy()
             solve_started = perf_counter() if self.timing_enabled else None
             try:
@@ -1084,15 +1172,22 @@ class ScriptedCanPolicy:
                 return None
             observation_now = settled
             self._last_commanded_joint_targets = joint_target.copy()
+            waypoint_details: dict[str, object] = {
+                "joint_target": joint_target,
+                "ik_error_m": error,
+                "ik_tilt_deg": tilt,
+                "closed_loop_waypoint": target_provider is not None,
+            }
+            if live_target is not None:
+                waypoint_details["live_target_base_xyz_m"] = live_target.tolist()
             self._trace_boundary(
                 backend,
                 settled,
                 state,
                 "waypoint",
                 point,
-                joint_target=joint_target,
-                ik_error_m=error,
-                ik_tilt_deg=tilt,
+                failed=False,
+                **waypoint_details,
             )
         return self._commanded_vector(), observation_now
 
@@ -1130,6 +1225,7 @@ class ScriptedCanPolicy:
         previous = {name: float(start_q[self.kinematics.idx[name]]) for name in ARM_JOINTS}
         stalled_steps = 0
         for _ in range(max_steps):
+            self._step_count += 1
             step_started = perf_counter() if self.timing_enabled else None
             observation = backend.step(1)
             if step_started is not None:
@@ -1313,6 +1409,12 @@ class ScriptedCanPolicy:
             "arm_7_joint_endpoint_offset_change_world_xyz_m",
             "arm_7_joint_ground_truth_source",
             "arm_7_joint_endpoint_fk_validation_available",
+            "ee_fk_world_xyz_m",
+            "finger_tip_world_xyz_m",
+            "finger_midpoint_world_xyz_m",
+            "finger_midpoint_source",
+            "finger_midpoint_fk_offset_world_xyz_m",
+            "finger_midpoint_fk_offset_m",
         ):
             record[key] = observation.robot.diagnostics.get(key)
         arm_links = observation.robot.diagnostics.get("arm_link_world_xyz_m")
@@ -1348,6 +1450,139 @@ class ScriptedCanPolicy:
             commanded_ee_base_xyz_m=point.tolist(),
             **self._trace_measurements(backend, observation),
         )
+
+    def _gt_finger_payload(
+        self,
+        backend,
+        observation: Observation,
+        can_world: np.ndarray,
+    ) -> dict[str, object]:
+        """Real finger telemetry beside the FK tool tip, including per-side CAN clearance.
+
+        Everything comes from Supervisor diagnostics (``finger_midpoint_world_xyz_m``,
+        ``finger_tip_world_xyz_m``, ``ee_fk_world_xyz_m``) and the GT CAN pose. When diagnostics
+        lack the FK world tip (fake backends), it is re-derived from the base-frame FK EE and the
+        live base pose, so the offset itself stays a real computed number.
+        """
+        diagnostics = observation.robot.diagnostics
+        gt_midpoint = diagnostics.get("finger_midpoint_world_xyz_m")
+        finger_tips = diagnostics.get("finger_tip_world_xyz_m")
+        ee_fk_world = diagnostics.get("ee_fk_world_xyz_m")
+        base_pose_world = observation.robot.base_pose_world
+        if ee_fk_world is None and base_pose_world is not None:
+            base_rot = _quaternion_to_matrix(base_pose_world.orientation)
+            base_pos = np.asarray(base_pose_world.position.as_array(), dtype=float)
+            ee_fk_world = (
+                base_rot @ observation.robot.ee_pose.position.as_array() + base_pos
+            ).tolist()
+
+        payload: dict[str, object] = {
+            "gt_midpoint_world_xyz_m": gt_midpoint,
+            "finger_tip_world_xyz_m": finger_tips,
+            "finger_midpoint_source": diagnostics.get("finger_midpoint_source"),
+            "finger_midpoint_fk_offset_world_xyz_m": diagnostics.get(
+                "finger_midpoint_fk_offset_world_xyz_m"
+            ),
+            "ee_fk_world_xyz_m": ee_fk_world,
+            "can_radius_m": CAN_RADIUS_M,
+            "clearance_left_m": None,
+            "clearance_right_m": None,
+        }
+        if not isinstance(gt_midpoint, (list, tuple)) or len(gt_midpoint) != 3:
+            return payload
+        gt_midpoint_arr = np.asarray(gt_midpoint, dtype=float)
+        fk_tip_arr = (
+            np.asarray(ee_fk_world, dtype=float)
+            if isinstance(ee_fk_world, (list, tuple)) and len(ee_fk_world) == 3
+            else None
+        )
+        if fk_tip_arr is not None:
+            fk_to_can = fk_tip_arr - np.asarray(can_world, dtype=float)
+            payload["fk_to_can_world_m"] = float(np.linalg.norm(fk_to_can))
+            payload["fk_to_can_xy_m"] = float(np.linalg.norm(fk_to_can[:2]))
+            offset_vector = gt_midpoint_arr - fk_tip_arr
+            payload["finger_midpoint_fk_offset_world_xyz_m"] = offset_vector.tolist()
+            payload["fk_gt_offset_m"] = float(np.linalg.norm(offset_vector))
+        midpoint_to_can = gt_midpoint_arr - np.asarray(can_world, dtype=float)
+        payload["gt_to_can_world_m"] = float(np.linalg.norm(midpoint_to_can))
+        payload["gt_to_can_xy_m"] = float(np.linalg.norm(midpoint_to_can[:2]))
+        if base_pose_world is not None:
+            midpoint_base = _world_to_base(gt_midpoint_arr, base_pose_world)
+            can_base = _world_to_base(np.asarray(can_world, dtype=float), base_pose_world)
+            payload["finger_midpoint_base_xyz_m"] = midpoint_base.tolist()
+            payload["finger_midpoint_to_can_base_xy_m"] = float(
+                np.linalg.norm((midpoint_base - can_base)[:2])
+            )
+        if isinstance(finger_tips, dict):
+            can_arr = np.asarray(can_world, dtype=float)
+            for finger_name, tip_pos in finger_tips.items():
+                if not isinstance(tip_pos, (list, tuple)) or len(tip_pos) != 3:
+                    continue
+                tip_arr = np.asarray(tip_pos, dtype=float)
+                dist_xy = float(np.linalg.norm((tip_arr - can_arr)[:2]))
+                clearance = dist_xy - CAN_RADIUS_M
+                if "left" in finger_name:
+                    payload["clearance_left_m"] = clearance
+                elif "right" in finger_name:
+                    payload["clearance_right_m"] = clearance
+        return payload
+
+    def _trace_gt_tip(
+        self,
+        backend,
+        observation: Observation,
+        state: str,
+        phase: str,
+    ) -> dict[str, object] | None:
+        """Log real finger midpoint vs FK tip, XY offset, and per-side clearance to the CAN."""
+        if self.trace_path is None:
+            return None
+        can_world = self._can_pose(backend.get_ground_truth())
+        payload: dict[str, object] = {
+            "state": state,
+            "phase": phase,
+            "sim_time_s": observation.t,
+            **self._gt_finger_payload(backend, observation, can_world),
+        }
+        offset_m = payload.get("fk_gt_offset_m")
+        tool_offset_error = (
+            isinstance(offset_m, (int, float)) and offset_m > TOOL_OFFSET_CALIBRATION_TOLERANCE_M
+        )
+        payload["tool_offset_error"] = tool_offset_error
+        if tool_offset_error:
+            assert isinstance(offset_m, (int, float))
+            payload["calibration_warning"] = (
+                f"TOOL_OFFSET calibration error (|GT midpoint - FK tip| = {offset_m:.4f}m > "
+                f"{TOOL_OFFSET_CALIBRATION_TOLERANCE_M:.4f}m)"
+            )
+            arm7_gt_world = observation.robot.diagnostics.get(
+                "arm_7_joint_ground_truth_world_xyz_m"
+            )
+            gt_midpoint = payload.get("gt_midpoint_world_xyz_m")
+            if (
+                isinstance(arm7_gt_world, (list, tuple))
+                and isinstance(gt_midpoint, (list, tuple))
+                and len(arm7_gt_world) == 3
+                and len(gt_midpoint) == 3
+            ):
+                span = float(
+                    np.linalg.norm(
+                        np.asarray(gt_midpoint, dtype=float)
+                        - np.asarray(arm7_gt_world, dtype=float)
+                    )
+                )
+                proposal: dict[str, object] = {
+                    "report_only": True,
+                    "configured_finger_tip_offset_m": FINGER_TIP_OFFSET_M,
+                    "proposed_finger_tip_offset_m": span,
+                    "proposal_note": (
+                        "Pad-centre distance from the arm_7 endPoint Solid; direction must be "
+                        "confirmed against the tool axis. Never applied automatically."
+                    ),
+                }
+                payload["tool_offset_calibration_proposal"] = proposal
+        self._trace_event("gt_tip_telemetry", **payload)
+        return payload
 
     def _trace_measurements(self, backend, observation: Observation) -> dict[str, object]:
         can_pose = self._can_pose3d(backend.get_ground_truth())
@@ -1386,6 +1621,7 @@ class ScriptedCanPolicy:
             )
             record["base_world_xyz_m"] = base_pose_world.position.as_array().tolist()
             record["base_world_orientation_xyzw"] = list(base_pose_world.orientation)
+        record.update(self._gt_finger_payload(backend, observation, can_world))
         return record
 
     def _base_drift(self, observation: Observation) -> tuple[float, float]:
@@ -1554,6 +1790,8 @@ class ScriptedCanPolicy:
         reset: bool = False,
         state: str = "INIT",
     ) -> None:
+        if not reset:
+            self._step_count += 1
         drift_m, drift_yaw_deg = self._base_drift(observation)
         self._max_base_drift_m = max(self._max_base_drift_m, drift_m)
         self._max_base_drift_yaw_deg = max(self._max_base_drift_yaw_deg, abs(drift_yaw_deg))
@@ -1591,11 +1829,15 @@ class ScriptedCanPolicy:
         for bucket in self.state_timings.values():
             for component, seconds in bucket.items():
                 totals[component] = totals.get(component, 0.0) + seconds
+        total_wall_s = sum(totals.values())
+        wall_per_step = (total_wall_s / self._step_count) if self._step_count > 0 else None
         return {
             "enabled": self.timing_enabled,
-            "total_wall_s": sum(totals.values()),
+            "total_wall_s": total_wall_s,
             "totals": totals,
             "by_state": self.state_timings,
+            "steps": self._step_count,
+            "wall_per_step_s": wall_per_step,
         }
 
     def _trace_event(self, event: str, **details: object) -> None:

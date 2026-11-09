@@ -1,6 +1,7 @@
 import json
 import math
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -10,6 +11,7 @@ from vlarobot.backends.webots.config import (
     ALIGN_TOL,
     APPROACH_H,
     ARM_JOINTS,
+    CAN_RADIUS_M,
     CLOSE_ALIGN_TOL,
     FINGER_SPEED,
     GRASP_Z,
@@ -28,6 +30,7 @@ from vlarobot.backends.webots.kinematics import IKTrustRegionError, Kinematics
 from vlarobot.core.types import ApplyResult, GripperCmd, GroundTruth, JointTarget, Pose3D, Vec3
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_can import (
+    FINGER_TIP_OFFSET_M,
     CanSuccessCriteria,
     ScriptedCanPolicy,
     _ik_tolerance_for_state,
@@ -1261,3 +1264,276 @@ def test_trust_region_rejects_reachable_target_that_requires_branch_jump() -> No
             position_tolerance=IK_TOL_GRASP,
             max_joint_step_rad=MAX_JOINT_STEP_RAD,
         )
+
+
+class DescendingTiltBackend(RateLimitedCanBackend):
+    """Ramp the base a few mm sideways once the fingertip starts descending onto the CAN.
+
+    The rock starts only below the approach hover (strictly inside DESCEND) so the DESCEND entry
+    targets are identical, and ramps slowly enough to stay under the base drift rate limit
+    while the fake base pose actually moves.
+    """
+
+    def __init__(
+        self,
+        kinematics,
+        *,
+        rock_total_m: float = 0.006,
+        rock_step_m: float = 0.00025,
+        trigger_below_z: float = 0.92,
+    ):
+        super().__init__(kinematics)
+        self.rock_total_m = rock_total_m
+        self.rock_step_m = rock_step_m
+        self.trigger_below_z = trigger_below_z
+        self.rock_remaining = 0.0
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+
+    def reset(self, scenario, seed):
+        observation = super().reset(scenario, seed)
+        self.rock_remaining = 0.0
+        self.can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+        return observation
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        tip = _tip_world(observation)
+        near_column = float(np.linalg.norm(tip[:2] - self.can_world[:2])) < 0.03
+        if self.rock_remaining > 0.0:
+            shift = min(self.rock_step_m, self.rock_remaining)
+            self.rock_remaining -= shift
+            base = self._robot_state.base_pose_world
+            assert base is not None
+            position = base.position.as_array() + np.array((-shift, 0.0, 0.0))
+            self._robot_state.base_pose_world = Pose3D(
+                Vec3(*map(float, position)), base.orientation
+            )
+        elif near_column and tip[2] < self.trigger_below_z and tip[2] > self.can_world[2] + 0.01:
+            self.rock_remaining = self.rock_total_m
+        return observation
+
+
+def _descend_waypoint_rows(rows: list[dict]) -> list[dict]:
+    return [
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "DESCEND"
+        and row.get("phase") == "waypoint"
+    ]
+
+
+def test_closed_loop_descend_tracks_rocking_base(tmp_path) -> None:
+    kin = Kinematics()
+    kin.set_seed(0)
+
+    live_backend = DescendingTiltBackend(kin)
+    live_trace = tmp_path / "closed-loop-on.jsonl"
+    live = ScriptedCanPolicy(
+        kin,
+        trace_path=live_trace,
+        pregrasp_realign=False,
+        closed_loop_waypoints=True,
+        stop_after="DESCEND",
+    )
+    live.execute(live_backend, seed=0)
+
+    fixed_backend = DescendingTiltBackend(kin)
+    fixed_trace = tmp_path / "closed-loop-off.jsonl"
+    fixed = ScriptedCanPolicy(
+        kin,
+        trace_path=fixed_trace,
+        pregrasp_realign=False,
+        closed_loop_waypoints=False,
+        stop_after="DESCEND",
+    )
+    fixed.execute(fixed_backend, seed=0)
+
+    live_rows = _descend_waypoint_rows(
+        [json.loads(line) for line in live_trace.read_text(encoding="utf-8").splitlines()]
+    )
+    fixed_rows = _descend_waypoint_rows(
+        [json.loads(line) for line in fixed_trace.read_text(encoding="utf-8").splitlines()]
+    )
+
+    # Both variants must drive the same number of interpolated DESCEND waypoints.
+    assert len(live_rows) >= 3
+    assert len(live_rows) == len(fixed_rows)
+
+    # Closed-loop OFF keeps the original semantics verbatim: anchor only, no live targets.
+    for row in fixed_rows:
+        assert row["closed_loop_waypoint"] is False
+        assert "live_target_base_xyz_m" not in row
+
+    # Closed-loop ON re-expresses the target in the live base frame at every waypoint, so the
+    # target tracks the rocking base (the fake slides the base in -x, so the base-frame CAN
+    # slides in +x).
+    for row in live_rows:
+        assert row["closed_loop_waypoint"] is True
+        live_target = row["live_target_base_xyz_m"]
+        assert len(live_target) == 3
+    # The base-frame target height stays at grasp height; the tiny z wobble comes from the
+    # tilted base orientation mixing x into z, so only track the horizontal drift.
+    drift_xy = np.linalg.norm(
+        np.asarray(live_rows[-1]["live_target_base_xyz_m"][:2])
+        - np.asarray(live_rows[0]["live_target_base_xyz_m"][:2])
+    )
+    assert drift_xy >= 0.002
+
+
+def _finger_gt_diagnostics(
+    observation, finger_offset_world: tuple[float, float, float]
+) -> dict[str, object]:
+    """Supervisor-style GT diagnostics computed from the live FK and a fixed finger geometry."""
+    base = observation.robot.base_pose_world
+    assert base is not None
+    rotation = _rotation_from_quaternion(base.orientation)
+    ee_world = rotation @ observation.robot.ee_pose.position.as_array() + base.position.as_array()
+    gt_midpoint = ee_world + np.asarray(finger_offset_world, dtype=float)
+    can_world = np.asarray((-0.799879, -4.38998, 0.810949), dtype=float)
+    span_m = 0.17
+    return {
+        "ee_fk_world_xyz_m": ee_world.tolist(),
+        "finger_tip_world_xyz_m": {
+            "finger_left_tip": (can_world + np.array((0.05, 0.0, 0.0))).tolist(),
+            "finger_right_tip": (can_world + np.array((-0.05, 0.0, 0.0))).tolist(),
+        },
+        "finger_midpoint_world_xyz_m": gt_midpoint.tolist(),
+        "finger_midpoint_source": "supervisor_endpoints",
+        "finger_midpoint_fk_offset_world_xyz_m": np.asarray(
+            finger_offset_world, dtype=float
+        ).tolist(),
+        "finger_midpoint_fk_offset_m": float(np.linalg.norm(finger_offset_world)),
+        "arm_7_joint_ground_truth_world_xyz_m": (
+            gt_midpoint - np.array((0.0, 0.0, span_m))
+        ).tolist(),
+    }
+
+
+class _GtTelemetry:
+    """Shared Supervisor-style GT injection for the fake backends."""
+
+    finger_offset_world: tuple[float, float, float]
+    # The concrete subclass is a FakeBackend/RateLimitedCanBackend, which owns this state.
+    _robot_state: Any
+
+    def _inject(self, observation):
+        diagnostics = dict(observation.robot.diagnostics)
+        diagnostics.update(_finger_gt_diagnostics(observation, self.finger_offset_world))
+        observation.robot.diagnostics = diagnostics
+        self._robot_state.diagnostics = diagnostics
+        return observation
+
+
+class GtCanBackend(_GtTelemetry, RateLimitedCanBackend):
+    """Inject Supervisor-style GT fingertip diagnostics into every observation."""
+
+    def __init__(self, kinematics, *, finger_offset_world=(0.08, 0.0, 0.0)):
+        super().__init__(kinematics)
+        self.finger_offset_world = tuple(finger_offset_world)
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        return self._inject(observation)
+
+
+class GtFakeCanBackend(_GtTelemetry, FakeCanBackend):
+    """GT diagnostics on the plain fake backend, for the full CLOSE-boundary coverage."""
+
+    def __init__(self, *, finger_offset_world=(0.08, 0.0, 0.0)):
+        FakeCanBackend.__init__(self)
+        self.finger_offset_world = tuple(finger_offset_world)
+
+    def step(self, n_steps=1):
+        observation = super().step(n_steps)
+        return self._inject(observation)
+
+    def reset(self, scenario, seed):
+        return self._inject(super().reset(scenario, seed))
+
+
+def _gt_events(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if row.get("event") == "gt_tip_telemetry"]
+
+
+def test_gt_telemetry_records_fingers_and_flags_tool_offset_error(tmp_path) -> None:
+    kin = Kinematics()
+    backend = GtCanBackend(kin)
+    trace = tmp_path / "gt-on.jsonl"
+    policy = ScriptedCanPolicy(
+        kin,
+        trace_path=trace,
+        pregrasp_realign=False,
+        closed_loop_waypoints=False,
+        stop_after="DESCEND",
+    )
+    policy.execute(backend, seed=0)
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    events = _gt_events(rows)
+    assert {(row["state"], row["phase"]) for row in events} == {
+        ("PREGRASP", "exit"),
+        ("DESCEND", "enter"),
+    }
+    for event in events:
+        assert event["tool_offset_error"] is True
+        assert event["fk_gt_offset_m"] == pytest.approx(0.08, abs=1e-9)
+        assert event["gt_to_can_xy_m"] > 0.0
+        assert event["clearance_left_m"] == pytest.approx(0.05 - CAN_RADIUS_M, abs=1e-9)
+        assert event["clearance_right_m"] == pytest.approx(0.05 - CAN_RADIUS_M, abs=1e-9)
+        proposal = event["tool_offset_calibration_proposal"]
+        assert proposal["report_only"] is True
+        assert proposal["configured_finger_tip_offset_m"] == pytest.approx(FINGER_TIP_OFFSET_M)
+        assert proposal["proposed_finger_tip_offset_m"] == pytest.approx(0.17, abs=1e-9)
+        assert "direction must be confirmed" in proposal["proposal_note"]
+
+    # The merged boundary record carries the same real numbers beside the FK tip.
+    descend_enter = next(
+        row
+        for row in rows
+        if row.get("event") == "state_boundary"
+        and row.get("state") == "DESCEND"
+        and row.get("phase") == "enter"
+    )
+    assert descend_enter["gt_midpoint_world_xyz_m"] is not None
+    assert descend_enter["fk_gt_offset_m"] == pytest.approx(0.08, abs=1e-9)
+    assert descend_enter["finger_midpoint_to_can_base_xy_m"] > 0.0
+    assert descend_enter["can_radius_m"] == pytest.approx(CAN_RADIUS_M)
+
+
+def test_gt_telemetry_below_tolerance_has_no_calibration_proposal(tmp_path) -> None:
+    kin = Kinematics()
+    backend = GtCanBackend(kin, finger_offset_world=(0.002, 0.0, 0.0))
+    trace = tmp_path / "gt-off.jsonl"
+    policy = ScriptedCanPolicy(
+        kin,
+        trace_path=trace,
+        pregrasp_realign=False,
+        closed_loop_waypoints=False,
+        stop_after="DESCEND",
+    )
+    policy.execute(backend, seed=0)
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    events = _gt_events(rows)
+    assert len(events) == 2
+    for event in events:
+        assert event["tool_offset_error"] is False
+        assert "tool_offset_calibration_proposal" not in event
+
+
+def test_gt_telemetry_fires_at_all_three_full_flow_boundaries(tmp_path) -> None:
+    backend = GtFakeCanBackend()
+    trace = tmp_path / "gt-full.jsonl"
+    policy = ScriptedCanPolicy(backend.kinematics, trace_path=trace, pregrasp_realign=False)
+    policy.execute(backend, seed=0)
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    events = _gt_events(rows)
+    assert {(row["state"], row["phase"]) for row in events} == {
+        ("PREGRASP", "exit"),
+        ("DESCEND", "enter"),
+        ("CLOSE", "enter"),
+    }
+    for event in events:
+        assert event["tool_offset_error"] is True

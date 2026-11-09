@@ -1061,3 +1061,163 @@ No IK tolerance, safety limit, workspace bound, or drift threshold changed.
   from 42 mm to a few mm.
 - Original-controller fixture evidence, final drift thresholds, and the FK diagnostic frame
   remain **UNVERIFIED**. M1-06a, M1-07, and all M1 gates remain **UNVERIFIED**.
+
+## 2026-11-09 M1-07 diagnosis: closed-loop waypoints, GT tip telemetry, fresh-world runner
+
+This section records (a) the per-run diagnosis of the six M1-07 full-flow runs, (b) the GT
+fingertip telemetry instrument, (c) the closed-loop waypoint change behind ADR-0018, (d) the
+housekeeping fixes and opt-in profiling counters, and (e) the fresh-world `run-episodes` runner
+with its determinism-check mode. Nothing that gates behaviour changed: thresholds, the two-tier
+drift invariant, `hold_base: none`, and the four success criteria are untouched.
+
+### Six-run diagnosis (first failure cause per run)
+
+Evidence: `runs/m1-07-realign-{on,off}-0{1,2,3}.jsonl`, rendered by
+`scripts/analyze_can_run.py` (per-state rows below show CAN displacement and the
+live-base fingertip→CAN xy error at state exit; "dz" is the CAN's vertical lift Δ, so a
+strongly negative dz means the CAN was pushed/tipped down).
+
+| run | realign | outcome | first failure cause | DESCEND/lift knock signature |
+|---|---|---|---|---|
+| `on-01` | ON | failed at CLOSE (`misaligned at close`; check 33.1 mm → one re-descent → residual 50.7 mm) | **contact/knock during DESCEND**: CAN pushed dz −29.60 mm (displacement 40.5 mm) | tip→CAN 35.59 mm at DESCEND exit |
+| `on-02` | ON | failed at DESCEND (`joint_stall`) | **joint stall under the strongest tilt** (roll −2.14°, pitch −2.05°); CAN moved only 10.2 mm | descent dz +1.35 mm (no knock) |
+| `on-03` | ON | failed at CLOSE (`misaligned at close`, check 277.6 mm; re-descent IK rejection at 20.7 mm error) | **CAN knocked during DESCEND** (dz −29.64 mm) then again before CLOSE (CLOSE z 0.031 m, off the table) | displacement 282 mm at DESCEND exit |
+| `off-01` | OFF | ran to DONE; failed criteria | **CAN knocked during DESCEND and tipped 90°** at LIFT rise (dz −29.64 mm); height error −29.6 mm, distance 266 mm | tip→CAN 59–67 mm through DESCEND/CLOSE |
+| `off-02` | OFF | ran to DONE; failed criteria | **CAN rolled off the table** (final distance 1.740 m, height error −780 mm, tilt 90°); pushed dz −28.35 mm during DESCEND | tip→CAN 99.7 mm at DESCEND exit; 151.3 mm at LIFT |
+| `off-03` | OFF | **success** (distance 41.5 mm ≤ 100 mm, height +4.4 µm, tilt 0.06°) | CAN pushed ~42 mm (dz +5.32 mm, caught) but grasp and placement landed inside tolerance | eccentric carry ~43 mm through CLOSE/LIFT |
+
+**Ordering:** in 5/6 runs the first decisive deviation is a contact/knock while the arm descends
+onto the CAN (`can-regression`'s approach column clips the rim); base tilt is secondary — it
+ correlates with the push but the stall in `on-02` is the only run where it is the proximate cause.
+This matches the earlier `hold-none`/`velocity` study: pushed 42 mm during DESCEND in `none`,
+tipped in `velocity`. The realign gate changes where the knock shows up (ON pushes at DESCEND
+even after a clean 0.0–4.0 mm realigned approach; OFF pushes a larger
+32.6 mm-eccentric descent), but neither setting fixes the contact itself.
+
+**FK-vs-GT frame mismatch (not the proximate cause).** Earlier supervisor-side measurement put
+the FK tool tip ~70–83 mm away from the real finger-pad midpoint on live runs. That is a
+`TOOL_OFFSET`/frame calibration discrepancy against the configured 0.1741 m `finger_tip_offset_m`;
+the descent targets stay world-anchored to the GT CAN, so the offset degrades clearance
+measurement fidelity, not the target itself. Because the six M1-07 traces predate the GT fields,
+these numbers are **UNVERIFIED** until the telemetry below has run live.
+
+### GT fingertip telemetry (instrumented this session)
+
+Every state boundary now merges `_gt_finger_payload` into `_trace_measurements`, and
+`gt_tip_telemetry` events fire exactly at PREGRASP exit, DESCEND enter, and CLOSE enter, carrying:
+
+- `gt_midpoint_world_xyz_m`, `finger_tip_world_xyz_m` (per-finger tip points from
+  Supervisor `endPoint` Solids), `ee_fk_world_xyz_m`, `finger_midpoint_fk_offset_world_xyz_m`/
+  `finger_midpoint_fk_offset_m`, `finger_midpoint_source`;
+- `fk_gt_offset_m` (|GT midpoint − FK tip|) and `fk_to_can_world_m`/`fk_to_can_xy_m`;
+- `gt_to_can_world_m`/`gt_to_can_xy_m`, `finger_midpoint_base_xyz_m`,
+  `finger_midpoint_to_can_base_xy_m`, `can_radius_m`;
+- `clearance_left_m`/`clearance_right_m`: each finger-pad's xy distance to the CAN cylinder minus
+  `can_radius_m` (negative = pad centre inside the CAN radius).
+
+If `fk_gt_offset_m > TOOL_OFFSET_CALIBRATION_TOLERANCE_M` (5 mm), the event adds
+`tool_offset_error`, a `calibration_warning`, and a report-only
+`tool_offset_calibration_proposal` (`configured_finger_tip_offset_m = 0.1741` and a
+`proposed_finger_tip_offset_m` from the GT `arm_7_joint` ground-truth point, with a note that the
+direction must be confirmed against the tool axis). **The proposal is never auto-applied**;
+calibration requires a live operator run and a decision entry. The m1-07 traces show
+`gt_tip_telemetry: none in this trace` in `analyze_can_run.py`, as expected for pre-telemetry
+records.
+
+### Closed-loop waypoints (ADR-0018)
+
+`closed_loop_waypoints: true|false` in `configs/robot.yaml` (default `true`;
+`--closed-loop-waypoints/--no-closed-loop-waypoints` on `can-regression` and `run-episodes`):
+
+- **DESCEND**: the grasp target is re-expressed in the live base frame at every Cartesian
+  waypoint (`closed_loop_waypoint: true`, `live_target_base_xyz_m` on waypoint boundaries), so a
+  base that shifts between waypoints drags the target with it instead of clipping the rim.
+- **LIFT**: anchored to the CAN pose captured at LIFT entry, then re-expressed in the live base
+  frame only — a grasped, rising CAN cannot pull its own target upward (no feedback loop).
+- **CLOSE guard re-descent**: also live-tracked now, and attributed to CLOSE in
+  `state_sim_durations`/`state_wall_durations` so DESCEND's settle accounting is not inflated by
+  a state that already exited.
+- **OFF = original semantics**: `_move_linear` keeps a fixed target and the original `alpha`
+  schedule verbatim; fake-backend regression tests assert the OFF run's waypoint boundaries carry
+  no `live_target_base_xyz_m` key at all.
+
+The base-frame unit test rocks the base 6 mm sideways once the fingertip is inside the DESCEND
+column: with closed-loop on, the live targets follow the planar drift (≥ 2 mm first-to-last);
+with it off, they do not move.
+
+### Reset fingerprint / repeat-check status
+
+Carried over from the 2026-11-08 repeatability run (still current, no change this session):
+`repeat-check` reports `fingerprint=present` with `commanded=0 measured=0 transient=6
+max_measured_delta≈1.5e-4 max_transient_delta≈7.2e-3` and **PASS** under the
+commanded/measured/transient classification. Episode-0 base/CAN velocity differences remain a
+world-load transient, not a reset contract violation. The fresh-world runner additionally
+normalizes `reset_fingerprint` and `controller_reset_state` out of trace digests so a
+determinism comparison does not re-flag them.
+
+### Housekeeping and opt-in profiling
+
+- **Gripper force clamp** (`backend._set_gripper`, `gripper.close`): commanded force is clamped
+  to `motor.getMaxForce()` before `setAvailableForce`, matching the simulator's internal clamp.
+  No behaviour change; the AvailableForce warning disappears.
+- **Settle/sim accounting**: the CLOSE guard's re-descent no longer counts into DESCEND; CLOSE's
+  own sim/wall durations are recorded (`state_sim_durations["CLOSE"]`) and set before the guard
+  runs.
+- **Per-step counters (opt-in):** `--timings` on `can-regression` / the policy-level
+  `TimingSummary` reports `ik_solve_s`, `backend_apply_s`, `backend_step_s`, `trace_write_s`,
+  `backend_reset_s` totals with per-state splits, plus new `steps` and `wall_per_step_s`
+  (accounted wall per control step). With `VLAROBOT_BACKEND_TIMINGS=1` the ZeroMQ client also
+  accumulates `encode_s`/`send_s`/`recv_s`/`decode_s`, `requests`, and `image_transfer_bytes`
+  (RGB rasters), printed as `timings zmq:`. Supervisor diagnostics time is traced as
+  `backend_diagnostics_compute_s`. **Cheapest-fix proposal (not applied):** the largest
+  policy-side slice is expected to be `trace_write_s` (one JSON line per boundary/waypoint), so
+  buffering trace rows and flushing per state would cut file syscalls; the sim step itself
+  (`backend_step_s`) dominates overall wall time and is not addressable from the brain side.
+  Run one live episode with `--timings` + `VLAROBOT_BACKEND_TIMINGS=1` to confirm before acting.
+
+### Fresh-world episode runner (`run-episodes`)
+
+New CLI command (see `docs/MANUAL.md` §3b) built on `execution/episode_runner.py`:
+
+- one Webots subprocess per episode (strict arg lists, never `shell=True`), `WEBOTS_HOME` /
+  `PATH` resolution, ping-wait (`--startup-timeout-s`, 180 s default), polite terminate-then-kill;
+- per-episode traces `runs/episode-runner/episode-NN.jsonl` + `episode-NN.log` (stale traces are
+  deleted), one fixed-width summary table across all runs covering the four success criteria;
+- `--determinism-check K`: same seed K times in fresh worlds; compares outcome dictionaries
+  (per-episode index/paths/wall-times excluded), SHA-256 digests of normalized traces (volatile
+  keys `reset_fingerprint`, `controller_reset_state`, `trace_path`,
+  `backend_diagnostics_compute_s` dropped), and numeric deltas (`sim_time_max_delta_s`,
+  `achieved_ee_max_delta_m`, `can_world_max_delta_m`, `commanded_ee_max_delta_m`); **exits 1 on a
+  mismatch**;
+- `--no-fresh-world` reuses one Webots process with soft resets (same semantics as
+  `can-regression`);
+- rendering stays ON (`--batch --mode=fast --stdout --stderr`) because the scripted policy reads
+  RGB every step; `--headless` adds `--no-rendering` and prints an explicit UNVERIFIED caveat.
+
+Operator commands (not run by the agent):
+
+```bash
+uv run python -m vlarobot.cli run-episodes --n 3 --fresh-world
+uv run python -m vlarobot.cli run-episodes --n 3 --fresh-world --no-closed-loop-waypoints
+uv run python -m vlarobot.cli run-episodes --determinism-check 3
+```
+
+### Verification
+
+- `ruff check .` and `ruff format --check .` pass; `uv run ty check src tests` is clean
+  (0 diagnostics).
+- `pytest -m "not webots"` reports **144 passed** (119 before this round), including:
+  - `test_closed_loop_descend_tracks_rocking_base` (descend-column base shift; live targets
+    track ≥ 2 mm, OFF run has no live-target keys, identical waypoint counts);
+  - `test_gt_telemetry_records_fingers_and_flags_tool_offset_error` (three-point events, 5 mm
+    proposal with `report_only=True` and configured 0.1741);
+  - `test_gt_telemetry_below_tolerance_has_no_calibration_proposal`;
+  - `test_gt_telemetry_fires_at_all_three_full_flow_boundaries`;
+  - the ZMQ client timing tests (opt-in counters, off by default);
+  - `tests/test_episode_runner.py` (16 tests: exact Webots arg lists, `WEBOTS_HOME` resolution,
+    outcome normalization, digest/delta comparisons, determinism match/mismatch) — no subprocess
+    is launched in any new test.
+- `runs/*.jsonl` operator evidence was not modified; the six M1-07 traces stay as recorded.
+- **UNVERIFIED items:** live `run-episodes`/`--determinism-check` runs; headless flags; the real
+  `TOOL_OFFSET` calibration correction; the original-controller fixture comparison; M1-06a,
+  M1-07, and all M1 gates.

@@ -319,6 +319,62 @@ jq -c 'select(.event=="state_boundary" and .state=="DONE") | {pregrasp_realign, 
 the trace. The CLOSE guard's own measurement is `close_alignment_check.xy_error_m` (and
 `close_realign.xy_error_after_m`). Report the ON and OFF batches separately; do not average them.
 
+## 3b. Fresh-world episode runner (`run-episodes`)
+
+`run-episodes` launches one Webots subprocess per episode, waits for the ZeroMQ server, runs one
+brain-side episode, terminates the simulator, and prints one summary table row per episode
+(outcome, the four success criteria, failure state, and timing). It resolves the Webots binary
+from `--webots`, `WEBOTS_HOME`, then `PATH`; per-episode traces and Webots logs are written to
+`runs/episode-runner/` by default and stale per-episode traces are deleted before each run.
+Rendering stays on by default because the scripted policy reads the camera every step.
+
+**Batch of three fresh worlds (one process per episode, seeds 0..2):**
+
+```bash
+uv run python -m vlarobot.cli run-episodes --n 3 --fresh-world
+```
+
+**Original-semantics control batch (closed-loop off) in fresh worlds:**
+
+```bash
+uv run python -m vlarobot.cli run-episodes --n 3 --fresh-world --no-closed-loop-waypoints
+```
+
+**Same process, soft reset per episode (like `can-regression`):**
+
+```bash
+uv run python -m vlarobot.cli run-episodes --n 3 --no-fresh-world
+```
+
+**Determinism check:** run the same seed 3 times, each in its own fresh world, and compare
+outcomes, normalized trace digests, and numeric deltas (sim time, achieved EE, CAN pose,
+commanded EE). The command exits 1 on a mismatch.
+
+```bash
+uv run python -m vlarobot.cli run-episodes --determinism-check 3
+```
+
+**Watched single state in a fresh world** (e.g. stop after DESCEND for tip telemetry):
+
+```bash
+uv run python -m vlarobot.cli run-episodes --n 1 --stop-after DESCEND
+```
+
+Useful extras: `--trace-dir runs/my-batch`, `--webots /path/to/webots`, `--endpoint tcp://...`,
+`--startup-timeout-s 180`, `--pregrasp-realign/--no-pregrasp-realign`. All flags are standard
+typer options and identical on Windows PowerShell (use `runs\episode-runner` style paths).
+
+**Caveat — headless is UNVERIFIED.** `--headless` maps to the documented batch flags
+(`webots --batch --mode=fast --no-rendering --stdout --stderr`). `--no-rendering` can blank
+camera frames, and the scripted policy reads RGB every step, so an episode may fail for that
+reason alone. Keep rendering (the default) until the headless path has been live-verified on the
+target OS; the runner prints a warning whenever it is enabled.
+
+_GT fingertip telemetry_ (`gt_tip_telemetry`, plus the merged boundary fields) appears in every
+trace from this section's real runs; `scripts/analyze_can_run.py` prints it as a table after the
+per-state rows, together with any `TOOL_OFFSET` calibration proposal (report-only, never
+applied).
+
 ## 4. Capture controller-side diagnostics
 
 The simulator-server mode is the default. To run the scripted controller flow and append its

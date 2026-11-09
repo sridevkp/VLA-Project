@@ -716,3 +716,70 @@
   diagnostics, unchanged in the untouched `controllers/`, `model/`, and
   `scripts/analyze_pregrasp_table.py` files.
 - **Supersedes:** Nothing.
+
+## ADR-0018: Closed-loop waypoints, GT fingertip telemetry, and the fresh-world episode runner
+
+- **Date:** 2026-11-09
+- **Status:** Accepted
+- **Context:** The six M1-07 run diagnosis (`runs/m1-07-realign-{on,off}-0{1,2,3}.jsonl`) shows
+  the first failure cause is contact/knock during DESCEND in 5/6 runs and a joint stall under the
+  strongest tilt in the sixth. The FK tool tip and the Supervisor GT finger pads disagree by
+  roughly 7–8 cm on live runs, which is a frame mismatch, not the proximate cause. The M1-07 flow
+  also needs a repeatable fresh-world runner and cross-platform determinism checking that did not
+  depend on the operator manually restarting Webots.
+- **Decision — closed-loop waypoints:** new config `closed_loop_waypoints` (default `true`,
+  CLI `--closed-loop-waypoints/--no-closed-loop-waypoints`). When on, DESCEND, LIFT, and the
+  CLOSE guard's re-descent re-express their world-anchored target in the **live base frame once
+  per Cartesian waypoint** through `_waypoint_target_provider()`. DESCEND tracks the live CAN;
+  LIFT is anchored to the CAN pose captured at LIFT entry so a grasped, rising CAN cannot create
+  a target feedback loop. `_move_linear(target_provider=...)` interpolates the remaining fraction
+  of the path from the achieved position; with a fixed target this telescopes exactly to the
+  original `alpha` schedule, so closed-loop-off arithmetic is byte-identical to the previous
+  controller. Traces record `closed_loop_waypoint` and `live_target_base_xyz_m` on every waypoint
+  boundary. This deepens, not replaces, ADR-0016: the PREGRASP realign and its refreshed LIFT are
+  unchanged.
+- **Decision — GT fingertip telemetry, report-only:** one helper, `_gt_finger_payload()`, merged
+  into `_trace_measurements()`, supplies `gt_midpoint_world_xyz_m`, `finger_tip_world_xyz_m`,
+  `ee_fk_world_xyz_m`, `fk_gt_offset_m`, `gt_to_can_xy_m`, `fk_to_can_world_m`/`fk_to_can_xy_m`,
+  `finger_midpoint_base_xyz_m`, `finger_midpoint_to_can_base_xy_m`, `can_radius_m`, and the
+  per-finger `clearance_left_m`/`clearance_right_m` (finger-pad distance to the CAN cylinder).
+  `gt_tip_telemetry` events fire exactly at PREGRASP exit, DESCEND enter, and CLOSE enter. When
+  `fk_gt_offset_m` exceeds the 5 mm `TOOL_OFFSET_CALIBRATION_TOLERANCE_M`, the event carries
+  `tool_offset_error`, a `calibration_warning`, and a report-only
+  `tool_offset_calibration_proposal` computed from the GT `arm_7_joint` ground-truth point;
+  nothing is ever applied automatically. Calibration needs a live operator run, so the
+  `finger_tip_offset_m` value (0.1741 m) stays as configured.
+- **Decision — fresh-world episode runner:** `run-episodes` in `vlarobot.cli` (module
+  `execution/episode_runner.py`) launches `webots <world>` as one subprocess per episode (strict
+  arg lists, never `shell=True`, `pathlib`+`sys.executable`-safe, `encoding="utf-8"` on all file
+  I/O), waits for the ZeroMQ ping, runs exactly one brain-side episode, terminates the
+  simulator, and prints one fixed-width summary table covering the four success criteria.
+  `--determinism-check K` runs the same seed K times in fresh worlds, normalizes both traces
+  (dropping `reset_fingerprint`, `controller_reset_state`, `trace_path`,
+  `backend_diagnostics_compute_s`) and compares outcome dictionaries (dropping per-episode
+  index, paths, and wall-clock times), SHA-256 digests, and numeric deltas; the command exits 1
+  on a mismatch. Accumulating `run-episodes` deletes stale per-episode traces before writing.
+  `--no-fresh-world` reuses one Webots process with soft resets (same semantics as
+  `can-regression`). Rendering stays ON by default because the scripted policy reads RGB every
+  step; `--headless` maps to `--batch --mode=fast --no-rendering --stdout --stderr` and is
+  explicitly UNVERIFIED (`.doc` caveat: `--no-rendering` can blank camera reads).
+- **Decision — housekeeping in the same pass:** gripper close force is clamped to the motor
+  `maxForce` (`backend._set_gripper` and `gripper.close`), matching the simulator's internal
+  clamp so behaviour is unchanged while the AvailableForce warning disappears. The CLOSE guard's
+  re-descent is attributed to CLOSE, not DESCEND, in `state_sim_durations`/`state_wall_durations`,
+  so DESCEND settle accounting is not inflated by a state that already exited. Transport timing
+  counters are opt-in (`VLAROBOT_BACKEND_TIMINGS=1`): `encode_s`, `send_s`, `recv_s`, `decode_s`,
+  `requests`, `image_transfer_bytes`; the policy timing summary adds `steps` and
+  `wall_per_step_s`, and `can-regression --timings` prints a `timings zmq:` block.
+- **Evidence:** `ruff check .`, `ruff format --check .`, and `uv run ty check src tests` are
+  clean; `pytest -m "not webots"` reports **144 passed**, including a fake backend that shifts the
+  base 6 mm sideways only once the tip is inside the DESCEND column (closed-loop live targets
+  track it by ≥2 mm planar drift; the OFF run has no `live_target_base_xyz_m` keys), a
+  GT-injection fake backend asserting the three event sites and the >5 mm proposal, and the
+  episode-runner helper tests (exact arg lists, `WEBOTS_HOME` resolution, digest/norm/delta
+  comparisons). No subprocess is launched by the tests.
+- **Remaining evidence:** Operator `run-episodes` runs (fresh-world and `--determinism-check`)
+  are **UNVERIFIED**, as are the headless flags and the real GT calibration correction. M1-06a,
+  M1-07, and all M1 gates remain **UNVERIFIED**.
+- **Supersedes:** Nothing. ADR-0016, the two-tier drift invariant, `hold_base: none`, and the
+  four success criteria remain in force.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from time import perf_counter
 from typing import Any
 
 import zmq
@@ -16,6 +18,11 @@ from vlarobot.core.types import (
 from vlarobot.core.wire import ProtocolError, decode_message, encode_message, make_message
 
 DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+
+
+def _client_timings_enabled() -> bool:
+    """Transport timing is opt-in (``VLAROBOT_BACKEND_TIMINGS=1``) so live runs stay unchanged."""
+    return os.environ.get("VLAROBOT_BACKEND_TIMINGS") == "1"
 
 
 class ZmqBackendClient:
@@ -37,6 +44,9 @@ class ZmqBackendClient:
         self._seq = 0
         self._sim_time: float | None = None
         self._closed = False
+        # Opt-in transport counters: per-call seconds plus request counts and RGB bytes.
+        self._timings_enabled = _client_timings_enabled()
+        self._timings: dict[str, float] = {}
 
     def reset(self, scenario: ScenarioSpec, seed: int) -> Observation:
         response = self._request("reset", {"scenario": scenario, "seed": seed})
@@ -71,17 +81,45 @@ class ZmqBackendClient:
             self._context.term()
             self._closed = True
 
+    def timings(self) -> dict[str, float]:
+        """Copy of the opt-in transport counters; empty unless ``VLAROBOT_BACKEND_TIMINGS=1``."""
+        return dict(self._timings)
+
+    def _track(self, key: str, mark: float | None) -> None:
+        """Accumulate one opt-in timing slot; ``mark=None`` when timing is disabled."""
+        if mark is not None:
+            self._timings[key] = self._timings.get(key, 0.0) + (perf_counter() - mark)
+
     def _request(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
         if self._closed:
             raise RuntimeError("ZeroMQ backend client is closed.")
         message = make_message(operation, self._seq, payload, self._sim_time)
+        timed = self._timings_enabled
+        mark = perf_counter() if timed else None
+        encoded = encode_message(message)
+        self._track("encode_s", mark)
         try:
-            self._socket.send(encode_message(message))
-            response = decode_message(self._socket.recv())
+            mark = perf_counter() if timed else None
+            self._socket.send(encoded)
+            self._track("send_s", mark)
+            mark = perf_counter() if timed else None
+            raw = self._socket.recv()
+            self._track("recv_s", mark)
+            mark = perf_counter() if timed else None
+            response = decode_message(raw)
+            self._track("decode_s", mark)
         except zmq.Again as exc:
             raise TimeoutError(
                 f"Simulator did not reply to {operation!r} within the configured timeout."
             ) from exc
+        if timed:
+            self._timings["requests"] = self._timings.get("requests", 0.0) + 1.0
+            observation = response["payload"].get("observation")
+            rgb = getattr(observation, "rgb", None)
+            if rgb is not None:
+                self._timings["image_transfer_bytes"] = self._timings.get(
+                    "image_transfer_bytes", 0.0
+                ) + float(rgb.nbytes)
         if response["seq"] != self._seq:
             raise ProtocolError(
                 f"Simulator replied with sequence {response['seq']}; expected {self._seq}."

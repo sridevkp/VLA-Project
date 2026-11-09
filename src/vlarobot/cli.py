@@ -11,8 +11,20 @@ from vlarobot.backends.webots.smoke import create_webots_robot, run_smoke
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
 from vlarobot.core.types import ScenarioSpec
+from vlarobot.execution.episode_runner import (
+    RunnerSettings,
+    determinism_report,
+    format_determinism_report,
+    format_summary_table,
+    resolve_webots,
+)
+from vlarobot.execution.episode_runner import (
+    run_episodes as run_episode_batch,
+)
 from vlarobot.execution.scripted_can import ResetProbeResult, ScriptedCanPolicy
 from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
+
+RUN_EPISODES_DEFAULT_WORLD = Path("worlds/factory.wbt")
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -82,6 +94,16 @@ def can_regression(
             help="Re-align PREGRASP after base tilt; defaults to configs/robot.yaml.",
         ),
     ] = None,
+    closed_loop_waypoints: Annotated[
+        bool | None,
+        typer.Option(
+            "--closed-loop-waypoints/--no-closed-loop-waypoints",
+            help=(
+                "Recompute DESCEND/LIFT targets per waypoint from the live base pose; "
+                "defaults to configs/robot.yaml."
+            ),
+        ),
+    ] = None,
     stop_after: Annotated[
         Literal["PREGRASP", "LIFT"] | None,
         typer.Option(help="Stop this watched diagnostic run after PREGRASP or LIFT."),
@@ -98,6 +120,7 @@ def can_regression(
         trace_path=trace_log,
         pregrasp_route=pregrasp_route,
         pregrasp_realign=pregrasp_realign,
+        closed_loop_waypoints=closed_loop_waypoints,
         stop_after=stop_after,
         timing_enabled=timings,
     )
@@ -112,6 +135,7 @@ def can_regression(
                 f"final_distance={result.final_target_distance:.3f}m state={result.final_state} "
                 f"failure_state={result.failure_state} failure_reason={result.failure_reason} "
                 f"pregrasp_realign={result.pregrasp_realign} "
+                f"closed_loop_waypoints={result.closed_loop_waypoints} "
                 f"home_reached={result.home_reached} "
                 f"place_distance_ok={result.place_distance_ok} "
                 f"can_height_ok={result.can_height_ok} can_tilt_ok={result.can_tilt_ok} "
@@ -131,12 +155,116 @@ def can_regression(
                     f"settle={settle_seconds:.3f}s wall={wall_seconds:.3f}s"
                 )
             if timings:
-                _print_timing_summary(policy)
+                _print_timing_summary(policy, client)
         successes = sum(1 for result in results if result.success)
         rejections = sum(result.rejections for result in results)
         typer.echo(f"summary success={successes}/{seeds} rejections={rejections}")
     finally:
         client.close()
+
+
+@app.command("run-episodes")
+def run_episodes(
+    n: int = typer.Option(1, "--n", min=1, help="Number of episodes to run."),
+    fresh_world: bool = typer.Option(
+        True,
+        "--fresh-world/--no-fresh-world",
+        help="Launch a fresh Webots subprocess per episode so every run starts from a clean world.",
+    ),
+    headless: bool = typer.Option(
+        False,
+        "--headless/--no-headless",
+        help=(
+            "Use the batch flags (--batch --mode=fast --no-rendering --stdout --stderr). "
+            "--no-rendering is UNVERIFIED and can blank camera frames; keep rendering for now."
+        ),
+    ),
+    determinism_check: int = typer.Option(
+        0,
+        "--determinism-check",
+        min=0,
+        help=(
+            "Repeat one episode K times in fresh worlds and report whether outcomes and "
+            "traces match. Overrides --n."
+        ),
+    ),
+    world: Annotated[
+        Path | None,
+        typer.Option(help="Path to the Webots world file; defaults to worlds/factory.wbt."),
+    ] = None,
+    endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
+    seed: int = typer.Option(0, help="PRNG seed for the first episode; later episodes increment."),
+    webots: str | None = typer.Option(
+        None, "--webots", help="Webots executable; defaults to WEBOTS_HOME, then PATH."
+    ),
+    trace_dir: Annotated[
+        Path | None,
+        typer.Option(help="Directory for per-episode traces, summaries, and Webots logs."),
+    ] = None,
+    pregrasp_route: Annotated[
+        Literal["interpolated", "safe_via"] | None,
+        typer.Option(help="PREGRASP route; defaults to configs/robot.yaml."),
+    ] = None,
+    pregrasp_realign: Annotated[
+        bool | None,
+        typer.Option(
+            "--pregrasp-realign/--no-pregrasp-realign",
+            help="Re-align PREGRASP after base tilt; defaults to configs/robot.yaml.",
+        ),
+    ] = None,
+    closed_loop_waypoints: Annotated[
+        bool | None,
+        typer.Option(
+            "--closed-loop-waypoints/--no-closed-loop-waypoints",
+            help=(
+                "Recompute DESCEND/LIFT targets per waypoint from the live base pose; "
+                "defaults to configs/robot.yaml."
+            ),
+        ),
+    ] = None,
+    stop_after: Annotated[
+        Literal["PREGRASP", "LIFT"] | None,
+        typer.Option(help="Stop each episode after PREGRASP or LIFT."),
+    ] = None,
+    startup_timeout_s: float = typer.Option(
+        180.0, min=1.0, help="Seconds to wait for the Webots ZeroMQ server before failing."
+    ),
+) -> None:
+    """Run Webots episodes with clean process isolation and summarize outcomes."""
+    if headless:
+        typer.echo(
+            "Note: headless mode disables Webots rendering; the scripted policy reads RGB every "
+            "step, so camera frames may be blank and episodes may fail for that reason only."
+        )
+    resolved_webots = resolve_webots(webots)
+    settings = RunnerSettings(
+        webots=resolved_webots,
+        world=(world or RUN_EPISODES_DEFAULT_WORLD).expanduser().resolve(),
+        endpoint=endpoint,
+        trace_dir=(
+            trace_dir.expanduser().resolve()
+            if trace_dir is not None
+            else Path("runs") / "episode-runner"
+        ),
+        trace_prefix="episode",
+        headless=headless,
+        startup_timeout_s=startup_timeout_s,
+        seed=seed,
+        pregrasp_realign=pregrasp_realign,
+        closed_loop_waypoints=closed_loop_waypoints,
+        stop_after=stop_after,
+    )
+    outcomes = run_episode_batch(
+        settings,
+        n=n,
+        fresh_world=fresh_world,
+        determinism_check=determinism_check,
+    )
+    typer.echo(format_summary_table(outcomes))
+    if determinism_check > 0:
+        typer.echo(format_determinism_report(determinism_report(outcomes)))
+        if not determinism_report(outcomes).get("match"):
+            raise typer.Exit(code=1)
 
 
 @app.command("repeat-check")
@@ -199,7 +327,7 @@ def repeat_check(
                 f"fingerprint={'present' if result.reset_fingerprint is not None else 'missing'}"
             )
             if timings:
-                _print_timing_summary(policy)
+                _print_timing_summary(policy, client)
 
         first = results[0]
         comparisons = []
@@ -373,7 +501,9 @@ def compare_trace_files(
     raise typer.Exit(code=1)
 
 
-def _print_timing_summary(policy: ScriptedCanPolicy) -> None:
+def _print_timing_summary(
+    policy: ScriptedCanPolicy, client: ZmqBackendClient | None = None
+) -> None:
     summary = policy.timing_summary()
     if not summary.get("enabled"):
         return
@@ -384,7 +514,13 @@ def _print_timing_summary(policy: ScriptedCanPolicy) -> None:
             f"{component}={float(seconds):.6f}s ({100.0 * float(seconds) / total_wall:.1f}%)"
             for component, seconds in sorted(totals.items())
         )
-        typer.echo(f"  timings total_wall={total_wall:.6f}s {shares}")
+        steps = int(summary.get("steps", 0) or 0)
+        per_step = summary.get("wall_per_step_s")
+        per_step_text = "n/a" if per_step is None else f"{float(per_step):.6f}s"
+        typer.echo(
+            f"  timings total_wall={total_wall:.6f}s steps={steps} "
+            f"accounted_wall_per_step={per_step_text} {shares}"
+        )
     for state, components in sorted(summary["by_state"].items()):
         state_total = sum(float(value) for value in components.values())
         detail = " ".join(
@@ -392,6 +528,12 @@ def _print_timing_summary(policy: ScriptedCanPolicy) -> None:
             for component, seconds in sorted(components.items())
         )
         typer.echo(f"  timings {state}: total={state_total:.6f}s {detail}")
+    if client is not None:
+        transport = client.timings()
+        if transport:
+            counted = {key: value for key, value in sorted(transport.items()) if key != "requests"}
+            detail = " ".join(f"{key}={float(value):.6f}" for key, value in counted.items())
+            typer.echo(f"  timings zmq: requests={int(transport.get('requests', 0.0))} {detail}")
 
 
 def _optional_float(value: float | None, digits: int) -> str:

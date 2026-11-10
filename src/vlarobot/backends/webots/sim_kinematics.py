@@ -41,10 +41,10 @@ Geometry model and conventions (all SI, orientations row-major 3x3):
 from __future__ import annotations
 
 import hashlib
-import os
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -192,7 +192,8 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
         actual_hash = snapshot_content_hash(payload)
         if actual_hash != expected_hash:
             raise ValueError(
-                f"Snapshot {source}: content_hash mismatch (expected {expected_hash}, got {actual_hash})."
+                f"Snapshot {source}: content_hash mismatch "
+                f"(expected {expected_hash}, got {actual_hash})."
             )
     version = payload.get("schema_version")
     if version != REQUIRED_SCHEMA_VERSION:

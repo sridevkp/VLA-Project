@@ -12,12 +12,16 @@ import numpy as np
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
-    EXPORT_SIM_KINEMATICS,
     FINGER_TIP_OFFSET_M,
     FK_GROUND_TRUTH_TOLERANCE_M,
     HEAD_JOINTS,
     HEAD_PAN,
     HEAD_TILT,
+    OBSERVE_IMAGES,
+    PROBE_MAX_STEPS_PER_JOINT,
+    PROBE_STATIONARITY_STEPS,
+    PROBE_STATIONARY_DELTA_RAD,
+    PROBE_TOTAL_STEP_CAP,
     RESET_HEAD_SETTLE_MS,
     RESET_TORSO_SETTLE_TOLERANCE_M,
     RESET_TORSO_TIMEOUT_STEPS,
@@ -30,11 +34,15 @@ from vlarobot.backends.webots.gripper import Gripper
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.robot_io import RobotIO
 from vlarobot.backends.webots.supervisor_kinematics import (
-    capture_snapshot,
+    _capture_joint_entry,
     child_solid,
+    joint_contexts,
     parent_solid,
+    posture_reference,
     read_joint_node,
+    sim_time_s,
     solid_pose,
+    webots_version,
 )
 from vlarobot.backends.webots.visualization import Visualization
 from vlarobot.core.types import (
@@ -78,6 +86,9 @@ class WebotsBackend:
             raise RuntimeError("Required Webots camera not found: Astra rgb")
         self.camera.enable(self.io.ts)
         LOGGER.info("Webots RGB camera noise field: %s", self.io.camera_noise_value(self.camera))
+        self._camera_width = int(self.camera.getWidth())
+        self._camera_height = int(self.camera.getHeight())
+        self._camera_fov = float(self.camera.getFov())
         initial_positions = self.io.joint_positions_from_fields()
         self._initial_joint_pos = {
             name: initial_positions[name] for name in ARM_JOINTS + [TORSO_JOINT] + HEAD_JOINTS
@@ -98,6 +109,7 @@ class WebotsBackend:
         self._stopped = False
         self._reset_fingerprint_pending: dict[str, object] | None = None
         self._sim_kinematics_snapshot_pending: dict[str, object] | None = None
+        self._export_job: dict[str, object] | None = None
         self._arm7_endpoint_offset_world: np.ndarray | None = None
         self._arm7_reset_link_rotation: np.ndarray | None = None
 
@@ -171,16 +183,10 @@ class WebotsBackend:
             self._arm7_reset_link_rotation = None
         else:
             self._arm7_endpoint_offset_world, self._arm7_reset_link_rotation = endpoint_offset
-        self._sim_kinematics_snapshot_pending = None
-        if EXPORT_SIM_KINEMATICS:
-            # ADR-0020: read-only capture at the settled reset posture. Hinge
-            # axes are always derived from a small posture probe (<=0.05 rad,
-            # restored immediately); any readable jointParameters axis is only
-            # cross-checked. See supervisor_kinematics.py.
-            joint_order = (TORSO_JOINT, *ARM_JOINTS)
-            self._sim_kinematics_snapshot_pending = capture_snapshot(
-                self.io, joint_order, probe_axes=True
-            )
+        # ADR-0020 addendum: reset stays fast (< 5 s) and performs no probes.
+        # Kinematics export is served on demand via the dedicated export_kinematics
+        # request (chunked polling) so probing cannot block a normal reset.
+        self._export_job: dict[str, object] | None = None
         return self._observation()
 
     def step(self, n_steps: int = 1) -> Observation:
@@ -262,14 +268,182 @@ class WebotsBackend:
             self._stopped = True
             self.io.robot.simulationQuit(0)
 
+    # ------------------------------------------------------------------
+    # ADR-0020 addendum: on-demand, chunked kinematics export (no reset probes).
+    # ------------------------------------------------------------------
+
+    def _probe_settings(self) -> dict[str, float | int]:
+        return {
+            "stationary_delta": float(PROBE_STATIONARY_DELTA_RAD),
+            "stationarity_steps": int(PROBE_STATIONARITY_STEPS),
+            "max_steps_per_joint": int(PROBE_MAX_STEPS_PER_JOINT),
+        }
+
+    def export_kinematics(self, action: str = "poll") -> dict[str, object]:
+        """Chunked export: ``start`` resets the job, ``poll`` probes one joint step.
+
+        Each ``poll`` advances by probing at most the next joint (or finalizing),
+        returning progress/heartbeat status and, when complete, the snapshot.
+        This keeps reset fast and lets clients use per-poll timeouts.
+        """
+        if action == "start":
+            self._export_job = self._new_export_job()
+            return self._export_status(self._export_job)
+        if action == "cancel":
+            self._export_job = None
+            return {"state": "cancelled", "done": True, "snapshot": None, "progress": {}}
+        if action not in {"poll", "status"}:
+            raise ValueError(f"Unknown export_kinematics action: {action!r}")
+        job = self._export_job
+        if job is None:
+            job = self._new_export_job()
+            self._export_job = job
+        if not bool(job.get("done")) and action == "poll":
+            self._advance_export_job(job)
+        return self._export_status(job)
+
+    def _new_export_job(self) -> dict[str, object]:
+        joint_order = (TORSO_JOINT, *ARM_JOINTS)
+        contexts = list(joint_contexts(self.io, joint_order))
+        return {
+            "joint_order": joint_order,
+            "contexts": contexts,
+            "index": 0,
+            "joints": [],
+            "steps_used_total": 0,
+            "done": False,
+            "error": None,
+            "snapshot": None,
+            "per_joint": [],
+            "probe_settings": self._probe_settings(),
+        }
+
+    def _advance_export_job(self, job: dict[str, object]) -> None:
+        contexts = job["contexts"]
+        index = int(job["index"])
+        if index >= len(contexts):
+            job["snapshot"] = self._finalize_export_snapshot(job)
+            job["done"] = True
+            self._export_job = job
+            return
+        if int(job["steps_used_total"]) >= int(PROBE_TOTAL_STEP_CAP):
+            job["error"] = "total_probe_step_cap_reached"
+            job["snapshot"] = self._finalize_export_snapshot(job)
+            job["done"] = True
+            return
+        name, kind, motor = contexts[index]
+        entry = _capture_joint_entry(
+            self.io,
+            name,
+            kind,
+            motor,
+            probe_axes=True,
+            probe_settings=job["probe_settings"],  # type: ignore[arg-type]
+        )
+        job["joints"].append(entry)  # type: ignore[attr-defined]
+        status = entry.get("probe_status") or {}
+        steps = int(status.get("steps_used", 0) or 0) if isinstance(status, dict) else 0
+        job["steps_used_total"] = int(job["steps_used_total"]) + steps
+        job["per_joint"].append(  # type: ignore[attr-defined]
+            {
+                "name": name,
+                "kind": kind,
+                "steps_used": steps,
+                "measured_angle_moved_rad": status.get("measured_angle_moved_rad")
+                if isinstance(status, dict)
+                else None,
+                "reason": status.get("reason") if isinstance(status, dict) else None,
+                "settled": status.get("settled") if isinstance(status, dict) else None,
+                "axis_source": entry.get("axis_source"),
+            }
+        )
+        job["index"] = index + 1
+        if int(job["index"]) >= len(contexts):
+            job["snapshot"] = self._finalize_export_snapshot(job)
+            job["done"] = True
+
+    def _finalize_export_snapshot(self, job: dict[str, object]) -> dict[str, object]:
+        joints = list(job.get("joints") or [])
+        joint_order = job.get("joint_order") or (TORSO_JOINT, *ARM_JOINTS)
+        readable: list[str] = []
+        pose_inferred: list[str] = []
+        unreadable: list[str] = []
+        for entry in joints:
+            if not isinstance(entry, dict):
+                continue
+            source = str(entry.get("axis_source"))
+            name = str(entry.get("name"))
+            if source == "posture_probe":
+                pose_inferred.append(name)
+                if entry.get("readable_axis") is not None:
+                    readable.append(name)
+            else:
+                unreadable.append(name)
+        fingers = {
+            motor.getName(): child_solid(self.io, motor.getName()).to_payload()
+            for motor, _sensor in getattr(self.io, "fingers", [])
+        }
+        snapshot: dict[str, object] = {
+            "schema_version": 1,
+            "units": {"length": "m", "angle": "rad"},
+            "source": "Webots Supervisor, Pose-derived Solid world poses",
+            "webots_version": webots_version(self.io),
+            "sim_time_s": sim_time_s(self.io),
+            "timestamp_utc": __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .isoformat(),
+            "base_frame": solid_pose(self.io.me, "RobotNode").to_payload(),
+            "joints": joints,
+            "finger_endpoint_solids": fingers,
+            "readability_report": {
+                "jointParameters": readable,
+                "posture_probe": pose_inferred,
+                "unreadable": unreadable,
+            },
+            "posture_reference": posture_reference(self.io, tuple(joint_order)),  # type: ignore[arg-type]
+            "export_progress": {
+                "steps_used_total": job.get("steps_used_total", 0),
+                "total_step_cap": PROBE_TOTAL_STEP_CAP,
+                "per_joint": job.get("per_joint", []),
+                "error": job.get("error"),
+            },
+        }
+        return snapshot
+
+    def _export_status(self, job: dict[str, object]) -> dict[str, object]:
+        contexts = job.get("contexts") or []
+        index = int(job.get("index", 0))
+        total = len(contexts)
+        done = bool(job.get("done"))
+        return {
+            "state": "done" if done else "in_progress",
+            "done": done,
+            "current_index": index,
+            "total_joints": total,
+            "steps_used_total": job.get("steps_used_total", 0),
+            "total_step_cap": PROBE_TOTAL_STEP_CAP,
+            "per_joint": list(job.get("per_joint") or []),
+            "error": job.get("error"),
+            "snapshot": job.get("snapshot") if done else None,
+        }
+
     def _observation(self) -> Observation:
-        image = np.asarray(self.camera.getImageArray(), dtype=np.uint8)
-        if image.ndim != 3 or image.shape[2] < 3:
-            raise RuntimeError(f"Webots camera returned an invalid image shape: {image.shape}.")
-        image = image[:, :, :3].transpose((1, 0, 2)).copy()
-        width, height = image.shape[1], image.shape[0]
-        fov = float(self.camera.getFov())
-        focal = width / (2.0 * math.tan(fov / 2.0))
+        width = int(getattr(self, "_camera_width", getattr(self.camera, "getWidth", lambda: 64)()))
+        height = int(
+            getattr(self, "_camera_height", getattr(self.camera, "getHeight", lambda: 48)())
+        )
+        fov = float(getattr(self, "_camera_fov", getattr(self.camera, "getFov", lambda: 1.0)()))
+        if OBSERVE_IMAGES:
+            image = np.asarray(self.camera.getImageArray(), dtype=np.uint8)
+            if image.ndim != 3 or image.shape[2] < 3:
+                raise RuntimeError(f"Webots camera returned an invalid image shape: {image.shape}.")
+            image = image[:, :, :3].transpose((1, 0, 2)).copy()
+            width, height = image.shape[1], image.shape[0]
+            fov = float(getattr(self.camera, "getFov", lambda: fov)())
+        else:
+            # bench-steps: image reads can be disabled without changing observation shape.
+            image = np.zeros((height, width, 3), dtype=np.uint8)
+        focal = width / (2.0 * math.tan(fov / 2.0)) if fov else 0.0
         camera_info = CameraInfo(
             K=(
                 (focal, 0.0, width / 2.0),
@@ -399,15 +573,10 @@ class WebotsBackend:
             diagnostics["reset_torso_before_rad"] = getattr(self, "_reset_torso_before_rad", None)
             diagnostics["reset_torso_after_rad"] = getattr(self, "_reset_torso_after_rad", None)
             self._reset_fingerprint_pending = None
-        if EXPORT_SIM_KINEMATICS:
+        # Attach live GT Solid telemetry for the validation sweep when the
+        # kinematics export/telemetry path is enabled (reads poses only, no probes).
+        if SETTINGS.export_sim_kinematics:
             diagnostics["kinematics_telemetry"] = self._kinematics_telemetry()
-            snapshot = self._sim_kinematics_snapshot_pending
-            if snapshot is not None:
-                # Attached once, to the reset observation only: the snapshot is
-                # static per session while kinematics_telemetry re-reads live
-                # Solid poses every step.
-                diagnostics["sim_kinematics_snapshot"] = snapshot
-                self._sim_kinematics_snapshot_pending = None
         if diagnostics_started is not None:
             diagnostics["backend_diagnostics_compute_s"] = perf_counter() - diagnostics_started
         opening = self.gripper.opening()

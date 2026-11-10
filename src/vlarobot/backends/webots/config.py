@@ -130,6 +130,12 @@ class RobotSettings:
     export_sim_kinematics: bool
     kinematic_model: Literal["urdf", "sim"]
     sim_kinematics_filename: str
+    observe_images: bool
+    probe_stationary_delta_rad: float
+    probe_stationarity_steps: int
+    probe_max_steps_per_joint: int
+    probe_total_step_cap: int
+    zmq_port: int
 
     @classmethod
     def from_yaml(cls, path: Path) -> RobotSettings:
@@ -215,6 +221,22 @@ class RobotSettings:
             or not values["sim_kinematics_filename"]
         ):
             raise ValueError("sim_kinematics_filename must be a non-empty string.")
+        if not isinstance(values.get("observe_images"), bool):
+            raise ValueError("observe_images must be a boolean.")
+        if (
+            not isinstance(values.get("probe_stationary_delta_rad"), (int, float))
+            or values["probe_stationary_delta_rad"] <= 0.0
+        ):
+            raise ValueError("probe_stationary_delta_rad must be positive.")
+        for key in (
+            "probe_stationarity_steps",
+            "probe_max_steps_per_joint",
+            "probe_total_step_cap",
+        ):
+            if not isinstance(values.get(key), int) or values[key] <= 0:
+                raise ValueError(f"{key} must be a positive integer.")
+        if not isinstance(values.get("zmq_port"), int) or not (1 <= values["zmq_port"] <= 65535):
+            raise ValueError("zmq_port must be an integer port in [1, 65535].")
         for key in (
             "table_top_height_m",
             "table_clearance_required_m",
@@ -339,3 +361,9 @@ TABLE_FOOTPRINT_CENTRE_XY_M = SETTINGS.table_footprint_centre_xy_m
 TABLE_FOOTPRINT_SIZE_XY_M = SETTINGS.table_footprint_size_xy_m
 TABLE_CLEARANCE_REQUIRED_M = SETTINGS.table_clearance_required_m
 FK_GROUND_TRUTH_TOLERANCE_M = SETTINGS.fk_ground_truth_tolerance_m
+OBSERVE_IMAGES = SETTINGS.observe_images
+PROBE_STATIONARY_DELTA_RAD = SETTINGS.probe_stationary_delta_rad
+PROBE_STATIONARITY_STEPS = SETTINGS.probe_stationarity_steps
+PROBE_MAX_STEPS_PER_JOINT = SETTINGS.probe_max_steps_per_joint
+PROBE_TOTAL_STEP_CAP = SETTINGS.probe_total_step_cap
+ZMQ_PORT = SETTINGS.zmq_port

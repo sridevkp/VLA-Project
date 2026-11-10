@@ -39,10 +39,13 @@ POSE_TYPES = frozenset({"Solid", "Robot", "Pose", "SolidReference"})
 #: Posture-probe amplitude for unreadable hinges (rad) and sliders (m).
 PROBE_DELTA_RAD = 0.05
 PROBE_DELTA_M = 0.01
-#: Probe settle parameters: sensor tolerance (rad/m) and the maximum lockstep
-#: budget to reach the probe target or to restore the export posture.
-PROBE_SENSOR_TOL = 0.005
-PROBE_MAX_STEPS = 400
+#: Default probe settle/cap parameters (ADR-0020 addendum). A joint is settled
+#: when ``|delta sensor| < probe_stationary_delta_rad`` for
+#: ``probe_stationarity_steps`` consecutive lockstep steps.
+DEFAULT_PROBE_STATIONARY_DELTA_RAD = 0.0001
+DEFAULT_PROBE_STATIONARITY_STEPS = 3
+DEFAULT_PROBE_MAX_STEPS_PER_JOINT = 60
+DEFAULT_PROBE_TOTAL_STEP_CAP = 2000
 #: Probe posture-restore tolerance: the child Solid must return within this
 #: distance (m) of its pre-probe pose before probing the next joint.
 PROBE_RESTORE_TOL_M = 1e-4
@@ -345,7 +348,8 @@ def slider_axis_residual(
 
 
 # --------------------------------------------------------------------------
-# Posture probe: small known move + read, restore (only for unreadable axes).
+# Posture probe: small known move + stationarity settle + read, restore.
+# (ADR-0020 addendum: no convergence-to-command; axis from measured delta.)
 # --------------------------------------------------------------------------
 
 
@@ -357,81 +361,124 @@ def joint_limits(motor: Any) -> tuple[float, float] | None:
     return float(low), float(high)
 
 
-def _probe_posture(
-    io: Any, name: str, motor: Any, sensor: Any, kind: str
-) -> tuple[float, float] | None:
-    """Move one joint by a small commanded delta and return (theta0, theta1).
+def _settle_stationary(
+    io: Any,
+    sensor: Any,
+    *,
+    stationary_delta: float,
+    stationary_steps: int,
+    max_steps: int,
+) -> tuple[bool, int, float | None, str]:
+    """Step until the sensor is stationary, not until it reaches a command.
 
-    Both values are actual sensor readings, never commands; the loader derives
-    the axis from measured poses, and the sensor pair is recorded for the
-    residual report only.
+    Settled when ``|delta sensor| < stationary_delta`` for ``stationary_steps``
+    consecutive lockstep steps. Returns
+    ``(settled, steps_used, final_value, reason)``.
     """
-    if motor is None or kind is None or sensor is None:
-        return None
-    try:
-        theta0 = float(sensor.getValue())
-    except (AttributeError, TypeError, RuntimeError, ValueError) as error:
-        LOGGER.warning("Export: sensor read failed for %s (%s).", name, error)
-        return None
-    delta = PROBE_DELTA_RAD if kind == "hinge" else PROBE_DELTA_M
-    limits = joint_limits(motor)
-    target = theta0 + delta
-    if limits is not None and not limits[0] + 1e-6 <= target <= limits[1] - 1e-6:
-        # At a limit: probe in the other direction (recorded via the actual
-        # sensor pair, so the loader math stays agnostic to the direction).
-        target = theta0 - delta
+    last = _guard(sensor.getValue, "sensor getValue failed")
+    if not isinstance(last, (int, float)):
+        return False, 0, None, "sensor_unreadable"
+    consecutive = 0
+    steps = 0
+    for _ in range(max_steps):
+        if not io.step_raw(1):
+            return False, steps, float(last), "step_failed"
+        steps += 1
+        value = _guard(sensor.getValue, "sensor getValue failed")
+        if not isinstance(value, (int, float)):
+            return False, steps, float(last), "sensor_unreadable"
+        moved = abs(float(value) - float(last))
+        last = float(value)
+        if moved < stationary_delta:
+            consecutive += 1
+            if consecutive >= stationary_steps:
+                return True, steps, float(last), "stationary"
+        else:
+            consecutive = 0
+    return False, steps, float(last), "step_cap"
+
+
+def _drive_and_settle(
+    io: Any,
+    name: str,
+    motor: Any,
+    sensor: Any,
+    target: float,
+    *,
+    stationary_delta: float,
+    stationary_steps: int,
+    max_steps: int,
+) -> tuple[bool, int, float | None, str]:
+    """Command ``target`` and settle by stationarity; never require target convergence."""
     try:
         motor.setPosition(target)
     except (AttributeError, TypeError, RuntimeError) as error:
         LOGGER.warning("Export: setPosition failed for %s (%s).", name, error)
-        return None
-    if not _step_until_sensor_near(io, sensor, target):
-        LOGGER.warning(
-            "Export: %s did not reach the probe target within %d steps.", name, PROBE_MAX_STEPS
-        )
-        return None
-    return theta0, float(sensor.getValue())
-
-
-def _step_until_sensor_near(io: Any, sensor: Any, target: float) -> bool:
-    for _ in range(PROBE_MAX_STEPS):
-        if not io.step_raw(1):
-            return False
-        value = _guard(sensor.getValue, "sensor getValue failed")
-        if isinstance(value, (int, float)) and abs(float(value) - target) < PROBE_SENSOR_TOL:
-            return True
-    return False
-
-
-def _restore_posture(
-    io: Any, name: str, motor: Any, sensor: Any | None, theta0: float, initial_pose: SolidPose
-) -> dict[str, object] | None:
-    """Drive the joint back and verify the child Solid pose returned (read-only check)."""
-    if motor is None:
-        return None
-    motor.setPosition(theta0)
-    if sensor is None or not _step_until_sensor_near(io, sensor, theta0):
-        LOGGER.warning("Export: %s posture-restore could not be sensor-verified.", name)
-    restored = child_solid(io, name)
-    error_m = solid_pose_distance(initial_pose, restored)
-    return {
-        "restored_pose_error_m": error_m,
-        "restored": error_m is not None and error_m < PROBE_RESTORE_TOL_M,
-    }
+        return False, 0, None, "set_position_failed"
+    return _settle_stationary(
+        io,
+        sensor,
+        stationary_delta=stationary_delta,
+        stationary_steps=stationary_steps,
+        max_steps=max_steps,
+    )
 
 
 def solid_pose_distance(a: SolidPose, b: SolidPose) -> float | None:
     if a.position is None or b.position is None:
         return None
-    dt = float(
+    return float(
         np.linalg.norm(np.asarray(a.position, dtype=float) - np.asarray(b.position, dtype=float))
     )
-    return float(dt) if not False else None
 
 
-# --------------------------------------------------------------------------
-# Snapshot capture.
-# --------------------------------------------------------------------------
+def _restore_posture(
+    io: Any,
+    name: str,
+    motor: Any,
+    sensor: Any | None,
+    theta0: float,
+    initial_pose: SolidPose,
+    *,
+    stationary_delta: float,
+    stationary_steps: int,
+    max_steps: int,
+) -> dict[str, object]:
+    """Drive the joint back and verify the child Solid pose returned."""
+    status: dict[str, object] = {
+        "restored_pose_error_m": None,
+        "restored": False,
+        "restore_steps": 0,
+        "restore_reason": "not_attempted",
+    }
+    if motor is None or sensor is None:
+        status["restore_reason"] = "unavailable"
+        return status
+    settled, steps, _, reason = _drive_and_settle(
+        io,
+        name,
+        motor,
+        sensor,
+        theta0,
+        stationary_delta=stationary_delta,
+        stationary_steps=stationary_steps,
+        max_steps=max_steps,
+    )
+    status["restore_steps"] = steps
+    status["restore_reason"] = reason if settled else f"restore_{reason}"
+    restored = child_solid(io, name)
+    error_m = solid_pose_distance(initial_pose, restored)
+    status["restored_pose_error_m"] = error_m
+    status["restored"] = bool(settled and error_m is not None and error_m < PROBE_RESTORE_TOL_M)
+    if not status["restored"]:
+        LOGGER.warning(
+            "Export: %s posture restore not fully verified (settled=%s error_m=%s reason=%s).",
+            name,
+            settled,
+            error_m,
+            status["restore_reason"],
+        )
+    return status
 
 
 def probe_axis(
@@ -443,77 +490,118 @@ def probe_axis(
     parent_pose: SolidPose,
     transform0: np.ndarray,
     initial_child_pose: SolidPose,
-) -> dict[str, object] | None:
-    """Derive one joint axis from a small posture probe; restore afterwards.
+    *,
+    stationary_delta: float = DEFAULT_PROBE_STATIONARY_DELTA_RAD,
+    stationary_steps: int = DEFAULT_PROBE_STATIONARITY_STEPS,
+    max_steps: int = DEFAULT_PROBE_MAX_STEPS_PER_JOINT,
+) -> dict[str, object]:
+    """Probe one joint and return a result payload (always, with status).
 
-    Returns the entry payload for the JSON (axis + residuals + restore check) or
-    ``None`` when the probe could not produce a usable axis. Both transforms are
-    expressed in the **same** stored parent frame (posture 0) so the recorded
-    axis is recomputable from the snapshot's own ``parent``/``child``/probe poses.
+    Axis and angle come from the *measured* sensor change and measured poses;
+    the commanded delta is recorded for traceability but never assumed reached.
+    Settle is stationarity-based, so steady-state tracking error cannot stall the probe.
     """
-    probed = _probe_posture(io, name, motor, sensor, kind or "")
-    if probed is None:
-        return None
-    theta0, theta1 = probed
-    child_probe_pose = child_solid(io, name)
-    restore_payload = _restore_posture(io, name, motor, sensor, theta0, initial_child_pose)
-    actual_delta = abs(theta1 - theta0)
-    transform1 = parent_from_child_world(parent_pose, child_probe_pose)
-    if transform1 is None or actual_delta < 1e-9:
-        return None
-    if kind == "hinge":
-        solved = hinge_axis_residual(transform0, transform1)
-        if solved is None:
-            return None
-        axis = float_vec(solved[0])
-        residual_payload = {
-            "rotation_angle_rad": float(solved[1]),
-            "pose_residual_m": float(solved[2]),
-        }
-        commanded_delta = PROBE_DELTA_RAD
-    else:
-        solved = slider_axis_residual(transform0, transform1)
-        if solved is None:
-            return None
-        axis = float_vec(solved[0])
-        residual_payload = {"pose_residual_m": float(solved[1])}
-        commanded_delta = PROBE_DELTA_M
-    payload: dict[str, object] = {
-        "axis_source": "posture_probe",
+    result: dict[str, object] = {
+        "axis_source": "unreadable",
         "readable_axis": None,
-        "derived_axis": axis,
-        "probe": {
-            "commanded_delta": commanded_delta,
-            "theta0": theta0,
-            "theta1": theta1,
-            "theta_delta": theta1 - theta0,
-            "child_pose_probe": child_probe_pose.to_payload(),
-            "restore": restore_payload,
+        "derived_axis": None,
+        "probe": None,
+        "probe_residual": None,
+        "probe_status": {
+            "steps_used": 0,
+            "measured_angle_moved_rad": None,
+            "measured_delta_m": None,
+            "settled": False,
+            "reason": "not_attempted",
         },
-        "probe_residual": residual_payload,
     }
-    return payload
-
-
-def float_vec(values: Any) -> list[float]:
-    array = np.asarray(values, dtype=float)
-    return [float(value) for value in array]
-
-
-def webots_version(io: Any) -> str | None:
-    robot = getattr(io, "robot", None)
-    if robot is None:
-        return None
-    value = _guard(getattr(robot, "getVersion", None), "getVersion failed")
-    return value if isinstance(value, str) else None
-
-
-def sim_time_s(io: Any) -> float | None:
-    robot = getattr(io, "robot", None)
-    if robot is None:
-        return None
-    value = _guard(robot.getTime, "getTime failed")
-    return float(value) if isinstance(value, (int, float)) else None
+    if motor is None or sensor is None or kind != "hinge":
+        status = result["probe_status"]
+        assert isinstance(status, dict)
+        status["reason"] = "not_probeable"
+        return result
+    try:
+        theta0 = float(sensor.getValue())
+    except (AttributeError, TypeError, RuntimeError, ValueError) as error:
+        LOGGER.warning("Export: sensor read failed for %s (%s).", name, error)
+        status = result["probe_status"]
+        assert isinstance(status, dict)
+        status["reason"] = "sensor_unreadable"
+        return result
+    delta_cmd = PROBE_DELTA_RAD if kind == "hinge" else PROBE_DELTA_M
+    limits = joint_limits(motor)
+    target = theta0 + delta_cmd
+    if limits is not None and not limits[0] + 1e-6 <= target <= limits[1] - 1e-6:
+        target = theta0 - delta_cmd
+    settled, steps, theta1, reason = _drive_and_settle(
+        io,
+        name,
+        motor,
+        sensor,
+        target,
+        stationary_delta=stationary_delta,
+        stationary_steps=stationary_steps,
+        max_steps=max_steps,
+    )
+    if theta1 is None:
+        theta1 = theta0
+    measured_delta = float(theta1 - theta0)
+    status = result["probe_status"]
+    assert isinstance(status, dict)
+    status.update(
+        {
+            "steps_used": steps,
+            "settled": settled,
+            "reason": reason,
+            "measured_angle_moved_rad" if kind == "hinge" else "measured_delta_m": measured_delta,
+        }
+    )
+    child_probe_pose = child_solid(io, name)
+    restore = _restore_posture(
+        io,
+        name,
+        motor,
+        sensor,
+        theta0,
+        initial_child_pose,
+        stationary_delta=stationary_delta,
+        stationary_steps=stationary_steps,
+        max_steps=max_steps,
+    )
+    result["probe"] = {
+        "commanded_delta": float(target - theta0),
+        "theta0": theta0,
+        "theta1": float(theta1),
+        "theta_delta": measured_delta,
+        "child_pose_probe": child_probe_pose.to_payload(),
+        "restore": restore,
+    }
+    if not settled:
+        return result
+    if abs(measured_delta) < 1e-9:
+        status["reason"] = "no_measured_motion"
+        return result
+    transform1 = parent_from_child_world(parent_pose, child_probe_pose)
+    if transform1 is None:
+        status["reason"] = "incomplete_pose"
+        return result
+    solved = hinge_axis_residual(transform0, transform1)
+    if solved is None:
+        status["reason"] = "axis_unsolved"
+        return result
+    axis = float_vec(solved[0])
+    result.update(
+        {
+            "axis_source": "posture_probe",
+            "derived_axis": axis,
+            "probe_residual": {
+                "rotation_angle_rad": float(solved[1]),
+                "pose_residual_m": float(solved[2]),
+            },
+        }
+    )
+    status["reason"] = "ok"
+    return result
 
 
 def capture_snapshot(
@@ -521,6 +609,7 @@ def capture_snapshot(
     joint_order: tuple[str, ...],
     *,
     probe_axes: bool = True,
+    probe_settings: dict[str, float | int] | None = None,
 ) -> dict[str, object]:
     """Capture the full simulator kinematics snapshot at the current posture.
 
@@ -536,7 +625,9 @@ def capture_snapshot(
     pose_inferred: list[str] = []
     unreadable: list[str] = []
     for name, kind, motor in joint_contexts(io, joint_order):
-        entry = _capture_joint_entry(io, name, kind, motor, probe_axes=probe_axes)
+        entry = _capture_joint_entry(
+            io, name, kind, motor, probe_axes=probe_axes, probe_settings=probe_settings
+        )
         joints.append(entry)
         source = str(entry["axis_source"])
         if source == "posture_probe":
@@ -570,12 +661,19 @@ def capture_snapshot(
 
 
 def _capture_joint_entry(
-    io: Any, name: str, kind: str | None, motor: Any | None, *, probe_axes: bool
+    io: Any,
+    name: str,
+    kind: str | None,
+    motor: Any | None,
+    *,
+    probe_axes: bool,
+    probe_settings: dict[str, float | int] | None = None,
 ) -> dict[str, object]:
     joint_node = read_joint_node(io, name)
     child_pose = child_solid(io, name)
     parent_pose = parent_solid(joint_node, name)
     sensor = io.sensors.get(name)
+    settings = probe_settings or {}
     entry: dict[str, object] = {
         "name": name,
         "kind": kind,
@@ -587,6 +685,7 @@ def _capture_joint_entry(
         "axis_source": "unreadable",
         "readable_axis": None,
         "derived_axis": None,
+        "probe_status": None,
     }
     if joint_node is None:
         return entry
@@ -595,23 +694,66 @@ def _capture_joint_entry(
     if readable_axis is not None:
         entry.update({"readable_axis": readable_axis})
     if probe_axes and kind == "hinge":
-        # Only hinges carry chain variables; the torso slider is baked at its
-        # export posture (ADR-0020) so probing it would be needless motion.
         transform0 = parent_from_child_world(parent_pose, child_pose)
         if transform0 is not None:
-            probed = probe_axis(io, name, kind, motor, sensor, parent_pose, transform0, child_pose)
-            if probed is not None:
-                entry.update(probed)  # axis fields + probe/probe_residual blocks
-                # probe_axis sets readable_axis=None; restore the recorded
-                # jointParameters axis: chain-input derived, cross-check only.
+            probed = probe_axis(
+                io,
+                name,
+                kind,
+                motor,
+                sensor,
+                parent_pose,
+                transform0,
+                child_pose,
+                stationary_delta=float(
+                    settings.get("stationary_delta", DEFAULT_PROBE_STATIONARY_DELTA_RAD)
+                ),
+                stationary_steps=int(
+                    settings.get("stationarity_steps", DEFAULT_PROBE_STATIONARITY_STEPS)
+                ),
+                max_steps=int(
+                    settings.get("max_steps_per_joint", DEFAULT_PROBE_MAX_STEPS_PER_JOINT)
+                ),
+            )
+            entry["probe_status"] = probed.get("probe_status")
+            if probed.get("axis_source") == "posture_probe":
+                entry.update(
+                    {
+                        k: probed[k]
+                        for k in ("axis_source", "derived_axis", "probe", "probe_residual")
+                    }
+                )
                 entry["readable_axis"] = readable_axis
                 entry["axis_cross_check"] = _axis_cross_check(readable_axis, entry["derived_axis"])
                 return entry
+            if probed.get("probe") is not None:
+                entry["probe"] = probed["probe"]
+            if probed.get("probe_residual") is not None:
+                entry["probe_residual"] = probed["probe_residual"]
     if readable_axis is not None:
-        # Chain build requires a derived axis; a jointParameters-only axis keeps
-        # its unverified frame convention and is reported but not used.
         entry["axis_source"] = "jointParameters_unverified"
     return entry
+
+
+def float_vec(values: Any) -> list[float]:
+    array = np.asarray(values, dtype=float)
+    return [float(value) for value in array]
+
+
+def webots_version(io: Any) -> str | None:
+    robot = getattr(io, "robot", None)
+    if robot is None:
+        return None
+    value = _guard(getattr(robot, "getVersion", None), "getVersion failed")
+    return value if isinstance(value, str) else None
+
+
+def sim_time_s(io: Any) -> float | None:
+    robot = getattr(io, "robot", None)
+    if robot is None:
+        return None
+    value = _guard(robot.getTime, "getTime failed")
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def _axis_cross_check(readable_axis, derived_axis) -> dict[str, float] | None:
@@ -625,12 +767,7 @@ def _axis_cross_check(readable_axis, derived_axis) -> dict[str, float] | None:
 
 
 def _raw_axis(parameters: dict[str, Any]) -> list[float] | None:
-    """The jointParameters axis when finite and non-degenerate (None otherwise).
-
-    The Webots axis-field frame convention is not assumed: whenever this axis is
-    used for the chain, the loader cross-checks it against the derived axis and
-    prefers the derived one (see sim_kinematics.axis_consistency).
-    """
+    """The jointParameters axis when finite and non-degenerate (None otherwise)."""
     axis = parameters.get("axis")
     if not isinstance(axis, list) or len(axis) != 3:
         return None

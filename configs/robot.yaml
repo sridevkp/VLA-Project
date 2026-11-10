@@ -116,3 +116,15 @@ export_sim_kinematics: false
 kinematic_model: urdf
 # Path of the simulator kinematics JSON, relative to configs/.
 sim_kinematics_filename: generated/sim_kinematics.json
+# Observe RGB camera images on reset/step (ADR-0020 addendum: bench-steps/diagnostics).
+# Default true preserves existing behavior; set false only when the brain does not read images.
+observe_images: true
+# Export probe (ADR-0020 addendum): stationarity-based settle, measured-angle axis derivation.
+# A joint is settled when |delta sensor| < probe_stationarity_threshold for
+# probe_stationarity_steps consecutive lockstep steps.
+probe_stationary_delta_rad: 0.0001
+probe_stationarity_steps: 3
+probe_max_steps_per_joint: 60
+probe_total_step_cap: 2000
+# ZMQ simulator endpoint port (overridable via VLAROBOT_ZMQ_PORT). Server fails loudly on bind failure.
+zmq_port: 5555

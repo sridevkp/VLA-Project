@@ -553,15 +553,18 @@ def sample_is_safe(
     conservative about *which* link it evaluates: the lowest tracked point
     decides.
     """
-    tracked: dict[str, object] = {}
+    arm_tracked: dict[str, object] = {}
     solids = telemetry.get("joint_endpoint_solids")
     if isinstance(solids, dict):
-        tracked.update({name: payload for name, payload in solids.items() if name in ARM_JOINTS})
+        arm_tracked.update(
+            {name: payload for name, payload in solids.items() if name in ARM_JOINTS}
+        )
+    if not arm_tracked:
+        return False, "no tracked link poses in telemetry"
+    tracked: dict[str, object] = dict(arm_tracked)
     fingers = telemetry.get("finger_endpoint_solids")
     if isinstance(fingers, dict):
         tracked.update(fingers)
-    if not tracked:
-        return False, "no tracked link poses in telemetry"
     half_x = footprint_size_xy_m[0] / 2.0
     half_y = footprint_size_xy_m[1] / 2.0
     centre_x, centre_y = footprint_centre_xy_m
@@ -569,7 +572,10 @@ def sample_is_safe(
     for name, payload in tracked.items():
         world = _world_pose(payload)
         if world is None:
-            return False, f"{name} has no complete world pose"
+            # Finger endPoint Solids can be unreadable in some exports; arm links must be complete.
+            if name in arm_tracked:
+                return False, f"{name} has no complete world pose"
+            continue
         _, position = world
         inside = abs(position[0] - centre_x) <= half_x and abs(position[1] - centre_y) <= half_y
         if inside and position[2] < plane:

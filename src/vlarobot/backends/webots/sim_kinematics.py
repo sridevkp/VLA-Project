@@ -226,9 +226,10 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
     if not isinstance(posture, dict):
         raise ValueError(f"Snapshot {source}: 'posture_reference' must be an object.")
 
+    base_payload = _complete_pose({"base_frame": payload.get("base_frame")}, "base_frame", source)
     joints: list[SimJoint] = []
     torso_reference: float | None = None
-    torso_transform: np.ndarray | None = None
+    torso_transform: np.ndarray | None = None  # Robot/base frame -> torso child Solid
     torso_child_payload: dict[str, object] | None = None
     previous_child_payload: dict[str, object] | None = None
     previous_child_name: str | None = None
@@ -261,11 +262,11 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
         if kind == "slider":
             if torso_reference is not None:
                 raise ValueError(f"Snapshot {source}: multiple slider joints detected.")
-            torso_reference, torso_transform, torso_child_payload = (
-                float(value),
-                transform,
-                child_payload,
+            torso_reference = float(value)
+            torso_transform = _relative_transform(
+                base_payload, child_payload, "base->torso_child", source
             )
+            torso_child_payload = child_payload
             continue
         if torso_reference is None:
             raise ValueError(
@@ -291,7 +292,6 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
     )
     fingers = _finger_payloads(payload, source)
     tool_offset, tool_source = _tool_offset(entries[-1], fingers, source)
-    base_payload = _complete_pose({"base_frame": payload.get("base_frame")}, "base_frame", source)
     expected_child_transforms: list[np.ndarray] = []
     for arm_entry in arm_entries:
         child_payload = _complete_pose(arm_entry, "child", source)

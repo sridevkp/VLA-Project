@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, overload
 
 import numpy as np
 import typer
@@ -595,41 +595,119 @@ def _max_joint_error(observation: Observation, command: dict[str, float]) -> flo
     return max(errors, default=float("inf"))
 
 
+@overload
 def _drive_pose(
     client: ZmqBackendClient,
     target: dict[str, float],
-    torso_target: float,
+    torso_target: float | None = None,
     *,
     max_steps: int,
     settle_tolerance: float,
-) -> _PoseOutcome:
-    """Apply one joint target, settle, and pre-check the pose for table safety."""
-    command = dict(target)
-    command[TORSO_JOINT] = torso_target
-    response = client.apply(JointTarget(command))
-    if not response.accepted:
-        return _PoseOutcome(None, f"safety rejected the target: {response.reason}")
-    observation = client.step(1)
-    for _ in range(max_steps - 1):
-        if _max_joint_error(observation, command) < settle_tolerance:
+    observation: None = None,
+    max_delta_rad: float = 0.05,
+) -> _PoseOutcome: ...
+
+
+@overload
+def _drive_pose(
+    client: ZmqBackendClient,
+    target: dict[str, float],
+    torso_target: float | None = None,
+    *,
+    max_steps: int,
+    settle_tolerance: float,
+    observation: Observation,
+    max_delta_rad: float = 0.05,
+) -> tuple[_PoseOutcome, Observation]: ...
+
+
+def _drive_pose(
+    client: ZmqBackendClient,
+    target: dict[str, float],
+    torso_target: float | None = None,
+    *,
+    max_steps: int,
+    settle_tolerance: float,
+    observation: Observation | None = None,
+    max_delta_rad: float = 0.05,
+) -> _PoseOutcome | tuple[_PoseOutcome, Observation]:
+    """Apply a joint target, settle, and pre-check the pose for table safety.
+
+    Legacy: ``(client, target, torso_target, *, max_steps, settle_tolerance)`` returns a
+    :class:`_PoseOutcome` and applies the full command once (including torso) for
+    Webots-free unit tests. Live sweep: pass ``observation=`` and no ``torso_target`` to
+    interpolate arm targets and return ``(_PoseOutcome, Observation)``.
+    """
+    # Legacy/single-shot path (tests): no current observation supplied.
+    if observation is None:
+        command = dict(target)
+        if torso_target is not None:
+            command[TORSO_JOINT] = float(torso_target)
+        response = client.apply(JointTarget(command))
+        if not response.accepted:
+            return _PoseOutcome(None, f"safety rejected the target: {response.reason}")
+        obs = client.step(1)
+        goal = {name: command[name] for name in ARM_JOINTS if name in command}
+        for _ in range(max_steps - 1):
+            if _max_joint_error(obs, goal) < settle_tolerance:
+                break
+            obs = client.step(1)
+        if _max_joint_error(obs, goal) >= settle_tolerance:
+            return _PoseOutcome(None, f"pose did not settle within {max_steps} steps")
+        telemetry = obs.robot.diagnostics.get("kinematics_telemetry")
+        if not isinstance(telemetry, dict):
+            return _PoseOutcome(None, "observation carries no kinematics_telemetry")
+        safe, reason = sample_is_safe(telemetry)
+        if not safe:
+            return _PoseOutcome(None, f"aborted by the table pre-check: {reason}")
+        joints = {
+            name: float(obs.robot.joint_pos[name])
+            for name in ARM_JOINTS
+            if name in obs.robot.joint_pos
+        }
+        if len(joints) != len(ARM_JOINTS):
+            return _PoseOutcome(None, "observation lacks measured arm joint angles")
+        return _PoseOutcome(JointSample(joints=joints, telemetry=telemetry), None)
+
+    current = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
+    goal = {name: float(target[name]) for name in ARM_JOINTS}
+    max_err = max(abs(goal[n] - current[n]) for n in ARM_JOINTS)
+    segments = max(1, int(np.ceil(max_err / max(1e-6, max_delta_rad))))
+    for seg in range(1, segments + 1):
+        alpha = seg / segments
+        command = {
+            name: current[name] + alpha * (goal[name] - current[name]) for name in ARM_JOINTS
+        }
+        response = client.apply(JointTarget(command))
+        if not response.accepted:
+            return (
+                _PoseOutcome(None, f"safety rejected the target: {response.reason}"),
+                observation,
+            )
+        observation = client.step(1)
+    for _ in range(max_steps):
+        if _max_joint_error(observation, goal) < settle_tolerance:
             break
         observation = client.step(1)
-    if _max_joint_error(observation, command) >= settle_tolerance:
-        return _PoseOutcome(None, f"pose did not settle within {max_steps} steps")
+    if _max_joint_error(observation, goal) >= settle_tolerance:
+        return (
+            _PoseOutcome(None, f"pose did not settle within {max_steps} steps"),
+            observation,
+        )
     telemetry = observation.robot.diagnostics.get("kinematics_telemetry")
     if not isinstance(telemetry, dict):
-        return _PoseOutcome(None, "observation carries no kinematics_telemetry")
+        return _PoseOutcome(None, "observation carries no kinematics_telemetry"), observation
     safe, reason = sample_is_safe(telemetry)
     if not safe:
-        return _PoseOutcome(None, f"aborted by the table pre-check: {reason}")
+        return _PoseOutcome(None, f"aborted by the table pre-check: {reason}"), observation
     joints = {
         name: float(observation.robot.joint_pos[name])
         for name in ARM_JOINTS
         if name in observation.robot.joint_pos
     }
     if len(joints) != len(ARM_JOINTS):
-        return _PoseOutcome(None, "observation lacks measured arm joint angles")
-    return _PoseOutcome(JointSample(joints=joints, telemetry=telemetry), None)
+        return _PoseOutcome(None, "observation lacks measured arm joint angles"), observation
+    return _PoseOutcome(JointSample(joints=joints, telemetry=telemetry), None), observation
 
 
 @app.command("validate-kinematics")
@@ -669,27 +747,36 @@ def validate_kinematics(
             )
             raise typer.Exit(code=1)
         torso_target = float(observation.robot.joint_pos[TORSO_JOINT])
-        # Use configured/telemetry-compatible limits; snapshot is no longer attached on reset.
-        limits = pose_limits(None)
+        # Prefer the exported snapshot's live motor limits; fall back to generic bounds only
+        # when no verified snapshot is available (reported in limits output).
+        snapshot_payload: dict[str, object] | None = None
+        if SIM_KINEMATICS_PATH.exists():
+            try:
+                loaded = json.loads(SIM_KINEMATICS_PATH.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    snapshot_payload = loaded
+            except Exception:
+                snapshot_payload = None
+        limits = pose_limits(snapshot_payload)
         targets = diverse_pose_targets(n=n, seed=seed, limits=limits)
         limit_text = ", ".join(
             f"{name}: ({low:.3f}, {high:.3f})" for name, (low, high) in limits.items()
         )
         typer.echo(f"sweep n={n} seed={seed} torso_rad={torso_target:.6f} limits={{{limit_text}}}")
         for index, target in enumerate(targets):
-            outcome = _drive_pose(
+            outcome, observation = _drive_pose(
                 client,
                 target,
-                torso_target,
                 max_steps=max_steps,
                 settle_tolerance=SETTLE_TOLERANCE_RAD,
+                observation=observation,
             )
             if outcome.sample is None:
                 aborted.append(f"pose={index} {outcome.reason}")
                 typer.echo(f"  pose={index} aborted: {outcome.reason}")
                 continue
             samples.append(outcome.sample)
-            if (index + 1) % 10 == 0:
+            if (index + 1) % 10 == 0 or index == 0:
                 typer.echo(f"  pose={index} collected samples={len(samples)}")
         if not samples:
             typer.echo("error: no usable sweep poses; nothing to score.")

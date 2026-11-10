@@ -22,6 +22,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import IO
 
+from vlarobot.backends.webots.config import SETTINGS, SIM_KINEMATICS_PATH
+from vlarobot.backends.webots.sim_kinematics import (
+    load_snapshot,
+    resolve_snapshot_path,
+)
 from vlarobot.backends.zmq.client import REQUEST_TIMEOUTS_MS, ZmqBackendClient
 from vlarobot.backends.zmq.server import endpoint_for_port
 from vlarobot.execution.scripted_can import ScriptedCanPolicy, ScriptedCanResult
@@ -62,6 +67,7 @@ class RunnerSettings:
     pregrasp_realign: bool | None = None
     closed_loop_waypoints: bool | None = None
     stop_after: str | None = None
+    kinematic_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +94,9 @@ class EpisodeOutcome:
     log_path: Path
     pregrasp_realign: bool | None = None
     closed_loop_waypoints: bool | None = None
+    kinematic_model: str | None = None
+    snapshot_hash: str | None = None
+    snapshot_path: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """JSON-safe version of this outcome row."""
@@ -286,6 +295,90 @@ def format_determinism_report(report: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _validate_sim_snapshot_for_session(
+    settings: RunnerSettings, ping: dict[str, object]
+) -> tuple[str, str]:
+    """Return (resolved_snapshot_path, content_hash) or raise with clear available fields."""
+    requested = str(settings.kinematic_model or SETTINGS.kinematic_model)
+    if requested != "sim":
+        resolved = resolve_snapshot_path(SIM_KINEMATICS_PATH)
+        hash_value = None
+        if resolved.is_file():
+            try:
+                payload = json.loads(resolved.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    hash_value = payload.get("content_hash")
+            except Exception:
+                hash_value = None
+        return str(resolved), str(hash_value) if hash_value is not None else ""
+    try:
+        load_snapshot(SIM_KINEMATICS_PATH)
+    except Exception as exc:
+        raise RuntimeError(
+            "kinematic_model=sim refused: snapshot missing/invalid at "
+            f"{SIM_KINEMATICS_PATH} ({exc})"
+        ) from exc
+    resolved = resolve_snapshot_path(SIM_KINEMATICS_PATH)
+    payload = {}
+    try:
+        payload_obj = json.loads(resolved.read_text(encoding="utf-8"))
+        if isinstance(payload_obj, dict):
+            payload = payload_obj
+    except Exception:
+        payload = {}
+    snap_hash = str(payload.get("content_hash") or "")
+    snap_webots = payload.get("webots_version")
+    snap_session = payload.get("session_id")
+    # ping/session fields available from running server
+    ping_session = ping.get("session_id") if isinstance(ping, dict) else None
+    ping_payload = ping.get("payload") if isinstance(ping, dict) else None
+    if isinstance(ping_payload, dict) and ping_session is None:
+        ping_session = ping_payload.get("session_id")
+    session_webots = None
+    session_world_hash = None
+    if isinstance(ping_payload, dict):
+        session_webots = ping_payload.get("webots_version")
+        session_world_hash = ping_payload.get("world_hash") or ping_payload.get("webots_world_hash")
+    # webots version check if both available and comparable
+    if (
+        isinstance(snap_webots, str)
+        and snap_webots
+        and isinstance(session_webots, str)
+        and session_webots
+    ):
+        if snap_webots != session_webots:
+            raise RuntimeError(
+                "kinematic_model=sim refused: snapshot webots_version differs from running session "
+                f"(snapshot={snap_webots!r}, session={session_webots!r}, "
+                f"snapshot_hash={snap_hash!r}, snapshot_session={snap_session!r}, "
+                f"session_id={ping_session!r})"
+            )
+    # world hash: refuse if different from running session; if unverifiable, fail clearly.
+    # If session does not expose world hash we cannot prove equality/difference; fail clearly.
+    snap_world_hash = payload.get("webots_world_hash") or payload.get("world_hash")
+    if snap_world_hash is not None or session_world_hash is not None:
+        if snap_world_hash != session_world_hash:
+            raise RuntimeError(
+                "kinematic_model=sim refused: snapshot world hash differs from running session "
+                f"(snapshot_world_hash={snap_world_hash!r}, "
+                f"session_world_hash={session_world_hash!r}, "
+                f"snapshot_webots_version={snap_webots!r}, "
+                f"session_webots_version={session_webots!r}, "
+                f"snapshot_hash={snap_hash!r}, snapshot_session={snap_session!r}, "
+                f"session_id={ping_session!r})"
+            )
+    else:
+        # world hash unavailable on both sides -> cannot verify identity to running session
+        raise RuntimeError(
+            "kinematic_model=sim refused: cannot verify snapshot/world identity against "
+            "running session (session world hash unavailable, snapshot world hash unavailable); "
+            f"available fields: snapshot_hash={snap_hash!r}, "
+            f"snapshot_webots_version={snap_webots!r}, snapshot_session={snap_session!r}, "
+            f"session_id={ping_session!r}, session_webots_version={session_webots!r}"
+        )
+    return str(resolved), snap_hash
+
+
 def run_episodes(
     settings: RunnerSettings,
     *,
@@ -351,6 +444,9 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
             client = wait_for_simulator(endpoint, process, settings.startup_timeout_s)
             startup_s = perf_counter() - startup_started
             try:
+                ping = client.ping()
+                requested_model = str(settings.kinematic_model or SETTINGS.kinematic_model)
+                snap_path, snap_hash = _validate_sim_snapshot_for_session(settings, ping)
                 for index in range(n):
                     episode_started = perf_counter()
                     result = policy.execute(client, settings.seed + index)
@@ -363,6 +459,9 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                             log_path,
                             startup_s,
                             perf_counter() - episode_started,
+                            kinematic_model=requested_model,
+                            snapshot_hash=snap_hash or None,
+                            snapshot_path=snap_path or None,
                         )
                     )
             finally:
@@ -394,6 +493,9 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
             client = wait_for_simulator(endpoint, process, settings.startup_timeout_s)
             startup_s = perf_counter() - startup_started
             try:
+                ping = client.ping()
+                requested_model = str(settings.kinematic_model or SETTINGS.kinematic_model)
+                snap_path, snap_hash = _validate_sim_snapshot_for_session(settings, ping)
                 policy = ScriptedCanPolicy(
                     trace_path=trace_path,
                     pregrasp_realign=settings.pregrasp_realign,
@@ -410,6 +512,9 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                     log_path,
                     startup_s,
                     perf_counter() - episode_started,
+                    kinematic_model=requested_model,
+                    snapshot_hash=snap_hash or None,
+                    snapshot_path=snap_path or None,
                 )
             finally:
                 _stop_client(client)
@@ -575,6 +680,10 @@ def _outcome(
     log_path: Path,
     startup_s: float,
     episode_s: float,
+    *,
+    kinematic_model: str | None = None,
+    snapshot_hash: str | None = None,
+    snapshot_path: str | None = None,
 ) -> EpisodeOutcome:
     """Map one ``ScriptedCanResult`` onto a summary-table row."""
     return EpisodeOutcome(
@@ -598,4 +707,7 @@ def _outcome(
         log_path=log_path,
         pregrasp_realign=result.pregrasp_realign,
         closed_loop_waypoints=result.closed_loop_waypoints,
+        kinematic_model=kinematic_model,
+        snapshot_hash=snapshot_hash,
+        snapshot_path=snapshot_path,
     )

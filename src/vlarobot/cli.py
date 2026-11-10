@@ -1,16 +1,25 @@
 """Command-line entry point for project tools."""
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
 import numpy as np
 import typer
 
+from vlarobot.backends.webots.config import ARM_JOINTS, SIM_KINEMATICS_PATH, TORSO_JOINT
+from vlarobot.backends.webots.sim_kinematics import (
+    EXPORT_POSTURE_FIT_TOL_M,
+    build_chain,
+    load_snapshot,
+    verify_export_posture,
+)
 from vlarobot.backends.webots.smoke import create_webots_robot, run_smoke
+from vlarobot.backends.webots.supervisor_kinematics import to_json_bytes
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
-from vlarobot.core.types import ScenarioSpec
+from vlarobot.core.types import JointTarget, Observation, ScenarioSpec
 from vlarobot.execution.episode_runner import (
     RunnerSettings,
     determinism_report,
@@ -20,6 +29,17 @@ from vlarobot.execution.episode_runner import (
 )
 from vlarobot.execution.episode_runner import (
     run_episodes as run_episode_batch,
+)
+from vlarobot.execution.kinematics_validation import (
+    FINGER_MAX_ACCEPT_M,
+    FINGER_MEAN_ACCEPT_M,
+    SETTLE_TOLERANCE_RAD,
+    JointSample,
+    diverse_pose_targets,
+    evaluate_sweep,
+    format_report,
+    pose_limits,
+    sample_is_safe,
 )
 from vlarobot.execution.scripted_can import ResetProbeResult, ScriptedCanPolicy
 from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
@@ -448,6 +468,216 @@ def can_reset_check(
             f"reset_observation_timing='after one Webots step, episode t=0'"
         )
         if not passed:
+            raise typer.Exit(code=1)
+    finally:
+        client.close()
+
+
+@app.command("export-sim-kinematics")
+def export_sim_kinematics(
+    endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
+    output: Annotated[
+        Path | None,
+        typer.Option(help="Where to write the JSON snapshot; defaults to configs/robot.yaml."),
+    ] = None,
+    seed: int = typer.Option(0, help="Seed for the reset that sets the export posture."),
+) -> None:
+    """Export live Supervisor kinematics to JSON and verify the sim chain round trip (ADR-0020)."""
+    client = ZmqBackendClient(endpoint)
+    try:
+        client.ping()
+        observation = client.reset(ScenarioSpec(), seed=seed)
+        snapshot = observation.robot.diagnostics.get("sim_kinematics_snapshot")
+        if not isinstance(snapshot, dict):
+            typer.echo(
+                "error: the reset observation carries no sim_kinematics_snapshot. Set "
+                "export_sim_kinematics: true in configs/robot.yaml, restart the Webots "
+                "sim-server, and run this command again."
+            )
+            raise typer.Exit(code=1)
+        path = (output or SIM_KINEMATICS_PATH).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = to_json_bytes(snapshot)
+        path.write_bytes(data)
+        model = load_snapshot(path)
+        chain = build_chain(model)
+        residuals = verify_export_posture(model, chain)
+        typer.echo(
+            f"export path={path} bytes={len(data)} schema={snapshot.get('schema_version')} "
+            f"joints={len(model.joints)} torso_reference_m={model.torso_reference:.6f} "
+            f"tool_source={model.tool_source}"
+        )
+        readability = model.metadata.get("readability_report")
+        if isinstance(readability, dict):
+            typer.echo(
+                f"readability jointParameters={readability.get('jointParameters')} "
+                f"posture_probe={readability.get('posture_probe')} "
+                f"unreadable={readability.get('unreadable')}"
+            )
+        for joint in model.joints:
+            cross_check = _optional_float(joint.axis_cross_check_deg, 3)
+            residual = _optional_float(joint.pose_residual_m, 9)
+            typer.echo(
+                f"  joint={joint.name} source={joint.axis_source} "
+                f"axis={np.array2string(joint.axis, precision=6)} "
+                f"limits={joint.limits} probe_residual_m={residual} "
+                f"jointParameters_cross_check_deg={cross_check}"
+            )
+        typer.echo(
+            "export-posture FK residual max_m="
+            f"{max(residuals.values(), default=0.0):.3e} "
+            f"(tolerance {EXPORT_POSTURE_FIT_TOL_M:.0e} m)"
+        )
+        typer.echo(
+            "next: set kinematic_model: sim in configs/robot.yaml and run "
+            "uv run python -m vlarobot.cli validate-kinematics"
+        )
+    finally:
+        client.close()
+
+
+@dataclass
+class _PoseOutcome:
+    """One sweep pose attempt: the sample if scored, else the abort reason."""
+
+    sample: JointSample | None
+    reason: str | None
+
+
+def _max_joint_error(observation: Observation, command: dict[str, float]) -> float:
+    """Largest |commanded - measured| over the arm joints of one observation (rad)."""
+    errors = [
+        abs(command[name] - observation.robot.joint_pos[name])
+        for name in ARM_JOINTS
+        if name in observation.robot.joint_pos
+    ]
+    return max(errors, default=float("inf"))
+
+
+def _drive_pose(
+    client: ZmqBackendClient,
+    target: dict[str, float],
+    torso_target: float,
+    *,
+    max_steps: int,
+    settle_tolerance: float,
+) -> _PoseOutcome:
+    """Apply one joint target, settle, and pre-check the pose for table safety."""
+    command = dict(target)
+    command[TORSO_JOINT] = torso_target
+    response = client.apply(JointTarget(command))
+    if not response.accepted:
+        return _PoseOutcome(None, f"safety rejected the target: {response.reason}")
+    observation = client.step(1)
+    for _ in range(max_steps - 1):
+        if _max_joint_error(observation, command) < settle_tolerance:
+            break
+        observation = client.step(1)
+    if _max_joint_error(observation, command) >= settle_tolerance:
+        return _PoseOutcome(None, f"pose did not settle within {max_steps} steps")
+    telemetry = observation.robot.diagnostics.get("kinematics_telemetry")
+    if not isinstance(telemetry, dict):
+        return _PoseOutcome(None, "observation carries no kinematics_telemetry")
+    safe, reason = sample_is_safe(telemetry)
+    if not safe:
+        return _PoseOutcome(None, f"aborted by the table pre-check: {reason}")
+    joints = {
+        name: float(observation.robot.joint_pos[name])
+        for name in ARM_JOINTS
+        if name in observation.robot.joint_pos
+    }
+    if len(joints) != len(ARM_JOINTS):
+        return _PoseOutcome(None, "observation lacks measured arm joint angles")
+    return _PoseOutcome(JointSample(joints=joints, telemetry=telemetry), None)
+
+
+@app.command("validate-kinematics")
+def validate_kinematics(
+    endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
+    n: int = typer.Option(
+        40, min=1, help="Number of diverse safe poses to sweep (ADR-0020: >=40)."
+    ),
+    seed: int = typer.Option(0, help="Seed for pose sampling (deterministic sweep)."),
+    report: Annotated[
+        Path | None,
+        typer.Option(help="Write the full report as JSON here (optional)."),
+    ] = None,
+    max_steps: int = typer.Option(
+        120, min=1, help="Maximum simulation steps to settle one pose before aborting it."
+    ),
+) -> None:
+    """Run the sim-vs-URDF FK sweep against live GT Solids and apply the ADR-0020 criterion."""
+    client = ZmqBackendClient(endpoint)
+    samples: list[JointSample] = []
+    aborted: list[str] = []
+    try:
+        client.ping()
+        observation = client.reset(ScenarioSpec(), seed=seed)
+        snapshot = observation.robot.diagnostics.get("sim_kinematics_snapshot")
+        if not isinstance(snapshot, dict):
+            typer.echo(
+                "error: the reset observation carries no sim_kinematics_snapshot. Set "
+                "export_sim_kinematics: true in configs/robot.yaml, restart the Webots "
+                "sim-server, and run this command again."
+            )
+            raise typer.Exit(code=1)
+        torso_target = float(observation.robot.joint_pos[TORSO_JOINT])
+        limits = pose_limits(snapshot)
+        targets = diverse_pose_targets(n=n, seed=seed, limits=limits)
+        limit_text = ", ".join(
+            f"{name}: ({low:.3f}, {high:.3f})" for name, (low, high) in limits.items()
+        )
+        typer.echo(f"sweep n={n} seed={seed} torso_rad={torso_target:.6f} limits={{{limit_text}}}")
+        for index, target in enumerate(targets):
+            outcome = _drive_pose(
+                client,
+                target,
+                torso_target,
+                max_steps=max_steps,
+                settle_tolerance=SETTLE_TOLERANCE_RAD,
+            )
+            if outcome.sample is None:
+                aborted.append(f"pose={index} {outcome.reason}")
+                typer.echo(f"  pose={index} aborted: {outcome.reason}")
+                continue
+            samples.append(outcome.sample)
+            if (index + 1) % 10 == 0:
+                typer.echo(f"  pose={index} collected samples={len(samples)}")
+        if not samples:
+            typer.echo("error: no usable sweep poses; nothing to score.")
+            raise typer.Exit(code=1)
+        sweep = evaluate_sweep(samples)
+        for line in format_report(sweep):
+            typer.echo(line)
+        typer.echo(
+            f"sweep samples={len(samples)} aborted={len(aborted)} "
+            f"accept_mean_mm={FINGER_MEAN_ACCEPT_M * 1e3:.1f} "
+            f"accept_max_mm={FINGER_MAX_ACCEPT_M * 1e3:.1f}"
+        )
+        if n < 40:
+            typer.echo(
+                "warning: n < 40 poses; this run is not an ADR-0020 acceptance sweep "
+                "(the decision is reported but under-powered)."
+            )
+        if report is not None:
+            path = report.expanduser()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "meta": {
+                    "seed": seed,
+                    "requested_poses": n,
+                    "scored_poses": len(samples),
+                    "aborted": aborted,
+                    "torso_rad": torso_target,
+                    "limits": limits,
+                },
+                "report": asdict(sweep),
+            }
+            path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
+            )
+            typer.echo(f"report written path={path}")
+        if sweep.accepted_model is None:
             raise typer.Exit(code=1)
     finally:
         client.close()

@@ -16,6 +16,7 @@ from vlarobot.backends.webots.config import (
     MAX_TILT_DEG,
     SIM_KINEMATICS_PATH,
     TOOL_OFFSET,
+    TORSO_HEIGHT,
     TORSO_JOINT,
     URDF_PATH,
 )
@@ -85,6 +86,13 @@ class Kinematics:
             # fast (tolerance mirrors the reset settle tolerance).
             validate_torso(self._sim, float(q[self.idx[TORSO_JOINT]]))
         return self.chain.forward_kinematics(q)
+
+    @property
+    def torso_reference(self) -> float:
+        """Torso value this chain expects: the sim export posture or torso_height."""
+        if self._sim is not None:
+            return float(self._sim.torso_reference)
+        return float(TORSO_HEIGHT or 0.0)
 
     def bounds(self, name):
         lo, hi = self.chain.links[self.idx[name]].bounds

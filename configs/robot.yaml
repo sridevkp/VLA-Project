@@ -126,5 +126,19 @@ probe_stationary_delta_rad: 0.0001
 probe_stationarity_steps: 3
 probe_max_steps_per_joint: 60
 probe_total_step_cap: 2000
+
+# ZMQ client per-request timeouts (ms). Justified vs bench-steps ~447 ms/step
+# (step+observation with RGB+kinematics_telemetry enabled on server):
+# step/apply/get_gt ~30s (>> single step); reset 120s (many settle steps/cold start);
+# ping 5s (liveness); shutdown 10s; export poll 300s (per-joint probe chunk, capped).
+# Startup wait for a server to come up is handled separately by run-episodes
+# (startup_timeout_s) with repeated short pings.
+zmq_ping_timeout_ms: 5000
+zmq_reset_timeout_ms: 120000
+zmq_step_timeout_ms: 30000
+zmq_apply_timeout_ms: 30000
+zmq_get_gt_timeout_ms: 30000
+zmq_shutdown_timeout_ms: 10000
+zmq_export_poll_timeout_ms: 300000
 # ZMQ simulator endpoint port (overridable via VLAROBOT_ZMQ_PORT). Server fails loudly on bind failure.
 zmq_port: 5555

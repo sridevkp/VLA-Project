@@ -2,6 +2,7 @@
 
 import json
 import os
+import socket
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -15,11 +16,10 @@ from vlarobot.backends.webots.config import ARM_JOINTS, SIM_KINEMATICS_PATH, TOR
 from vlarobot.backends.webots.sim_kinematics import (
     EXPORT_POSTURE_FIT_TOL_M,
     build_chain,
-    load_snapshot,
+    finalize_verified_snapshot,
     verify_export_posture,
 )
 from vlarobot.backends.webots.smoke import create_webots_robot, run_smoke
-from vlarobot.backends.webots.supervisor_kinematics import to_json_bytes
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
 from vlarobot.core.types import JointTarget, Observation, ScenarioSpec
@@ -524,14 +524,18 @@ def export_sim_kinematics(
             typer.echo(f"error: export did not produce a snapshot: {status}")
             raise typer.Exit(code=1)
         path = (output or SIM_KINEMATICS_PATH).expanduser()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = to_json_bytes(snapshot)
-        path.write_bytes(data)
-        model = load_snapshot(path)
+        model = finalize_verified_snapshot(
+            snapshot,
+            path,
+            session_id=session if isinstance(session, dict) else None,
+        )
         chain = build_chain(model)
         residuals = verify_export_posture(model, chain)
+        # Read back for reporting (includes valid/hash/session written on success).
+        saved = json.loads(path.read_text(encoding="utf-8"))
         typer.echo(
-            f"export path={path} bytes={len(data)} schema={snapshot.get('schema_version')} "
+            f"export path={path} bytes={path.stat().st_size} schema={saved.get('schema_version')} "
+            f"valid={saved.get('valid')} hash={str(saved.get('content_hash', ''))[:12]} "
             f"joints={len(model.joints)} torso_reference_m={model.torso_reference:.6f} "
             f"tool_source={model.tool_source}"
         )
@@ -716,6 +720,11 @@ def validate_kinematics(
                     "limits": limits,
                 },
                 "report": asdict(sweep),
+                # Persist per-pose telemetry so scripts/reevaluate_traces_sim_model.py can
+                # re-score offline without a live Webots session.
+                "samples": [
+                    {"joints": sample.joints, "telemetry": sample.telemetry} for sample in samples
+                ],
             }
             path.write_text(
                 json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
@@ -1155,6 +1164,14 @@ def doctor(
 ) -> None:
     """Preflight: list stale Webots/controller processes and the configured port owner."""
     typer.echo(f"doctor port={port}")
+    port_free = True
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("127.0.0.1", port))
+    except OSError:
+        port_free = False
+    typer.echo(f"port_free={port_free}")
     owners = _port_owner(port)
     if owners:
         typer.echo("port_owner:")
@@ -1167,8 +1184,15 @@ def doctor(
         typer.echo("processes:")
         for line in procs:
             typer.echo(f"  {line}")
+        webots_lines = [ln for ln in procs if "webots" in ln.lower()]
+        if webots_lines:
+            modes = ["batch" if "--batch" in ln else "gui/unknown" for ln in webots_lines]
+            typer.echo(f"webots_mode={','.join(modes)}")
+        else:
+            typer.echo("webots_mode=none")
     else:
         typer.echo("processes: none")
+        typer.echo("webots_mode=none")
     if not kill:
         return
     if not procs:
@@ -1194,6 +1218,32 @@ def doctor(
             typer.echo(f"  signaled pid={pid}")
 
 
+def _recent_run_episode_stats(trace_dir: Path | None = None) -> tuple[int, float]:
+    """(episode_count, mean_step_rows) from the most recent run-episodes traces, if any."""
+    root = trace_dir or (Path(__file__).resolve().parents[2] / "runs")
+    candidates = [root / "episode-runner", root]
+    files: list[Path] = []
+    for base in candidates:
+        if base.is_dir():
+            files.extend(sorted(base.glob("episode-*.jsonl")))
+    if not files:
+        files = sorted(root.glob("**/episode-*.jsonl"))
+    if not files:
+        return 0, 0.0
+    newest = max(files, key=lambda p: p.stat().st_mtime)
+    batch = sorted(newest.parent.glob("episode-*.jsonl")) or [newest]
+    counts: list[int] = []
+    for path in batch:
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                counts.append(sum(1 for line in handle if line.strip()))
+        except OSError:
+            continue
+    if not counts:
+        return 0, 0.0
+    return len(counts), float(sum(counts)) / len(counts)
+
+
 @app.command("bench-steps")
 def bench_steps(
     endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
@@ -1215,6 +1265,17 @@ def bench_steps(
         elapsed = time.perf_counter() - t0
         ms_per = (elapsed / n) * 1000.0 if n else 0.0
         typer.echo(f"bench steps={n} elapsed_s={elapsed:.4f} ms_per_step={ms_per:.3f}")
+        episodes, mean_steps = _recent_run_episode_stats()
+        if episodes > 0 and mean_steps > 0.0:
+            total_s = episodes * mean_steps * (ms_per / 1000.0)
+            typer.echo(
+                f"verdict: {episodes} episodes of ~{mean_steps:.0f} steps "
+                f"would take ~{total_s:.1f}s (~{total_s / 60.0:.1f} min) at measured ms/step"
+            )
+        else:
+            typer.echo(
+                "verdict: no recent run-episodes trace found; cannot estimate episode batch time"
+            )
         typer.echo(
             "note: each measured call is step+observation (state always; RGB controlled by "
             "server config observe_images; kinematics_telemetry attached when "

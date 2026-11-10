@@ -22,7 +22,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import IO
 
-from vlarobot.backends.zmq.client import ZmqBackendClient
+from vlarobot.backends.zmq.client import REQUEST_TIMEOUTS_MS, ZmqBackendClient
 from vlarobot.backends.zmq.server import endpoint_for_port
 from vlarobot.execution.scripted_can import ScriptedCanPolicy, ScriptedCanResult
 
@@ -454,18 +454,29 @@ def _popen(command: list[str], env: Mapping[str, str], log_file: IO[str]) -> sub
 
 
 def wait_for_simulator(
-    endpoint: str, process: subprocess.Popen[str], timeout_s: float, poll_s: float = 0.25
+    endpoint: str,
+    process: subprocess.Popen[str],
+    timeout_s: float,
+    poll_s: float = 0.25,
+    ping_timeout_ms: int | None = None,
 ) -> ZmqBackendClient:
-    """Repeatedly ping the endpoint with a fresh client until the simulator is ready."""
+    """Repeatedly ping the endpoint with a fresh client until the simulator is ready.
+
+    Uses short per-attempt pings so "server not up yet" (startup) is retried until
+    ``timeout_s`` without treating a slow boot as a single long request timeout.
+    """
     deadline = perf_counter() + timeout_s
     last_error: Exception | None = None
+    attempt_timeout = int(
+        ping_timeout_ms if ping_timeout_ms is not None else REQUEST_TIMEOUTS_MS["ping"]
+    )
     while perf_counter() < deadline:
         if process.poll() is not None:
             raise RuntimeError(
                 f"Webots exited with code {process.returncode} before the simulator "
                 f"server at {endpoint!r} became ready."
             )
-        client = ZmqBackendClient(endpoint, timeout_ms=1000)
+        client = ZmqBackendClient(endpoint, timeout_ms=attempt_timeout)
         try:
             client.ping()
         except (TimeoutError, RuntimeError, OSError) as error:
@@ -476,7 +487,7 @@ def wait_for_simulator(
         return client
     raise TimeoutError(
         f"Simulator at {endpoint!r} did not answer ping within {timeout_s:.0f}s "
-        f"(last error: {last_error!r})."
+        f"(startup wait; server not up/unreachable, last error: {last_error!r})."
     )
 
 

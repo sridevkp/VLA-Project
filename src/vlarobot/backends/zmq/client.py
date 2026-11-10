@@ -21,15 +21,19 @@ from vlarobot.core.wire import ProtocolError, decode_message, encode_message, ma
 DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 _LOGGER = logging.getLogger(__name__)
 
-# Per-request-type default timeouts (ms). Export runs axis probes and may take minutes.
+# Per-request-type default timeouts (ms). Config-overridable; no hard-coded callers
+# should rely on these values. Justification (bench-steps, 200 steps, server with
+# RGB + kinematics_telemetry enabled): ~447 ms/step measured => a single lockstep
+# step+observation RPC is well under 5 s in steady state, but reset/export span many
+# steps and cold Webots startup can be slow, so reset/export/startup waits are longer.
 REQUEST_TIMEOUTS_MS: dict[str, int] = {
-    "reset": 30_000,
-    "step": 30_000,
+    "reset": 120_000,  # many settle steps + possible cold-start work; not a fast RPC
+    "step": 30_000,  # 1 step ~0.45 s measured; headroom for load/diagnostics
     "apply": 30_000,
     "get_gt": 30_000,
-    "ping": 5_000,
+    "ping": 5_000,  # lightweight liveness/session probe
     "shutdown": 10_000,
-    "export_kinematics": 300_000,
+    "export_kinematics": 300_000,  # per-poll chunk (one joint probe); bounded by probe caps
 }
 
 
@@ -45,11 +49,13 @@ class ZmqBackendClient:
         self,
         endpoint: str = "tcp://127.0.0.1:5555",
         timeout_ms: int = DEFAULT_REQUEST_TIMEOUT_MS,
+        request_timeouts_ms: dict[str, int] | None = None,
     ) -> None:
         if timeout_ms <= 0:
             raise ValueError("timeout_ms must be positive.")
         self._endpoint = endpoint
         self._default_timeout_ms = int(timeout_ms)
+        self._request_timeouts_ms = {**REQUEST_TIMEOUTS_MS, **(request_timeouts_ms or {})}
         self._context = zmq.Context()
         self._socket: zmq.Socket | None = None
         self._seq = 0
@@ -59,6 +65,7 @@ class ZmqBackendClient:
         self._timings: dict[str, float] = {}
         self._session_id: dict[str, object] | None = None
         self._expected_session_id: dict[str, object] | None = None
+        self._ever_responsive = False
         self._ensure_socket(self._default_timeout_ms)
 
     # ------------------------------------------------------------------
@@ -130,7 +137,7 @@ class ZmqBackendClient:
         if self._closed:
             return
         try:
-            self._request("shutdown", {}, timeout_ms=REQUEST_TIMEOUTS_MS["shutdown"])
+            self._request("shutdown", {}, timeout_ms=self._timeout_for("shutdown", None))
         except Exception:
             pass
         finally:
@@ -162,7 +169,7 @@ class ZmqBackendClient:
     def _timeout_for(self, operation: str, timeout_ms: int | None) -> int:
         if timeout_ms is not None:
             return int(timeout_ms)
-        return REQUEST_TIMEOUTS_MS.get(operation, self._default_timeout_ms)
+        return int(self._request_timeouts_ms.get(operation, self._default_timeout_ms))
 
     def _request(
         self, operation: str, payload: dict[str, Any], timeout_ms: int | None = None
@@ -187,20 +194,25 @@ class ZmqBackendClient:
             mark = perf_counter() if timed else None
             response = decode_message(raw)
             self._track("decode_s", mark)
+            self._ever_responsive = True
         except zmq.Again as exc:
             elapsed = perf_counter() - started
+            state = (
+                "busy/stalled (was responsive)" if self._ever_responsive else "not up/unreachable"
+            )
             _LOGGER.error(
-                "Simulator did not reply to %r within %d ms (elapsed %.3fs, endpoint %s)",
+                "Simulator did not reply to %r within %d ms (elapsed %.3fs, endpoint %s, state=%s)",
                 operation,
                 effective_timeout,
                 elapsed,
                 self._endpoint,
+                state,
             )
             # Lazy-pirate: drop the poisoned REQ socket so later calls can proceed.
             self._reset_socket(self._default_timeout_ms)
             raise TimeoutError(
                 f"Simulator did not reply to {operation!r} within {effective_timeout} ms "
-                f"(elapsed {elapsed:.3f}s)."
+                f"(elapsed {elapsed:.3f}s, {state}, endpoint {self._endpoint})."
             ) from exc
         except zmq.ZMQError as exc:
             self._reset_socket(self._default_timeout_ms)

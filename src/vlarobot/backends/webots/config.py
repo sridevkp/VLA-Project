@@ -135,6 +135,13 @@ class RobotSettings:
     probe_stationarity_steps: int
     probe_max_steps_per_joint: int
     probe_total_step_cap: int
+    zmq_ping_timeout_ms: int
+    zmq_reset_timeout_ms: int
+    zmq_step_timeout_ms: int
+    zmq_apply_timeout_ms: int
+    zmq_get_gt_timeout_ms: int
+    zmq_shutdown_timeout_ms: int
+    zmq_export_poll_timeout_ms: int
     zmq_port: int
 
     @classmethod
@@ -232,6 +239,13 @@ class RobotSettings:
             "probe_stationarity_steps",
             "probe_max_steps_per_joint",
             "probe_total_step_cap",
+            "zmq_ping_timeout_ms",
+            "zmq_reset_timeout_ms",
+            "zmq_step_timeout_ms",
+            "zmq_apply_timeout_ms",
+            "zmq_get_gt_timeout_ms",
+            "zmq_shutdown_timeout_ms",
+            "zmq_export_poll_timeout_ms",
         ):
             if not isinstance(values.get(key), int) or values[key] <= 0:
                 raise ValueError(f"{key} must be a positive integer.")
@@ -366,4 +380,11 @@ PROBE_STATIONARY_DELTA_RAD = SETTINGS.probe_stationary_delta_rad
 PROBE_STATIONARITY_STEPS = SETTINGS.probe_stationarity_steps
 PROBE_MAX_STEPS_PER_JOINT = SETTINGS.probe_max_steps_per_joint
 PROBE_TOTAL_STEP_CAP = SETTINGS.probe_total_step_cap
+ZMQ_PING_TIMEOUT_MS = SETTINGS.zmq_ping_timeout_ms
+ZMQ_RESET_TIMEOUT_MS = SETTINGS.zmq_reset_timeout_ms
+ZMQ_STEP_TIMEOUT_MS = SETTINGS.zmq_step_timeout_ms
+ZMQ_APPLY_TIMEOUT_MS = SETTINGS.zmq_apply_timeout_ms
+ZMQ_GET_GT_TIMEOUT_MS = SETTINGS.zmq_get_gt_timeout_ms
+ZMQ_SHUTDOWN_TIMEOUT_MS = SETTINGS.zmq_shutdown_timeout_ms
+ZMQ_EXPORT_POLL_TIMEOUT_MS = SETTINGS.zmq_export_poll_timeout_ms
 ZMQ_PORT = SETTINGS.zmq_port

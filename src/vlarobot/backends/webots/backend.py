@@ -6,6 +6,7 @@ import logging
 import math
 import os
 from time import perf_counter
+from typing import Any, cast
 
 import numpy as np
 
@@ -288,7 +289,7 @@ class WebotsBackend:
         """
         if action == "start":
             self._export_job = self._new_export_job()
-            return self._export_status(self._export_job)
+            return self._export_status(cast(dict[str, Any], self._export_job))
         if action == "cancel":
             self._export_job = None
             return {"state": "cancelled", "done": True, "snapshot": None, "progress": {}}
@@ -298,9 +299,10 @@ class WebotsBackend:
         if job is None:
             job = self._new_export_job()
             self._export_job = job
-        if not bool(job.get("done")) and action == "poll":
-            self._advance_export_job(job)
-        return self._export_status(job)
+        job_typed = cast(dict[str, Any], job)
+        if not bool(job_typed.get("done")) and action == "poll":
+            self._advance_export_job(job_typed)
+        return self._export_status(job_typed)
 
     def _new_export_job(self) -> dict[str, object]:
         joint_order = (TORSO_JOINT, *ARM_JOINTS)
@@ -318,15 +320,15 @@ class WebotsBackend:
             "probe_settings": self._probe_settings(),
         }
 
-    def _advance_export_job(self, job: dict[str, object]) -> None:
-        contexts = job["contexts"]
-        index = int(job["index"])
+    def _advance_export_job(self, job: dict[str, Any]) -> None:
+        contexts = cast(list[Any], job.get("contexts") or [])
+        index = int(job.get("index", 0) or 0)
         if index >= len(contexts):
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
             self._export_job = job
             return
-        if int(job["steps_used_total"]) >= int(PROBE_TOTAL_STEP_CAP):
+        if int(job.get("steps_used_total", 0) or 0) >= int(PROBE_TOTAL_STEP_CAP):
             job["error"] = "total_probe_step_cap_reached"
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
@@ -338,33 +340,32 @@ class WebotsBackend:
             kind,
             motor,
             probe_axes=True,
-            probe_settings=job["probe_settings"],  # type: ignore[arg-type]
+            probe_settings=cast(dict[str, float | int], job.get("probe_settings") or {}),
         )
-        job["joints"].append(entry)  # type: ignore[attr-defined]
-        status = entry.get("probe_status") or {}
-        steps = int(status.get("steps_used", 0) or 0) if isinstance(status, dict) else 0
-        job["steps_used_total"] = int(job["steps_used_total"]) + steps
-        job["per_joint"].append(  # type: ignore[attr-defined]
+        cast(list[dict[str, object]], job.setdefault("joints", [])).append(entry)
+        status_obj = entry.get("probe_status") or {}
+        status = status_obj if isinstance(status_obj, dict) else {}
+        steps = int(status.get("steps_used", 0) or 0)
+        job["steps_used_total"] = int(job.get("steps_used_total", 0) or 0) + steps
+        cast(list[dict[str, object]], job.setdefault("per_joint", [])).append(
             {
                 "name": name,
                 "kind": kind,
                 "steps_used": steps,
-                "measured_angle_moved_rad": status.get("measured_angle_moved_rad")
-                if isinstance(status, dict)
-                else None,
-                "reason": status.get("reason") if isinstance(status, dict) else None,
-                "settled": status.get("settled") if isinstance(status, dict) else None,
+                "measured_angle_moved_rad": status.get("measured_angle_moved_rad"),
+                "reason": status.get("reason"),
+                "settled": status.get("settled"),
                 "axis_source": entry.get("axis_source"),
             }
         )
         job["index"] = index + 1
-        if int(job["index"]) >= len(contexts):
+        if int(job.get("index", 0) or 0) >= len(contexts):
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
 
-    def _finalize_export_snapshot(self, job: dict[str, object]) -> dict[str, object]:
-        joints = list(job.get("joints") or [])
-        joint_order = job.get("joint_order") or (TORSO_JOINT, *ARM_JOINTS)
+    def _finalize_export_snapshot(self, job: dict[str, Any]) -> dict[str, object]:
+        joints = list(cast(list[Any], job.get("joints") or []))
+        joint_order = tuple(cast(Any, job.get("joint_order") or (TORSO_JOINT, *ARM_JOINTS)))
         readable: list[str] = []
         pose_inferred: list[str] = []
         unreadable: list[str] = []
@@ -400,7 +401,7 @@ class WebotsBackend:
                 "posture_probe": pose_inferred,
                 "unreadable": unreadable,
             },
-            "posture_reference": posture_reference(self.io, tuple(joint_order)),  # type: ignore[arg-type]
+            "posture_reference": posture_reference(self.io, cast(tuple[str, ...], joint_order)),
             "export_progress": {
                 "steps_used_total": job.get("steps_used_total", 0),
                 "total_step_cap": PROBE_TOTAL_STEP_CAP,
@@ -410,9 +411,9 @@ class WebotsBackend:
         }
         return snapshot
 
-    def _export_status(self, job: dict[str, object]) -> dict[str, object]:
-        contexts = job.get("contexts") or []
-        index = int(job.get("index", 0))
+    def _export_status(self, job: dict[str, Any]) -> dict[str, object]:
+        contexts = cast(list[Any], job.get("contexts") or [])
+        index = int(job.get("index", 0) or 0)
         total = len(contexts)
         done = bool(job.get("done"))
         return {
@@ -422,7 +423,7 @@ class WebotsBackend:
             "total_joints": total,
             "steps_used_total": job.get("steps_used_total", 0),
             "total_step_cap": PROBE_TOTAL_STEP_CAP,
-            "per_joint": list(job.get("per_joint") or []),
+            "per_joint": list(cast(list[Any], job.get("per_joint") or [])),
             "error": job.get("error"),
             "snapshot": job.get("snapshot") if done else None,
         }
@@ -683,7 +684,7 @@ class WebotsBackend:
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """World position and rotation of the IKPy ``arm_7_joint`` frame."""
         try:
-            transforms = self.kinematics.chain.forward_kinematics(q, full_kinematics=True)
+            transforms = self.kinematics.chain.forward_kinematics(list(q), full_kinematics=True)
             transform = np.asarray(transforms[self.kinematics.idx["arm_7_joint"]])
         except (AttributeError, IndexError, KeyError):
             return None

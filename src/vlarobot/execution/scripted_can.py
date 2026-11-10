@@ -1950,7 +1950,7 @@ def _table_clearance(links: object) -> float | None:
 def _arm_clearance_points(
     kinematics: Kinematics, q: np.ndarray
 ) -> list[tuple[str, np.ndarray, float]]:
-    transforms = kinematics.chain.forward_kinematics(q, full_kinematics=True)
+    transforms = kinematics.chain.forward_kinematics(list(q), full_kinematics=True)
     names = {link.name: index for index, link in enumerate(kinematics.chain.links)}
     elbow_index = names.get("arm_4_joint", names.get("arm_3_joint", 0))
     wrist_index = names["arm_6_joint"]

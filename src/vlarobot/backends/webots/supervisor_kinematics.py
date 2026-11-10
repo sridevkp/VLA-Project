@@ -41,8 +41,8 @@ PROBE_DELTA_RAD = 0.05
 PROBE_DELTA_M = 0.01
 #: Probe settle parameters: sensor tolerance (rad/m) and the maximum lockstep
 #: budget to reach the probe target or to restore the export posture.
-PROBE_SENSOR_TOL = 0.002
-PROBE_MAX_STEPS = 200
+PROBE_SENSOR_TOL = 0.005
+PROBE_MAX_STEPS = 400
 #: Probe posture-restore tolerance: the child Solid must return within this
 #: distance (m) of its pre-probe pose before probing the next joint.
 PROBE_RESTORE_TOL_M = 1e-4
@@ -440,13 +440,16 @@ def probe_axis(
     kind: str | None,
     motor: Any,
     sensor: Any | None,
+    parent_pose: SolidPose,
     transform0: np.ndarray,
     initial_child_pose: SolidPose,
 ) -> dict[str, object] | None:
     """Derive one joint axis from a small posture probe; restore afterwards.
 
     Returns the entry payload for the JSON (axis + residuals + restore check) or
-    ``None`` when the probe could not produce a usable axis.
+    ``None`` when the probe could not produce a usable axis. Both transforms are
+    expressed in the **same** stored parent frame (posture 0) so the recorded
+    axis is recomputable from the snapshot's own ``parent``/``child``/probe poses.
     """
     probed = _probe_posture(io, name, motor, sensor, kind or "")
     if probed is None:
@@ -455,8 +458,7 @@ def probe_axis(
     child_probe_pose = child_solid(io, name)
     restore_payload = _restore_posture(io, name, motor, sensor, theta0, initial_child_pose)
     actual_delta = abs(theta1 - theta0)
-    joint_node = read_joint_node(io, name)
-    transform1 = parent_from_child_world(parent_solid(joint_node, name), child_probe_pose)
+    transform1 = parent_from_child_world(parent_pose, child_probe_pose)
     if transform1 is None or actual_delta < 1e-9:
         return None
     if kind == "hinge":
@@ -597,7 +599,7 @@ def _capture_joint_entry(
         # export posture (ADR-0020) so probing it would be needless motion.
         transform0 = parent_from_child_world(parent_pose, child_pose)
         if transform0 is not None:
-            probed = probe_axis(io, name, kind, motor, sensor, transform0, child_pose)
+            probed = probe_axis(io, name, kind, motor, sensor, parent_pose, transform0, child_pose)
             if probed is not None:
                 entry.update(probed)  # axis fields + probe/probe_residual blocks
                 # probe_axis sets readable_axis=None; restore the recorded

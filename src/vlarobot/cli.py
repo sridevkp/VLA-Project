@@ -481,9 +481,14 @@ def export_sim_kinematics(
         typer.Option(help="Where to write the JSON snapshot; defaults to configs/robot.yaml."),
     ] = None,
     seed: int = typer.Option(0, help="Seed for the reset that sets the export posture."),
+    timeout_ms: int = typer.Option(
+        300_000,
+        min=1,
+        help="Request timeout (ms); reset runs axis probes when export is enabled.",
+    ),
 ) -> None:
     """Export live Supervisor kinematics to JSON and verify the sim chain round trip (ADR-0020)."""
-    client = ZmqBackendClient(endpoint)
+    client = ZmqBackendClient(endpoint, timeout_ms=timeout_ms)
     try:
         client.ping()
         observation = client.reset(ScenarioSpec(), seed=seed)
@@ -605,9 +610,16 @@ def validate_kinematics(
     max_steps: int = typer.Option(
         120, min=1, help="Maximum simulation steps to settle one pose before aborting it."
     ),
+    timeout_ms: int = typer.Option(
+        300_000,
+        min=1,
+        help=(
+            "Request timeout (ms); the initial reset may run axis probes when export is enabled."
+        ),
+    ),
 ) -> None:
     """Run the sim-vs-URDF FK sweep against live GT Solids and apply the ADR-0020 criterion."""
-    client = ZmqBackendClient(endpoint)
+    client = ZmqBackendClient(endpoint, timeout_ms=timeout_ms)
     samples: list[JointSample] = []
     aborted: list[str] = []
     try:

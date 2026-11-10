@@ -14,18 +14,15 @@ Geometry model and conventions (all SI, orientations row-major 3x3):
   residual quantified in ADR-0019).
 - For each measured hinge with export-posture relative transform
   ``T = T_pc(θ_ref)`` and axis ``â`` (parent frame), the joint family is
-  ``T(θ) = Rot(â, θ) @ K`` with ``K = Rot(â, θ_ref)⁻¹ @ T``. This follows purely
-  from the measured conjugation ``T(θ1) T(θ0)⁻¹ = Rot(â, θ1−θ0)``; no Webots
-  axis-field convention is assumed (any readable ``jointParameters.axis`` is
-  only cross-checked, never used).
-- ikpy composes an element as ``origin @ Rot(axis, θ)``, i.e. translation first
-  then rotation. The measured family is the opposite order, so the per-joint
-  element sequence is the **rotation link first** (axis ``â`` in the joint's
-  parent frame) followed by a fixed ``FixedLink(K)`` element; the variable is
-  the **absolute** joint angle as reported by the sensors, and the recorded
-  motor limits are used directly as IK bounds. Putting ``K`` first would encode
-  a different hinge family (constant child-origin translation instead of a
-  rotating anchor) — the perturbed-angle FK test pins the correct order.
+  ``T(θ) = D(θ-θ_ref) @ T(θ_ref)`` where ``D(d)=Trans(c)@Rot(â,d)@Trans(-c)``
+  is rotation about the fitted axis line ``(â,c)`` in the parent frame (â from
+  the measured relative rotation, c the point on the axis closest to origin,
+  solved from ``(I-R)c=t_perp``). This matches the conjugation
+  ``T(θ1)T(θ0)⁻¹ = D(θ1-θ0)`` including the anchor offset (not assumed through
+  origin). In IKPy form: ``T(θ) = (Trans(c)@Rot(â,θ)) @ K`` with
+  ``K = Rot(â,-θ_ref)@Trans(-c)@T(θ_ref)``, represented as a revolute URDFLink
+  (origin=c, axis=â) followed by fixed ``K``; the variable is the absolute
+  joint angle and recorded motor limits are IK bounds.
 - The torso slider is baked at its export posture (M1 keeps the torso at
   ``torso_height``, asserted at load and per FK call). Its element is the plain
   measured Robot->torsoChild transform, which needs no axis at all.
@@ -94,6 +91,7 @@ class SimJoint:
     name: str
     kind: str  # "hinge"
     axis: np.ndarray  # unit axis, parent frame
+    axis_point: np.ndarray  # point on axis line in parent frame (perp to axis)
     transform_parent_child: np.ndarray  # at the export posture
     angle_reference: float  # absolute sensor value at the export posture
     axis_source: str  # "posture_probe" (derived) or fallback marker
@@ -149,14 +147,31 @@ def finalize_verified_snapshot(
     candidate["content_hash"] = snapshot_content_hash(candidate)
     data = json.dumps(candidate, sort_keys=True, allow_nan=False, indent=2).encode("utf-8")
     tmp_path = path.with_suffix(path.suffix + ".tmp")
+    debug_path = path.with_suffix(path.suffix + ".debug.json")
     try:
         tmp_path.write_bytes(data)
         model = load_snapshot(tmp_path)
         chain = build_chain(model)
         verify_export_posture(model, chain)
         os.replace(tmp_path, path)
+        try:
+            debug_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         return model
-    except Exception:
+    except Exception as exc:
+        # Preserve evidence for diagnosis but never leave a loadable canonical snapshot.
+        try:
+            debug_payload = dict(candidate)
+            debug_payload["valid"] = False
+            debug_payload["verification_error"] = f"{type(exc).__name__}: {exc}"
+            debug_payload.pop("content_hash", None)
+            debug_path.write_text(
+                json.dumps(debug_payload, sort_keys=True, allow_nan=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
         try:
             tmp_path.unlink(missing_ok=True)
         except OSError:
@@ -383,13 +398,25 @@ def _validated_hinge(
         limits_tuple = (float(low), float(high))
     cross_check_deg = None
     derived_axis: np.ndarray | None = None
+    derived_point: np.ndarray | None = None
     residual: float | None = None
     if probe_axis is not None and axis_source == "posture_probe":
-        derived_axis, residual = _recomputed_probe_axis(entry, probe_axis, transform, source)
+        derived_axis, derived_point, residual = _recomputed_probe_axis(
+            entry, probe_axis, transform, source
+        )
         readable = entry.get("readable_axis")
         if isinstance(readable, list) and len(readable) == 3:
             cross_check_deg = _axis_angle_deg(readable, derived_axis)
     if derived_axis is None:
+        # Fallback: readable axis without probe fit -> cannot place axis line; assume origin.
+        raw = entry.get("readable_axis")
+        if isinstance(raw, list) and len(raw) == 3:
+            arr = np.asarray(raw, dtype=float)
+            if np.linalg.norm(arr) > 1e-9:
+                derived_axis = arr / np.linalg.norm(arr)
+                derived_point = np.zeros(3)
+                axis_source = str(entry.get("axis_source", "jointParameters_unverified"))
+    if derived_axis is None or derived_point is None:
         raise ValueError(
             f"Snapshot {source}: joint {name} has no usable axis; re-run the exporter with "
             "posture probing enabled (--probe-axes is the default)."
@@ -398,6 +425,7 @@ def _validated_hinge(
         name=name,
         kind="hinge",
         axis=derived_axis,
+        axis_point=derived_point,
         transform_parent_child=transform,
         angle_reference=angle_reference,
         axis_source=axis_source,
@@ -409,45 +437,60 @@ def _validated_hinge(
 
 def _recomputed_probe_axis(
     entry: dict[str, object], stored_axis: Any, transform0: np.ndarray, source: str
-) -> tuple[np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Recompute the derivation from the recorded second posture and verify.
 
-    The exporter stores ``derived_axis``; the loader re-derives it from the
-    recorded probe pose pair so a broken derivation or a truncated file cannot
-    silently enter the chain, and returns the fit residual statement required by
-    the export (residual beyond the cap is a hard error).
+    Returns (axis, axis_point_c, residual). The exporter stores ``derived_axis``
+    (and ``derived_axis_point_m`` for axis-line hinges); the loader re-derives it
+    from the recorded probe pose pair so a broken derivation or a truncated file
+    cannot silently enter the chain. Residual beyond the cap is a hard error.
     """
     probe = entry.get("probe")
     if not isinstance(probe, dict) or not isinstance(probe.get("child_pose_probe"), dict):
         raise ValueError(f"Snapshot {source}: probe axis joint lacks its probe child pose.")
     probe_child = _pose_from_payload(probe["child_pose_probe"])
-    # Prefer the parent pose sampled at probe time (instantaneous frame) when present;
-    # fall back to the export-posture parent pose for older snapshots.
     probe_parent_payload = probe.get("parent_pose_probe")
     if isinstance(probe_parent_payload, dict):
         probe_parent = _pose_from_payload(probe_parent_payload)
     else:
         probe_parent = _pose_from_payload(_complete_pose(entry, "parent", source))
     transform1 = parent_from_child_world(probe_parent, probe_child)
+    # Prefer the exact poses used at probe-derivation time when present, so
+    # chain-consistency adjustments to entry parent/child do not invalidate recomputation.
+    if isinstance(probe.get("parent_pose0"), dict) and isinstance(probe.get("child_pose0"), dict):
+        t0 = parent_from_child_world(
+            _pose_from_payload(probe["parent_pose0"]), _pose_from_payload(probe["child_pose0"])
+        )
+        if t0 is not None:
+            transform0 = t0
     if transform1 is None:
         raise ValueError(f"Snapshot {source}: probe child pose is incomplete.")
     solved = hinge_axis_residual(transform0, transform1)
     if solved is None:
         raise ValueError(f"Snapshot {source}: probe postures do not form a rigid hinge move.")
-    axis, angle, residual = solved
+    axis, angle, c, pitch, residual = solved
     stored = np.asarray(stored_axis, dtype=float)
     if stored.shape != (3,):
         raise ValueError(f"Snapshot {source}: stored derived_axis is malformed.")
     stored = stored / np.linalg.norm(stored)
     if float(abs(np.dot(stored, axis))) < 1.0 - 1e-9:
         raise ValueError(f"Snapshot {source}: recomputed axis disagrees with the stored axis.")
+    stored_point = entry.get("derived_axis_point_m")
+    if stored_point is not None:
+        sp = np.asarray(stored_point, dtype=float)
+        if sp.shape == (3,):
+            diff = (sp - c) - np.dot(sp - c, axis) * axis
+            if float(np.linalg.norm(diff)) > 1e-4:
+                raise ValueError(
+                    f"Snapshot {source}: recomputed axis point disagrees with stored point."
+                )
     if residual > DERIVED_AXIS_RESIDUAL_TOL_M:
         raise ValueError(
             f"Snapshot {source}: hinge axis fit residual {residual * 1e3:.4f} mm exceeds the "
             f"{DERIVED_AXIS_RESIDUAL_TOL_M * 1e3:.1f} mm cap; the two postures are not a "
             "clean rigid hinge move."
         )
-    return axis, residual
+    return axis, c, residual
 
 
 def _axis_angle_deg(a: Any, b: np.ndarray) -> float:
@@ -579,21 +622,23 @@ class FixedLink(OriginLink):
 
 
 def joint_origin(joint: SimJoint) -> np.ndarray:
-    """The fixed post-rotation element ``K`` of one absolute-angle hinge.
+    """The fixed post-rotation element ``K`` of one absolute-angle hinge line.
 
-    The measured family is ``T(θ) = Rot(â, θ) @ K`` with
-    ``K = Rot(â, θ_ref)⁻¹ @ T_pc(θ_ref)``. ikpy composes elements in order, so
-    the per-joint element sequence is the **rotation link first** (axis = ``â``
-    expressed in the chain's current frame, which is the joint's parent frame)
-    followed by the fixed ``K`` element — rotation-before-origin, exactly the
-    measured semantics. Placing ``K`` before the rotation would encode a
-    *different* hinge family (constant child-origin translation, axis
-    conjugated into the post-rotation frame); the loader round-trip test pins
-    the correct order.
+    Hinge motion is rotation about axis line ``(â, c)`` in the parent frame:
+    ``D(d) = Trans(c) @ Rot(â,d) @ Trans(-c)`` and
+    ``T(θ) = D(θ-θ_ref) @ T(θ_ref) = (Trans(c) @ Rot(â,θ)) @ K`` with
+    ``K = Rot(â,-θ_ref) @ Trans(-c) @ T(θ_ref)``. IKPy composes the revolute link
+    as ``origin @ Rot(axis, θ)`` followed by fixed ``K``, so we set
+    ``origin_translation = c`` on the URDFLink and this fixed element to ``K``.
     """
-    delta = np.eye(4)
-    delta[:3, :3] = rotation_matrix(joint.axis, joint.angle_reference)
-    return np.linalg.inv(delta) @ joint.transform_parent_child
+    c = np.asarray(joint.axis_point, dtype=float)
+    Tc = np.eye(4)
+    Tc[:3, 3] = c
+    Tm = np.eye(4)
+    Tm[:3, 3] = -c
+    Rref = np.eye(4)
+    Rref[:3, :3] = rotation_matrix(joint.axis, -float(joint.angle_reference))
+    return Rref @ Tm @ joint.transform_parent_child
 
 
 def after_element_name(joint: SimJoint) -> str:
@@ -620,7 +665,7 @@ def build_chain(model: SimKinematics) -> Chain:
         links.append(
             URDFLink(
                 name=joint.name,
-                origin_translation=np.zeros(3),
+                origin_translation=np.asarray(joint.axis_point, dtype=float),
                 origin_orientation=np.zeros(3),
                 rotation=np.asarray(joint.axis, dtype=float) / float(np.linalg.norm(joint.axis)),
                 bounds=(joint.limits if joint.limits is not None else (-math.pi, +math.pi)),

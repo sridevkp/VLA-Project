@@ -39,10 +39,12 @@ from vlarobot.backends.webots.supervisor_kinematics import (
     child_solid,
     joint_contexts,
     parent_solid,
+    pin_base_pose,
     posture_reference,
     read_joint_node,
     sim_time_s,
     solid_pose,
+    unpin_base_pose,
     webots_version,
 )
 from vlarobot.backends.webots.visualization import Visualization
@@ -288,15 +290,18 @@ class WebotsBackend:
         This keeps reset fast and lets clients use per-poll timeouts.
         """
         if action == "start":
+            pin_base_pose(self.io)
             self._export_job = self._new_export_job()
             return self._export_status(cast(dict[str, Any], self._export_job))
         if action == "cancel":
             self._export_job = None
+            unpin_base_pose(self.io)
             return {"state": "cancelled", "done": True, "snapshot": None, "progress": {}}
         if action not in {"poll", "status"}:
             raise ValueError(f"Unknown export_kinematics action: {action!r}")
         job = self._export_job
         if job is None:
+            pin_base_pose(self.io)
             job = self._new_export_job()
             self._export_job = job
         job_typed = cast(dict[str, Any], job)
@@ -327,11 +332,13 @@ class WebotsBackend:
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
             self._export_job = job
+            unpin_base_pose(self.io)
             return
         if int(job.get("steps_used_total", 0) or 0) >= int(PROBE_TOTAL_STEP_CAP):
             job["error"] = "total_probe_step_cap_reached"
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
+            unpin_base_pose(self.io)
             return
         name, kind, motor = contexts[index]
         entry = _capture_joint_entry(
@@ -362,9 +369,20 @@ class WebotsBackend:
         if int(job.get("index", 0) or 0) >= len(contexts):
             job["snapshot"] = self._finalize_export_snapshot(job)
             job["done"] = True
+            unpin_base_pose(self.io)
 
     def _finalize_export_snapshot(self, job: dict[str, Any]) -> dict[str, object]:
         joints = list(cast(list[Any], job.get("joints") or []))
+        # Enforce parent-chain consistency for arm joints: arm_i parent == arm_{i-1} child.
+        previous_child: dict[str, object] | None = None
+        for idx, entry in enumerate(joints):
+            if not isinstance(entry, dict):
+                continue
+            child = entry.get("child")
+            if idx >= 2 and previous_child is not None and isinstance(entry.get("parent"), dict):
+                entry["parent"] = previous_child
+            if isinstance(child, dict):
+                previous_child = child
         joint_order = tuple(cast(Any, job.get("joint_order") or (TORSO_JOINT, *ARM_JOINTS)))
         readable: list[str] = []
         pose_inferred: list[str] = []
@@ -577,7 +595,10 @@ class WebotsBackend:
         # Attach live GT Solid telemetry for the validation sweep when the
         # kinematics export/telemetry path is enabled (reads poses only, no probes).
         if SETTINGS.export_sim_kinematics:
-            diagnostics["kinematics_telemetry"] = self._kinematics_telemetry()
+            try:
+                diagnostics["kinematics_telemetry"] = self._kinematics_telemetry()
+            except Exception:
+                diagnostics["kinematics_telemetry"] = {"error": "unavailable"}
         if diagnostics_started is not None:
             diagnostics["backend_diagnostics_compute_s"] = perf_counter() - diagnostics_started
         opening = self.gripper.opening()

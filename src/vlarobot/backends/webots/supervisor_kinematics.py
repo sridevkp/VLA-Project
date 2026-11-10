@@ -104,15 +104,23 @@ def node_label(node: Any, fallback: str) -> str:
     if node is None:
         return fallback
     pieces: list[str] = []
-    name = _guard(node.getDef, f"{fallback}: getDef failed")
+    get_def = getattr(node, "getDef", None)
+    name = _guard(get_def, f"{fallback}: getDef failed") if callable(get_def) else None
     if isinstance(name, str) and name:
         pieces.append(name)
-    field_node = _guard(lambda: node.getField("name"), f"{fallback}: name field failed")
+    get_field = getattr(node, "getField", None)
+    field_node = (
+        _guard(lambda: get_field("name"), f"{fallback}: name field failed")
+        if callable(get_field)
+        else None
+    )
     if field_node is not None:
-        value = _guard(field_node.getSFString, f"{fallback}: name getSFString failed")
+        get_sf = getattr(field_node, "getSFString", None)
+        value = _guard(get_sf, f"{fallback}: name getSFString failed") if callable(get_sf) else None
         if isinstance(value, str) and value and value not in pieces:
             pieces.append(value)
-    type_name = _guard(node.getTypeName, f"{fallback}: getTypeName failed")
+    get_type = getattr(node, "getTypeName", None)
+    type_name = _guard(get_type, f"{fallback}: getTypeName failed") if callable(get_type) else None
     if isinstance(type_name, str) and type_name:
         pieces.append(type_name)
     return "/".join(pieces) if pieces else fallback
@@ -123,12 +131,25 @@ def solid_pose(node: Any, fallback_label: str) -> SolidPose:
     if node is None:
         return SolidPose(label=fallback_label)
     pose = SolidPose()
-    pose.node_type = _guard(node.getTypeName, f"{fallback_label}: getTypeName failed")
+    get_type = getattr(node, "getTypeName", None)
+    pose.node_type = (
+        _guard(get_type, f"{fallback_label}: getTypeName failed") if callable(get_type) else None
+    )
     pose.label = node_label(node, fallback_label)
-    values = _finite_values(_guard(node.getPosition, f"{pose.label}: getPosition failed"), 3)
+    get_pos = getattr(node, "getPosition", None)
+    values = (
+        _finite_values(_guard(get_pos, f"{pose.label}: getPosition failed"), 3)
+        if callable(get_pos)
+        else None
+    )
     if values is not None:
         pose.position = values
-    values = _finite_values(_guard(node.getOrientation, f"{pose.label}: getOrientation failed"), 9)
+    get_ori = getattr(node, "getOrientation", None)
+    values = (
+        _finite_values(_guard(get_ori, f"{pose.label}: getOrientation failed"), 9)
+        if callable(get_ori)
+        else None
+    )
     if values is not None:
         pose.rotation = values
     if not pose.complete:
@@ -302,28 +323,64 @@ def rotation_axis(R: np.ndarray) -> tuple[np.ndarray, float] | None:
 _PROXY_POINTS = np.eye(4)
 
 
+def _orthonormal_basis(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Orthonormal basis in the plane perpendicular to unit axis a."""
+    a = np.asarray(a, dtype=float)
+    a = a / np.linalg.norm(a)
+    if abs(a[0]) < 0.9:
+        b = np.cross(a, np.array([1.0, 0.0, 0.0]))
+    else:
+        b = np.cross(a, np.array([0.0, 1.0, 0.0]))
+    b = b / np.linalg.norm(b)
+    c = np.cross(a, b)
+    c = c / np.linalg.norm(c)
+    return b, c
+
+
 def hinge_axis_residual(
     transform_parent_child0: np.ndarray, transform_parent_child1: np.ndarray
-) -> tuple[np.ndarray, float, float] | None:
-    """Hinge axis (parent frame, unit), rotation angle (rad), fit residual (m).
+) -> tuple[np.ndarray, float, np.ndarray, float, float] | None:
+    """Hinge axis line fit (parent frame): axis (unit), angle (rad), point c on axis
+    (perp to axis, closest to origin), pitch (m along axis), fit residual (m).
 
-    For a hinge, ``D = T1 @ T0^-1`` is a pure rotation about the joint axis in
-    the parent frame (the fixed on-axis translations of both postures cancel in
-    the conjugation). The residual is the largest proxy-point deviation between
-    the measured ``T1`` and the model ``Rot(axis, angle) @ T0`` — an actual fit
-    quality statement, not just the commanded delta.
+    For a hinge, ``D = T1 @ T0^-1`` is rotation about a fixed axis line
+    ``(a, c)``: ``D = Trans(c) @ Rot(a, delta) @ Trans(-c)`` (zero pitch).
+    The residual is the largest proxy-point deviation between measured ``T1``
+    and the line-rotation model; pitch ``|t·a|`` captures any screw component.
     """
     delta = transform_parent_child1 @ np.linalg.inv(transform_parent_child0)
-    solved = rotation_axis(delta[:3, :3])
+    R = delta[:3, :3]
+    t = delta[:3, 3].astype(float)
+    solved = rotation_axis(R)
     if solved is None:
         return None
     axis, angle = solved
-    rotation = np.eye(4)
-    rotation[:3, :3] = rotation_matrix(axis, angle)
-    modelled = (rotation @ transform_parent_child0) @ _PROXY_POINTS.T
+    axis = axis / np.linalg.norm(axis)
+    # Solve (I-R)*c = t_perp for c perpendicular to axis.
+    cos_d = math.cos(angle)
+    sin_d = math.sin(angle)
+    if abs(sin_d) > 1e-12 and abs(1.0 - cos_d) > 1e-18:
+        c = ((np.eye(3) - R.T) @ t) / (2.0 * (1.0 - cos_d))
+    else:
+        # Near identity or 180deg degeneracy: use pseudoinverse approximation.
+        A = np.eye(3) - R
+        c, _, _, _ = np.linalg.lstsq(A, t, rcond=None)
+    # Project c to plane perpendicular to axis (line closest to origin).
+    c = c - float(np.dot(c, axis)) * axis
+    pitch = float(abs(np.dot(t, axis)))
+    t_model = (np.eye(3) - R) @ c
+    # Verify t_model matches t_perp
+    rotation_m = np.eye(4)
+    rotation_m[:3, :3] = R
+    D_model = np.eye(4)
+    D_model[:3, :3] = R
+    D_model[:3, 3] = t_model
+    modelled = (D_model @ transform_parent_child0) @ _PROXY_POINTS.T
     measured = transform_parent_child1 @ _PROXY_POINTS.T
     residual = float(np.max(np.linalg.norm(measured - modelled, axis=0)))
-    return axis, angle, residual
+    # Include pitch in the quality metric (screw component should be ~0 for hinge).
+    residual_total = float(max(residual, pitch))
+    return axis, angle, c, pitch, residual_total
 
 
 def slider_axis_residual(
@@ -361,6 +418,54 @@ def joint_limits(motor: Any) -> tuple[float, float] | None:
     return float(low), float(high)
 
 
+def _pinned_base(io: Any) -> tuple[list[float], list[float]] | None:
+    """Saved (translation, rotation) to pin the robot base during export probing."""
+    pose = getattr(io, "_export_pinned_base_pose", None)
+    if isinstance(pose, tuple) and len(pose) == 2:
+        return pose  # type: ignore[return-value]
+    return None
+
+
+def pin_base_pose(io: Any) -> tuple[list[float], list[float]] | None:
+    """Record and return the current robot base pose for export-time pinning."""
+    me = getattr(io, "me", None)
+    if me is None:
+        return None
+    try:
+        t = me.getField("translation").getSFVec3f()
+        r = me.getField("rotation").getSFRotation()
+        if t is None or r is None:
+            return None
+        pose = (list(t), list(r))
+        io._export_pinned_base_pose = pose
+        return pose
+    except Exception:
+        return None
+
+
+def unpin_base_pose(io: Any) -> None:
+    if hasattr(io, "_export_pinned_base_pose"):
+        try:
+            delattr(io, "_export_pinned_base_pose")
+        except Exception:
+            io._export_pinned_base_pose = None
+
+
+def _apply_base_constraints(io: Any) -> None:
+    hold_base = getattr(io, "apply_hold_base", None)
+    if callable(hold_base):
+        hold_base()
+    pinned = _pinned_base(io)
+    me = getattr(io, "me", None)
+    if pinned is None or me is None:
+        return
+    try:
+        me.getField("translation").setSFVec3f(pinned[0])
+        me.getField("rotation").setSFRotation(pinned[1])
+    except Exception:
+        return
+
+
 def _settle_stationary(
     io: Any,
     sensor: Any,
@@ -375,12 +480,14 @@ def _settle_stationary(
     consecutive lockstep steps. Returns
     ``(settled, steps_used, final_value, reason)``.
     """
+    _apply_base_constraints(io)
     last = _guard(sensor.getValue, "sensor getValue failed")
     if not isinstance(last, (int, float)):
         return False, 0, None, "sensor_unreadable"
     consecutive = 0
     steps = 0
     for _ in range(max_steps):
+        _apply_base_constraints(io)
         if not io.step_raw(1):
             return False, steps, float(last), "step_failed"
         steps += 1
@@ -392,6 +499,16 @@ def _settle_stationary(
         if moved < stationary_delta:
             consecutive += 1
             if consecutive >= stationary_steps:
+                # Extra steps to let coupled dynamics/base settle before pose sampling.
+                for _ in range(2):
+                    _apply_base_constraints(io)
+                    if not io.step_raw(1):
+                        break
+                    steps += 1
+                    value = _guard(sensor.getValue, "sensor getValue failed")
+                    if isinstance(value, (int, float)):
+                        last = float(value)
+                _apply_base_constraints(io)
                 return True, steps, float(last), "stationary"
         else:
             consecutive = 0
@@ -582,6 +699,8 @@ def probe_axis(
         "theta0": theta0,
         "theta1": float(theta1),
         "theta_delta": measured_delta,
+        "child_pose0": child_pose0.to_payload(),
+        "parent_pose0": parent_pose0.to_payload(),
         "child_pose_probe": child_probe_pose.to_payload(),
         "parent_pose_probe": parent_probe_pose.to_payload(),
         "restore": restore,
@@ -599,14 +718,18 @@ def probe_axis(
     if solved is None:
         status["reason"] = "axis_unsolved"
         return result
-    axis = float_vec(solved[0])
+    axis, angle, c, pitch, residual = solved
+    axis_list = float_vec(axis)
+    point_list = float_vec(c)
     result.update(
         {
             "axis_source": "posture_probe",
-            "derived_axis": axis,
+            "derived_axis": axis_list,
+            "derived_axis_point_m": point_list,
             "probe_residual": {
-                "rotation_angle_rad": float(solved[1]),
-                "pose_residual_m": float(solved[2]),
+                "rotation_angle_rad": float(angle),
+                "pose_residual_m": float(residual),
+                "pitch_m": float(pitch),
             },
         }
     )
@@ -634,11 +757,23 @@ def capture_snapshot(
     readable: list[str] = []
     pose_inferred: list[str] = []
     unreadable: list[str] = []
-    for name, kind, motor in joint_contexts(io, joint_order):
+    previous_child_payload: dict[str, object] | None = None
+    for idx, (name, kind, motor) in enumerate(joint_contexts(io, joint_order)):
         entry = _capture_joint_entry(
             io, name, kind, motor, probe_axes=probe_axes, probe_settings=probe_settings
         )
+        # For arm joints after the first, the parent Solid is the previous joint's
+        # child Solid (same rigid body). Use the previously recorded child pose to
+        # keep the chain consistent despite small base drift between sequential captures.
+        if (
+            idx >= 2
+            and previous_child_payload is not None
+            and isinstance(entry.get("parent"), dict)
+        ):
+            entry["parent"] = previous_child_payload
         joints.append(entry)
+        child = entry.get("child")
+        previous_child_payload = child if isinstance(child, dict) else previous_child_payload
         source = str(entry["axis_source"])
         if source == "posture_probe":
             pose_inferred.append(name)
@@ -680,6 +815,12 @@ def _capture_joint_entry(
     probe_settings: dict[str, float | int] | None = None,
 ) -> dict[str, object]:
     joint_node = read_joint_node(io, name)
+    _apply_base_constraints(io)
+    # Let dynamics quiesce in the current posture before measuring T0/probing.
+    for _ in range(3):
+        _apply_base_constraints(io)
+        io.step_raw(1)
+    _apply_base_constraints(io)
     child_pose = child_solid(io, name)
     parent_pose = parent_solid(joint_node, name)
     sensor = io.sensors.get(name)
@@ -730,7 +871,14 @@ def _capture_joint_entry(
                 entry.update(
                     {
                         k: probed[k]
-                        for k in ("axis_source", "derived_axis", "probe", "probe_residual")
+                        for k in (
+                            "axis_source",
+                            "derived_axis",
+                            "derived_axis_point_m",
+                            "probe",
+                            "probe_residual",
+                        )
+                        if k in probed
                     }
                 )
                 entry["readable_axis"] = readable_axis

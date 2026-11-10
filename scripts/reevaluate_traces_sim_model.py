@@ -29,30 +29,36 @@ from vlarobot.execution.kinematics_validation import (  # noqa: E402
 )
 
 
-def _samples_from_payload(payload: object) -> list[JointSample]:
+def _samples_from_payload(payload: object) -> list[tuple[JointSample, str]]:
     """Extract validation samples from a validate-kinematics JSON report, if present."""
     if not isinstance(payload, dict):
         return []
-    # Future-proof: accept an explicit sample list carrying the telemetry record.
     raw_samples = payload.get("samples")
-    samples: list[JointSample] = []
+    samples: list[tuple[JointSample, str]] = []
     if isinstance(raw_samples, list):
         for row in raw_samples:
             if not isinstance(row, dict):
                 continue
             joints = row.get("joints") or row.get("joint_positions_rad")
             telemetry = row.get("telemetry") or row.get("kinematics_telemetry")
+            group = row.get("group")
+            if not isinstance(group, str):
+                group = "spread"
             if isinstance(joints, dict) and isinstance(telemetry, dict):
                 samples.append(
-                    JointSample(
-                        joints={str(k): float(v) for k, v in joints.items()}, telemetry=telemetry
+                    (
+                        JointSample(
+                            joints={str(k): float(v) for k, v in joints.items()},
+                            telemetry=telemetry,
+                        ),
+                        group,
                     )
                 )
     return samples
 
 
-def _load_samples(paths: list[Path]) -> list[JointSample]:
-    samples: list[JointSample] = []
+def _load_samples(paths: list[Path]) -> list[tuple[JointSample, str]]:
+    samples: list[tuple[JointSample, str]] = []
     for path in paths:
         try:
             text = path.read_text(encoding="utf-8")
@@ -64,7 +70,6 @@ def _load_samples(paths: list[Path]) -> list[JointSample]:
             continue
         except json.JSONDecodeError:
             pass
-        # JSONL: scan for embedded telemetry-bearing rows.
         for line in text.splitlines():
             if not line.strip():
                 continue
@@ -75,10 +80,15 @@ def _load_samples(paths: list[Path]) -> list[JointSample]:
             samples.extend(_samples_from_payload(row))
             joints = row.get("joint_positions_rad")
             telemetry = row.get("kinematics_telemetry")
+            group = row.get("group") if isinstance(row.get("group"), str) else "spread"
             if isinstance(joints, dict) and isinstance(telemetry, dict):
                 samples.append(
-                    JointSample(
-                        joints={str(k): float(v) for k, v in joints.items()}, telemetry=telemetry
+                    (
+                        JointSample(
+                            joints={str(k): float(v) for k, v in joints.items()},
+                            telemetry=telemetry,
+                        ),
+                        group,
                     )
                 )
     return samples
@@ -126,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    report = evaluate_sweep(samples)
+    report = evaluate_sweep(samples, tool_verified=False)
     print(f"reevaluation snapshot={snapshot} samples={len(samples)} inputs={len(args.inputs)}")
     for line in format_report(report):
         print(line)

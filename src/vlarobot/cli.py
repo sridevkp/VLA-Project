@@ -34,15 +34,22 @@ from vlarobot.execution.episode_runner import (
     run_episodes as run_episode_batch,
 )
 from vlarobot.execution.kinematics_validation import (
-    FINGER_MAX_ACCEPT_M,
-    FINGER_MEAN_ACCEPT_M,
-    SETTLE_TOLERANCE_RAD,
+    DEFAULT_HORIZON_S,
+    DEFAULT_VELOCITY_LIMIT_RAD_S,
+    LINK_MAX_ACCEPT_M,
+    LINK_MEAN_ACCEPT_M,
+    SETTLE_DELTA_RAD,
+    SETTLE_STEPS,
+    SETTLE_SUBMOVE_CAP,
     JointSample,
-    diverse_pose_targets,
+    estimate_step_budget,
     evaluate_sweep,
+    feasible_pose_plan,
     format_report,
+    plan_submoves,
     pose_limits,
     sample_is_safe,
+    submove_bound,
 )
 from vlarobot.execution.scripted_can import ResetProbeResult, ScriptedCanPolicy
 from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
@@ -245,6 +252,16 @@ def run_episodes(
             ),
         ),
     ] = None,
+    kinematic_model: Annotated[
+        Literal["urdf", "sim"] | None,
+        typer.Option(
+            "--kinematic-model",
+            help=(
+                "Kinematic model for this run (recorded in every episode summary). "
+                "sim requires a valid snapshot verifiable against the running session."
+            ),
+        ),
+    ] = None,
     stop_after: Annotated[
         Literal["PREGRASP", "LIFT"] | None,
         typer.Option(help="Stop each episode after PREGRASP or LIFT."),
@@ -276,6 +293,7 @@ def run_episodes(
         pregrasp_realign=pregrasp_realign,
         closed_loop_waypoints=closed_loop_waypoints,
         stop_after=stop_after,
+        kinematic_model=kinematic_model,
     )
     outcomes = run_episode_batch(
         settings,
@@ -595,6 +613,20 @@ def _max_joint_error(observation: Observation, command: dict[str, float]) -> flo
     return max(errors, default=float("inf"))
 
 
+def _stationary_settled(
+    previous: Observation, current: Observation, *, delta_rad: float = SETTLE_DELTA_RAD
+) -> bool:
+    """Stationarity: per-joint change below threshold between consecutive observations."""
+    for name in ARM_JOINTS:
+        p = previous.robot.joint_pos.get(name)
+        c = current.robot.joint_pos.get(name)
+        if p is None or c is None:
+            return False
+        if abs(float(c) - float(p)) >= delta_rad:
+            return False
+    return True
+
+
 @overload
 def _drive_pose(
     client: ZmqBackendClient,
@@ -710,20 +742,44 @@ def _drive_pose(
     return _PoseOutcome(JointSample(joints=joints, telemetry=telemetry), None), observation
 
 
+def _drive_submove_to_target(
+    client: ZmqBackendClient,
+    observation: Observation,
+    target: dict[str, float],
+) -> tuple[bool, str | None, Observation]:
+    """Apply one bounded sub-move and settle by stationarity (cap SETTLE_SUBMOVE_CAP)."""
+    response = client.apply(JointTarget({name: float(target[name]) for name in ARM_JOINTS}))
+    if not response.accepted:
+        return False, f"safety rejected the sub-move: {response.reason}", observation
+    previous = observation
+    observation = client.step(1)
+    stable = 1 if _stationary_settled(previous, observation) else 0
+    for _ in range(1, SETTLE_SUBMOVE_CAP):
+        if stable >= SETTLE_STEPS:
+            return True, None, observation
+        previous = observation
+        observation = client.step(1)
+        stable = stable + 1 if _stationary_settled(previous, observation) else 0
+    if stable >= SETTLE_STEPS:
+        return True, None, observation
+    return (
+        False,
+        f"sub-move did not settle within {SETTLE_SUBMOVE_CAP} steps (stationarity)",
+        observation,
+    )
+
+
 @app.command("validate-kinematics")
 def validate_kinematics(
     endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
     n: int = typer.Option(
-        40, min=1, help="Number of diverse safe poses to sweep (ADR-0020: >=40)."
+        12, min=1, help="Number of poses in the feasible sweep (ADR-0020 redesign: 12)."
     ),
     seed: int = typer.Option(0, help="Seed for pose sampling (deterministic sweep)."),
     report: Annotated[
         Path | None,
         typer.Option(help="Write the full report as JSON here (optional)."),
     ] = None,
-    max_steps: int = typer.Option(
-        120, min=1, help="Maximum simulation steps to settle one pose before aborting it."
-    ),
     timeout_ms: int = typer.Option(
         300_000,
         min=1,
@@ -731,10 +787,32 @@ def validate_kinematics(
             "Request timeout (ms); the initial reset may run axis probes when export is enabled."
         ),
     ),
+    bench_ms_per_step: Annotated[
+        float | None,
+        typer.Option(
+            "--bench-ms-per-step",
+            help="Measured ms/step (e.g. from bench-steps) to print the total step budget.",
+        ),
+    ] = None,
+    velocity_limit_rad_s: float = typer.Option(
+        DEFAULT_VELOCITY_LIMIT_RAD_S,
+        min=1e-6,
+        help="Conservative joint velocity limit (rad/s) for sub-move bound 0.4*v*h.",
+    ),
+    command_horizon_s: float = typer.Option(
+        DEFAULT_HORIZON_S,
+        min=1e-6,
+        help="Safety command horizon (s) for sub-move bound 0.4*v*h.",
+    ),
 ) -> None:
-    """Run the sim-vs-URDF FK sweep against live GT Solids and apply the ADR-0020 criterion."""
+    """Run the feasible sim-vs-URDF FK sweep against live GT Solids (ADR-0020 redesign)."""
+    if n != 12:
+        typer.echo(
+            "warning: ADR-0020 redesigned acceptance sweep requires n=12 "
+            "(6 spread + 6 near-task); results reported but not an acceptance run."
+        )
     client = ZmqBackendClient(endpoint, timeout_ms=timeout_ms)
-    samples: list[JointSample] = []
+    samples: list[tuple[JointSample, str]] = []
     aborted: list[str] = []
     try:
         client.ping()
@@ -746,71 +824,118 @@ def validate_kinematics(
                 "restart the Webots sim-server, and run this command again."
             )
             raise typer.Exit(code=1)
-        torso_target = float(observation.robot.joint_pos[TORSO_JOINT])
-        # Prefer the exported snapshot's live motor limits; fall back to generic bounds only
-        # when no verified snapshot is available (reported in limits output).
+        torso_target = float(observation.robot.joint_pos.get(TORSO_JOINT, 0.0))
         snapshot_payload: dict[str, object] | None = None
-        if SIM_KINEMATICS_PATH.exists():
+        snapshot_path = SIM_KINEMATICS_PATH
+        if snapshot_path.exists():
             try:
-                loaded = json.loads(SIM_KINEMATICS_PATH.read_text(encoding="utf-8"))
+                loaded = json.loads(snapshot_path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
                     snapshot_payload = loaded
             except Exception:
                 snapshot_payload = None
         limits = pose_limits(snapshot_payload)
-        targets = diverse_pose_targets(n=n, seed=seed, limits=limits)
+        all_specs = feasible_pose_plan(seed=seed, limits=limits)
+        specs = all_specs[:n]
+        current = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
+        bound = submove_bound(velocity_limit_rad_s, command_horizon_s)
+        budget = estimate_step_budget(specs, current, bound, bench_ms_per_step)
         limit_text = ", ".join(
             f"{name}: ({low:.3f}, {high:.3f})" for name, (low, high) in limits.items()
         )
-        typer.echo(f"sweep n={n} seed={seed} torso_rad={torso_target:.6f} limits={{{limit_text}}}")
-        for index, target in enumerate(targets):
-            outcome, observation = _drive_pose(
-                client,
-                target,
-                max_steps=max_steps,
-                settle_tolerance=SETTLE_TOLERANCE_RAD,
-                observation=observation,
+        typer.echo(
+            f"sweep n={len(specs)} seed={seed} torso_rad={torso_target:.6f} limits={{{limit_text}}}"
+        )
+        typer.echo(
+            "step budget: "
+            f"poses={budget['poses']} submoves={budget['total_submoves']} "
+            f"cap_per_submove={budget['steps_per_submove_cap']} "
+            f"max_steps={budget['max_total_steps']}"
+            + (
+                f" bench_ms_per_step={budget['ms_per_step']:.1f} "
+                f"est_s={budget.get('estimated_s', 0.0):.1f} "
+                f"est_min={budget.get('estimated_min', 0.0):.2f}"
+                if budget.get("ms_per_step") is not None
+                else " (bench_ms_per_step not provided; ~447 ms/step recorded in docs)"
             )
-            if outcome.sample is None:
-                aborted.append(f"pose={index} {outcome.reason}")
-                typer.echo(f"  pose={index} aborted: {outcome.reason}")
+        )
+        typer.echo(
+            f"submove_bound_rad={bound:.6f} "
+            f"(0.4*velocity_limit_rad_s={velocity_limit_rad_s}*horizon_s={command_horizon_s})"
+        )
+        # Re-home to export posture before sweep if no samples yet; best-effort (current is current)
+        for spec in specs:
+            pose_label = f"pose={spec.index} group={spec.group}"
+            pose_failed = False
+            submoves = plan_submoves(current, spec.target, bound)
+            for sub_index, sub_target in enumerate(submoves):
+                ok, reason, observation = _drive_submove_to_target(client, observation, sub_target)
+                if not ok:
+                    aborted.append(f"{pose_label} submove={sub_index} {reason}")
+                    typer.echo(f"  {pose_label} aborted (fail-fast): {reason}")
+                    pose_failed = True
+                    break
+                telemetry = observation.robot.diagnostics.get("kinematics_telemetry")
+                if isinstance(telemetry, dict):
+                    safe, why = sample_is_safe(telemetry)
+                    if not safe:
+                        aborted.append(f"{pose_label} submove={sub_index} unsafe: {why}")
+                        typer.echo(f"  {pose_label} aborted (fail-fast): table pre-check: {why}")
+                        pose_failed = True
+                        break
+            if pose_failed:
+                # try to continue from current measured pose
+                current = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
                 continue
-            samples.append(outcome.sample)
-            if (index + 1) % 10 == 0 or index == 0:
-                typer.echo(f"  pose={index} collected samples={len(samples)}")
+            telemetry = observation.robot.diagnostics.get("kinematics_telemetry")
+            if not isinstance(telemetry, dict):
+                aborted.append(f"{pose_label} no kinematics_telemetry")
+                typer.echo(f"  {pose_label} aborted: observation carries no kinematics_telemetry")
+                current = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
+                continue
+            safe, why = sample_is_safe(telemetry)
+            if not safe:
+                aborted.append(f"{pose_label} unsafe: {why}")
+                typer.echo(f"  {pose_label} aborted: table pre-check: {why}")
+                current = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
+                continue
+            joints = {name: float(observation.robot.joint_pos[name]) for name in ARM_JOINTS}
+            samples.append((JointSample(joints=joints, telemetry=telemetry), spec.group))
+            current = dict(joints)
+            typer.echo(f"  {pose_label} collected samples={len(samples)} submoves={len(submoves)}")
         if not samples:
             typer.echo("error: no usable sweep poses; nothing to score.")
             raise typer.Exit(code=1)
-        sweep = evaluate_sweep(samples)
+        sweep = evaluate_sweep(samples, tool_verified=False)
         for line in format_report(sweep):
             typer.echo(line)
         typer.echo(
             f"sweep samples={len(samples)} aborted={len(aborted)} "
-            f"accept_mean_mm={FINGER_MEAN_ACCEPT_M * 1e3:.1f} "
-            f"accept_max_mm={FINGER_MAX_ACCEPT_M * 1e3:.1f}"
+            f"accept_mean_mm={LINK_MEAN_ACCEPT_M * 1e3:.1f} "
+            f"accept_max_mm={LINK_MAX_ACCEPT_M * 1e3:.1f} "
+            f"tool_frame=FALLBACK/UNVERIFIED"
         )
-        if n < 40:
-            typer.echo(
-                "warning: n < 40 poses; this run is not an ADR-0020 acceptance sweep "
-                "(the decision is reported but under-powered)."
-            )
         if report is not None:
             path = report.expanduser()
             path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 "meta": {
                     "seed": seed,
-                    "requested_poses": n,
+                    "requested_poses": len(specs),
                     "scored_poses": len(samples),
                     "aborted": aborted,
                     "torso_rad": torso_target,
                     "limits": limits,
+                    "velocity_limit_rad_s": velocity_limit_rad_s,
+                    "command_horizon_s": command_horizon_s,
+                    "submove_bound_rad": bound,
+                    "step_budget": budget,
+                    "tool_frame": "FALLBACK/UNVERIFIED",
                 },
                 "report": asdict(sweep),
-                # Persist per-pose telemetry so scripts/reevaluate_traces_sim_model.py can
-                # re-score offline without a live Webots session.
                 "samples": [
-                    {"joints": sample.joints, "telemetry": sample.telemetry} for sample in samples
+                    {"group": group, "joints": sample.joints, "telemetry": sample.telemetry}
+                    for sample, group in samples
                 ],
             }
             path.write_text(

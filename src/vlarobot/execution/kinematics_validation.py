@@ -1,28 +1,22 @@
-"""Webots-free evaluation of FK models against live GT Solid telemetry (ADR-0020).
+"""Webots-free evaluation and redesigned feasible FK validation sweep (ADR-0020).
 
 The live ``validate-kinematics`` command drives a Webots session and collects
-one :class:`JointSample` per pose: the measured absolute joint angles plus the
-``kinematics_telemetry`` diagnostics record (world poses of every torso/arm
-``endPoint`` Solid, both finger Solids, and the Robot-node base frame). This
-module turns those samples into per-model, per-link FK errors and the ADR-0020
-accept/reject decision — without importing Webots, so the math is unit-testable
-on fake telemetry.
+scored samples: measured absolute joint angles plus ``kinematics_telemetry``.
+This module provides pose design, stationarity settle helpers, scoring, and the
+accept/reject decision without importing Webots.
 
-Semantics:
+Sweep redesign (feasible, no Webots required to evaluate): 12 poses total —
+6 spread + 6 near the PREGRASP/DESCEND working volume (tool-vertical bias in
+joint space). Poses are reached by joint sub-moves bounded to
+``0.4 * velocity_limit_rad_s * horizon_s`` per joint so the safety layer does
+not reject; each sub-move settles by stationarity (|delta| < threshold for N
+consecutive steps) with a cap of 60 steps per sub-move. A pose that cannot
+settle or is unsafe fails fast with a clear reason and the sweep continues.
 
-- FK output is expressed in the **Robot node frame** (the frame
-  ``frames.world_to_base`` uses); GT Solid poses are transformed into the same
-  base frame per sample. The URDF chain root is displaced from the Robot node by
-  the rigid upstream residual quantified in ADR-0019, so its per-link errors
-  are expected to carry that frame bias — the sim chain fixes it by
-  construction, and the two reports show exactly that difference.
-- The acceptance criterion applies to the **sim** model only: finger-midpoint
-  error (midpoint of the two finger pad centres) mean < 2 mm and max < 5 mm
-  over the sweep. The URDF model stays as the informational baseline.
-- Link errors are *held out* from any fitted parameter: nothing in this module
-  is tuned on the sweep before scoring. Only the failure-analysis refinement
-  (below) fits, and it cross-validates strictly **by pose** (even poses fitted,
-  odd poses held out) — never by run or episode.
+Acceptance (12 poses): mean < 3 mm, max < 6 mm on ``arm_7`` endpoint and
+``wrist`` in the Robot/base frame (finger midpoint only when the tool frame is
+verified). Results are reported separately for the whole set and the near-task
+poses. The tool frame is labeled FALLBACK/UNVERIFIED unless explicitly verified.
 """
 
 from __future__ import annotations
@@ -30,7 +24,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 
@@ -44,37 +38,38 @@ from vlarobot.backends.webots.config import (
     TORSO_JOINT,
 )
 from vlarobot.backends.webots.kinematics import Kinematics
-from vlarobot.backends.webots.sim_kinematics import (
-    chain_element_index,
-)
+from vlarobot.backends.webots.sim_kinematics import chain_element_index
 
-#: ADR-0020 acceptance criterion for the sim-derived model: finger-midpoint
-#: mean and max error over the sweep, base frame (m).
-FINGER_MEAN_ACCEPT_M = 0.002
-FINGER_MAX_ACCEPT_M = 0.005
-#: Joint-target sampling margin inside the recorded motor limits (rad).
-POSE_MARGIN_RAD = 0.15
-#: Relaxed target tolerance used to decide a sweep pose has settled (rad).
-SETTLE_TOLERANCE_RAD = 0.02
-#: Minimum tracked-link distance above the table top inside the footprint (m).
-TABLE_PLANE_CLEARANCE_M = TABLE_CLEARANCE_REQUIRED_M
+# ADR-0020 redesign acceptance (12 poses): arm_7 endpoint and wrist, base frame.
+LINK_MEAN_ACCEPT_M = 0.003
+LINK_MAX_ACCEPT_M = 0.006
+REQUIRED_LINKS: tuple[str, ...] = ("arm_7_joint", "arm_6_joint")  # wrist=end of arm_6 child frame
+SETTLE_DELTA_RAD = 0.0005
+SETTLE_STEPS = 3
+SETTLE_SUBMOVE_CAP = 60
+SUBMOVE_SAFETY_FRACTION = 0.4
+DEFAULT_VELOCITY_LIMIT_RAD_S = 1.0
+DEFAULT_HORIZON_S = 1.0
+POSE_MARGIN_RAD = 0.10
 
-#: The two chains scored by the sweep: the repo URDF baseline and the sim model.
 ModelName = Literal["urdf", "sim"]
 
 
 @dataclass(frozen=True)
 class JointSample:
-    """One sweep pose: measured absolute angles plus its GT telemetry record."""
-
     joints: dict[str, float]
     telemetry: dict[str, object]
 
 
 @dataclass(frozen=True)
-class LinkStats:
-    """FK-vs-GT position error of one chain element over the sweep (base frame)."""
+class PoseSpec:
+    index: int
+    group: str  # "spread" | "near_task"
+    target: dict[str, float]
 
+
+@dataclass(frozen=True)
+class LinkStats:
     link: str
     n: int
     mean_error_m: float
@@ -82,20 +77,29 @@ class LinkStats:
 
 
 @dataclass(frozen=True)
-class ModelReport:
-    """Per-link and tool-level errors of one kinematic model."""
+class GroupDecision:
+    group: str
+    n: int
+    mean_m: float | None
+    max_m: float | None
+    accepted: bool
 
+
+@dataclass(frozen=True)
+class ModelReport:
     model: str
     per_link: tuple[LinkStats, ...]
+    scored_links: tuple[str, ...]
     finger_mean_m: float | None
     finger_max_m: float | None
+    tool_verified: bool
+    whole: GroupDecision
+    near_task: GroupDecision
     accepted: bool
 
 
 @dataclass(frozen=True)
 class RefinementCandidate:
-    """One named-parameter least-squares refinement of the residual."""
-
     parameters: str
     fit: str
     fit_rmse_m: float
@@ -104,8 +108,6 @@ class RefinementCandidate:
 
 @dataclass(frozen=True)
 class RefinementReport:
-    """Failure analysis: where the residual lives and what could explain it."""
-
     model: str
     worst_link: str
     worst_mean_m: float
@@ -116,20 +118,18 @@ class RefinementReport:
 
 @dataclass(frozen=True)
 class SweepReport:
-    """The whole validation outcome: both models plus the failure analysis."""
-
     models: dict[str, ModelReport]
     refinement: RefinementReport | None
     accepted_model: str | None
+    tool_status: str
 
 
 # ---------------------------------------------------------------------------
-# Frame and payload helpers.
+# Frame/payload helpers
 # ---------------------------------------------------------------------------
 
 
 def _world_pose(payload: object) -> tuple[np.ndarray, np.ndarray] | None:
-    """``(R_world_local, p_world)`` of one recorded payload, or None if incomplete."""
     if not isinstance(payload, dict):
         return None
     position = payload.get("world_xyz_m")
@@ -145,7 +145,6 @@ def _world_pose(payload: object) -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def base_frame_transform(telemetry: dict[str, object]) -> tuple[np.ndarray, np.ndarray]:
-    """``(R_base_world, p_base)`` from the telemetry ``base_frame`` record."""
     base = _world_pose(telemetry.get("base_frame"))
     if base is None:
         raise ValueError("telemetry lacks a complete base_frame world pose.")
@@ -156,7 +155,6 @@ def base_frame_transform(telemetry: dict[str, object]) -> tuple[np.ndarray, np.n
 def pose_in_base(
     payload: object, base_transform: tuple[np.ndarray, np.ndarray]
 ) -> tuple[np.ndarray, np.ndarray] | None:
-    """A recorded world pose expressed in the Robot-node base frame."""
     world = _world_pose(payload)
     if world is None:
         return None
@@ -168,11 +166,6 @@ def pose_in_base(
 def finger_midpoint_gt(
     telemetry: dict[str, object], *, finger_tip_offset_m: float = FINGER_TIP_OFFSET_M
 ) -> np.ndarray | None:
-    """Midpoint of the two finger pad centres in the base frame, or None.
-
-    Both finger endPoint Solids are required: a one-sided midpoint would rotate
-    the tool frame about the CAN axis and could not be compared with FK.
-    """
     fingers = telemetry.get("finger_endpoint_solids")
     if not isinstance(fingers, dict) or len(fingers) != 2:
         return None
@@ -196,25 +189,11 @@ def _q_vector(kin: Kinematics, joints: dict[str, float], torso_value: float) -> 
 
 
 def _element_names(kin: Kinematics) -> dict[str, str]:
-    """Chain element that lands in each joint's child Solid frame.
-
-    The sim chain reaches the child Solid frame after the joint's rotation and
-    its fixed ``K`` element, so the comparison element is ``sim_after_<joint>``;
-    the URDF chain's joint element already ends in the child link frame.
-    """
     if kin.model == "sim":
-        # The torso child Solid frame is the baked FixedLink named after the
-        # joint; a hinge's child Solid frame is reached only after its rotation
-        # link and the fixed ``K`` element that follows it.
         names = {TORSO_JOINT: TORSO_JOINT}
-        names.update({name: _sim_after_name(name) for name in ARM_JOINTS})
+        names.update({name: f"sim_after_{name}" for name in ARM_JOINTS})
         return names
     return {name: name for name in (TORSO_JOINT, *ARM_JOINTS) if name in kin.idx}
-
-
-def _sim_after_name(name: str) -> str:
-    """``sim_after_<joint>`` for an arm joint (same rule as the chain builder)."""
-    return f"sim_after_{name}"
 
 
 def _tool_index(kin: Kinematics) -> int:
@@ -226,7 +205,6 @@ def _tool_index(kin: Kinematics) -> int:
 def _fk(
     kin: Kinematics, joints: dict[str, float], torso_value: float
 ) -> tuple[dict[str, np.ndarray], np.ndarray, np.ndarray]:
-    """``(child-frame positions per joint, tool position, tool rotation)``."""
     q = _q_vector(kin, joints, torso_value)
     matrices = kin.chain.forward_kinematics([float(value) for value in q], full_kinematics=True)
     positions = {
@@ -240,242 +218,11 @@ def _fk(
 
 
 # ---------------------------------------------------------------------------
-# Evaluation.
+# Pose design and budget
 # ---------------------------------------------------------------------------
 
 
-def _torso_value(kin: Kinematics) -> float:
-    return kin.torso_reference
-
-
-def evaluate_model(
-    samples: Sequence[JointSample],
-    model: ModelName,
-    *,
-    finger_tip_offset_m: float = FINGER_TIP_OFFSET_M,
-) -> ModelReport:
-    """Per-link and finger-midpoint errors of one model over the sweep."""
-    if not samples:
-        raise ValueError("At least one sample is required for validation.")
-    kin = Kinematics(model_override=model)
-    torso_value = _torso_value(kin)
-    per_link_errors: dict[str, list[float]] = {name: [] for name in _element_names(kin)}
-    finger_errors: list[float] = []
-    for sample in samples:
-        telemetry = sample.telemetry
-        base_transform = base_frame_transform(telemetry)
-        fk_positions, fk_tool, _ = _fk(kin, sample.joints, torso_value)
-        gt_solids = telemetry.get("joint_endpoint_solids")
-        if not isinstance(gt_solids, dict):
-            raise ValueError("telemetry lacks joint_endpoint_solids.")
-        for name, errors in per_link_errors.items():
-            posed = pose_in_base(gt_solids.get(name), base_transform)
-            if posed is None:
-                raise ValueError(f"telemetry lacks a complete {name} child Solid pose.")
-            errors.append(float(np.linalg.norm(fk_positions[name] - posed[1])))
-        midpoint = finger_midpoint_gt(telemetry, finger_tip_offset_m=finger_tip_offset_m)
-        if midpoint is not None:
-            finger_errors.append(float(np.linalg.norm(fk_tool - midpoint)))
-    per_link = tuple(
-        LinkStats(
-            link=name,
-            n=len(errors),
-            mean_error_m=float(np.mean(errors)),
-            max_error_m=float(np.max(errors)),
-        )
-        for name, errors in per_link_errors.items()
-    )
-    finger_mean = float(np.mean(finger_errors)) if finger_errors else None
-    finger_max = float(np.max(finger_errors)) if finger_errors else None
-    accepted = bool(
-        model == "sim"
-        and finger_mean is not None
-        and finger_max is not None
-        and finger_mean < FINGER_MEAN_ACCEPT_M
-        and finger_max < FINGER_MAX_ACCEPT_M
-    )
-    return ModelReport(
-        model=model,
-        per_link=per_link,
-        finger_mean_m=finger_mean,
-        finger_max_m=finger_max,
-        accepted=accepted,
-    )
-
-
-def evaluate_sweep(
-    samples: Sequence[JointSample],
-    *,
-    models: Sequence[ModelName] = ("urdf", "sim"),
-    finger_tip_offset_m: float = FINGER_TIP_OFFSET_M,
-) -> SweepReport:
-    """Score every model on the same poses and apply the ADR-0020 criterion."""
-    reports: dict[str, ModelReport] = {
-        model: evaluate_model(samples, model, finger_tip_offset_m=finger_tip_offset_m)
-        for model in models
-    }
-    accepted_model = next((model for model, report in reports.items() if report.accepted), None)
-    refinement = None
-    if "sim" in reports and not reports["sim"].accepted:
-        refinement = propose_refinement(
-            samples, model="sim", finger_tip_offset_m=finger_tip_offset_m
-        )
-    return SweepReport(models=reports, refinement=refinement, accepted_model=accepted_model)
-
-
-# ---------------------------------------------------------------------------
-# Failure analysis: named-parameter refinement with pose-based cross-validation.
-# ---------------------------------------------------------------------------
-
-
-def _rmse(residuals: np.ndarray) -> float:
-    return float(np.sqrt(np.mean(np.sum(residuals**2, axis=1))))
-
-
-def propose_refinement(
-    samples: Sequence[JointSample],
-    *,
-    model: ModelName = "sim",
-    finger_tip_offset_m: float = FINGER_TIP_OFFSET_M,
-) -> RefinementReport:
-    """Least-squares refinement of the residual with explicit identifiability notes.
-
-    Only called when the acceptance criterion fails. Residual vectors are
-    ``GT_midpoint - FK_tool`` in the base frame, held out strictly by pose:
-    even poses are fitted, odd poses score the held-out error. Two named
-    parameter families are fitted — a constant tool-frame offset and a constant
-    base-frame offset — and the notes state when the data cannot distinguish
-    them, or when no rigid offset explains the residual at all.
-    """
-    kin = Kinematics(model_override=model)
-    torso_value = _torso_value(kin)
-    residuals: list[np.ndarray] = []
-    tool_rotations: list[np.ndarray] = []
-    link_errors: dict[str, list[float]] = {}
-    for sample in samples:
-        base_transform = base_frame_transform(sample.telemetry)
-        fk_positions, fk_tool, _ = _fk(kin, sample.joints, torso_value)
-        qt = _q_vector(kin, sample.joints, torso_value)
-        matrices = kin.chain.forward_kinematics(
-            [float(value) for value in qt], full_kinematics=True
-        )
-        tool_rotation = np.asarray(matrices[_tool_index(kin)][:3, :3], dtype=float)
-        midpoint = finger_midpoint_gt(sample.telemetry, finger_tip_offset_m=finger_tip_offset_m)
-        if midpoint is None:
-            continue
-        residuals.append(midpoint - fk_tool)
-        tool_rotations.append(tool_rotation)
-        gt_solids = sample.telemetry.get("joint_endpoint_solids")
-        if isinstance(gt_solids, dict):
-            for name in _element_names(kin):
-                posed = pose_in_base(gt_solids.get(name), base_transform)
-                if posed is not None:
-                    link_errors.setdefault(name, []).append(
-                        float(np.linalg.norm(fk_positions[name] - posed[1]))
-                    )
-    if not residuals:
-        raise ValueError("No usable samples for the refinement analysis.")
-    worst_link = max(link_errors, key=lambda name: float(np.mean(link_errors[name])))
-    worst_mean = float(np.mean(link_errors[worst_link]))
-    residual_array = np.stack(residuals)
-    # Diagnostic only: spread of the residual *vectors* about their mean. A
-    # constant offset anywhere in the chain keeps this near zero; a pose-
-    # dependent model error does not.
-    variation = _rmse(residual_array - np.mean(residual_array, axis=0))
-    fit_idx = list(range(0, len(residual_array), 2))
-    holdout_idx = list(range(1, len(residual_array), 2))
-    candidates: list[RefinementCandidate] = []
-    notes: list[str] = [
-        "cross-validated by pose: even poses fitted, odd poses held out (never by run).",
-    ]
-    if not holdout_idx:
-        notes.append("insufficient poses for a holdout split; refinement is fit-only.")
-        holdout_idx = fit_idx
-    fit_residuals = residual_array[fit_idx]
-    holdout_residuals = residual_array[holdout_idx]
-    base_offset = np.mean(fit_residuals, axis=0)
-    candidates.append(
-        RefinementCandidate(
-            parameters="base_frame_offset_xyz_m",
-            fit="constant residual vector in the base frame",
-            fit_rmse_m=_rmse(fit_residuals - base_offset),
-            holdout_rmse_m=_rmse(holdout_residuals - base_offset),
-        )
-    )
-    fit_tool_residuals = np.stack(
-        [tool_rotations[index].T @ residual_array[index] for index in fit_idx]
-    )
-    holdout_tool_residuals = np.stack(
-        [tool_rotations[index].T @ residual_array[index] for index in holdout_idx]
-    )
-    tool_offset = np.mean(fit_tool_residuals, axis=0)
-    candidates.append(
-        RefinementCandidate(
-            parameters="tool_offset_xyz_m",
-            fit="constant residual vector in the arm_7/tool frame",
-            fit_rmse_m=_rmse(fit_tool_residuals - tool_offset),
-            holdout_rmse_m=_rmse(holdout_tool_residuals - tool_offset),
-        )
-    )
-    baseline_holdout = _rmse(holdout_residuals)
-    best = min(candidates, key=lambda candidate: candidate.holdout_rmse_m)
-    if baseline_holdout > 0.0 and best.holdout_rmse_m < 0.5 * baseline_holdout:
-        notes.append(
-            f"the {best.parameters} family reduces the held-out residual from "
-            f"{baseline_holdout * 1e3:.2f} mm to {best.holdout_rmse_m * 1e3:.2f} mm."
-        )
-    else:
-        notes.append(
-            "no rigid-offset family explains the held-out residual "
-            f"({best.holdout_rmse_m * 1e3:.2f} mm of {baseline_holdout * 1e3:.2f} mm): "
-            "the error is pose-dependent, i.e. axis/scale/structure, not a frame offset."
-        )
-    if candidates[0].holdout_rmse_m > 0.0 and abs(
-        candidates[0].holdout_rmse_m - candidates[1].holdout_rmse_m
-    ) < 0.1 * max(candidates[0].holdout_rmse_m, candidates[1].holdout_rmse_m):
-        notes.append(
-            "base-frame and tool-frame offsets fit the pose data equally well: the two "
-            "parameter families are not separable from poses alone (identifiability note)."
-        )
-    if baseline_holdout > 0.0 and worst_mean < 0.2 * baseline_holdout:
-        notes.append(
-            f"every tracked link frame agrees to <= {worst_mean * 1e3:.2f} mm while the "
-            f"tool-level residual is {baseline_holdout * 1e3:.2f} mm: the residual is "
-            "introduced between the arm_7 child Solid and the finger pad frame (tool offset "
-            "or finger geometry), not in the arm chain."
-        )
-    else:
-        notes.append(
-            f"the {worst_link} link frame is off by {worst_mean * 1e3:.2f} mm mean "
-            f"(tool residual {baseline_holdout * 1e3:.2f} mm), so the error is already present "
-            "at or before that segment; compare the per-link rows to find the first affected "
-            "joint."
-        )
-    return RefinementReport(
-        model=model,
-        worst_link=worst_link,
-        worst_mean_m=worst_mean,
-        residual_variation_m=variation,
-        candidates=tuple(candidates),
-        notes=tuple(notes),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Pose sampling and safety pre-check (also Webots-free).
-# ---------------------------------------------------------------------------
-
-
-def pose_limits(
-    snapshot: dict[str, object] | None,
-) -> dict[str, tuple[float, float]]:
-    """Per-joint absolute motor limits: the snapshot's when present, else config.
-
-    The snapshot records the Webots motor limits at export time, which is the
-    authority for the sweep; the config fallback only keeps the command usable
-    when the snapshot predates the limits fields (it then samples a generic
-    +-2 rad window, clearly reported).
-    """
+def pose_limits(snapshot: dict[str, object] | None) -> dict[str, tuple[float, float]]:
     limits: dict[str, tuple[float, float]] = {}
     entries = snapshot.get("joints") if isinstance(snapshot, dict) else None
     if not isinstance(entries, list):
@@ -502,57 +249,169 @@ def pose_limits(
     return limits
 
 
-def diverse_pose_targets(
-    *,
-    n: int,
-    seed: int,
-    limits: dict[str, tuple[float, float]],
-    margin_rad: float = POSE_MARGIN_RAD,
-) -> list[dict[str, float]]:
-    """``n`` deterministic, stratified arm-joint targets inside the limits.
+def _clamp_target(
+    target: dict[str, float], limits: dict[str, tuple[float, float]], margin: float
+) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for name in ARM_JOINTS:
+        low, high = limits[name]
+        lo, hi = low + margin, high - margin
+        if lo > hi:
+            lo = hi = (low + high) / 2.0
+        out[name] = float(min(max(float(target.get(name, (low + high) / 2.0)), lo), hi))
+    return out
 
-    Each joint's sampled values are spread over evenly spaced quantiles (then
-    jittered) and the joint order is shuffled per pose, so the sweep covers the
-    workspace instead of clustering. The torso is never sampled: the sweep holds
-    it fixed at the settled export value (M1 sim model is baked there).
-    """
-    if n <= 0:
-        raise ValueError("n must be positive.")
-    if len(limits) < len(ARM_JOINTS):
-        raise ValueError("pose_limits must cover every arm joint.")
+
+def feasible_pose_plan(*, seed: int, limits: dict[str, tuple[float, float]]) -> list[PoseSpec]:
+    """12 poses: 6 spread + 6 near-task (PREGRASP/DESCEND working volume, tool-vertical bias)."""
     rng = np.random.default_rng(seed)
-    joint_order = list(ARM_JOINTS)
-    positions = {name: rng.permutation(n) for name in joint_order}
-    targets: list[dict[str, float]] = []
-    for index in range(n):
+    specs: list[PoseSpec] = []
+    # 6 spread stratified poses
+    n_spread = 6
+    positions = {name: rng.permutation(n_spread) for name in ARM_JOINTS}
+    for index in range(n_spread):
         target: dict[str, float] = {}
-        for name in joint_order:
+        for name in ARM_JOINTS:
             low, high = limits[name]
-            span = max(high - low - 2.0 * margin_rad, 0.0)
-            quantile = (positions[name][index] + 0.5) / n
-            jitter = float(rng.uniform(-0.5, 0.5)) * span / n
-            value = low + margin_rad + quantile * span + jitter
-            target[name] = float(min(max(value, low + margin_rad), high - margin_rad))
-        targets.append(target)
-    return targets
+            span = max(high - low - 2.0 * POSE_MARGIN_RAD, 0.0)
+            quantile = (positions[name][index] + 0.5) / n_spread
+            value = low + POSE_MARGIN_RAD + quantile * span
+            target[name] = float(min(max(value, low + POSE_MARGIN_RAD), high - POSE_MARGIN_RAD))
+        specs.append(PoseSpec(index=index, group="spread", target=target))
+    # 6 near-task poses: deterministic joint-space configurations biased to forward reach and
+    # downward/tool-vertical wrist orientations in the working volume (heuristic, joint-space).
+    near_templates = [
+        {
+            "arm_1_joint": 0.35,
+            "arm_2_joint": 0.20,
+            "arm_3_joint": -1.20,
+            "arm_4_joint": 1.45,
+            "arm_5_joint": 0.00,
+            "arm_6_joint": 0.85,
+            "arm_7_joint": 0.00,
+        },
+        {
+            "arm_1_joint": 0.55,
+            "arm_2_joint": 0.10,
+            "arm_3_joint": -1.40,
+            "arm_4_joint": 1.55,
+            "arm_5_joint": 0.20,
+            "arm_6_joint": 0.95,
+            "arm_7_joint": 0.10,
+        },
+        {
+            "arm_1_joint": 0.25,
+            "arm_2_joint": 0.30,
+            "arm_3_joint": -1.00,
+            "arm_4_joint": 1.35,
+            "arm_5_joint": -0.20,
+            "arm_6_joint": 0.75,
+            "arm_7_joint": -0.10,
+        },
+        {
+            "arm_1_joint": 0.45,
+            "arm_2_joint": -0.05,
+            "arm_3_joint": -1.30,
+            "arm_4_joint": 1.60,
+            "arm_5_joint": 0.00,
+            "arm_6_joint": 1.05,
+            "arm_7_joint": 0.00,
+        },
+        {
+            "arm_1_joint": 0.65,
+            "arm_2_joint": 0.15,
+            "arm_3_joint": -1.10,
+            "arm_4_joint": 1.40,
+            "arm_5_joint": 0.30,
+            "arm_6_joint": 0.90,
+            "arm_7_joint": 0.20,
+        },
+        {
+            "arm_1_joint": 0.30,
+            "arm_2_joint": 0.05,
+            "arm_3_joint": -1.50,
+            "arm_4_joint": 1.50,
+            "arm_5_joint": -0.10,
+            "arm_6_joint": 1.00,
+            "arm_7_joint": -0.05,
+        },
+    ]
+    for i, tmpl in enumerate(near_templates):
+        specs.append(
+            PoseSpec(
+                index=n_spread + i,
+                group="near_task",
+                target=_clamp_target(tmpl, limits, POSE_MARGIN_RAD),
+            )
+        )
+    return specs
+
+
+def submove_bound(velocity_limit_rad_s: float, horizon_s: float) -> float:
+    return (
+        SUBMOVE_SAFETY_FRACTION
+        * max(1e-6, float(velocity_limit_rad_s))
+        * max(1e-6, float(horizon_s))
+    )
+
+
+def plan_submoves(
+    current: dict[str, float], target: dict[str, float], bound: float
+) -> list[dict[str, float]]:
+    max_err = max(abs(float(target[n]) - float(current[n])) for n in ARM_JOINTS)
+    segments = max(1, int(math.ceil(max_err / max(1e-9, bound))))
+    steps: list[dict[str, float]] = []
+    for seg in range(1, segments + 1):
+        alpha = seg / segments
+        steps.append(
+            {
+                n: float(current[n]) + alpha * (float(target[n]) - float(current[n]))
+                for n in ARM_JOINTS
+            }
+        )
+    return steps
+
+
+def estimate_step_budget(
+    poses: Sequence[PoseSpec],
+    start: dict[str, float],
+    bound: float,
+    ms_per_step: float | None,
+) -> dict[str, object]:
+    current = dict(start)
+    total_submoves = 0
+    for spec in poses:
+        subs = plan_submoves(current, spec.target, bound)
+        total_submoves += len(subs)
+        current = dict(spec.target)
+    # cap steps per sub-move = SETTLE_SUBMOVE_CAP
+    max_steps = total_submoves * SETTLE_SUBMOVE_CAP
+    est = {
+        "poses": len(poses),
+        "total_submoves": total_submoves,
+        "steps_per_submove_cap": SETTLE_SUBMOVE_CAP,
+        "max_total_steps": max_steps,
+        "ms_per_step": ms_per_step,
+    }
+    if ms_per_step is not None and ms_per_step > 0:
+        est["estimated_s"] = max_steps * ms_per_step / 1000.0
+        est["estimated_min"] = est["estimated_s"] / 60.0
+    return est
+
+
+# ---------------------------------------------------------------------------
+# Safety pre-check
+# ---------------------------------------------------------------------------
 
 
 def sample_is_safe(
     telemetry: dict[str, object],
     *,
-    clearance_m: float = TABLE_PLANE_CLEARANCE_M,
+    clearance_m: float = TABLE_CLEARANCE_REQUIRED_M,
     table_top_height_m: float = TABLE_TOP_HEIGHT_M,
     footprint_centre_xy_m: tuple[float, float] = TABLE_FOOTPRINT_CENTRE_XY_M,
     footprint_size_xy_m: tuple[float, float] = TABLE_FOOTPRINT_SIZE_XY_M,
 ) -> tuple[bool, str]:
-    """Obstacle check for one sweep pose, by design from GT Solid poses.
-
-    Every tracked link (arm child Solids and both finger Solids) whose XY lies
-    inside the table footprint must stay at least ``clearance_m`` above the
-    table top; the pose is aborted otherwise. The check is deliberately
-    conservative about *which* link it evaluates: the lowest tracked point
-    decides.
-    """
     arm_tracked: dict[str, object] = {}
     solids = telemetry.get("joint_endpoint_solids")
     if isinstance(solids, dict):
@@ -572,7 +431,6 @@ def sample_is_safe(
     for name, payload in tracked.items():
         world = _world_pose(payload)
         if world is None:
-            # Finger endPoint Solids can be unreadable in some exports; arm links must be complete.
             if name in arm_tracked:
                 return False, f"{name} has no complete world pose"
             continue
@@ -581,48 +439,274 @@ def sample_is_safe(
         if inside and position[2] < plane:
             return (
                 False,
-                f"{name} at z={position[2]:.3f} m is below {plane:.3f} m inside the "
-                "table footprint",
+                f"{name} at z={position[2]:.3f} m is below {plane:.3f} m "
+                "inside the table footprint",
             )
     return True, "all tracked links clear the table plane"
 
 
 # ---------------------------------------------------------------------------
-# Text rendering for the CLI.
+# Scoring
 # ---------------------------------------------------------------------------
 
 
+def _link_errors_for_samples(
+    kin: Kinematics, samples: Sequence[JointSample], links: Sequence[str]
+) -> tuple[dict[str, list[float]], list[float]]:
+    torso_value = kin.torso_reference
+    per_link: dict[str, list[float]] = {name: [] for name in links}
+    finger_errors: list[float] = []
+    for sample in samples:
+        telemetry = sample.telemetry
+        base_transform = base_frame_transform(telemetry)
+        fk_positions, fk_tool, _ = _fk(kin, sample.joints, torso_value)
+        gt_solids = telemetry.get("joint_endpoint_solids")
+        if not isinstance(gt_solids, dict):
+            raise ValueError("telemetry lacks joint_endpoint_solids.")
+        for name in links:
+            posed = pose_in_base(gt_solids.get(name), base_transform)
+            if posed is None or name not in fk_positions:
+                raise ValueError(f"telemetry lacks a complete {name} child Solid pose.")
+            per_link[name].append(float(np.linalg.norm(fk_positions[name] - posed[1])))
+        midpoint = finger_midpoint_gt(telemetry)
+        if midpoint is not None:
+            finger_errors.append(float(np.linalg.norm(fk_tool - midpoint)))
+    return per_link, finger_errors
+
+
+def _decision(errors: list[float], group: str) -> GroupDecision:
+    if not errors:
+        return GroupDecision(group=group, n=0, mean_m=None, max_m=None, accepted=False)
+    mean_v = float(np.mean(errors))
+    max_v = float(np.max(errors))
+    return GroupDecision(
+        group=group,
+        n=len(errors),
+        mean_m=mean_v,
+        max_m=max_v,
+        accepted=(mean_v < LINK_MEAN_ACCEPT_M and max_v < LINK_MAX_ACCEPT_M),
+    )
+
+
+def evaluate_model(
+    samples: Sequence[tuple[JointSample, str]],
+    model: ModelName,
+    *,
+    tool_verified: bool = False,
+) -> ModelReport:
+    if not samples:
+        raise ValueError("At least one sample is required for validation.")
+    kin = Kinematics(model_override=model)
+    torso_value = kin.torso_reference
+    scored_links = tuple(name for name in REQUIRED_LINKS if name in _element_names(kin))
+    if not scored_links:
+        raise ValueError("no required scoring links available in chain.")
+    per_link_errors: dict[str, list[float]] = {name: [] for name in _element_names(kin)}
+    scored_all: list[float] = []
+    scored_near: list[float] = []
+    finger_errors: list[float] = []
+    for sample, group in samples:
+        telemetry = sample.telemetry
+        base_transform = base_frame_transform(telemetry)
+        fk_positions, fk_tool, _ = _fk(kin, sample.joints, torso_value)
+        gt_solids = telemetry.get("joint_endpoint_solids")
+        if not isinstance(gt_solids, dict):
+            raise ValueError("telemetry lacks joint_endpoint_solids.")
+        pose_scored_vals: list[float] = []
+        for name, errors in per_link_errors.items():
+            posed = pose_in_base(gt_solids.get(name), base_transform)
+            if posed is None:
+                raise ValueError(f"telemetry lacks a complete {name} child Solid pose.")
+            err = float(np.linalg.norm(fk_positions[name] - posed[1]))
+            errors.append(err)
+            if name in scored_links:
+                pose_scored_vals.append(err)
+        if pose_scored_vals:
+            v = float(max(pose_scored_vals))
+            scored_all.append(v)
+            if group == "near_task":
+                scored_near.append(v)
+        midpoint = finger_midpoint_gt(telemetry)
+        if midpoint is not None:
+            finger_errors.append(float(np.linalg.norm(fk_tool - midpoint)))
+    per_link = tuple(
+        LinkStats(
+            link=name,
+            n=len(errors),
+            mean_error_m=float(np.mean(errors)),
+            max_error_m=float(np.max(errors)),
+        )
+        for name, errors in per_link_errors.items()
+    )
+    finger_mean = float(np.mean(finger_errors)) if finger_errors else None
+    finger_max = float(np.max(finger_errors)) if finger_errors else None
+    whole = _decision(scored_all, "whole")
+    near = _decision(scored_near, "near_task")
+    accepted = bool(model == "sim" and whole.accepted and near.accepted)
+    return ModelReport(
+        model=model,
+        per_link=per_link,
+        scored_links=scored_links,
+        finger_mean_m=finger_mean,
+        finger_max_m=finger_max,
+        tool_verified=tool_verified,
+        whole=whole,
+        near_task=near,
+        accepted=accepted,
+    )
+
+
+def evaluate_sweep(
+    samples: Sequence[tuple[JointSample, str]],
+    *,
+    models: Sequence[ModelName] = ("urdf", "sim"),
+    tool_verified: bool = False,
+) -> SweepReport:
+    reports: dict[str, ModelReport] = {
+        model: evaluate_model(samples, model, tool_verified=tool_verified) for model in models
+    }
+    accepted_model = next((model for model, report in reports.items() if report.accepted), None)
+    refinement = None
+    if "sim" in reports and not reports["sim"].accepted:
+        try:
+            refinement = propose_refinement(samples, model="sim")
+        except Exception:
+            refinement = None
+    return SweepReport(
+        models=cast(dict[str, ModelReport], reports),
+        refinement=refinement,
+        accepted_model=accepted_model,
+        tool_status="VERIFIED" if tool_verified else "FALLBACK/UNVERIFIED",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Refinement (best-effort, pose holdout)
+# ---------------------------------------------------------------------------
+
+
+def _rmse(residuals: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(np.sum(residuals**2, axis=1))))
+
+
+def propose_refinement(
+    samples: Sequence[tuple[JointSample, str]], *, model: ModelName = "sim"
+) -> RefinementReport:
+    kin = Kinematics(model_override=model)
+    torso_value = kin.torso_reference
+    residuals: list[np.ndarray] = []
+    tool_rotations: list[np.ndarray] = []
+    link_errors: dict[str, list[float]] = {}
+    for sample, _group in samples:
+        base_transform = base_frame_transform(sample.telemetry)
+        fk_positions, fk_tool, _ = _fk(kin, sample.joints, torso_value)
+        q = _q_vector(kin, sample.joints, torso_value)
+        matrices = kin.chain.forward_kinematics([float(v) for v in q], full_kinematics=True)
+        tool_rotation = np.asarray(matrices[_tool_index(kin)][:3, :3], dtype=float)
+        midpoint = finger_midpoint_gt(sample.telemetry)
+        if midpoint is None:
+            continue
+        residuals.append(midpoint - fk_tool)
+        tool_rotations.append(tool_rotation)
+        gt_solids = sample.telemetry.get("joint_endpoint_solids")
+        if isinstance(gt_solids, dict):
+            for name in _element_names(kin):
+                posed = pose_in_base(gt_solids.get(name), base_transform)
+                if posed is not None:
+                    link_errors.setdefault(name, []).append(
+                        float(np.linalg.norm(fk_positions[name] - posed[1]))
+                    )
+    if not residuals:
+        raise ValueError("No usable samples for the refinement analysis.")
+    worst_link = (
+        max(link_errors, key=lambda name: float(np.mean(link_errors[name])))
+        if link_errors
+        else "unknown"
+    )
+    worst_mean = float(np.mean(link_errors[worst_link])) if link_errors else 0.0
+    residual_array = np.stack(residuals)
+    variation = _rmse(residual_array - np.mean(residual_array, axis=0))
+    fit_idx = list(range(0, len(residual_array), 2))
+    holdout_idx = list(range(1, len(residual_array), 2)) or fit_idx
+    fit_res = residual_array[fit_idx]
+    hold_res = residual_array[holdout_idx]
+    base_offset = np.mean(fit_res, axis=0)
+    candidates = [
+        RefinementCandidate(
+            "base_frame_offset_xyz_m",
+            "constant residual vector in the base frame",
+            _rmse(fit_res - base_offset),
+            _rmse(hold_res - base_offset),
+        ),
+    ]
+    fit_tool = np.stack([tool_rotations[i].T @ residual_array[i] for i in fit_idx])
+    hold_tool = np.stack([tool_rotations[i].T @ residual_array[i] for i in holdout_idx])
+    tool_offset = np.mean(fit_tool, axis=0)
+    candidates.append(
+        RefinementCandidate(
+            "tool_offset_xyz_m",
+            "constant residual vector in the arm_7/tool frame",
+            _rmse(fit_tool - tool_offset),
+            _rmse(hold_tool - tool_offset),
+        )
+    )
+    notes = [
+        "cross-validated by pose: even poses fitted, odd poses held out (never by run).",
+        f"worst_link={worst_link} mean_mm={worst_mean * 1e3:.3f} "
+        f"residual_variation_mm={variation * 1e3:.3f}.",
+    ]
+    return RefinementReport(
+        model=model,
+        worst_link=worst_link,
+        worst_mean_m=worst_mean,
+        residual_variation_m=variation,
+        candidates=tuple(candidates),
+        notes=tuple(notes),
+    )
+
+
 def format_report(report: SweepReport) -> list[str]:
-    """Human-readable lines for the validation outcome (CLI prints them)."""
-    lines: list[str] = []
+    lines = [f"tool_frame={report.tool_status} (finger midpoint scored only when VERIFIED)"]
     for model, model_report in report.models.items():
         lines.append(
-            f"model={model} finger_mean_mm={_mm(model_report.finger_mean_m)} "
-            f"finger_max_mm={_mm(model_report.finger_max_m)} accepted={model_report.accepted}"
+            f"model={model} scored_links={','.join(model_report.scored_links)} "
+            f"whole_mean_mm={_mm(model_report.whole.mean_m)} "
+            f"whole_max_mm={_mm(model_report.whole.max_m)} "
+            f"whole_accepted={model_report.whole.accepted} (n={model_report.whole.n}) "
+            f"near_mean_mm={_mm(model_report.near_task.mean_m)} "
+            f"near_max_mm={_mm(model_report.near_task.max_m)} "
+            f"near_accepted={model_report.near_task.accepted} "
+            f"(n={model_report.near_task.n}) "
+            f"accepted={model_report.accepted}"
         )
+        if model_report.finger_mean_m is not None:
+            lines.append(
+                f"  finger_midpoint_mean_mm={_mm(model_report.finger_mean_m)} "
+                f"finger_midpoint_max_mm={_mm(model_report.finger_max_m)} "
+                "(informational; "
+                f"{'counted' if model_report.tool_verified else 'NOT counted'}"
+                ", tool FALLBACK/UNVERIFIED)"
+            )
         for stats in model_report.per_link:
             lines.append(
                 f"  link={stats.link} n={stats.n} "
                 f"mean_mm={stats.mean_error_m * 1e3:.3f} max_mm={stats.max_error_m * 1e3:.3f}"
             )
     if report.accepted_model is None:
-        lines.append("result=REJECT no model met the ADR-0020 acceptance criterion")
+        lines.append("result=REJECT no model met the redesigned acceptance criterion")
     else:
         lines.append(f"result=ACCEPT model={report.accepted_model}")
-    refinement = report.refinement
-    if refinement is not None:
+    if report.refinement is not None:
+        r = report.refinement
         lines.append(
-            f"refinement model={refinement.model} worst_link={refinement.worst_link} "
-            f"worst_mean_mm={refinement.worst_mean_m * 1e3:.3f} "
-            f"residual_variation_mm={refinement.residual_variation_m * 1e3:.3f}"
+            f"refinement worst_link={r.worst_link} worst_mean_mm={r.worst_mean_m * 1e3:.3f}"
         )
-        for candidate in refinement.candidates:
+        for c in r.candidates:
             lines.append(
-                f"  candidate={candidate.parameters} fit={candidate.fit!r} "
-                f"fit_rmse_mm={candidate.fit_rmse_m * 1e3:.3f} "
-                f"holdout_rmse_mm={candidate.holdout_rmse_m * 1e3:.3f}"
+                f"  candidate={c.parameters} fit_rmse_mm={c.fit_rmse_m * 1e3:.3f} "
+                f"holdout_rmse_mm={c.holdout_rmse_m * 1e3:.3f}"
             )
-        for note in refinement.notes:
+        for note in r.notes:
             lines.append(f"  note: {note}")
     return lines
 

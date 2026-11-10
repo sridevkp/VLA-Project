@@ -387,9 +387,7 @@ progress/heartbeat (per-joint steps used, measured angle moved, settled/reason).
 derived from the **measured** sensor angle change and measured poses using stationarity-based settle
 (`|delta sensor| < probe_stationary_delta_rad` for `probe_stationarity_steps` consecutive steps;
 caps per joint/total), so steady-state tracking error cannot stall a probe. The
-`jointParameters.axis` field is never assumed and is only cross-checked. The snapshot is written to
-`configs/generated/sim_kinematics.json` (or `--output`) and the command re-loads it to verify the
-export-posture FK round trip.
+`jointParameters.axis` field is never assumed and is only cross-checked. The snapshot is finalized only after load/build/export-posture verification passes: marked `valid: true` with `content_hash`, session/Webots metadata, written to a temp file and atomically renamed; on failure the temp and target are removed so stale/invalid snapshots do not remain loadable. Written to `configs/generated/sim_kinematics.json` (or `--output`).
 
 `validate-kinematics` drives >= 40 diverse, stratified arm poses with the torso fixed, settles each
 pose, and scores URDF vs sim-derived FK against live GT `Solid` poses in the Robot node frame. A pose
@@ -427,7 +425,31 @@ uv run python scripts/reevaluate_traces_sim_model.py .\runs\validate-kinematics-
 
 **Step-cost probe (no Webots launched):** `uv run python -m vlarobot.cli bench-steps --n 200`
 reports ms/step for step+observation calls against a running server (state always; RGB controlled by
-`observe_images`; telemetry attached when `export_sim_kinematics` is enabled). Defaults unchanged.
+`observe_images`; telemetry attached when `export_sim_kinematics` is enabled) and prints a one-line
+verdict estimating batch time from the most recent `run-episodes` traces when available. Defaults unchanged.
+
+**ZMQ timeouts (config keys, `configs/robot.yaml`, defaults):** justified against bench-steps
+~447 ms/step measured on a server with RGB + `kinematics_telemetry` enabled (step+observation); a
+single steady-state step is well below 5 s but reset/export span many steps and cold Webots startup
+can be slow.
+- `zmq_ping_timeout_ms` = 5000 (liveness/session probe; `doctor`/startup wait use repeated short pings).
+- `zmq_reset_timeout_ms` = 120000 (many settle steps/cold start; must tolerate slow Webots start).
+- `zmq_step_timeout_ms` = 30000, `zmq_apply_timeout_ms` = 30000, `zmq_get_gt_timeout_ms` = 30000.
+- `zmq_shutdown_timeout_ms` = 10000.
+- `zmq_export_poll_timeout_ms` = 300000 (per-joint chunk; bounded by probe caps, not by commanded convergence).
+- `run-episodes --startup-timeout-s` (default 180 s) governs "server not up yet" wait; the client
+  distinguishes `not up/unreachable` (before first successful response) from `busy/stalled` (was responsive)
+  using session-aware timeout reporting.
+
+**Re-evaluation readiness (ADR-0020):** `scripts/reevaluate_traces_sim_model.py` re-scores inputs that
+contain per-pose `kinematics_telemetry` samples (validate-kinematics JSON reports with `samples`
+entries of `joints`+`telemetry`, or JSONL rows carrying `kinematics_telemetry`). Validate-sweep reports
+now persist `samples` for offline re-scoring once a valid snapshot exists. The six earlier scripted
+runs (e.g. `runs/m1-07-realign-on/off-01..03.jsonl`, `runs/hold-*-*.jsonl`) contain **no**
+`kinematics_telemetry` in any row and cannot be numerically re-scored from existing data; they cannot be
+backfilled. To re-evaluate comparable episodes with the sim model, a short re-collection (e.g. 3 episodes)
+must be run with `export_sim_kinematics: true` on the server so `kinematics_telemetry` is attached to
+observations/traces. Do not guess results.
 
 **Durations (approximate, UNVERIFIED):** export startup + stationarity probes (per-joint progress
 reported); the 40-pose sweep takes several minutes. `--n < 40` is under-powered/non-acceptance.

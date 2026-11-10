@@ -18,7 +18,7 @@ import pytest
 
 from vlarobot.backends.webots import supervisor_kinematics as sk
 from vlarobot.backends.webots.backend import WebotsBackend
-from vlarobot.backends.webots.sim_kinematics import kinematics_from_payload
+from vlarobot.backends.webots.sim_kinematics import kinematics_from_payload, snapshot_content_hash
 
 TORSO_REF = 0.35
 ARM_ANGLES = {
@@ -420,6 +420,8 @@ def test_capture_snapshot_feeds_the_loader():
     io = build_fake_io(build_world())
     snapshot = capture(io)
     reloaded = json.loads(sk.to_json_bytes(snapshot).decode("utf-8"))
+    reloaded["valid"] = True
+    reloaded["content_hash"] = snapshot_content_hash(reloaded)
     model = kinematics_from_payload(reloaded, source="<capture>")
     axes = {joint.name: joint.axis for joint in model.joints}
     for name, axis in AXES.items():

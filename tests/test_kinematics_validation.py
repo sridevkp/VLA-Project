@@ -25,6 +25,7 @@ from vlarobot.backends.webots.config import (
     TABLE_TOP_HEIGHT_M,
     TORSO_JOINT,
 )
+from vlarobot.backends.webots.sim_kinematics import snapshot_content_hash
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.cli import _drive_pose
 from vlarobot.core.types import ApplyResult
@@ -152,13 +153,14 @@ def build_payload() -> dict:
         )
         previous = child
     arm7 = frames[ARM_JOINTS[-1]]
-    return {
+    payload = {
         "schema_version": 1,
         "units": {"length": "m", "angle": "rad"},
         "source": "synthetic",
         "webots_version": "R2025a-test",
         "sim_time_s": 12.5,
         "timestamp_utc": "2026-01-01T00:00:00+00:00",
+        "session_id": {"pid": 1, "start_time": 0.0, "nonce": "test"},
         "base_frame": payload_of(np.eye(4)),
         "joints": entries,
         "finger_endpoint_solids": {
@@ -171,7 +173,10 @@ def build_payload() -> dict:
             "unreadable": [TORSO_JOINT],
         },
         "posture_reference": {TORSO_JOINT: TORSO_REF, **REF_ANGLES},
+        "valid": True,
     }
+    payload["content_hash"] = snapshot_content_hash(payload)
+    return payload
 
 
 def telemetry_for(

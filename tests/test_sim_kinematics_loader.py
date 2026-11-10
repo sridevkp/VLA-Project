@@ -26,7 +26,10 @@ from vlarobot.backends.webots.sim_kinematics import (
     after_element_name,
     build_chain,
     chain_element_index,
+    finalize_verified_snapshot,
     kinematics_from_payload,
+    load_snapshot,
+    snapshot_content_hash,
     validate_torso,
     verify_export_posture,
 )
@@ -159,6 +162,7 @@ def build_payload(
         "webots_version": "R2025a-test",
         "sim_time_s": 12.5,
         "timestamp_utc": "2026-01-01T00:00:00+00:00",
+        "session_id": {"pid": 1, "start_time": 0.0, "nonce": "test"},
         "base_frame": pose(tilt),
         "joints": entries,
         "finger_endpoint_solids": fingers if complete_fingers else {"left": {"world_xyz_m": None}},
@@ -173,8 +177,16 @@ def build_payload(
             "arm_2_joint": EXPORT_ANGLES["arm_2_joint"],
             "arm_3_joint": EXPORT_ANGLES["arm_3_joint"],
         },
+        "valid": True,
     }
+    payload["content_hash"] = snapshot_content_hash(payload)
     return payload, world
+
+
+def _rehash(payload: dict) -> dict:
+    payload["valid"] = True
+    payload["content_hash"] = snapshot_content_hash(payload)
+    return payload
 
 
 def test_loader_round_trip_is_exact_at_the_export_posture():
@@ -252,14 +264,14 @@ def test_loader_rejects_missing_axis():
             entry["axis_source"] = "unreadable"
             entry["derived_axis"] = None
     with pytest.raises(ValueError, match="no usable axis"):
-        kinematics_from_payload(payload, source="<test>")
+        kinematics_from_payload(_rehash(payload), source="<test>")
 
 
 def test_loader_rejects_torso_reference_mismatch():
     payload, _ = build_payload()
     payload["posture_reference"]["torso_lift_joint"] = 0.30
     with pytest.raises(ValueError, match="export posture torso"):
-        kinematics_from_payload(payload, source="<test>")
+        kinematics_from_payload(_rehash(payload), source="<test>")
 
 
 def test_loader_rejects_probe_residual_beyond_cap():
@@ -276,7 +288,7 @@ def test_loader_rejects_probe_residual_beyond_cap():
             bogus[2],
         ]
     with pytest.raises(ValueError, match="residual"):
-        kinematics_from_payload(payload, source="<test>")
+        kinematics_from_payload(_rehash(payload), source="<test>")
 
 
 def test_loader_flags_tool_fallback_when_fingers_incomplete(caplog):
@@ -319,8 +331,44 @@ def test_wrong_ancestor_parent_is_rejected(caplog):
             ]
             entry["parent"] = parent
     with pytest.raises(ValueError, match="previous child Solid"):
-        kinematics_from_payload(payload, source="<test>")
+        kinematics_from_payload(_rehash(payload), source="<test>")
 
 
 if __name__ == "__main__":  # pragma: no cover
     __import__("pytest").main([__file__, "-q"])
+
+
+def test_failed_finalize_removes_temp_and_leaves_preexisting_snapshot_unloadable(tmp_path):
+    """ADR-0020 addendum: failed export must not leave a loadable/stale snapshot."""
+    path = tmp_path / "sim_kinematics.json"
+    # Pre-existing invalid file (not marked valid).
+    path.write_text('{"schema_version": 1, "valid": false}', encoding="utf-8")
+    assert path.is_file()
+
+    payload, _ = build_payload()
+    # Make the payload fail verification: break a probe so hinge fit exceeds cap.
+    for entry in payload["joints"]:
+        if entry["kind"] != "hinge":
+            continue
+        bogus = entry["probe"]["child_pose_probe"]["world_xyz_m"]
+        entry["probe"]["child_pose_probe"]["world_xyz_m"] = [
+            bogus[0] + 0.02,
+            bogus[1],
+            bogus[2],
+        ]
+    _rehash(payload)
+
+    with pytest.raises(ValueError, match="residual|Snapshot"):
+        finalize_verified_snapshot(payload, path, session_id={"pid": 1, "nonce": "x"})
+
+    # Temp removed and target not loadable (removed or otherwise invalid).
+    assert not path.with_suffix(path.suffix + ".tmp").exists()
+    assert not path.exists() or not _is_loadable_snapshot(path)
+
+
+def _is_loadable_snapshot(path):
+    try:
+        load_snapshot(path)
+    except Exception:
+        return False
+    return True

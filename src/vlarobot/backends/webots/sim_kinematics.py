@@ -40,6 +40,8 @@ Geometry model and conventions (all SI, orientations row-major 3x3):
 
 from __future__ import annotations
 
+import hashlib
+import os
 import json
 import logging
 import math
@@ -118,6 +120,54 @@ class SimKinematics:
         return [joint.name for joint in self.joints]
 
 
+def snapshot_content_hash(payload: dict[str, object]) -> str:
+    """SHA-256 over canonical JSON of the payload excluding the content hash field."""
+    material = {key: value for key, value in payload.items() if key != "content_hash"}
+    blob = json.dumps(material, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def finalize_verified_snapshot(
+    snapshot: dict[str, object],
+    path: Path,
+    *,
+    session_id: dict[str, object] | None = None,
+) -> SimKinematics:
+    """Write a snapshot only after verification passes; atomic on success.
+
+    Adds ``valid`` and ``content_hash`` (and ``session_id`` when provided), writes to a
+    temp file, verifies by loading/building and checking export posture, then atomically
+    renames to ``path``. On any failure the temp file is removed and ``path`` is removed
+    so a pre-existing invalid or stale snapshot cannot remain loadable.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    candidate = dict(snapshot)
+    if session_id is not None:
+        candidate["session_id"] = session_id
+    candidate["valid"] = True
+    candidate["content_hash"] = snapshot_content_hash(candidate)
+    data = json.dumps(candidate, sort_keys=True, allow_nan=False, indent=2).encode("utf-8")
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp_path.write_bytes(data)
+        model = load_snapshot(tmp_path)
+        chain = build_chain(model)
+        verify_export_posture(model, chain)
+        os.replace(tmp_path, path)
+        return model
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def load_snapshot(path: Path) -> SimKinematics:
     """Load and validate a simulator kinematics JSON written by the exporter."""
     path = Path(path)
@@ -130,6 +180,20 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
     """Validate one snapshot payload and return the ready-to-build model."""
     if not isinstance(payload, dict):
         raise ValueError(f"Snapshot {source} must be a JSON object.")
+    if payload.get("valid") is not True:
+        raise ValueError(
+            f"Snapshot {source} is not marked valid (valid={payload.get('valid')!r}); "
+            "refusing to load an unverified or failed export."
+        )
+    expected_hash = payload.get("content_hash")
+    if expected_hash is not None:
+        if not isinstance(expected_hash, str):
+            raise ValueError(f"Snapshot {source}: content_hash must be a string.")
+        actual_hash = snapshot_content_hash(payload)
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"Snapshot {source}: content_hash mismatch (expected {expected_hash}, got {actual_hash})."
+            )
     version = payload.get("schema_version")
     if version != REQUIRED_SCHEMA_VERSION:
         raise ValueError(
@@ -356,8 +420,14 @@ def _recomputed_probe_axis(
     if not isinstance(probe, dict) or not isinstance(probe.get("child_pose_probe"), dict):
         raise ValueError(f"Snapshot {source}: probe axis joint lacks its probe child pose.")
     probe_child = _pose_from_payload(probe["child_pose_probe"])
-    parent_payload = _complete_pose(entry, "parent", source)
-    transform1 = parent_from_child_world(_pose_from_payload(parent_payload), probe_child)
+    # Prefer the parent pose sampled at probe time (instantaneous frame) when present;
+    # fall back to the export-posture parent pose for older snapshots.
+    probe_parent_payload = probe.get("parent_pose_probe")
+    if isinstance(probe_parent_payload, dict):
+        probe_parent = _pose_from_payload(probe_parent_payload)
+    else:
+        probe_parent = _pose_from_payload(_complete_pose(entry, "parent", source))
+    transform1 = parent_from_child_world(probe_parent, probe_child)
     if transform1 is None:
         raise ValueError(f"Snapshot {source}: probe child pose is incomplete.")
     solved = hinge_axis_residual(transform0, transform1)

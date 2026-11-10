@@ -487,9 +487,9 @@ def probe_axis(
     kind: str | None,
     motor: Any,
     sensor: Any | None,
-    parent_pose: SolidPose,
-    transform0: np.ndarray,
-    initial_child_pose: SolidPose,
+    joint_node: Any,
+    parent_pose0: SolidPose,
+    child_pose0: SolidPose,
     *,
     stationary_delta: float = DEFAULT_PROBE_STATIONARY_DELTA_RAD,
     stationary_steps: int = DEFAULT_PROBE_STATIONARITY_STEPS,
@@ -500,6 +500,10 @@ def probe_axis(
     Axis and angle come from the *measured* sensor change and measured poses;
     the commanded delta is recorded for traceability but never assumed reached.
     Settle is stationarity-based, so steady-state tracking error cannot stall the probe.
+
+    Both relative transforms are computed in their instantaneous parent frame
+    (parent and child poses sampled together) so small base/parent drift during
+    probing does not inflate the hinge-fit residual.
     """
     result: dict[str, object] = {
         "axis_source": "unreadable",
@@ -519,6 +523,12 @@ def probe_axis(
         status = result["probe_status"]
         assert isinstance(status, dict)
         status["reason"] = "not_probeable"
+        return result
+    transform0 = parent_from_child_world(parent_pose0, child_pose0)
+    if transform0 is None:
+        status = result["probe_status"]
+        assert isinstance(status, dict)
+        status["reason"] = "incomplete_pose"
         return result
     try:
         theta0 = float(sensor.getValue())
@@ -546,16 +556,15 @@ def probe_axis(
     if theta1 is None:
         theta1 = theta0
     measured_delta = float(theta1 - theta0)
-    status = result["probe_status"]
-    assert isinstance(status, dict)
-    status.update(
-        {
-            "steps_used": steps,
-            "settled": settled,
-            "reason": reason,
-            "measured_angle_moved_rad" if kind == "hinge" else "measured_delta_m": measured_delta,
-        }
-    )
+    status_obj = result["probe_status"]
+    assert isinstance(status_obj, dict)
+    status: dict[str, Any] = status_obj
+    status["steps_used"] = steps
+    status["settled"] = settled
+    status["reason"] = reason
+    status["measured_angle_moved_rad" if kind == "hinge" else "measured_delta_m"] = measured_delta
+    # Sample parent+child together at the probed (settled) posture.
+    parent_probe_pose = parent_solid(joint_node, name)
     child_probe_pose = child_solid(io, name)
     restore = _restore_posture(
         io,
@@ -563,7 +572,7 @@ def probe_axis(
         motor,
         sensor,
         theta0,
-        initial_child_pose,
+        child_pose0,
         stationary_delta=stationary_delta,
         stationary_steps=stationary_steps,
         max_steps=max_steps,
@@ -574,6 +583,7 @@ def probe_axis(
         "theta1": float(theta1),
         "theta_delta": measured_delta,
         "child_pose_probe": child_probe_pose.to_payload(),
+        "parent_pose_probe": parent_probe_pose.to_payload(),
         "restore": restore,
     }
     if not settled:
@@ -581,7 +591,7 @@ def probe_axis(
     if abs(measured_delta) < 1e-9:
         status["reason"] = "no_measured_motion"
         return result
-    transform1 = parent_from_child_world(parent_pose, child_probe_pose)
+    transform1 = parent_from_child_world(parent_probe_pose, child_probe_pose)
     if transform1 is None:
         status["reason"] = "incomplete_pose"
         return result
@@ -702,8 +712,8 @@ def _capture_joint_entry(
                 kind,
                 motor,
                 sensor,
+                joint_node,
                 parent_pose,
-                transform0,
                 child_pose,
                 stationary_delta=float(
                     settings.get("stationary_delta", DEFAULT_PROBE_STATIONARY_DELTA_RAD)

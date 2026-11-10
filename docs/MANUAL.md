@@ -372,64 +372,69 @@ target OS; the runner prints a warning whenever it is enabled.
 
 ## 3c. Simulator-derived kinematics export and validation (ADR-0020, UNVERIFIED)
 
-`export-sim-kinematics` captures the live Webots kinematics at the settled reset posture (Robot
-node frame, every torso/arm parent/child `Solid` pose, and both finger `endPoint` poses, read
-only from `Pose`-derived nodes). Hinge axes are derived empirically from a small posture probe
-(<= 0.05 rad per joint, restored immediately); the `jointParameters.axis` field is never assumed
-and is only cross-checked in the report. The torso slider is baked at its export posture. The
-snapshot is written to `configs/generated/sim_kinematics.json` (or `--output`) and the command
-re-loads it to verify the sim chain reproduces the export posture.
+**Preflight (before any live run):** check for stale servers/processes and port conflicts, and kill
+them only after reviewing the list:
+```bash
+uv run python -m vlarobot.cli doctor --port 5555
+uv run python -m vlarobot.cli doctor --port 5555 --kill
+```
+`ping` replies carry a `session_id`; clients fail loudly on a mismatch to avoid talking to a stale
+simulator. The server binds `VLAROBOT_ZMQ_PORT`/`zmq_port` and fails loudly if the bind fails.
 
-`validate-kinematics` drives >= 40 diverse, stratified arm poses with the torso held fixed at the
-settled export value, settles each pose, and scores two chains against the live GT `Solid` poses
-in the Robot node (base) frame: the repo URDF baseline and the sim-derived chain
-(`kinematic_model: sim`). A pose is aborted (not scored) if any tracked link is below the table
-plane inside the table footprint, or if the target is rejected / does not settle. The sim model
-is accepted only when the finger-midpoint error (midpoint of the two finger pad centres) is
-**mean < 2 mm and max < 5 mm** over the sweep; otherwise the report names the first affected
-link/frame and proposes least-squares refinements of named parameter families with a strict
-even/odd pose holdout (never by run), so a rigid frame/tool offset is distinguished from a
-pose-dependent axis/scale/structure error. The URDF chain is always reported as the
-informational baseline.
+`export-sim-kinematics` performs a **fast reset** (no probes) to the settled posture, then runs a
+dedicated chunked `export_kinematics` request: each poll probes at most one joint and returns
+progress/heartbeat (per-joint steps used, measured angle moved, settled/reason). Hinge axes are
+derived from the **measured** sensor angle change and measured poses using stationarity-based settle
+(`|delta sensor| < probe_stationary_delta_rad` for `probe_stationarity_steps` consecutive steps;
+caps per joint/total), so steady-state tracking error cannot stall a probe. The
+`jointParameters.axis` field is never assumed and is only cross-checked. The snapshot is written to
+`configs/generated/sim_kinematics.json` (or `--output`) and the command re-loads it to verify the
+export-posture FK round trip.
 
-**Prerequisites:** open `worlds/factory.wbt` in Webots so its controller starts the lockstep
-server, and set `export_sim_kinematics: true` in `configs/robot.yaml` for the export/sweep
-session (default `false`; restart the sim-server after changing it so the backend attaches the
-snapshot and per-step `kinematics_telemetry`). `kinematic_model` stays `urdf` by default
-(M1-06a equivalence baseline) and is only switched to `sim` after a live sweep accepts the
-sim chain.
+`validate-kinematics` drives >= 40 diverse, stratified arm poses with the torso fixed, settles each
+pose, and scores URDF vs sim-derived FK against live GT `Solid` poses in the Robot node frame. A pose
+is aborted (not scored) on table-plane clearance failure or reject/unsettled. **Accept (sim only):**
+finger-midpoint mean < 2 mm and max < 5 mm. On failure the report names the affected link/frame and
+fits rigid-offset families with a strict even/odd **pose** holdout (not by run).
+
+**Prerequisites:** open `worlds/factory.wbt` (controller starts the lockstep server) and set
+`export_sim_kinematics: true` in `configs/robot.yaml` for the export/sweep session (default `false`;
+restart the sim-server after changing it). This flag now enables per-step `kinematics_telemetry`
+needed by the sweep; **reset remains fast and does no probes**. `kinematic_model` stays `urdf` by
+default (M1-06a baseline) and is switched to `sim` only after a live sweep accepts the sim chain.
 
 **Linux**
-
 ```bash
+uv run python -m vlarobot.cli doctor --port 5555
+# 1. export (chunked probes, progress per joint)
 uv run python -m vlarobot.cli export-sim-kinematics
+# 2. watched trial sweep
+uv run python -m vlarobot.cli validate-kinematics --n 8 --seed 0 --report runs/validate-kinematics-trial.json
+# 3. acceptance sweep (only if trial is safe)
 uv run python -m vlarobot.cli validate-kinematics --n 40 --seed 0 --report runs/validate-kinematics-seed0.json
-```
-
-**Windows PowerShell**
-
-```powershell
-uv run python -m vlarobot.cli export-sim-kinematics
-uv run python -m vlarobot.cli validate-kinematics --n 40 --seed 0 --report .\runs\validate-kinematics-seed0.json
-```
-
-The offline re-scorer (Webots-free) re-applies the sweep to a telemetry-bearing report; without a
-live export or without such a report it states that it is blocked on a live export and claims no
-numeric result:
-
-```bash
+# 4. offline re-evaluation (Webots-free; blocked without snapshot/telemetry)
 uv run python scripts/reevaluate_traces_sim_model.py runs/validate-kinematics-seed0.json
 ```
 
-**Durations (approximate, UNVERIFIED):** export ≈ 60–120 s Webots startup + ~10 s axis probes;
-the 40-pose validation sweep takes several minutes (one settle per pose). `--n < 40` runs but is
-reported as an under-powered, non-acceptance sweep.
+**Windows PowerShell**
+```powershell
+uv run python -m vlarobot.cli doctor --port 5555
+uv run python -m vlarobot.cli export-sim-kinematics
+uv run python -m vlarobot.cli validate-kinematics --n 8 --seed 0 --report .\runs\validate-kinematics-trial.json
+uv run python -m vlarobot.cli validate-kinematics --n 40 --seed 0 --report .\runs\validate-kinematics-seed0.json
+uv run python scripts/reevaluate_traces_sim_model.py .\runs\validate-kinematics-seed0.json
+```
 
-**Status: UNVERIFIED.** No Webots session was available in this environment, so no snapshot, no
-live sweep, no sim-model acceptance, and no numeric re-evaluation of existing traces has been
-performed here. The machinery and its Webots-free tests are in place; the live
-export/validate commands above are the required next evidence. Keep rendering on (see the
-headless caveat above) and run against a watched factory world.
+**Step-cost probe (no Webots launched):** `uv run python -m vlarobot.cli bench-steps --n 200`
+reports ms/step for step+observation calls against a running server (state always; RGB controlled by
+`observe_images`; telemetry attached when `export_sim_kinematics` is enabled). Defaults unchanged.
+
+**Durations (approximate, UNVERIFIED):** export startup + stationarity probes (per-joint progress
+reported); the 40-pose sweep takes several minutes. `--n < 40` is under-powered/non-acceptance.
+
+**Status: UNVERIFIED.** The machinery and Webots-free tests are in place; live export/sweep/acceptance
+and determinism runs were not completed by the agent (no Webots/GUI launched). Run the commands above
+against a watched fresh world and report the outputs.
 
 _GT fingertip telemetry_ (`gt_tip_telemetry`, plus the merged boundary fields) appears in every
 trace from this section's real runs; `scripts/analyze_can_run.py` prints it as a table after the

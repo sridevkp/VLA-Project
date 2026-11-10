@@ -913,3 +913,20 @@
   (unchanged from ADR-0019, still report-only). M1-06a, M1-07, and all M1 gates remain UNVERIFIED.
 - **Supersedes:** Nothing. `calibrate_tool` stays `false`/report-only; `kinematic_model` defaults to
   `urdf` and the URDF equivalence baseline is unchanged.
+
+## ADR-0020 addendum — Fast reset, chunked export, probe stationarity, session hygiene (2026-11-10)
+
+- **Status:** Accepted (implementation landed; live/GUI runs **UNVERIFIED** — agent must not launch Webots or run live commands; provide commands only).
+- **Scope:** Addresses live export/reset timeout and stale-server failures observed in the first live attempt. No safety/IK-tolerance/threshold/target changes. No M2.
+
+- **Separate export from reset:** `reset` performs no probes and must remain fast (< 5 s). Kinematics export is an on-demand `export_kinematics` request handled by chunked polling (`start`/`poll`/`status`/`cancel`): each poll advances by probing at most the next joint and returns per-joint progress/heartbeat (steps used, measured angle moved, settled/reason) plus the final snapshot when done. `export-sim-kinematics` now does `reset` (posture) then polls the export; per-poll timeouts are bounded and progress is reported.
+
+- **Probe design (stationarity, measured motion):** a joint is settled when `|delta sensor| < probe_stationary_delta_rad` for `probe_stationarity_steps` consecutive lockstep steps (config: `0.0001` rad, 3). The axis is derived from the **measured** sensor angle change and measured poses, never from assumed convergence to the commanded angle (avoids stalling on steady-state tracking error). Steps are capped per joint (`probe_max_steps_per_joint`, default 60) and in total (`probe_total_step_cap`, default 2000); every joint reports steps used, measured angle moved, and the reason for success/failure. The earlier `PROBE_SENSOR_TOL` "near-target" workaround is removed; the remaining settle parameters are the explicit stationarity/cap config above.
+
+- **Session identity and bind hygiene:** `ping` replies include a `session_id` (`pid`, `start_time`, `nonce`); clients record/expect it and fail loudly on mismatch (stale server detection). The server binds `VLAROBOT_ZMQ_PORT` (or config `zmq_port`) and fails loudly on bind failure (no silent fallback). `cli doctor` lists stale `webots`/`tiago_controller`/sim-server processes and the configured port owner, and with `--kill` terminates listed processes after printing them.
+
+- **Client robustness:** per-request-type timeouts (reset short, export long/per-poll); on timeout the client closes and recreates the REQ socket (lazy-pirate) so shutdown no longer hits a poisoned ZMQ state, and logs the request, timeout, and elapsed time.
+
+- **Step cost / observation toggles:** `cli bench-steps --n 200` measures ms/step against a running server (each call is step + observation: state always; RGB capture controlled by `observe_images`; per-step `kinematics_telemetry` attached only when `export_sim_kinematics` is enabled). Config `observe_images` (default `true`, unchanged behavior) allows disabling image reads later when the brain does not need them. Defaults unchanged.
+
+- **Evidence:** Webots-free/unit coverage for chunked export via the fake backend, session identity in ping, lazy-pirate socket recovery, stationarity-based probe capture, and updated supervisor/loader/validation tests. Full live export/sweep/determinism runs remain **UNVERIFIED** (commands only).

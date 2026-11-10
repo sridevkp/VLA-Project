@@ -1,6 +1,9 @@
 """Command-line entry point for project tools."""
 
 import json
+import os
+import subprocess
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Annotated, Literal
@@ -481,24 +484,44 @@ def export_sim_kinematics(
         typer.Option(help="Where to write the JSON snapshot; defaults to configs/robot.yaml."),
     ] = None,
     seed: int = typer.Option(0, help="Seed for the reset that sets the export posture."),
-    timeout_ms: int = typer.Option(
-        300_000,
+    poll_timeout_ms: int = typer.Option(
+        120_000,
         min=1,
-        help="Request timeout (ms); reset runs axis probes when export is enabled.",
+        help="Per-poll request timeout (ms); each poll probes one joint chunk.",
     ),
 ) -> None:
-    """Export live Supervisor kinematics to JSON and verify the sim chain round trip (ADR-0020)."""
-    client = ZmqBackendClient(endpoint, timeout_ms=timeout_ms)
+    """Export live Supervisor kinematics via chunked polling and verify the chain (ADR-0020)."""
+    client = ZmqBackendClient(endpoint)
     try:
-        client.ping()
-        observation = client.reset(ScenarioSpec(), seed=seed)
-        snapshot = observation.robot.diagnostics.get("sim_kinematics_snapshot")
+        ping = client.ping()
+        session = ping.get("payload", {}).get("session_id")
+        if session:
+            typer.echo(f"session_id={session}")
+        # Fast reset to the settled export posture (no probes).
+        client.reset(ScenarioSpec(), seed=seed)
+        typer.echo("export: start (chunked polling, one joint per poll)")
+        status = client.export_kinematics("start", timeout_ms=poll_timeout_ms)
+        while not status.get("done"):
+            status = client.export_kinematics("poll", timeout_ms=poll_timeout_ms)
+            per_joint = status.get("per_joint") or []
+            current = per_joint[-1] if per_joint else None
+            if isinstance(current, dict):
+                typer.echo(
+                    f"  progress {status.get('current_index')}/{status.get('total_joints')} "
+                    f"joint={current.get('name')} axis={current.get('axis_source')} "
+                    f"steps={current.get('steps_used')} "
+                    f"moved={current.get('measured_angle_moved_rad')} "
+                    f"reason={current.get('reason')} "
+                    f"total_steps={status.get('steps_used_total')}"
+                )
+            else:
+                typer.echo(
+                    f"  progress {status.get('current_index')}/{status.get('total_joints')} "
+                    f"state={status.get('state')} total_steps={status.get('steps_used_total')}"
+                )
+        snapshot = status.get("snapshot")
         if not isinstance(snapshot, dict):
-            typer.echo(
-                "error: the reset observation carries no sim_kinematics_snapshot. Set "
-                "export_sim_kinematics: true in configs/robot.yaml, restart the Webots "
-                "sim-server, and run this command again."
-            )
+            typer.echo(f"error: export did not produce a snapshot: {status}")
             raise typer.Exit(code=1)
         path = (output or SIM_KINEMATICS_PATH).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -528,6 +551,15 @@ def export_sim_kinematics(
                 f"limits={joint.limits} probe_residual_m={residual} "
                 f"jointParameters_cross_check_deg={cross_check}"
             )
+        progress = snapshot.get("export_progress") or {}
+        if isinstance(progress, dict):
+            for item in progress.get("per_joint") or []:
+                if isinstance(item, dict):
+                    typer.echo(
+                        f"  probe_status joint={item.get('name')} steps={item.get('steps_used')} "
+                        f"measured_angle_moved_rad={item.get('measured_angle_moved_rad')} "
+                        f"settled={item.get('settled')} reason={item.get('reason')}"
+                    )
         typer.echo(
             "export-posture FK residual max_m="
             f"{max(residuals.values(), default=0.0):.3e} "
@@ -625,16 +657,16 @@ def validate_kinematics(
     try:
         client.ping()
         observation = client.reset(ScenarioSpec(), seed=seed)
-        snapshot = observation.robot.diagnostics.get("sim_kinematics_snapshot")
-        if not isinstance(snapshot, dict):
+        if not isinstance(observation.robot.diagnostics.get("kinematics_telemetry"), dict):
             typer.echo(
-                "error: the reset observation carries no sim_kinematics_snapshot. Set "
-                "export_sim_kinematics: true in configs/robot.yaml, restart the Webots "
-                "sim-server, and run this command again."
+                "error: observations carry no kinematics_telemetry. Set "
+                "export_sim_kinematics: true in configs/robot.yaml (enables live GT telemetry), "
+                "restart the Webots sim-server, and run this command again."
             )
             raise typer.Exit(code=1)
         torso_target = float(observation.robot.joint_pos[TORSO_JOINT])
-        limits = pose_limits(snapshot)
+        # Use configured/telemetry-compatible limits; snapshot is no longer attached on reset.
+        limits = pose_limits(None)
         targets = diverse_pose_targets(n=n, seed=seed, limits=limits)
         limit_text = ", ".join(
             f"{name}: ({low:.3f}, {high:.3f})" for name, (low, high) in limits.items()
@@ -1051,6 +1083,146 @@ def _image_similarity(first: np.ndarray, second: np.ndarray) -> tuple[float, flo
             denominator = (mean_a**2 + mean_b**2 + 6.5025) * (variance_a + variance_b + 58.5225)
             ssim_scores.extend((numerator / denominator).tolist())
     return mean_absolute_difference, float(np.mean(ssim_scores)), maximum_difference
+
+
+def _port_owner(port: int) -> list[str]:
+    """Best-effort owner lines for a TCP port (cross-platform where possible)."""
+    lines: list[str] = []
+    if os.name == "nt":
+        try:
+            out = subprocess.check_output(
+                ["netstat", "-ano", "-p", "TCP"], text=True, encoding="utf-8", errors="replace"
+            )
+            needle = f":{port}"
+            for line in out.splitlines():
+                if needle in line and "LISTENING" in line.upper():
+                    lines.append(line.strip())
+        except Exception as exc:
+            lines.append(f"netstat failed: {exc}")
+    else:
+        try:
+            out = subprocess.check_output(
+                ["ss", "-ltnp"], text=True, encoding="utf-8", errors="replace"
+            )
+            needle = f":{port} "
+            for line in out.splitlines():
+                if needle in line or line.rstrip().endswith(f":{port}"):
+                    lines.append(line.strip())
+        except Exception:
+            try:
+                out = subprocess.check_output(
+                    ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                lines.extend([ln.strip() for ln in out.splitlines() if ln.strip()])
+            except Exception as exc:
+                lines.append(f"port-owner lookup failed: {exc}")
+    return lines
+
+
+def _webots_process_lines() -> list[str]:
+    lines: list[str] = []
+    try:
+        if os.name == "nt":
+            out = subprocess.check_output(
+                ["tasklist", "/V"], text=True, encoding="utf-8", errors="replace"
+            )
+            for line in out.splitlines():
+                low = line.lower()
+                if "webots" in low or "tiago_controller" in low:
+                    lines.append(line.strip())
+        else:
+            out = subprocess.check_output(
+                ["ps", "-eo", "pid,ppid,etime,cmd"], text=True, encoding="utf-8", errors="replace"
+            )
+            for line in out.splitlines()[1:]:
+                low = line.lower()
+                if "webots" in low or "tiago_controller" in low or "sim-server" in low:
+                    lines.append(line.strip())
+    except Exception as exc:
+        lines.append(f"process listing failed: {exc}")
+    return lines
+
+
+@app.command()
+def doctor(
+    port: int = typer.Option(5555, help="Simulator ZMQ port to inspect."),
+    kill: bool = typer.Option(
+        False, "--kill", help="Terminate listed stale processes after printing."
+    ),
+) -> None:
+    """Preflight: list stale Webots/controller processes and the configured port owner."""
+    typer.echo(f"doctor port={port}")
+    owners = _port_owner(port)
+    if owners:
+        typer.echo("port_owner:")
+        for line in owners:
+            typer.echo(f"  {line}")
+    else:
+        typer.echo("port_owner: none")
+    procs = _webots_process_lines()
+    if procs:
+        typer.echo("processes:")
+        for line in procs:
+            typer.echo(f"  {line}")
+    else:
+        typer.echo("processes: none")
+    if not kill:
+        return
+    if not procs:
+        typer.echo("kill: nothing to terminate")
+        return
+    typer.echo("kill: terminating listed processes")
+    for line in procs:
+        parts = line.split()
+        if not parts:
+            continue
+        pid_str = parts[0]
+        if not pid_str.isdigit():
+            continue
+        pid = int(pid_str)
+        try:
+            if os.name == "nt":
+                subprocess.check_call(["taskkill", "/PID", str(pid), "/T", "/F"])
+            else:
+                os.kill(pid, 15)
+        except Exception as exc:
+            typer.echo(f"  failed pid={pid}: {exc}")
+        else:
+            typer.echo(f"  signaled pid={pid}")
+
+
+@app.command("bench-steps")
+def bench_steps(
+    endpoint: str = typer.Option(DEFAULT_ENDPOINT, help="ZeroMQ simulator endpoint."),
+    n: int = typer.Option(200, min=1, help="Number of lockstep steps to measure."),
+    seed: int = typer.Option(0, help="Reset seed."),
+) -> None:
+    """Measure step latency against a running simulator (no Webots launched)."""
+    client = ZmqBackendClient(endpoint)
+    try:
+        ping = client.ping()
+        typer.echo(f"session_id={ping.get('payload', {}).get('session_id')}")
+        client.reset(ScenarioSpec(), seed=seed)
+        # Warmup
+        for _ in range(min(5, n)):
+            client.step(1)
+        t0 = time.perf_counter()
+        for _ in range(n):
+            client.step(1)
+        elapsed = time.perf_counter() - t0
+        ms_per = (elapsed / n) * 1000.0 if n else 0.0
+        typer.echo(f"bench steps={n} elapsed_s={elapsed:.4f} ms_per_step={ms_per:.3f}")
+        typer.echo(
+            "note: each measured call is step+observation (state always; RGB controlled by "
+            "server config observe_images; kinematics_telemetry attached when "
+            "export_sim_kinematics is enabled). Compare runs with diagnostics/images toggled "
+            "on the server to attribute cost. No server config is changed by this command."
+        )
+    finally:
+        client.close()
 
 
 if __name__ == "__main__":

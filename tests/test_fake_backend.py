@@ -68,3 +68,28 @@ def test_fake_backend_rejects_invalid_step_and_stopped_operations() -> None:
         backend.step()
     with pytest.raises(RuntimeError, match="stopped"):
         backend.apply(GripperCmd(opening=0.02))
+
+
+def test_fake_backend_export_kinematics_is_chunked_and_separate_from_reset() -> None:
+    backend = FakeBackend()
+    # Reset stays fast and must not attach/require an export snapshot.
+    obs = backend.reset(scenario=ScenarioSpec(), seed=0)
+    assert "sim_kinematics_snapshot" not in obs.robot.diagnostics
+
+    status = backend.export_kinematics("start")
+    assert status["done"] is False
+    assert status["state"] == "in_progress"
+    polls = 0
+    while not status["done"] and polls < 10:
+        status = backend.export_kinematics("poll")
+        polls += 1
+    assert status["done"] is True
+    snapshot = status.get("snapshot")
+    assert isinstance(snapshot, dict)
+    assert snapshot.get("schema_version") == 1
+    per_joint = status.get("per_joint") or []
+    assert isinstance(per_joint, list) and per_joint
+    first = per_joint[0]
+    assert isinstance(first, dict)
+    assert first["reason"] == "ok"
+    assert first["measured_angle_moved_rad"] == pytest.approx(0.05)

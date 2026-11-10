@@ -12,6 +12,8 @@ import hashlib
 import json
 import os
 import shutil
+import signal
+import socket
 import subprocess
 import time
 from collections.abc import Mapping
@@ -21,6 +23,7 @@ from time import perf_counter
 from typing import IO
 
 from vlarobot.backends.zmq.client import ZmqBackendClient
+from vlarobot.backends.zmq.server import endpoint_for_port
 from vlarobot.execution.scripted_can import ScriptedCanPolicy, ScriptedCanResult
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -305,15 +308,37 @@ def run_episodes(
     return _run_shared_session(settings, n)
 
 
+def _reserve_free_port() -> int:
+    """Pick a free localhost TCP port (released immediately for the simulator to bind)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _episode_endpoint_port(settings: RunnerSettings) -> tuple[str, int]:
+    """Endpoint and port for one episode: unique free port by default for hygiene."""
+    # Respect an explicit non-default endpoint only when no per-episode isolation requested
+    # is implied by run_episodes' fresh-world flow; callers pass settings.endpoint.
+    # For hygiene we always allocate a free port unless caller pinned a specific tcp port
+    # different from the default and wants to reuse it (shared session keeps one port).
+    port = _reserve_free_port()
+    return endpoint_for_port(port), port
+
+
 def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome]:
-    """One Webots process serves every episode, like ``can-regression`` (soft reset per episode)."""
+    """One Webots process serves every episode (soft reset per episode) with process hygiene."""
     settings.trace_dir.mkdir(parents=True, exist_ok=True)
     webots = resolve_webots(settings.webots)
     trace_path = settings.trace_dir / f"{settings.trace_prefix}-session.jsonl"
     log_path = settings.trace_dir / f"{settings.trace_prefix}-session.log"
+    endpoint, port = _episode_endpoint_port(settings)
+    pid_path = settings.trace_dir / f"{settings.trace_prefix}-session.pid"
     with log_path.open("w", encoding="utf-8", newline="") as log_file:
         command = build_webots_command(webots, settings.world, headless=settings.headless)
-        process = _popen(command, webots_environment(webots), log_file)
+        env = webots_environment(webots)
+        env["VLAROBOT_ZMQ_PORT"] = str(port)
+        process = _popen(command, env, log_file)
+        _write_pid_file(pid_path, process.pid)
         outcomes: list[EpisodeOutcome] = []
         policy = ScriptedCanPolicy(
             trace_path=trace_path,
@@ -323,7 +348,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
         )
         try:
             startup_started = perf_counter()
-            client = wait_for_simulator(settings.endpoint, process, settings.startup_timeout_s)
+            client = wait_for_simulator(endpoint, process, settings.startup_timeout_s)
             startup_s = perf_counter() - startup_started
             try:
                 for index in range(n):
@@ -343,7 +368,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
             finally:
                 _stop_client(client)
         finally:
-            _terminate_process(process, settings.shutdown_timeout_s)
+            _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
     return outcomes
 
 
@@ -356,12 +381,17 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
     if trace_path.is_file():
         trace_path.unlink()
     log_path = settings.trace_dir / f"{suffix}.log"
+    pid_path = settings.trace_dir / f"{suffix}.pid"
+    endpoint, port = _episode_endpoint_port(settings)
     with log_path.open("w", encoding="utf-8", newline="") as log_file:
         command = build_webots_command(webots, settings.world, headless=settings.headless)
-        process = _popen(command, webots_environment(webots), log_file)
+        env = webots_environment(webots)
+        env["VLAROBOT_ZMQ_PORT"] = str(port)
+        process = _popen(command, env, log_file)
+        _write_pid_file(pid_path, process.pid)
         try:
             startup_started = perf_counter()
-            client = wait_for_simulator(settings.endpoint, process, settings.startup_timeout_s)
+            client = wait_for_simulator(endpoint, process, settings.startup_timeout_s)
             startup_s = perf_counter() - startup_started
             try:
                 policy = ScriptedCanPolicy(
@@ -384,21 +414,42 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
             finally:
                 _stop_client(client)
         finally:
-            _terminate_process(process, settings.shutdown_timeout_s)
+            _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
 
 
 def _popen(command: list[str], env: Mapping[str, str], log_file: IO[str]) -> subprocess.Popen[str]:
-    """Launch a subprocess arg list (never ``shell=True``) with output captured to a log file."""
+    """Launch a subprocess arg list (never ``shell=True``) with output captured to a log file.
+
+    Starts a new process group/session on POSIX so the whole Webots/controller tree can be
+    terminated on exit/timeout/exception (ADR-0020 addendum process hygiene).
+    """
+    cwd = str(PROJECT_ROOT)
+    env_map = dict(env)
+    if os.name == "nt":
+        creationflags = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        return subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env_map,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=creationflags,
+        )
     return subprocess.Popen(
         command,
-        cwd=str(PROJECT_ROOT),
-        env=dict(env),
+        cwd=cwd,
+        env=env_map,
         stdout=log_file,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
         text=True,
         encoding="utf-8",
         errors="replace",
+        start_new_session=True,
     )
 
 
@@ -435,18 +486,74 @@ def _stop_client(client: ZmqBackendClient) -> None:
         client.stop()
     except (RuntimeError, TimeoutError, OSError):
         pass
+    try:
+        client.close()
+    except Exception:
+        pass
 
 
-def _terminate_process(process: subprocess.Popen[str], timeout_s: float) -> None:
-    """Terminate the simulator politely, then force-kill if it will not exit."""
+def _write_pid_file(pid_path: Path, pid: int) -> None:
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+    pid_path.write_text(str(pid), encoding="utf-8")
+
+
+def _remove_pid_file(pid_path: Path | None) -> None:
+    if pid_path is None:
+        return
+    try:
+        pid_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _kill_process_tree(process: subprocess.Popen[str], *, force: bool) -> None:
+    """Terminate the full Webots/controller process tree, cross-platform."""
     if process.poll() is not None:
         return
-    process.terminate()
+    pid = process.pid
     try:
-        process.wait(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=timeout_s)
+        if os.name == "nt":
+            # /T kills child processes (e.g. controller) too.
+            cmd = ["taskkill", "/PID", str(pid), "/T"]
+            if force:
+                cmd.append("/F")
+            subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            try:
+                os.killpg(os.getpgid(pid), sig)
+            except (ProcessLookupError, PermissionError, OSError):
+                try:
+                    os.kill(pid, sig)
+                except (ProcessLookupError, PermissionError, OSError):
+                    pass
+    except Exception:
+        # Last resort: direct process handle.
+        try:
+            (process.kill() if force else process.terminate())
+        except Exception:
+            pass
+
+
+def _terminate_process(
+    process: subprocess.Popen[str], timeout_s: float, pid_path: Path | None = None
+) -> None:
+    """Terminate the simulator process tree politely, then force-kill if needed."""
+    try:
+        if process.poll() is not None:
+            return
+        _kill_process_tree(process, force=False)
+        try:
+            process.wait(timeout=timeout_s)
+            return
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(process, force=True)
+            try:
+                process.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        _remove_pid_file(pid_path)
 
 
 def _outcome(

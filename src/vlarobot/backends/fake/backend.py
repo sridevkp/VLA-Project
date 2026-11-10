@@ -124,6 +124,63 @@ class FakeBackend:
     def stop(self) -> None:
         self._stopped = True
 
+    def export_kinematics(self, action: str = "poll") -> dict[str, object]:
+        """Fake chunked export (no Webots): progresses per poll and returns a snapshot."""
+        if not hasattr(self, "_export_job") or self._export_job is None or action == "start":
+            self._export_job = {"index": 0, "total": 3, "per_joint": [], "done": False}
+        if action == "cancel":
+            self._export_job = {"index": 0, "total": 3, "per_joint": [], "done": True}
+            return {"state": "cancelled", "done": True, "snapshot": None, "progress": {}}
+        job = self._export_job
+        if not job["done"]:
+            idx = int(job["index"])
+            total = int(job["total"])
+            if idx < total:
+                name = f"arm_{idx + 1}_joint"
+                job["per_joint"].append(
+                    {
+                        "name": name,
+                        "kind": "hinge",
+                        "steps_used": 5,
+                        "measured_angle_moved_rad": 0.05,
+                        "reason": "ok",
+                        "settled": True,
+                        "axis_source": "posture_probe",
+                    }
+                )
+                job["index"] = idx + 1
+            if int(job["index"]) >= total:
+                job["done"] = True
+        done = bool(job["done"])
+        snapshot = (
+            {
+                "schema_version": 1,
+                "units": {"length": "m", "angle": "rad"},
+                "source": "fake",
+                "joints": [],
+                "finger_endpoint_solids": {},
+                "base_frame": {},
+                "export_progress": {
+                    "steps_used_total": len(job["per_joint"]) * 5,
+                    "per_joint": list(job["per_joint"]),
+                    "error": None,
+                },
+            }
+            if done
+            else None
+        )
+        return {
+            "state": "done" if done else "in_progress",
+            "done": done,
+            "current_index": int(job["index"]),
+            "total_joints": int(job["total"]),
+            "steps_used_total": len(job["per_joint"]) * 5,
+            "total_step_cap": 2000,
+            "per_joint": list(job["per_joint"]),
+            "error": None,
+            "snapshot": snapshot,
+        }
+
     def _observation(self) -> Observation:
         return Observation(
             t=self._time,

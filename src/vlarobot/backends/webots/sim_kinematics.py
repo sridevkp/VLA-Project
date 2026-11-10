@@ -118,6 +118,59 @@ class SimKinematics:
         return [joint.name for joint in self.joints]
 
 
+def snapshot_session_hash(session_id: dict[str, object] | None) -> str | None:
+    """Stable short hash of a snapshot/session identity (ADR-0020)."""
+    if not isinstance(session_id, dict):
+        return None
+    blob = json.dumps(session_id, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def snapshot_pointer_path(path: Path) -> Path:
+    """Stable symlink-free pointer file alongside a snapshot path."""
+    path = Path(path)
+    return path.with_name(path.stem + ".pointer")
+
+
+def _read_pointer_target(path: Path) -> Path | None:
+    pointer = snapshot_pointer_path(path)
+    for candidate in (pointer, path):
+        if not candidate.is_file():
+            continue
+        try:
+            raw = candidate.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not raw:
+            continue
+        # pointer text file contains hashed snapshot filename (or relative path)
+        if raw.endswith(".json") and "\n" not in raw and "{" not in raw[:1]:
+            target = (candidate.parent / raw).resolve()
+            if target.is_file():
+                return target
+        # also accept JSON pointer object for robustness
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            obj = None
+        if isinstance(obj, dict):
+            ref = obj.get("snapshot") or obj.get("pointer")
+            if isinstance(ref, str) and ref.endswith(".json"):
+                target = (candidate.parent / ref).resolve()
+                if target.is_file():
+                    return target
+    return None
+
+
+def resolve_snapshot_path(path: Path) -> Path:
+    """Resolve a stable pointer/base path to the actual session-hashed snapshot file."""
+    path = Path(path)
+    target = _read_pointer_target(path)
+    if target is not None:
+        return target
+    return path
+
+
 def snapshot_content_hash(payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of the payload excluding the content hash field."""
     material = {key: value for key, value in payload.items() if key != "content_hash"}
@@ -131,12 +184,11 @@ def finalize_verified_snapshot(
     *,
     session_id: dict[str, object] | None = None,
 ) -> SimKinematics:
-    """Write a snapshot only after verification passes; atomic on success.
+    """Write a verified snapshot atomically; session-hashed file + stable pointer.
 
-    Adds ``valid`` and ``content_hash`` (and ``session_id`` when provided), writes to a
-    temp file, verifies by loading/building and checking export posture, then atomically
-    renames to ``path``. On any failure the temp file is removed and ``path`` is removed
-    so a pre-existing invalid or stale snapshot cannot remain loadable.
+    Writes ``configs/generated/sim_kinematics.<session-hash>.json`` (when session_id known)
+    and updates the stable symlink-free pointer file and base path for compatibility.
+    On failure removes temp/canonical outputs so no loadable stale snapshot remains.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,21 +198,31 @@ def finalize_verified_snapshot(
     candidate["valid"] = True
     candidate["content_hash"] = snapshot_content_hash(candidate)
     data = json.dumps(candidate, sort_keys=True, allow_nan=False, indent=2).encode("utf-8")
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    session = candidate.get("session_id")
+    shash = snapshot_session_hash(session if isinstance(session, dict) else None)
+    hashed_path = path.with_name(f"{path.stem}.{shash}{path.suffix}") if shash else path
+    pointer_path = snapshot_pointer_path(path)
+    tmp_path = hashed_path.with_suffix(hashed_path.suffix + ".tmp")
     debug_path = path.with_suffix(path.suffix + ".debug.json")
     try:
         tmp_path.write_bytes(data)
         model = load_snapshot(tmp_path)
         chain = build_chain(model)
         verify_export_posture(model, chain)
-        os.replace(tmp_path, path)
+        os.replace(tmp_path, hashed_path)
+        # stable symlink-free pointer: text filename
+        pointer_path.write_text(hashed_path.name, encoding="utf-8")
+        # keep base path as a copy for backward compatibility with existing loaders/tools
+        try:
+            path.write_bytes(data)
+        except OSError:
+            pass
         try:
             debug_path.unlink(missing_ok=True)
         except OSError:
             pass
         return model
     except Exception as exc:
-        # Preserve evidence for diagnosis but never leave a loadable canonical snapshot.
         try:
             debug_payload = dict(candidate)
             debug_payload["valid"] = False
@@ -172,20 +234,20 @@ def finalize_verified_snapshot(
             )
         except Exception:
             pass
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        for p in (tmp_path, hashed_path, pointer_path, path):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
         raise
 
 
 def load_snapshot(path: Path) -> SimKinematics:
-    """Load and validate a simulator kinematics JSON written by the exporter."""
-    path = Path(path)
+    """Load and validate a simulator kinematics JSON written by the exporter.
+
+    If ``path`` is a stable base/pointer, resolves to the session-hashed snapshot.
+    """
+    path = resolve_snapshot_path(Path(path))
     with path.open("r", encoding="utf-8") as file:
         payload = json.load(file)
     return kinematics_from_payload(payload, source=str(path))

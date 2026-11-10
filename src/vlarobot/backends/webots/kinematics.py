@@ -2,7 +2,7 @@
 
 import warnings
 from copy import copy
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 import numpy as np
 from ikpy.chain import Chain
@@ -11,10 +11,19 @@ from ikpy.link import Link
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     IK_TOL_GRASP,
+    KINEMATIC_MODEL,
     MAX_JOINT_STEP_RAD,
     MAX_TILT_DEG,
+    SIM_KINEMATICS_PATH,
     TOOL_OFFSET,
+    TORSO_JOINT,
     URDF_PATH,
+)
+from vlarobot.backends.webots.sim_kinematics import (
+    SimKinematics,
+    build_chain,
+    load_snapshot,
+    validate_torso,
 )
 
 warnings.filterwarnings("ignore", message=".*is of type 'fixed'.*")
@@ -27,21 +36,34 @@ class IKTrustRegionError(RuntimeError):
 
 
 class Kinematics:
-    def __init__(self):
-        if not URDF_PATH.exists():
-            raise FileNotFoundError(f"URDF not found: {URDF_PATH}")
-        base_elements = [
-            "base_link",
-            "base_link_Torso_joint",
-            "Torso",
-            "torso_lift_joint",
-            "torso_lift_link",
-            "torso_lift_link_TIAGo front arm_joint",
-            "TIAGo front arm",
-        ]
-        self.chain = Chain.from_urdf_file(
-            str(URDF_PATH), base_elements=base_elements, last_link_vector=TOOL_OFFSET
-        )
+    def __init__(self, model_override: Literal["urdf", "sim"] | None = None):
+        self.model = model_override if model_override is not None else KINEMATIC_MODEL
+        self._sim: SimKinematics | None = None
+        if self.model == "sim":
+            if not SIM_KINEMATICS_PATH.exists():
+                raise FileNotFoundError(
+                    f"Sim kinematics snapshot not found: {SIM_KINEMATICS_PATH}; run "
+                    "uv run python -m vlarobot.cli export-sim-kinematics first (ADR-0020)."
+                )
+            self._sim = load_snapshot(SIM_KINEMATICS_PATH)
+            self.chain = build_chain(self._sim)
+        else:
+            if not URDF_PATH.exists():
+                raise FileNotFoundError(f"URDF not found: {URDF_PATH}")
+            base_elements = [
+                "base_link",
+                "base_link_Torso_joint",
+                "Torso",
+                "torso_lift_joint",
+                "torso_lift_link",
+                "torso_lift_link_TIAGo front arm_joint",
+                "TIAGo front arm",
+            ]
+            self.chain = Chain.from_urdf_file(
+                str(URDF_PATH), base_elements=base_elements, last_link_vector=TOOL_OFFSET
+            )
+        # Same active-link semantics for both models: only the arm joints are
+        # IK variables (the torso is baked/constant in this M1 chain).
         for i, link in enumerate(self.chain.links):
             self.chain.active_links_mask[i] = link.name in ARM_JOINTS
         self.idx = {link.name: i for i, link in enumerate(self.chain.links)}
@@ -57,6 +79,11 @@ class Kinematics:
         print("IKPy chain:", [link.name for link in self.chain.links])
 
     def forward(self, q):
+        if self._sim is not None:
+            # The sim model bakes the torso at its export posture; FK with a
+            # drifted torso value would silently return a wrong pose, so fail
+            # fast (tolerance mirrors the reset settle tolerance).
+            validate_torso(self._sim, float(q[self.idx[TORSO_JOINT]]))
         return self.chain.forward_kinematics(q)
 
     def bounds(self, name):

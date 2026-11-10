@@ -952,3 +952,30 @@
 - **Hinge model:** replaced origin-axis assumption with fitted axis line `(a,c)` (point on axis, perpendicular component) and pitch-aware residual: `D = T1*T0^-1` modeled as `Trans(c)@Rot(a,delta)@Trans(-c)`; chain uses revolute origin at `c` with `K = Rot(a,-theta_ref)@Trans(-c)@T(theta_ref)`. Fixes systematic multi-mm residuals when hinge axes do not pass through parent origins.
 - **Export robustness:** robot base pose pinned and held/quiesced during probing to limit drift; probe records `parent_pose0/child_pose0` for stable recomputation; chain parent consistency enforced for sequential arm joints; on finalize failure a non-loadable debug snapshot (`*.debug.json`, `valid:false`) is written while canonical target/temp are removed.
 - **Open:** debug analysis of a failed run showed arm_6 pitch ~5.4 mm (>1 mm cap) under the new model; requires fresh live export to confirm and diagnose if persistent.
+
+
+## ADR-0020 addendum — Feasible sweep, episode hooks, snapshot hygiene, forensics (2026-11-10)
+
+- **Date:** 2026-11-10
+- **Status:** Implemented (Webots-free); live evidence **UNVERIFIED**
+- **Decision:** Redesign `validate-kinematics` to a feasible 12-pose sweep (6 spread + 6 near
+  PREGRASP/DESCEND, tool-vertical joint-space bias) with sub-moves bounded to
+  `0.4 * velocity_limit * horizon`, stationarity settle (cap 60 steps/sub-move), pre-run step budget,
+  and fail-fast-continue per pose. Acceptance: mean < 3 mm, max < 6 mm on `arm_7` endpoint and wrist
+  in base frame, whole/near-task reported separately; finger midpoint only when tool frame verified
+  (otherwise FALLBACK/UNVERIFIED). No safety/IK/threshold/target changes.
+  `run-episodes` accepts `--kinematic-model urdf|sim` and per-run `--closed-loop-waypoints/--pregrasp-realign`,
+  records model/snapshot hash/path in every episode summary, and refuses `sim` when snapshot
+  missing/invalid or identity differs/unverifiable against the running session (clear available fields).
+  Verified snapshots are written as `sim_kinematics.<session-hash>.json` with stable symlink-free pointer
+  `sim_kinematics.pointer` (+ compat `sim_kinematics.json`); failed finalize leaves no loadable/temp/debug
+  artifact.
+- **Evidence (Webots-free):** determinism forensics `docs/DETERMINISM_FORENSICS_2026-11-10.md`
+  (episode-00..02: first substantive divergence record 1, reset fingerprint identical; missing
+  session/world/step identity fields documented). Finger geometry derived from R2025a
+  `TiagoGripper.proto` (remote): pad-center midpoint in `arm_7` frame ≈ `(0,0.1901,0) m`, pad-bottom
+  ≈ `(0,0.2350,0) m`; vs scalar `finger_tip_offset_m=0.1741` as `[0,0,-0.1741]` difference norm ~0.258 m
+  under that interpretation (**UNVERIFIED**). Gates: ruff/format/ty pass, pytest `-m "not webots"` 180 passed.
+- **Consequences:** live 12-pose acceptance, determinism re-run, episode comparison runs, and offline
+  re-eval of telemetry-bearing reports remain **UNVERIFIED** without Webots. `--kinematic-model sim`
+  runs are refused unless snapshot/session identity is verifiable (conservative).

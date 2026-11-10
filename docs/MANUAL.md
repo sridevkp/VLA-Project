@@ -597,6 +597,8 @@ To see command options, run:
 uv run python -m vlarobot.cli --help
 uv run python -m vlarobot.cli brain --help
 uv run python -m vlarobot.cli can-regression --help
+uv run python -m vlarobot.cli run-episodes --help
+uv run python -m vlarobot.cli validate-kinematics --help
 ```
 
 `smoke`, `brain`, `can-regression`, `run-episodes`, `export-sim-kinematics`, and
@@ -604,3 +606,44 @@ uv run python -m vlarobot.cli can-regression --help
 inside Webots' controller environment; in the factory world, the controller shim starts it
 automatically. The kinematics export/validation commands are live-Webots tools whose acceptance
 evidence remains **UNVERIFIED** in this environment (see §3c).
+
+### run-episodes (ADR-0020 hooks)
+
+- `--kinematic-model urdf|sim`: recorded in every episode summary together with snapshot hash/path.
+  `--kinematic-model sim` is refused when the snapshot is missing/invalid or its identity cannot be
+  verified against the running session / differs (Webots version or world hash, when available). The
+  refusal is explicit and reports available session/snapshot fields.
+- `--pregrasp-realign/--no-pregrasp-realign` and `--closed-loop-waypoints/--no-closed-loop-waypoints`
+  are accepted per run and recorded in episode summaries/traces.
+
+### validate-kinematics (feasible sweep, ADR-0020 redesign)
+
+- Default `--n 12` (6 spread + 6 near PREGRASP/DESCEND working-volume poses, tool-vertical bias in
+  joint space). Poses are reached by sub-moves bounded to
+  `0.4 * velocity_limit_rad_s * command_horizon_s` (defaults 1.0 rad/s, 1.0 s; overridable via
+  `--velocity-limit-rad-s`, `--command-horizon-s`) so safety does not reject.
+- Each sub-move settles by stationarity with a cap of 60 steps/sub-move; a pose that cannot settle
+  or fails safety/table pre-check fails fast with a clear reason and the sweep continues.
+- Prints the total step budget before the run (`poses x sub-moves x cap x ms/step`); pass
+  `--bench-ms-per-step` (e.g. 447) for a time estimate.
+- Acceptance (12 poses): mean < 3 mm, max < 6 mm on `arm_7` endpoint and wrist in the Robot/base
+  frame. Whole-set and near-task results are reported separately. Finger midpoint is informational
+  only and the tool frame is labeled **FALLBACK/UNVERIFIED** unless resolved.
+- Report JSON persists `samples` with `group`, `joints`, and `telemetry` for offline re-eval
+  (`scripts/reevaluate_traces_sim_model.py`).
+
+Example (live Webots, **UNVERIFIED** here):
+
+```text
+uv run python -m vlarobot.cli export-sim-kinematics
+uv run python -m vlarobot.cli validate-kinematics --n 12 --seed 0 --bench-ms-per-step 447 --report runs/validate-kinematics-12-seed0.json
+uv run python -m vlarobot.cli run-episodes --n 3 --determinism-check 3 --kinematic-model urdf --fresh-world --webots <path>
+uv run python scripts/reevaluate_traces_sim_model.py runs/validate-kinematics-12-seed0.json
+```
+
+### Sim kinematics snapshot hygiene
+
+Verified exports are written to `configs/generated/sim_kinematics.<session-hash>.json` with a stable
+symlink-free pointer file `configs/generated/sim_kinematics.pointer` (and `configs/generated/sim_kinematics.json`
+kept for compatibility). Failed exports remove temp/canonical outputs and do not leave `.debug.json`
+artifacts. `configs/generated/` is gitignored.

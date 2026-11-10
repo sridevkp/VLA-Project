@@ -1319,3 +1319,43 @@ uv run python -m vlarobot.cli run-episodes --determinism-check 3
 - **Environment:** Webots server startup/availability was intermittent in this session (batch runs sometimes died or became unreachable), preventing completion of a fresh verified `export-sim-kinematics` and any `validate-kinematics` sweep on a telemetry-enabled server. `validate-kinematics` requires `export_sim_kinematics: true` on a restarted server.
 - **Gates (Webots-free):** `ruff check .` pass, `ruff format --check .` pass, `ty check src tests` pass (0), `pytest -m "not webots"` **185 passed**.
 - **Status:** live export acceptance, validate-kinematics (n=8/40), re-evaluation, determinism, and M1 gates remain **UNVERIFIED**. Next: run fresh `export-sim-kinematics` on a stable watched Webots session, inspect per-joint residuals (especially arm_6 pitch) from debug/canonical output, then run telemetry-enabled validation sweeps if export verifies.
+
+
+### Determinism forensics, finger geometry, feasible sweep redesign, hooks, snapshot hygiene (2026-11-10, Webots-free; live UNVERIFIED)
+
+- **Determinism forensics (Webots-free):** `docs/DETERMINISM_FORENSICS_2026-11-10.md`. Traces
+  `runs/episode-runner/episode-00..02.jsonl` (27/46/106). Record 0 semantically identical
+  (same seed/reset fingerprint/IK seed+digest) except expected per-episode `controller_reset_state.trace_path`.
+  **First substantive divergence: record 1** (0-based, waypoint/INIT, `sim_time_s=null`) across
+  base/pose/joint/EE/CAN/FK-GT/wheel/clearance fields while `reset_fingerprint` remains identical —
+  evidence consistent with early post-reset/world-state nondeterminism across fresh runs (not a proven
+  root cause). Missing: session/world/step identity, controller start time, physics/step counts, per-step
+  IK RNG state. Report lists fields to add next (canonical reset hash, IK seed/RNG at reset/solve, world
+  hash, session/process ids, `physics_step_count`/basicTimeStep, first-command markers, server
+  `webots_version`/identity). Bench-steps reference ~447 ms/step (RGB + `kinematics_telemetry`).
+- **Finger geometry (PROTO-derived, UNVERIFIED):** read R2025a `TiagoGripper.proto`
+  (`tiago_extensions/protos/TiagoGripper.proto`, remote raw; not found locally). Mount on `arm_7`
+  endEffectorSlot `t=(0,0.016,0)`, `R=axis-angle(0.5774,0.5774,-0.5774,2.0944)`. At `q=0` geometric
+  pad-center midpoint in `arm_7`/wrist frame ≈ `(6.78e-7, 0.1901, 4.92e-7) m`; pad-bottom midpoint
+  ≈ `(8.05e-7, 0.2350, 6.19e-7) m`. Scalar `finger_tip_offset_m=0.1741` interpreted as `[0,0,-0.1741]`
+  in `arm_7`-local yields pad-center difference ≈ `(6.78e-7, 0.1901, 0.17410049) m` (norm ~0.2578 m),
+  indicating a strong frame-convention discrepancy under that interpretation. Sim snapshot records
+  `fingerTipOffsetFallback(UNVERIFIED)` with no explicit tool-offset field. **UNVERIFIED**: no live
+  frame inspection, closed/open `q`, CAD contact definition, or readable finger Solids.
+- **Feasible sweep redesign (implemented, Webots-free):** 12 poses (6 spread + 6 near-task), sub-moves
+  bounded by `0.4 * velocity_limit * horizon`, stationarity settle with 60-step/sub-move cap, budget
+  printed before run, fail-fast-continue per pose. Acceptance: mean < 3 mm, max < 6 mm on `arm_7`
+  endpoint and wrist in base frame, whole/near-task reported separately; tool frame
+  **FALLBACK/UNVERIFIED** (finger midpoint informational only unless verified).
+  `scripts/reevaluate_traces_sim_model.py` updated for grouped samples. **Live acceptance sweep UNVERIFIED.**
+- **Episode comparison hooks:** `run-episodes` accepts `--kinematic-model urdf|sim` and per-run
+  `--closed-loop-waypoints/--pregrasp-realign`; records model/snapshot hash/path in every episode
+  summary and refuses `sim` if snapshot missing/invalid or identity differs/unverifiable vs running
+  session (clear error with available fields). **Not run.**
+- **Snapshot hygiene:** exports write `configs/generated/sim_kinematics.<session-hash>.json` + stable
+  symlink-free pointer `sim_kinematics.pointer` (+ compat `sim_kinematics.json`), failed finalize
+  removes temp/canonical outputs; `.debug.json` artifact removed; `configs/generated/` gitignored.
+- **Gates (Webots-free, this change set):** `uv run ruff check .` pass; `uv run ruff format --check .`
+  pass; `uv run ty check src tests` pass (0); `uv run pytest -m "not webots"` **180 passed**
+  (386 warnings, ikpy deprecations). **Live/Webots commands, telemetry-bearing 12-pose sweep,
+  determinism re-run, offline re-eval of completed telemetry report, M1-06a/M1-07/M1 gates: UNVERIFIED.**

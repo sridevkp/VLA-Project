@@ -847,3 +847,69 @@
   **UNVERIFIED**.
 - **Supersedes:** Nothing. The `calibrate_tool` gate and the report-only proposal behaviour are
   unchanged.
+
+## ADR-0020 — Sim-derived kinematics snapshot and FK validation sweep (live-UNVERIFIED machinery)
+
+- **Status:** Accepted (implementation + Webots-free tests landed; **live export, sweep, and acceptance UNVERIFIED** — no Webots session in this environment).
+- **Date:** 2026-11-10
+- **Scope:** Milestone M1 (second phase). Read-only live export of Webots kinematics to JSON, a sim-derived IKPy chain loader/selector, and a live FK-vs-GT validation sweep with an explicit accept criterion and a pose-cross-validated failure analysis. No safety/IK-tolerance/threshold/target changes, no `core/` wire or interface changes (`RobotState.diagnostics` remains the free-form channel), and no Webots/ROS imports outside `backends/webots/`.
+- **Context:** ADR-0019 decomposed the URDF FK-vs-GT gap from traces (n=749): the arm_4/arm_6
+  residuals are near-constant in world/base but the arm_6→arm_7 offset is the dominant term in the
+  arm_7 frame, and the URDF chain root (`Base link`) is rigidly displaced from the Robot node
+  origin — so a tip-only correction cannot represent the error and live-measured link frames are
+  required to localize it.
+- **Decision — live export (read-only, reset posture):** `supervisor_kinematics.capture_snapshot`
+  records world poses of the Robot node (`io.me`, the `frames.world_to_base` base), every torso/arm
+  joint's parent `Solid` and `endPoint` child `Solid`, and both finger `endPoint` `Solid`s. Poses are
+  read only from `Pose`-derived nodes; joint/`jointParameters` nodes are never asked for pose. Hinge
+  axes are derived empirically from a small posture probe (<= 0.05 rad per joint, restored
+  immediately) via the rigid conjugation of two measured postures; the `jointParameters.axis` field
+  is never assumed and is only cross-checked in the readability report. The torso slider is baked at
+  its export posture and never probed. The backend attaches the snapshot to the reset observation
+  (`diagnostics.sim_kinematics_snapshot`) and per-step GT Solid telemetry
+  (`diagnostics.kinematics_telemetry`) only when `export_sim_kinematics: true` (default `false`).
+- **Decision — sim chain (Robot-node base, measured hinge family):** the chain root is the **Robot
+  node frame**, fixing the URDF chain's rigid upstream XY offset by construction (a base-tilt
+  invariance test pins that a rigid base rotation is identical between FK and GT). For each hinge the
+  measured family is `T(θ) = Rot(â, θ) @ K` with `K = Rot(â, θ_ref)⁻¹ @ T_pc(θ_ref)` and absolute
+  joint angles as variables; because ikpy composes `origin ∘ Rot(axis, θ)`, the per-joint element
+  order is `URDFLink(axis=â, absolute motor limits)` **then** `FixedLink(K)` (placing `K` first would
+  encode a different, constant-anchor hinge family — the perturbed-angle FK test pins the correct
+  order). The torso is a baked `FixedLink` at the export posture, asserted at load and on every FK
+  call (`SIM_TORSO_TOLERANCE_M = 0.002 m`). The tool frame is the midpoint of the two finger pad
+  centres in the `arm_7` child frame; if only one finger is readable the loader falls back to the
+  configured `finger_tip_offset_m` along local −z and marks the source
+  `fingerTipOffsetFallback(UNVERIFIED)`. Load-time validation re-derives every axis from the recorded
+  probe, rejects a fit residual > 1 mm, and checks the arm parent-child chain (≤ 0.1 mm).
+- **Decision — chain selection:** `kinematic_model: urdf|sim` (default `urdf`, M1-06a equivalence
+  baseline unchanged). `sim` loads `configs/generated/sim_kinematics.json` and raises if it is
+  missing, so a normal run never silently changes geometry.
+- **Decision — validation sweep and criterion:** `validate-kinematics` sweeps >= 40 deterministic,
+  stratified arm poses inside the recorded absolute motor limits with the torso fixed; a pose is
+  aborted (not scored) when any tracked link is below the table plane inside the footprint, or when
+  rejected/does not settle. FK and GT are compared in the Robot-node base frame per pose. The **sim**
+  model is accepted only if the finger-midpoint error is mean < 2 mm and max < 5 mm over the sweep;
+  the URDF model is the informational baseline and is never auto-accepted. On failure the report
+  states the first affected link/frame and fits named parameter families (constant base-frame and
+  tool-frame offsets) with a strict even/odd **pose** holdout (never by run), so a rigid offset is
+  distinguished from pose-dependent axis/scale/structure error and identifiability is stated
+  explicitly.
+- **Consequences:** a live export is the single source for the sim chain; the export-posture FK
+  residual and per-joint probe/cross-check are reported on write, so axis/parent-chain defects fail
+  closed at load or are visible before a sweep. Existing PREGRASP/DESCEND traces lack the Solid-pose
+  telemetry the sweep requires, so their numeric re-evaluation is blocked on a live export + a
+  telemetry-bearing validation report (`scripts/reevaluate_traces_sim_model.py` enforces this and
+  claims no numeric result).
+- **Evidence (this environment):** Webots-free machinery and tests —
+  `tests/test_supervisor_kinematics.py`, `tests/test_sim_kinematics_loader.py`,
+  `tests/test_kinematics_validation.py` (synthetic 7-joint world, perturbed-angle FK, base-tilt
+  invariance, loader rejection cases, constant/pose-dependent bias attribution, table pre-check, CLI
+  sweep driver over a fake lockstep client). Gates: `ruff check .`, `ruff format --check .`,
+  `ty check src tests` (only the 2 pre-existing HEAD diagnostics in `backend.py`/`scripted_can.py`),
+  `pytest -m "not webots"` — 180 passed. Commits `4710fd7`, `587b176`, `05d18d7`, `801d62e`.
+- **Remaining evidence (UNVERIFIED):** live `export-sim-kinematics` JSON; live `validate-kinematics`
+  sweep (>= 40 poses) and sim-model accept/reject decision; numeric re-evaluation of prior traces
+  against the accepted sim model; the PROTO-side geometry and the `tool_offset` calibration path
+  (unchanged from ADR-0019, still report-only). M1-06a, M1-07, and all M1 gates remain UNVERIFIED.
+- **Supersedes:** Nothing. `calibrate_tool` stays `false`/report-only; `kinematic_model` defaults to
+  `urdf` and the URDF equivalence baseline is unchanged.

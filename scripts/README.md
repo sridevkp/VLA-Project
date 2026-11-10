@@ -19,3 +19,12 @@ run the dependent candidate search.
 joint motion through FK against the factory table box. It reports both torso heights, sampled hand
 radius, minimum signed clearance, and a deterministic `safe_via` route estimate. It is a kinematic
 screen only; Webots contacts and physical clearance remain unverified.
+
+`reevaluate_traces_sim_model.py` is a Webots-free offline re-scorer for ADR-0020: it loads a
+`validate-kinematics --report` (or any input that embeds `kinematics_telemetry` samples) and
+re-applies the sim-vs-URDF FK sweep against the recorded GT Solid poses. Without the exported
+`configs/generated/sim_kinematics.json` snapshot, or when the inputs do not carry the Solid-pose
+telemetry the sweep requires, it prints that it is blocked on a live export and exits without
+claiming a numeric result. Existing PREGRASP/DESCEND traces do not embed that telemetry, so the
+numeric re-evaluation of those traces remains blocked until a live export + validation sweep has
+produced a telemetry-bearing report.

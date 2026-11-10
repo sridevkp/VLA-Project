@@ -1252,3 +1252,42 @@ uv run python -m vlarobot.cli run-episodes --determinism-check 3
 - **UNVERIFIED items:** live `run-episodes`/`--determinism-check` runs; headless flags; the real
   `TOOL_OFFSET` calibration correction; the original-controller fixture comparison; M1-06a,
   M1-07, and all M1 gates.
+
+### Sim-derived kinematics export and validation sweep (ADR-0020, machinery; live UNVERIFIED)
+
+- **Supervisor export:** `supervisor_kinematics.py` captures a read-only snapshot at the settled
+  reset posture (Robot node frame, torso/arm parent+child `Solid` poses, both finger `endPoint`
+  poses, Pose-derived nodes only). Hinge axes are derived from a <= 0.05 rad posture probe
+  (restored immediately) with the `jointParameters.axis` used only as a cross-check; the torso
+  slider is baked and never probed. Gated by `export_sim_kinematics` (default `false`): the
+  backend attaches `sim_kinematics_snapshot` on reset and per-step `kinematics_telemetry`.
+- **Sim chain:** `sim_kinematics.py` loads the JSON and builds an IKPy chain rooted in the Robot
+  node frame (fixing the URDF rigid upstream XY offset by construction). Per hinge the measured
+  family `T(θ)=Rot(â,θ)@K` is encoded as `URDFLink(axis=â)` then `FixedLink(K)` with absolute
+  motor-limit bounds; the torso is a baked, asserted `FixedLink`; the tool frame is the finger-pad
+  midpoint (or the `fingerTipOffsetFallback(UNVERIFIED)`). Load validation re-derives axes from the
+  probe, rejects fit residuals > 1 mm and arm parent-chain gaps > 0.1 mm.
+  `Kinematics(model_override="urdf"|"sim")` selects the chain; default remains `urdf`.
+- **Validation sweep:** `kinematics_validation.py` + CLI `validate-kinematics` scores both chains
+  in the Robot-node base frame over >= 40 deterministic stratified arm poses (torso fixed). A pose
+  is aborted, not scored, on table-plane clearance failure or reject/unsettled. Accept (sim only):
+  finger-midpoint mean < 2 mm and max < 5 mm. Failure analysis reports the first affected
+  link/frame and fits named rigid-offset families with a strict even/odd **pose** holdout, so a
+  constant offset is distinguished from pose-dependent axis/scale/structure error (identifiability
+  stated). `export-sim-kinematics` writes/verifies the snapshot; `scripts/reevaluate_traces_sim_model.py`
+  re-scores telemetry-bearing reports offline and reports "blocked on live export" (no numeric
+  claim) when the snapshot/telemetry is absent.
+- **Evidence (Webots-free):** `tests/test_supervisor_kinematics.py`,
+  `tests/test_sim_kinematics_loader.py`, `tests/test_kinematics_validation.py` — 29 tests
+  covering access discipline, probe derivation/restore, export-posture round trip, perturbed-angle
+  FK, base-tilt invariance, loader rejections, exact acceptance, constant base/tool bias
+  attribution, pose-dependent rejection, table pre-check/pose sampling, and the CLI sweep driver
+  on a fake lockstep client. Gates: ruff check/format clean, `ty check` only the 2 pre-existing
+  HEAD diagnostics, `pytest -m "not webots"` **180 passed**. Commits `4710fd7`, `587b176`,
+  `05d18d7`, `801d62e`.
+- **UNVERIFIED (live, required next):** no snapshot exported, no `validate-kinematics` sweep run,
+  sim model not accepted/rejected on live data, and existing traces cannot be numerically
+  re-evaluated (they lack `kinematics_telemetry`). Run the §3c commands against a watched factory
+  world: `export-sim-kinematics` (≈60–120 s startup + ~10 s probes) then `validate-kinematics -n 40`
+  (several minutes), persist the JSON report, and feed it to `scripts/reevaluate_traces_sim_model.py`.
+  M1-06a, M1-07, and all M1 gates remain UNVERIFIED.

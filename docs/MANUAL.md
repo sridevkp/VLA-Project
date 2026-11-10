@@ -370,6 +370,67 @@ camera frames, and the scripted policy reads RGB every step, so an episode may f
 reason alone. Keep rendering (the default) until the headless path has been live-verified on the
 target OS; the runner prints a warning whenever it is enabled.
 
+## 3c. Simulator-derived kinematics export and validation (ADR-0020, UNVERIFIED)
+
+`export-sim-kinematics` captures the live Webots kinematics at the settled reset posture (Robot
+node frame, every torso/arm parent/child `Solid` pose, and both finger `endPoint` poses, read
+only from `Pose`-derived nodes). Hinge axes are derived empirically from a small posture probe
+(<= 0.05 rad per joint, restored immediately); the `jointParameters.axis` field is never assumed
+and is only cross-checked in the report. The torso slider is baked at its export posture. The
+snapshot is written to `configs/generated/sim_kinematics.json` (or `--output`) and the command
+re-loads it to verify the sim chain reproduces the export posture.
+
+`validate-kinematics` drives >= 40 diverse, stratified arm poses with the torso held fixed at the
+settled export value, settles each pose, and scores two chains against the live GT `Solid` poses
+in the Robot node (base) frame: the repo URDF baseline and the sim-derived chain
+(`kinematic_model: sim`). A pose is aborted (not scored) if any tracked link is below the table
+plane inside the table footprint, or if the target is rejected / does not settle. The sim model
+is accepted only when the finger-midpoint error (midpoint of the two finger pad centres) is
+**mean < 2 mm and max < 5 mm** over the sweep; otherwise the report names the first affected
+link/frame and proposes least-squares refinements of named parameter families with a strict
+even/odd pose holdout (never by run), so a rigid frame/tool offset is distinguished from a
+pose-dependent axis/scale/structure error. The URDF chain is always reported as the
+informational baseline.
+
+**Prerequisites:** open `worlds/factory.wbt` in Webots so its controller starts the lockstep
+server, and set `export_sim_kinematics: true` in `configs/robot.yaml` for the export/sweep
+session (default `false`; restart the sim-server after changing it so the backend attaches the
+snapshot and per-step `kinematics_telemetry`). `kinematic_model` stays `urdf` by default
+(M1-06a equivalence baseline) and is only switched to `sim` after a live sweep accepts the
+sim chain.
+
+**Linux**
+
+```bash
+uv run python -m vlarobot.cli export-sim-kinematics
+uv run python -m vlarobot.cli validate-kinematics --n 40 --seed 0 --report runs/validate-kinematics-seed0.json
+```
+
+**Windows PowerShell**
+
+```powershell
+uv run python -m vlarobot.cli export-sim-kinematics
+uv run python -m vlarobot.cli validate-kinematics --n 40 --seed 0 --report .\runs\validate-kinematics-seed0.json
+```
+
+The offline re-scorer (Webots-free) re-applies the sweep to a telemetry-bearing report; without a
+live export or without such a report it states that it is blocked on a live export and claims no
+numeric result:
+
+```bash
+uv run python scripts/reevaluate_traces_sim_model.py runs/validate-kinematics-seed0.json
+```
+
+**Durations (approximate, UNVERIFIED):** export ≈ 60–120 s Webots startup + ~10 s axis probes;
+the 40-pose validation sweep takes several minutes (one settle per pose). `--n < 40` runs but is
+reported as an under-powered, non-acceptance sweep.
+
+**Status: UNVERIFIED.** No Webots session was available in this environment, so no snapshot, no
+live sweep, no sim-model acceptance, and no numeric re-evaluation of existing traces has been
+performed here. The machinery and its Webots-free tests are in place; the live
+export/validate commands above are the required next evidence. Keep rendering on (see the
+headless caveat above) and run against a watched factory world.
+
 _GT fingertip telemetry_ (`gt_tip_telemetry`, plus the merged boundary fields) appears in every
 trace from this section's real runs; `scripts/analyze_can_run.py` prints it as a table after the
 per-state rows, together with any `TOOL_OFFSET` calibration proposal (report-only, never
@@ -511,6 +572,8 @@ uv run python -m vlarobot.cli brain --help
 uv run python -m vlarobot.cli can-regression --help
 ```
 
-`smoke`, `brain`, and `can-regression` are implemented. The standalone `sim-server` command is
-intended to run inside Webots' controller environment; in the factory world, the controller shim
-starts it automatically.
+`smoke`, `brain`, `can-regression`, `run-episodes`, `export-sim-kinematics`, and
+`validate-kinematics` are implemented. The standalone `sim-server` command is intended to run
+inside Webots' controller environment; in the factory world, the controller shim starts it
+automatically. The kinematics export/validation commands are live-Webots tools whose acceptance
+evidence remains **UNVERIFIED** in this environment (see §3c).

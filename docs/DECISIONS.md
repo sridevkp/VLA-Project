@@ -738,6 +738,14 @@
   controller. Traces record `closed_loop_waypoint` and `live_target_base_xyz_m` on every waypoint
   boundary. This deepens, not replaces, ADR-0016: the PREGRASP realign and its refreshed LIFT are
   unchanged.
+  *Annotation (2026-11-09, second phase):* the "byte-identical" wording above was originally
+  asserted only by key absence. It is now backed by `tests/test_move_linear_original_equivalence.py`
+  against a reference reimplementation of `1b2e4da:controllers/tiago_controller/motion.py`
+  `move_linear` (waypoints/seeds/solutions at 1e-9 under the bounded continuation; the literal
+  unbounded 1b2e4da solve is compared at the waypoint level and via the shared `IK_TOL_GRASP` tip
+  criterion, because the unbounded ikpy solve lands on divergent joint configs with the same tip).
+  The precise claim is: same Cartesian waypoint arithmetic, same seeds, same acceptance criteria;
+  the *joint solutions* differ only through the bounded-vs-unbounded solver continuation.
 - **Decision — GT fingertip telemetry, report-only:** one helper, `_gt_finger_payload()`, merged
   into `_trace_measurements()`, supplies `gt_midpoint_world_xyz_m`, `finger_tip_world_xyz_m`,
   `ee_fk_world_xyz_m`, `fk_gt_offset_m`, `gt_to_can_xy_m`, `fk_to_can_world_m`/`fk_to_can_xy_m`,
@@ -783,3 +791,59 @@
   M1-07, and all M1 gates remain **UNVERIFIED**.
 - **Supersedes:** Nothing. ADR-0016, the two-tier drift invariant, `hold_base: none`, and the
   four success criteria remain in force.
+
+## ADR-0019 — FK-vs-GT gap decomposition, tool-offset calibration proposal, and the graded OFF-equivalence test
+
+- **Date:** 2026-11-09 (second M1 phase, Webots-free, from recorded traces).
+- **Context:** The live FK-vs-GT tool-tip gap (~70–83 mm) needed a source before any further live
+  run or calibration action. Recorded traces (`runs/*.jsonl`, 749 usable `state_boundary` rows of
+  763; 12 skipped without complete FK/GT/base fields) carry the GT `arm_7_joint` endPoint Solid,
+  the base pose, and the measured joints, so the gap could be decomposed Webots-free with the
+  project's own URDF kinematics (`scripts/decompose_tool_offset.py`).
+- **Finding (trace-side, not calibrated live):** the gap is a *chain-of-origin* divergence, not a
+  tool offset alone. Per-segment residuals localize it: the arm_6→arm_7 origin placement is
+  **(+55.0, −1.1, +0.4) mm expressed in the arm_6_link frame with component stds
+  (0.06, 1.53, 0.67) mm** — near-rigid, i.e. the simulator places the arm_7 origin ~55 mm from
+  where every repo URDF (arm_7_joint at (0,0,0) of arm_6_link) and therefore FK expect it.
+  Upstream residuals are smaller and looser (u4 ≈ 26 mm std ~5; u6 ≈ 44 mm std ~11). The tip-side
+  residual (GT arm_7 vs FK tip incl. the 0.1741 m `finger_tip_offset_m`) is constant
+  (+199 mm) only in the tool frame's z: pad geometry (174.1 mm) plus the ~55 mm placement error
+  plus ~−28/+13 mm lateral spread. Consequence: `calibrate_tool_offset()` — which is **never run**
+  (gated by `calibrate_tool: false`, `configs/robot.yaml:31`; call sites
+  `pick_place.py:163-167` and `tiago_arm_api.py:391-393`; no brain caller) — could only correct a
+  constant tip vector and cannot represent the arm_6→arm_7 origin offset. A #s67-only correction
+  of the FK tip drops the DESCEND approach by 55 mm (correct directions for the observed rim
+  contact) but is a *proxy*; the root fix must be converted through one live run (see below).
+- **Decision — calibration stays report-only:** no code change to the configured
+  `finger_tip_offset_m` (0.1741 m). The predicted effect of applying the s67-only correction at
+  PREGRASP exit (per-run xy at the CAN: on-runs 1.6–6.6 mm uncorrected → 2.7–5.7 mm corrected,
+  i.e. marginally worse; off-runs 28.4 → 27.7 mm, marginally better) shows **XY realignment is
+  dominated by the PREGRASP realign gate, not by tool error**, so auto-correcting the offset would
+  trade a large vertical error (which explains the DESCEND rim knocks) for worse XY. Validation
+  path (live, operator): set `calibrate_tool: true`, run one episode, confirm the
+  `tool_offset_calibration_proposal` event's vector matches the s67 prediction, and re-check the
+  first-DESCEND-waypoint fingertip-to-lid clearance. All PROTO-side geometry (actual Webots
+  arm-link endpoint placement vs URDF) remains **UNVERIFIED** without that live run.
+- **Decision — graded OFF-equivalence test:** `tests/test_move_linear_original_equivalence.py`
+  replaces the key-absence assertion with two reference drives of the original
+  `1b2e4da:controllers/tiago_controller/motion.py` `move_linear` arithmetic (3 cm spacing, alpha
+  schedule, `IK_TOL_GRASP`/`MAX_TILT_DEG` rejection, 0.03/0.01 rad settle, 600-step budget) on the
+  identical OFF-policy inputs: *bounded* mode (shipped `restarts=True` +
+  `max_joint_step_rad=MAX_JOINT_STEP_RAD`) requires waypoints, per-waypoint seeds, and accepted
+  joint solutions equal within **1e-9**; *literal-1b2e4da* mode (`restarts=False`, unbounded
+  chain) requires waypoints within 1e-9, the seam seed within 1e-9, and solutions within the
+  common acceptance criterion (tip within `IK_TOL_GRASP`) plus the policy's trust-region bound —
+  because the unbounded ikpy solve legitimately wanders ~0.35 rad from the warm seed at the same
+  tip (< 1 µm). `ADR-0018`'s "byte-identical" wording is annotated above. The settle semantics of
+  the fake backend measurement (measurement converges to commands) also make the commanded-seam
+  seed equal to the measured seed within the 0.01 rad final settle tolerance; the seam test
+  asserts the recorded bound.
+- **Evidence:** `uv run pytest tests/test_move_linear_original_equivalence.py` — 4 passed
+  (bounded parity, literal mode, seam bound, solver-argument forwarding). Decomposition script
+  output for 6 `m1-07-realign-{on,off}-0{1,2,3}` runs + 10 `hold-*`/`velocity*`/earlier traces:
+  n=749/763, per-run and global tables in the run transcript; `docs/PROGRESS.md` M1-07 section
+  updated with the per-run first-deviation evidence table. Fake-backend-only; no live run.
+- **Remaining evidence:** all live/unverified items above. M1-06a, M1-07, and all M1 gates remain
+  **UNVERIFIED**.
+- **Supersedes:** Nothing. The `calibrate_tool` gate and the report-only proposal behaviour are
+  unchanged.

@@ -1094,6 +1094,37 @@ tipped in `velocity`. The realign gate changes where the knock shows up (ON push
 even after a clean 0.0–4.0 mm realigned approach; OFF pushes a larger
 32.6 mm-eccentric descent), but neither setting fixes the contact itself.
 
+### First-deviation evidence per run (trace decomposition, this session)
+
+Per-run numbers recomputed from the raw JSONL boundaries (`can_displacement_world_xyz_m`,
+`achieved_ee_base_xyz_m`, `can_base_xyz_m`; CAN half-height 0.0611 m from the standard Webots
+`Can.proto`). The "real fingertip" column applies the arm_6→arm_7 placement error found by the
+FK-vs-GT decomposition below (GT wrist sits 55.0 mm below the FK-predicted arm_7 origin in base
+z on these poses), i.e. real fingertip height ≈ FK tip − 55 mm in base z:
+
+| run | FK hover (tip − CAN top) | real fingertip at hover | real fingertip at first DESCEND waypoint | first CAN displacement ℓ1 | DESCEND exit displacement |
+|---|---|---|---|---|---|
+| `on-01` | +79.6 mm | +24.6 mm | **−14.8 mm** | 1.6 mm (at first DESCEND waypoint boundary) | 84.6 mm |
+| `on-02` | +79.7 mm | +24.7 mm | −13.3 mm | 3.1 mm | 10.2 mm (stall, see below) |
+| `on-03` | +77.2 mm | +22.2 mm | **−20.0 mm** | 188.4 mm | 953.9 mm |
+| `off-01` | +67.7 mm | +12.7 mm | **−11.4 mm** | 7.4 mm | 61.8 mm |
+| `off-02` | +67.7 mm | +12.7 mm | **−14.0 mm** | 7.1 mm | 103.2 mm |
+| `off-03` | +67.7 mm | +12.7 mm | **−12.7 mm** | 1.9 mm (grazing, caught) | 42.3 mm |
+
+All six runs agree: FK believes the tip hovers 68–80 mm above the CAN lid, but the
+55 mm wrist error leaves the real fingertip only +12.7…+24.7 mm clear at hover, and by the first
+DESCEND waypoint it is already **11.4–20.0 mm below the lid plane** — the commanded descent path
+starts geometrically inside the CAN body. This is the rim contact that knocks `(dz −28…−30 mm)`
+in 5/6 runs and stalls `on-02`.
+
+**`on-02` stall detail (UNVERIFIED inference).** The `joint_stall` event carries no object
+identification — only `target_base_xyz_m`, `joint_target`, and `no_progress_steps: 10` — so the
+obstacle it stalled against is not directly recoverable from the trace. The CAN-rim inference is
+arithmetic, not observation: the stalled waypoint's target z is **0.8055 m, i.e. 11.2 mm below
+the CAN top (0.8167 m)** at that boundary, and the corrected real fingertip would reach ~55 mm
+lower still; a stall against the rigid cylinder rim is consistent, but no contact-force or
+contact ground-truth channel exists in the trace to confirm it live.
+
 **FK-vs-GT frame mismatch (not the proximate cause).** Earlier supervisor-side measurement put
 the FK tool tip ~70–83 mm away from the real finger-pad midpoint on live runs. That is a
 `TOOL_OFFSET`/frame calibration discrepancy against the configured 0.1741 m `finger_tip_offset_m`;

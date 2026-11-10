@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from copy import deepcopy
 
 import numpy as np
@@ -131,13 +133,18 @@ class FakeBackend:
         if action == "cancel":
             self._export_job = {"index": 0, "total": 3, "per_joint": [], "done": True}
             return {"state": "cancelled", "done": True, "snapshot": None, "progress": {}}
-        job = self._export_job
-        if not job["done"]:
-            idx = int(job["index"])
-            total = int(job["total"])
+        job_any = self._export_job
+        assert isinstance(job_any, dict)
+        job: dict[str, Any] = job_any
+        per_joint_any = job.setdefault("per_joint", [])
+        per_joint: list[dict[str, Any]] = per_joint_any if isinstance(per_joint_any, list) else []
+        job["per_joint"] = per_joint
+        if not bool(job.get("done")):
+            idx = int(job.get("index", 0) or 0)
+            total = int(job.get("total", 0) or 0)
             if idx < total:
                 name = f"arm_{idx + 1}_joint"
-                job["per_joint"].append(
+                per_joint.append(
                     {
                         "name": name,
                         "kind": "hinge",
@@ -149,20 +156,21 @@ class FakeBackend:
                     }
                 )
                 job["index"] = idx + 1
-            if int(job["index"]) >= total:
+            if int(job.get("index", 0) or 0) >= total:
                 job["done"] = True
-        done = bool(job["done"])
+        done = bool(job.get("done"))
         snapshot = (
             {
                 "schema_version": 1,
                 "units": {"length": "m", "angle": "rad"},
                 "source": "fake",
+                "valid": True,
                 "joints": [],
                 "finger_endpoint_solids": {},
                 "base_frame": {},
                 "export_progress": {
-                    "steps_used_total": len(job["per_joint"]) * 5,
-                    "per_joint": list(job["per_joint"]),
+                    "steps_used_total": len(per_joint) * 5,
+                    "per_joint": list(per_joint),
                     "error": None,
                 },
             }
@@ -172,11 +180,11 @@ class FakeBackend:
         return {
             "state": "done" if done else "in_progress",
             "done": done,
-            "current_index": int(job["index"]),
-            "total_joints": int(job["total"]),
-            "steps_used_total": len(job["per_joint"]) * 5,
+            "current_index": int(job.get("index", 0) or 0),
+            "total_joints": int(job.get("total", 0) or 0),
+            "steps_used_total": len(per_joint) * 5,
             "total_step_cap": 2000,
-            "per_joint": list(job["per_joint"]),
+            "per_joint": list(per_joint),
             "error": None,
             "snapshot": snapshot,
         }

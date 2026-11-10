@@ -127,6 +127,9 @@ class RobotSettings:
     table_clearance_required_m: float
     fk_ground_truth_tolerance_m: float
     urdf_filename: str
+    export_sim_kinematics: bool
+    kinematic_model: Literal["urdf", "sim"]
+    sim_kinematics_filename: str
 
     @classmethod
     def from_yaml(cls, path: Path) -> RobotSettings:
@@ -203,6 +206,15 @@ class RobotSettings:
             )
         if values.get("hold_base") not in {"none", "wheels_zero_velocity"}:
             raise ValueError("hold_base must be 'none' or 'wheels_zero_velocity'.")
+        if not isinstance(values.get("export_sim_kinematics"), bool):
+            raise ValueError("export_sim_kinematics must be a boolean.")
+        if values.get("kinematic_model") not in {"urdf", "sim"}:
+            raise ValueError("kinematic_model must be 'urdf' or 'sim'.")
+        if (
+            not isinstance(values.get("sim_kinematics_filename"), str)
+            or not values["sim_kinematics_filename"]
+        ):
+            raise ValueError("sim_kinematics_filename must be a non-empty string.")
         for key in (
             "table_top_height_m",
             "table_clearance_required_m",
@@ -257,6 +269,9 @@ SAFETY_PROFILE_NAME = "original_envelope"
 SAFETY_PROFILE = SAFETY_SETTINGS.profiles[SAFETY_PROFILE_NAME]
 CONTROLLER_DIR = Path(__file__).resolve().parent
 URDF_PATH = CONTROLLER_DIR / SETTINGS.urdf_filename
+SIM_KINEMATICS_PATH = SETTINGS_PATH.parent / SETTINGS.sim_kinematics_filename
+EXPORT_SIM_KINEMATICS = SETTINGS.export_sim_kinematics
+KINEMATIC_MODEL = SETTINGS.kinematic_model
 
 # These names preserve the original controller module imports and values.
 TIME_STEP = SETTINGS.time_step

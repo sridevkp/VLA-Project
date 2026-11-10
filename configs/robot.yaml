@@ -104,3 +104,15 @@ table_clearance_required_m: 0.05
 # source: UNVERIFIED (inferred tolerance)
 fk_ground_truth_tolerance_m: 0.01
 urdf_filename: tiago.urdf
+# ADR-0020 simulator-kinematics snapshot. When true, the backend attaches at reset
+# a read-only snapshot of link Solid poses and joint axes to the reset observation
+# diagnostics (key sim_kinematics_snapshot) and per-step GT Solid telemetry
+# (key kinematics_telemetry) to every observation; the default stays false so
+# normal runs carry no extra telemetry cost.
+export_sim_kinematics: false
+# Kinematic model used by the policy FK/IK chain (ADR-0020): 'urdf' keeps the
+# repo URDF chain (M1-06a equivalence baseline); 'sim' builds the chain from the
+# JSON written by `uv run python -m vlarobot.cli export-sim-kinematics`.
+kinematic_model: urdf
+# Path of the simulator kinematics JSON, relative to configs/.
+sim_kinematics_filename: generated/sim_kinematics.json

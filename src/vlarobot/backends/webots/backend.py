@@ -12,6 +12,7 @@ import numpy as np
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,
     CAN_DEF,
+    EXPORT_SIM_KINEMATICS,
     FINGER_TIP_OFFSET_M,
     FK_GROUND_TRUTH_TOLERANCE_M,
     HEAD_JOINTS,
@@ -28,6 +29,13 @@ from vlarobot.backends.webots.frames import Frames
 from vlarobot.backends.webots.gripper import Gripper
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.robot_io import RobotIO
+from vlarobot.backends.webots.supervisor_kinematics import (
+    capture_snapshot,
+    child_solid,
+    parent_solid,
+    read_joint_node,
+    solid_pose,
+)
 from vlarobot.backends.webots.visualization import Visualization
 from vlarobot.core.types import (
     Action,
@@ -89,6 +97,7 @@ class WebotsBackend:
         self._safety = SafetyMonitor(self._safety_limits())
         self._stopped = False
         self._reset_fingerprint_pending: dict[str, object] | None = None
+        self._sim_kinematics_snapshot_pending: dict[str, object] | None = None
         self._arm7_endpoint_offset_world: np.ndarray | None = None
         self._arm7_reset_link_rotation: np.ndarray | None = None
 
@@ -162,6 +171,16 @@ class WebotsBackend:
             self._arm7_reset_link_rotation = None
         else:
             self._arm7_endpoint_offset_world, self._arm7_reset_link_rotation = endpoint_offset
+        self._sim_kinematics_snapshot_pending = None
+        if EXPORT_SIM_KINEMATICS:
+            # ADR-0020: read-only capture at the settled reset posture. Hinge
+            # axes are always derived from a small posture probe (<=0.05 rad,
+            # restored immediately); any readable jointParameters axis is only
+            # cross-checked. See supervisor_kinematics.py.
+            joint_order = (TORSO_JOINT, *ARM_JOINTS)
+            self._sim_kinematics_snapshot_pending = capture_snapshot(
+                self.io, joint_order, probe_axes=True
+            )
         return self._observation()
 
     def step(self, n_steps: int = 1) -> Observation:
@@ -380,6 +399,15 @@ class WebotsBackend:
             diagnostics["reset_torso_before_rad"] = getattr(self, "_reset_torso_before_rad", None)
             diagnostics["reset_torso_after_rad"] = getattr(self, "_reset_torso_after_rad", None)
             self._reset_fingerprint_pending = None
+        if EXPORT_SIM_KINEMATICS:
+            diagnostics["kinematics_telemetry"] = self._kinematics_telemetry()
+            snapshot = self._sim_kinematics_snapshot_pending
+            if snapshot is not None:
+                # Attached once, to the reset observation only: the snapshot is
+                # static per session while kinematics_telemetry re-reads live
+                # Solid poses every step.
+                diagnostics["sim_kinematics_snapshot"] = snapshot
+                self._sim_kinematics_snapshot_pending = None
         if diagnostics_started is not None:
             diagnostics["backend_diagnostics_compute_s"] = perf_counter() - diagnostics_started
         opening = self.gripper.opening()
@@ -407,6 +435,34 @@ class WebotsBackend:
             **{name: float(self.io.sensors[name].getValue()) for name in ARM_JOINTS},
             TORSO_JOINT: float(self.io.sensors[TORSO_JOINT].getValue()),
         }
+
+    def _kinematics_telemetry(self) -> dict[str, object]:
+        """Live GT Solid poses for the ADR-0020 validation sweep (flag-gated).
+
+        Mirrors the export schema field names so the same loader functions parse
+        both payloads: full world pose (position + row-major rotation) of the
+        Robot-node base frame, of every torso/arm joint's parent and endPoint
+        child Solid, and of the two finger endPoint Solids.
+        """
+        joint_order = (TORSO_JOINT, *ARM_JOINTS)
+        telemetry: dict[str, object] = {
+            "schema_version": 1,
+            "units": {"length": "m", "angle": "rad"},
+            "base_frame": solid_pose(self.io.me, "RobotNode").to_payload(),
+            "joint_endpoint_solids": {
+                name: child_solid(self.io, name).to_payload() for name in joint_order
+            },
+            "joint_parent_solids": {
+                name: parent_solid(read_joint_node(self.io, name), name).to_payload()
+                for name in joint_order
+            },
+            "joint_sensors_rad": self._joint_positions(),
+            "finger_endpoint_solids": {
+                motor.getName(): child_solid(self.io, motor.getName()).to_payload()
+                for motor, _sensor in self.io.fingers
+            },
+        }
+        return telemetry
 
     def _settle_reset_posture(self) -> None:
         """Reproduce the original INIT ordering: torso first, then head.

@@ -883,6 +883,47 @@ class ScriptedCanPolicy:
             return None
         return current_q, observation, refined
 
+    def _can_world_pose(self, backend) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+        pose = self._can_pose3d(backend.get_ground_truth())
+        return pose.position.as_array(), pose.orientation
+
+    def _base_world_rotation(self, observation: Observation) -> np.ndarray:
+        base_pose_world = observation.robot.base_pose_world
+        if base_pose_world is None:
+            raise RuntimeError("RobotState is missing the 3D world-frame base pose.")
+        return _quaternion_to_matrix(base_pose_world.orientation)
+
+    def _pad_midpoint_world(self, observation: Observation) -> np.ndarray | None:
+        """Pad midpoint in world frame from supervisor-derived diagnostics (preferred)."""
+        diag = observation.robot.diagnostics
+        mid = diag.get("finger_midpoint_world_xyz_m")
+        if isinstance(mid, list) and len(mid) == 3:
+            arr = np.asarray(mid, dtype=float)
+            if np.all(np.isfinite(arr)):
+                return arr
+        return None
+
+    def _log_servo(
+        self, backend, observation: Observation, state: str, phase: str, **extra
+    ) -> None:
+        can_xyz, _ = self._can_world_pose(backend)
+        pad = self._pad_midpoint_world(observation)
+        details: dict[str, object] = {
+            "state": state,
+            "phase": phase,
+            "sim_time_s": observation.t,
+            "can_world_xyz_m": can_xyz.tolist(),
+            "pad_mid_world_xyz_m": None if pad is None else pad.tolist(),
+        }
+        if pad is not None:
+            e_xy = (can_xyz - pad)[:2]
+            details["e_xy_world_m"] = e_xy.tolist()
+            details["e_xy_norm_m"] = float(np.linalg.norm(e_xy))
+            details["pad_mid_z_m"] = float(pad[2])
+            details["can_centre_z_m"] = float(can_xyz[2])
+        details.update(extra)
+        self._trace_event("grasp_servo", **details)
+
     def _success_criteria(
         self, backend, observation: Observation, final_state: str
     ) -> CanSuccessCriteria:

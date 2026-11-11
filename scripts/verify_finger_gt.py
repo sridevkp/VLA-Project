@@ -51,25 +51,43 @@ def _measure(client: ZmqBackendClient, kin: Kinematics, obs) -> dict[str, object
     diag = obs.robot.diagnostics
     midpoint = diag.get("finger_midpoint_world_xyz_m")
     arm7_gt = diag.get("arm_7_joint_ground_truth_world_xyz_m")
+    arm7_rows = diag.get("arm_7_joint_ground_truth_orientation_rows")
     joints = {name: float(obs.robot.joint_pos.get(name, float("nan"))) for name in ARM_JOINTS}
     q = np.zeros(len(kin.chain.links), dtype=float)
     for name in ARM_JOINTS:
         if name in obs.robot.joint_pos and name in kin.idx:
             q[kin.idx[name]] = float(obs.robot.joint_pos[name])
-    # arm_7 frame from FK on measured joints (urdf chain, M1 model).
+    # arm_7 orientation, two conventions, for cross-checking:
+    #  1. "sim": the endPoint Solid's own getOrientation() (authoritative sim frame).
+    #  2. "fk": urdf-chain FK orientation composed with the measured base world rotation.
+    arm7_sim_rotation = None if arm7_rows is None else np.asarray(arm7_rows, dtype=float)
     try:
         transforms = kin.chain.forward_kinematics(list(q), full_kinematics=True)
         arm7_fk = np.asarray(transforms[kin.idx["arm_7_joint"]], dtype=float)
+        fk_error = None
     except Exception as error:  # pragma: no cover - diagnostic only
         arm7_fk = None
         fk_error = str(error)
-    else:
-        fk_error = None
+    base_pose_world = obs.robot.base_pose_world
+    base_rot = None
+    if base_pose_world is not None:
+        x, y, z, w = base_pose_world.orientation
+        base_rot = np.asarray(
+            (
+                (1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)),
+                (2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)),
+                (2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)),
+            ),
+            dtype=float,
+        )
     result: dict[str, object] = {
         "joints_rad": joints,
         "finger_midpoint_world_xyz_m": midpoint,
         "arm_7_gt_world_xyz_m": arm7_gt,
         "arm_7_fk_world_xyz_m": (None if arm7_fk is None else arm7_fk[:3, 3].tolist()),
+        "base_world_quat_xyzw": (
+            None if base_pose_world is None else list(base_pose_world.orientation)
+        ),
         "contacts": diag.get("contact_nodes", []),
         "sim_time_s": float(obs.t),
         "fk_error": fk_error,
@@ -80,14 +98,16 @@ def _measure(client: ZmqBackendClient, kin: Kinematics, obs) -> dict[str, object
         d_world = mid - arm7
         result["arm7_to_midpoint_world_xyz_m"] = d_world.tolist()
         result["arm7_to_midpoint_distance_m"] = float(np.linalg.norm(d_world))
-        if arm7_fk is not None:
-            try:
-                transform = np.asarray(arm7_fk, dtype=float)
-                rotation = transform[:3, :3]
-                d_arm7 = rotation.T @ d_world
-                result["arm7_to_midpoint_arm7frame_xyz_m"] = d_arm7.tolist()
-            except Exception as error:  # pragma: no cover - diagnostic only
-                result["arm7_frame_error"] = str(error)
+        if arm7_sim_rotation is not None:
+            d_arm7 = arm7_sim_rotation.T @ d_world
+            result["arm7_to_midpoint_simframe_xyz_m"] = d_arm7.tolist()
+        if arm7_fk is not None and base_rot is not None:
+            fk_rotation_world = base_rot @ arm7_fk[:3, :3]
+            d_fk = fk_rotation_world.T @ d_world
+            result["arm7_to_midpoint_fkframe_xyz_m"] = d_fk.tolist()
+            if arm7_sim_rotation is not None:
+                mismatch = float(np.linalg.norm(arm7_sim_rotation - fk_rotation_world))
+                result["fk_vs_sim_rotation_frobenius_m"] = mismatch
     return result
 
 
@@ -127,9 +147,10 @@ def main() -> int:
             for index, deltas in enumerate(POSE_DELTAS, start=1):
                 # Safety pre-check: tool must be above the table and no contacts.
                 diag = obs.robot.diagnostics
-                midpoint = diag.get("finger_midpoint_world_xyz_m")
+                midpoint_raw = diag.get("finger_midpoint_world_xyz_m")
+                midpoint = None if midpoint_raw is None else np.asarray(midpoint_raw, dtype=float)
                 if midpoint is None or float(midpoint[2]) < MIN_TOOL_HEIGHT_M:
-                    raise RuntimeError(f"pose {index}: unsafe start height {midpoint}")
+                    raise RuntimeError(f"pose {index}: unsafe start height {midpoint_raw}")
                 if diag.get("contact_nodes"):
                     raise RuntimeError(f"pose {index}: unexpected contacts at start")
                 targets: dict[str, float] = {}
@@ -140,10 +161,11 @@ def main() -> int:
                 for _ in range(60):
                     obs = client.step(1)
                 diag = obs.robot.diagnostics
-                midpoint = diag.get("finger_midpoint_world_xyz_m")
+                midpoint_raw = diag.get("finger_midpoint_world_xyz_m")
+                midpoint = None if midpoint_raw is None else np.asarray(midpoint_raw, dtype=float)
                 if midpoint is None or float(midpoint[2]) < MIN_TOOL_HEIGHT_M:
                     raise RuntimeError(
-                        f"pose {index}: tool below safe height after move: {midpoint}"
+                        f"pose {index}: tool below safe height after move: {midpoint_raw}"
                     )
                 contacts = diag.get("contact_nodes", [])
                 if contacts:
@@ -157,22 +179,34 @@ def main() -> int:
                     }
                 )
 
-            # Constant-vector check across poses.
+            # Constant-vector check across poses (both frame conventions).
             vectors = [
-                np.asarray(pose["arm7_to_midpoint_arm7frame_xyz_m"], dtype=float)
+                np.asarray(pose["arm7_to_midpoint_simframe_xyz_m"], dtype=float)
                 for pose in poses
-                if isinstance(pose, dict) and pose.get("arm7_to_midpoint_arm7frame_xyz_m")
+                if isinstance(pose, dict) and pose.get("arm7_to_midpoint_simframe_xyz_m")
             ]
-            summary: dict[str, object] = {}
-            if len(vectors) >= 2:
-                stacked = np.vstack(vectors)
+            fk_vectors = [
+                np.asarray(pose["arm7_to_midpoint_fkframe_xyz_m"], dtype=float)
+                for pose in poses
+                if isinstance(pose, dict) and pose.get("arm7_to_midpoint_fkframe_xyz_m")
+            ]
+
+            def _spread_summary(rows: list) -> dict[str, object]:
+                if len(rows) < 2:
+                    return {}
+                stacked = np.vstack(rows)
                 spread = stacked.max(axis=0) - stacked.min(axis=0)
-                summary = {
-                    "pose_count": len(vectors),
+                return {
+                    "pose_count": len(rows),
                     "per_axis_spread_m": spread.tolist(),
                     "max_spread_m": float(spread.max()),
                     "constant_within_5mm": bool(spread.max() < 0.005),
                 }
+
+            summary: dict[str, object] = {
+                "sim_frame": _spread_summary(vectors),
+                "fk_frame": _spread_summary(fk_vectors),
+            }
             payload = {
                 "status": "ok",
                 "poses": poses,

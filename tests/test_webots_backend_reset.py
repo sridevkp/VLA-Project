@@ -390,10 +390,12 @@ class _FakeJointNode:
 
 
 class _FakeEndpointNode:
-    def __init__(self, position=None, error=None):
+    def __init__(self, position=None, error=None, orientation=None):
         self.position = position
         self.error = error
+        self.orientation = orientation
         self.position_calls = 0
+        self.orientation_calls = 0
 
     def getPosition(self):
         self.position_calls += 1
@@ -401,6 +403,13 @@ class _FakeEndpointNode:
             raise self.error
         assert self.position is not None
         return list(self.position)
+
+    def getOrientation(self):
+        self.orientation_calls += 1
+        if self.error is not None:
+            raise self.error
+        assert self.orientation is not None
+        return list(self.orientation)
 
 
 class _FakeTaggedMotor:
@@ -459,6 +468,49 @@ def test_joint_endpoint_returns_none_for_unknown_joint(caplog):
 
     assert io.joint_endpoint_world_position("missing_joint") is None
     assert caplog.text.count("No HingeJoint/SliderJoint node found") == 1
+
+
+_IDENTITY_R9 = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+
+def test_joint_endpoint_orientation_returns_three_rows_from_the_child_solid(caplog):
+    joint = _FakeJointNode(endpoint=_FakeEndpointNode([9.0, 9.0, 9.0], orientation=_IDENTITY_R9))
+    io = _make_joint_io(joint)
+
+    rows = io.joint_endpoint_world_orientation("arm_7_joint")
+
+    assert rows == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    assert joint.position_calls == 0
+    assert "getPosition" not in caplog.text
+
+
+def test_joint_endpoint_orientation_returns_none_and_warns_once_for_missing_endpoint(caplog):
+    joint = _FakeJointNode(endpoint=None)
+    io = _make_joint_io(joint)
+
+    assert io.joint_endpoint_world_orientation("arm_7_joint") is None
+    assert io.joint_endpoint_world_orientation("arm_7_joint") is None
+    assert caplog.text.count("has no endPoint Solid") == 1
+
+
+def test_joint_endpoint_orientation_caches_a_lookup_failure(caplog):
+    endpoint = _FakeEndpointNode([0.0, 0.0, 0.0], error=RuntimeError("not Pose-derived"))
+    joint = _FakeJointNode(endpoint=endpoint)
+    io = _make_joint_io(joint)
+
+    assert io.joint_endpoint_world_orientation("arm_7_joint") is None
+    assert io.joint_endpoint_world_orientation("arm_7_joint") is None
+    assert endpoint.orientation_calls == 1
+    assert caplog.text.count("endPoint orientation lookup failed") == 1
+
+
+def test_joint_endpoint_orientation_rejects_non_finite_values(caplog):
+    bad = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, float("nan")]
+    joint = _FakeJointNode(endpoint=_FakeEndpointNode([0.0, 0.0, 0.0], orientation=bad))
+    io = _make_joint_io(joint)
+
+    assert io.joint_endpoint_world_orientation("arm_7_joint") is None
+    assert caplog.text.count("non-finite orientation") == 1
 
 
 class _StubChain:

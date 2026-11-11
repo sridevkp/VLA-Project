@@ -531,6 +531,8 @@ class WebotsBackend:
         arm7_link_rotation = None if arm7_pose is None else arm7_pose[1]
         endpoint_lookup = getattr(self.io, "joint_endpoint_world_position", None)
         arm7_endpoint = endpoint_lookup("arm_7_joint") if endpoint_lookup else None
+        orientation_lookup = getattr(self.io, "joint_endpoint_world_orientation", None)
+        arm7_orientation = orientation_lookup("arm_7_joint") if orientation_lookup else None
         arm7_offset = (
             None
             if arm7_endpoint is None or arm7_world is None
@@ -582,6 +584,7 @@ class WebotsBackend:
             "arm_7_joint_fk_world_xyz_m": arm7_world.tolist() if arm7_world is not None else None,
             "arm_7_joint_ground_truth_world_xyz_m": arm7_endpoint,
             "arm_7_joint_ground_truth_source": "endPointSolid",
+            "arm_7_joint_ground_truth_orientation_rows": arm7_orientation,
             "arm_7_joint_endpoint_offset_world_xyz_m": (
                 arm7_offset.tolist() if arm7_offset is not None else None
             ),

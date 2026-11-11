@@ -263,6 +263,59 @@ class RobotIO:
             )
         return finite
 
+    def joint_endpoint_world_orientation(self, name: str) -> list[list[float]] | None:
+        """World rotation (3x3 rows, row-major) of a joint's ``endPoint`` Solid.
+
+        Same Pose-derived restriction as :meth:`joint_endpoint_world_position`: the joint node
+        itself is not Pose-derived, but the ``endPoint`` child Solid is, and ``getOrientation()``
+        is valid on it. ``world = R @ local`` with R expressed in the world frame. Failures are
+        cached and warned once per distinct lookup, mirroring the position lookup.
+        """
+        key = f"joint_endpoint_orientation:{name}"
+        if self._lookup_failed(key):
+            return None
+        node = self._joint_node(name)
+        if node is None:
+            self._warn_lookup_once(
+                key,
+                "No HingeJoint/SliderJoint node found for joint %s; link orientation is None.",
+                name,
+            )
+            return None
+        endpoint_field = node.getField("endPoint")
+        endpoint = endpoint_field.getSFNode() if endpoint_field is not None else None
+        if endpoint is None:
+            self._warn_lookup_once(
+                key, "Joint %s has no endPoint Solid; link orientation is None.", name
+            )
+            return None
+        try:
+            orientation = endpoint.getOrientation()
+        except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+            self._warn_lookup_once(
+                key,
+                "Joint %s endPoint orientation lookup failed (%s); link orientation is None.",
+                name,
+                error,
+            )
+            return None
+        if (
+            orientation is None
+            or len(orientation) != 9
+            or not all(math.isfinite(float(value)) for value in orientation)
+        ):
+            self._warn_lookup_once(
+                key,
+                "Joint %s endPoint returned a non-finite orientation; link orientation is None.",
+                name,
+            )
+            return None
+        return [
+            [float(orientation[0]), float(orientation[1]), float(orientation[2])],
+            [float(orientation[3]), float(orientation[4]), float(orientation[5])],
+            [float(orientation[6]), float(orientation[7]), float(orientation[8])],
+        ]
+
     def finger_tip_world_positions(self, offset_m: float) -> dict[str, list[float]] | None:
         """World position of each finger pad centre, from the Pose-derived endPoint Solid.
 

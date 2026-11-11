@@ -4,6 +4,7 @@ import numpy as np
 
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.core.types import (
+    ApplyResult,
     CameraInfo,
     GroundTruth,
     Observation,
@@ -41,6 +42,8 @@ def _obs(pad_mid_world, ee_base=(0.5, 0.0, 0.9), t=0.0):
 
 
 class FakeServoBackend:
+    """Minimal backend for gt_pad servo logic (Webots-free)."""
+
     def __init__(self, can_world=(0.7, 0.2, 0.8), pad_world=(0.65, 0.2, 0.92)):
         self.can_world = np.array(can_world, dtype=float)
         self.pad_world = np.array(pad_world, dtype=float)
@@ -56,21 +59,33 @@ class FakeServoBackend:
         return _obs(self.pad_world, t=self.t)
 
     def apply(self, action):
-        from vlarobot.core.types import ApplyResult
-
         return ApplyResult(True)
 
 
-def test_gt_pad_pregrasp_servo_converges_with_biased_fk():
-    # FK/tool bias: pad starts 50mm off in XY from can projection, but measured servo corrects.
+def test_open_loop_fails_with_50mm_wrong_tool_axis_fk_bias():
+    """Wrong tool-axis/FK bias (50 mm XY): open-loop (no servo) would be misaligned."""
+    # Measured pad midpoint is 50 mm away from can XY projection at hover.
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.65, 0.2, 0.92))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="none")
+    obs = _obs(backend.pad_world)
+    meas = policy._gt_pad_xy_error_world(backend, obs)
+    assert meas is not None
+    _e_xy, e_norm, _can, _pad, _src = meas
+    assert e_norm > 0.049  # ~50 mm wrong-tool-axis/FK bias present
+    assert policy.grasp_servo == "none"
+
+
+def test_gt_pad_servo_converges_with_50mm_wrong_tool_axis_fk_bias():
+    """With same 50 mm wrong tool-axis/FK bias, gt_pad servo converges to <4 mm."""
     backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.65, 0.2, 0.92))
     kin = Kinematics()
     policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
     obs = _obs(backend.pad_world)
 
     def fake_move_to(_backend, current_q, target, _state, waypoint_records=None):
-        # Simulate that commanded base-frame XY correction moves measured pad by same
-        # world delta (base at identity here).
+        # Commanded target comes from biased FK/planning, but measured pad moves by the
+        # requested base-frame XY correction (identity base/world in this fake).
         prev = np.array(target, dtype=float)
         nonlocal_target = (
             policy._last_servo_target if hasattr(policy, "_last_servo_target") else prev
@@ -79,28 +94,16 @@ def test_gt_pad_pregrasp_servo_converges_with_biased_fk():
         backend.pad_world = backend.pad_world + np.array([delta[0], delta[1], 0.0])
         policy._last_servo_target = np.array(target, dtype=float)
         ee_base = (float(target[0]), float(target[1]), float(target[2]))
-        new_obs = _obs(backend.pad_world, ee_base=ee_base)
-        return np.zeros(len(kin.chain.links)), new_obs
+        return np.zeros(len(kin.chain.links)), _obs(backend.pad_world, ee_base=ee_base)
 
+    # Initial planned hover target (could be biased by wrong tool-axis FK); servo corrects it.
     policy._last_servo_target = np.array([0.7, 0.2, 0.92], dtype=float)
     policy._move_to = fake_move_to  # type: ignore[method-assign]
     q = np.zeros(len(kin.chain.links))
     out = policy._servo_correct_pregrasp_xy(backend, obs, q, np.array([0.7, 0.2, 0.92]))
     assert out is not None
     _q, obs2, _target = out
-    pad_mid = np.array(obs2.robot.diagnostics["finger_midpoint_world_xyz_m"])[:2]
-    err = backend.can_world[:2] - pad_mid
-    assert float(np.linalg.norm(err)) < 0.004
-
-
-def test_gt_pad_pregrasp_open_loop_bias_would_fail_without_servo():
-    # Demonstrates the biased condition: initial XY error > 4mm (open-loop would be misaligned).
-    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.65, 0.2, 0.92))
-    kin = Kinematics()
-    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="none")
-    obs = _obs(backend.pad_world)
-    meas = policy._gt_pad_xy_error_world(backend, obs)
-    assert meas is not None
-    _e_xy, e_norm, _can, _pad, _src = meas
-    assert e_norm > 0.04  # 50mm bias present
-    assert policy.grasp_servo == "none"
+    err = policy._gt_pad_xy_error_world(backend, obs2)
+    assert err is not None
+    _e_xy, e_norm, _can, _pad, _src = err
+    assert e_norm < 0.004

@@ -39,12 +39,13 @@
 - Next (PRIORITY CHANGE): stop Phase 1 determinism x5/soft-vs-fresh; run Phase 2 `grasp_servo=gt_pad` (oracle, bounded corrections) with live pad verification, then 10 gt_pad vs 10 baseline fresh-world episodes. M1 acceptance revised per instructions.
 - Human steps: none required to continue autonomous runs; Windows live validation and visual confirmation remain HUMAN (see `docs/MANUAL_VALIDATION.md`).
 
-### Phase 2 (priority, in progress) - interim after setup
-- Verdict: IN PROGRESS (a-d pending). 5-episode fresh-world nondeterminism/settle check started with `reset_post_settle_enabled: true` (MEASURED launch: `runs/campaign-2026-11-11/phase1_settle_check`, determinism-check 5, seed 0, batch fast rendering on); outcome UNVERIFIED at time of update.
-- MEASURED: post-reset settle gate implemented (flagged, default off in repo) with step counting/fingerprint fields; `grasp_servo` config/plumbing and servo helper scaffolding added; runner hardened (0b) and 182 webots-free tests passing.
-- Failed/blocked: pad-position verification probe (a), fake-backend servo convergence tests (b), 3 watched episodes with screenshots (c), and 10-vs-10 batches (d) not yet executed; full `gt_pad` servo control logic incomplete.
-- Next: complete nondeterminism check record-0 comparison (tol 1e-3), run (a) safe pad probe and set servo to MEASURED pad value if |diff|>5mm (ADR), implement/verify servo + (b)/(c)/(d) per rules.
-- Human steps: none required to continue autonomous runs; Windows/visual review remain HUMAN (see MANUAL_VALIDATION.md).
+### Phase 2 (priority, in progress) - checkpoint after settle-check, (a) probe attempts, runner/report fixes
+- Verdict: IN PROGRESS (a partially attempted/INCOMPLETE, b partial, c/d pending). No M1 acceptance/batch evidence yet.
+- MEASURED: settle check completed with failures (see section below); runner determinism comparison/reporting fixed to handle missing traces and exit non-zero, with test (`tests/test_episode_runner.py`); servo/descent helpers and Webots-free servo tests present (`tests/test_gt_pad_servo.py` passing). (a) Dynamic descent pad probe (`scripts/verify_pad_probe.py`) failed: controllers/Webots terminated/crashed during expert `stop_after=PREGRASP` (~sim_time 8.768s, `runs/campaign-2026-11-11/phase2/pad_probe.log`), no `pad_probe.json`. Static reset-pose probe succeeded (`runs/campaign-2026-11-11/phase2/pad_static.json`, seed 0): finger midpoint and arm_7 GT diagnostics measured, `kinematics_telemetry` absent.
+- Pad-bottom-vs-PROTO (>5 mm criterion): **UNVERIFIED** (no contact-at-grasp measurement). Nominal/proto pad-center offset retained in servo; no measured offset applied and no ADR.
+- Failed/blocked: (a) live contact-based verification incomplete; (b) spec-complete fake-backend cases (explicit 50 mm/wrong tool-axis FK open-loop vs servo) to be tightened; (c) 3 watched gt_pad episodes+screenshots and (d) 10-vs-10 batches blocked on stable live runs; Webots/controller crash/instability observed.
+- Next: finalize (b) tests, attempt (c)/(d) with physical-state guard, process hygiene, screenshots (first 3/condition + every failed episode) and per-image descriptions; record CONTAMINATED/FAILURE evidence if instability recurs.
+- Human steps: review screenshots from (c)/(d) when produced (reset, PREGRASP exit, DESCEND mid, CLOSE, LIFT top, RELEASE, end) with one-line descriptions.
 
 ### Nondeterminism/settle check (5 fresh-world episodes, settle gate enabled) - completed with failures
 - Verdict: NOT COMPARABLE across 5 (MEASURED). Episode 00 completed with trace; episodes 01-04 hung during `reset` and produced no `episode-0{1..4}.jsonl`, so the runner crashed on missing traces during comparison (runner now reports missing traces and exits non-zero without crashing).

@@ -777,14 +777,17 @@ class WebotsBackend:
                 "angular_speed_rad_s": ang if steps_used else None,
                 "tilt_deg": last_tilt_deg,
             },
+            # ADR-0022: non-settling is recorded, not fatal. MEASURED: the base retains
+            # persistent angular jitter (~1.0-1.6e-4 rad/s) around the 1e-4 rad/s threshold,
+            # so a knife-edge share of fresh worlds never accumulate 20 stable steps; failing
+            # reset (RuntimeError -> error reply -> runner kill) aborted otherwise healthy
+            # episodes. Thresholds are unchanged; the physical-state guard still vetoes
+            # genuinely contaminated state.
+            "fatal": False,
         }
         if reason != "settled":
-            raise RuntimeError(
-                "Post-reset settle failed: "
-                f"reason={reason} steps_used={steps_used} "
-                f"consecutive={consecutive}/{RESET_POST_SETTLE_CONSECUTIVE_STEPS} "
-                f"final={info['final']}"
-            )
+            LOGGER.warning("post_reset_settle: not settled (recorded, non-fatal): %s", info)
+            return info
         LOGGER.info("post_reset_settle: %s", info)
         return info
 

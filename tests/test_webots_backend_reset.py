@@ -689,3 +689,84 @@ def test_hold_base_wheels_zero_velocity_switches_to_velocity_control(monkeypatch
         assert motor.position is not None
         assert math.isinf(motor.position)
         assert motor.velocity == 0.0
+
+
+def _attach_settle_fixtures(backend, velocity):
+    """Attach the pieces ``_settle_post_reset`` needs that the plain fakes lack.
+
+    ``velocity`` is the 6-vector ``me.getVelocity()`` returns every step; a constant
+    value reproduces the MEASURED live behaviour of a base that keeps a residual
+    angular jitter without ever decaying (ADR-0022 evidence).
+    """
+    backend._physics_step_count = 0
+
+    class _FakeVisualization:
+        def step(self):
+            return backend.io.robot.step(backend.io.ts)
+
+    backend.visualization = _FakeVisualization()
+    backend.io.me.getVelocity = lambda: list(velocity)
+    return backend
+
+
+def test_post_reset_settle_persistent_jitter_is_recorded_not_fatal(monkeypatch, caplog):
+    """MEASURED live failure mode: angular jitter ~1.6e-4 rad/s > 1e-4 threshold.
+
+    Before ADR-0022 this raised RuntimeError and aborted the reset (error reply ->
+    client raise -> runner kill). It must now be recorded with ``fatal: False`` and
+    no exception. Thresholds are unchanged (1e-4 rad/s, 20 consecutive steps).
+    """
+    import vlarobot.backends.webots.backend as backend_module
+
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_ENABLED", True)
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_MAX_STEPS", 5)
+    jitter = [0.0, 0.0, 0.0, 0.0, 0.0, 1.615e-4]
+    backend = _attach_settle_fixtures(_make_backend(), jitter)
+
+    info = backend._settle_post_reset()
+
+    assert info["reason"] == "max_steps"
+    assert info["steps_used"] == 5
+    assert info["consecutive_stable_steps"] == 0
+    assert info["required_consecutive_steps"] == 20
+    assert info["fatal"] is False
+    assert info["final"]["angular_speed_rad_s"] == pytest.approx(1.615e-4)
+    assert info["final"]["linear_speed_m_s"] == pytest.approx(0.0)
+    assert any("not settled (recorded, non-fatal)" in message for message in caplog.messages)
+
+
+def test_post_reset_settle_below_thresholds_settles_normally(monkeypatch):
+    import vlarobot.backends.webots.backend as backend_module
+
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_ENABLED", True)
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_MAX_STEPS", 500)
+    calm = [0.0, 0.0, 0.0, 0.0, 0.0, 9.38e-5]  # MEASURED live ep00 (settled) angular speed
+    backend = _attach_settle_fixtures(_make_backend(), calm)
+
+    info = backend._settle_post_reset()
+
+    assert info["reason"] == "settled"
+    assert info["steps_used"] == 20
+    assert info["consecutive_stable_steps"] == 20
+    assert info["fatal"] is False
+    assert info["final"]["angular_speed_rad_s"] == pytest.approx(9.38e-5)
+
+
+def test_reset_with_settle_gate_survives_persistent_jitter(monkeypatch):
+    """End to end: reset must return an observation and record the non-fatal outcome."""
+    import vlarobot.backends.webots.backend as backend_module
+
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_ENABLED", True)
+    monkeypatch.setattr(backend_module, "RESET_POST_SETTLE_MAX_STEPS", 3)
+    jitter = [0.0, 0.0, 0.0, 0.0, 0.0, 1.615e-4]
+    backend = _attach_settle_fixtures(_make_backend(), jitter)
+    backend.io.reset_fingerprint = lambda: {"kinematic_model": "fake"}
+
+    observation = backend.reset(ScenarioSpec(), seed=0)
+
+    fingerprint = observation.robot.diagnostics["reset_fingerprint"]
+    settle = fingerprint["post_reset_settle"]
+    assert settle["reason"] == "max_steps"
+    assert settle["steps_used"] == 3
+    assert settle["fatal"] is False
+    assert fingerprint["physics_step_count_at_reset"] == 3

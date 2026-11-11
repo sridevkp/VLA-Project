@@ -393,11 +393,45 @@ def run_episodes(
     ``K`` times, each in its own fresh world, and the caller compares outcomes/traces.
     """
     if determinism_check > 0:
-        return [
-            _run_fresh_episode(settings, index, settings.seed) for index in range(determinism_check)
-        ]
+        outcomes: list[EpisodeOutcome] = []
+        for index in range(determinism_check):
+            try:
+                outcomes.append(_run_fresh_episode(settings, index, settings.seed))
+            except Exception as exc:
+                suffix = f"{settings.trace_prefix}-{index:02d}"
+                outcomes.append(
+                    _error_outcome(
+                        index,
+                        settings.seed,
+                        settings.trace_dir / f"{suffix}.jsonl",
+                        settings.trace_dir / f"{suffix}.log",
+                        0.0,
+                        0.0,
+                        failure_state="RUNNER",
+                        failure_reason=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+        return outcomes
     if fresh_world:
-        return [_run_fresh_episode(settings, index, settings.seed + index) for index in range(n)]
+        outcomes = []
+        for index in range(n):
+            try:
+                outcomes.append(_run_fresh_episode(settings, index, settings.seed + index))
+            except Exception as exc:
+                suffix = f"{settings.trace_prefix}-{index:02d}"
+                outcomes.append(
+                    _error_outcome(
+                        index,
+                        settings.seed + index,
+                        settings.trace_dir / f"{suffix}.jsonl",
+                        settings.trace_dir / f"{suffix}.log",
+                        0.0,
+                        0.0,
+                        failure_state="RUNNER",
+                        failure_reason=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+        return outcomes
     return _run_shared_session(settings, n)
 
 
@@ -449,21 +483,39 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                 snap_path, snap_hash = _validate_sim_snapshot_for_session(settings, ping)
                 for index in range(n):
                     episode_started = perf_counter()
-                    result = policy.execute(client, settings.seed + index)
-                    outcomes.append(
-                        _outcome(
-                            index,
-                            settings.seed + index,
-                            result,
-                            trace_path,
-                            log_path,
-                            startup_s,
-                            perf_counter() - episode_started,
-                            kinematic_model=requested_model,
-                            snapshot_hash=snap_hash or None,
-                            snapshot_path=snap_path or None,
+                    try:
+                        result = policy.execute(client, settings.seed + index)
+                        outcomes.append(
+                            _outcome(
+                                index,
+                                settings.seed + index,
+                                result,
+                                trace_path,
+                                log_path,
+                                startup_s,
+                                perf_counter() - episode_started,
+                                kinematic_model=requested_model,
+                                snapshot_hash=snap_hash or None,
+                                snapshot_path=snap_path or None,
+                            )
                         )
-                    )
+                    except Exception as exc:
+                        outcomes.append(
+                            _error_outcome(
+                                index,
+                                settings.seed + index,
+                                trace_path,
+                                log_path,
+                                startup_s,
+                                perf_counter() - episode_started,
+                                failure_state="EXCEPTION",
+                                failure_reason=f"{type(exc).__name__}: {exc}",
+                                kinematic_model=requested_model,
+                                snapshot_hash=snap_hash or None,
+                                snapshot_path=snap_path or None,
+                            )
+                        )
+                        break
             finally:
                 _stop_client(client)
         finally:
@@ -488,13 +540,17 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
         env["VLAROBOT_ZMQ_PORT"] = str(port)
         process = _popen(command, env, log_file)
         _write_pid_file(pid_path, process.pid)
+        startup_s = 0.0
+        episode_started = perf_counter()
+        requested_model = str(settings.kinematic_model or SETTINGS.kinematic_model)
+        snap_path: str | None = None
+        snap_hash: str | None = None
         try:
             startup_started = perf_counter()
             client = wait_for_simulator(endpoint, process, settings.startup_timeout_s)
             startup_s = perf_counter() - startup_started
             try:
                 ping = client.ping()
-                requested_model = str(settings.kinematic_model or SETTINGS.kinematic_model)
                 snap_path, snap_hash = _validate_sim_snapshot_for_session(settings, ping)
                 policy = ScriptedCanPolicy(
                     trace_path=trace_path,
@@ -518,8 +574,62 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                 )
             finally:
                 _stop_client(client)
+        except Exception as exc:
+            return _error_outcome(
+                index,
+                seed,
+                trace_path,
+                log_path,
+                startup_s,
+                perf_counter() - episode_started,
+                failure_state="RUNNER",
+                failure_reason=f"{type(exc).__name__}: {exc}",
+                kinematic_model=requested_model,
+                snapshot_hash=snap_hash or None,
+                snapshot_path=snap_path or None,
+            )
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
+
+
+def _error_outcome(
+    index: int,
+    seed: int,
+    trace_path: Path,
+    log_path: Path,
+    startup_s: float,
+    episode_s: float,
+    *,
+    failure_state: str,
+    failure_reason: str,
+    kinematic_model: str | None = None,
+    snapshot_hash: str | None = None,
+    snapshot_path: str | None = None,
+) -> EpisodeOutcome:
+    """Synthetic failed outcome for runner/policy exceptions (always recordable)."""
+    return EpisodeOutcome(
+        index=index,
+        seed=seed,
+        success=False,
+        final_state="FAILED",
+        failure_state=failure_state,
+        failure_reason=failure_reason,
+        final_target_distance_m=float("nan"),
+        home_reached=False,
+        place_distance_ok=False,
+        can_height_ok=False,
+        can_tilt_ok=False,
+        can_height_error_m=None,
+        can_tilt_deg=None,
+        rejections=0,
+        startup_s=startup_s,
+        episode_s=episode_s,
+        trace_path=trace_path,
+        log_path=log_path,
+        kinematic_model=kinematic_model,
+        snapshot_hash=snapshot_hash,
+        snapshot_path=snapshot_path,
+    )
 
 
 def _popen(command: list[str], env: Mapping[str, str], log_file: IO[str]) -> subprocess.Popen[str]:

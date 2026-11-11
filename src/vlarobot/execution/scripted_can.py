@@ -28,6 +28,7 @@ from vlarobot.backends.webots.config import (
     CLOSE_ALIGN_TOL,
     CLOSED_LOOP_WAYPOINTS,
     FINGER_TIP_OFFSET_M,
+    GRASP_SERVO,
     GRASP_Z,
     GRIPPER_OPEN,
     GRIPPER_OPEN_TIMEOUT_S,
@@ -188,6 +189,7 @@ class ScriptedCanPolicy:
         pregrasp_route: str | None = None,
         pregrasp_realign: bool | None = None,
         closed_loop_waypoints: bool | None = None,
+        grasp_servo: str | None = None,
         stop_after: str | None = None,
         timing_enabled: bool = False,
     ) -> None:
@@ -197,6 +199,9 @@ class ScriptedCanPolicy:
         self.pregrasp_realign = (
             PREGRASP_REALIGN if pregrasp_realign is None else bool(pregrasp_realign)
         )
+        self.grasp_servo = GRASP_SERVO if grasp_servo is None else str(grasp_servo)
+        if self.grasp_servo not in {"none", "gt_pad"}:
+            raise ValueError("grasp_servo must be 'none' or 'gt_pad'.")
         self.closed_loop_waypoints = (
             CLOSED_LOOP_WAYPOINTS if closed_loop_waypoints is None else bool(closed_loop_waypoints)
         )

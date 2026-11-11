@@ -24,6 +24,12 @@ from vlarobot.backends.webots.config import (
     PROBE_STATIONARY_DELTA_RAD,
     PROBE_TOTAL_STEP_CAP,
     RESET_HEAD_SETTLE_MS,
+    RESET_POST_SETTLE_ANG_VELOCITY_THRESHOLD_RAD_S,
+    RESET_POST_SETTLE_CONSECUTIVE_STEPS,
+    RESET_POST_SETTLE_ENABLED,
+    RESET_POST_SETTLE_MAX_STEPS,
+    RESET_POST_SETTLE_TILT_DELTA_DEG,
+    RESET_POST_SETTLE_VELOCITY_THRESHOLD_M_S,
     RESET_TORSO_SETTLE_TOLERANCE_M,
     RESET_TORSO_TIMEOUT_STEPS,
     SAFETY_PROFILE,
@@ -112,6 +118,8 @@ class WebotsBackend:
         self._stopped = False
         self._reset_fingerprint_pending: dict[str, object] | None = None
         self._sim_kinematics_snapshot_pending: dict[str, object] | None = None
+        self._physics_step_count = 0
+        self._first_command_step_count: int | None = None
         self._export_job: dict[str, object] | None = None
         self._arm7_endpoint_offset_world: np.ndarray | None = None
         self._arm7_reset_link_rotation: np.ndarray | None = None
@@ -170,13 +178,21 @@ class WebotsBackend:
         self._episode_start_time = float(self.io.robot.getTime())
         self._last_joint_pos = self._joint_positions()
         self._last_time = self._episode_start_time
+        self._physics_step_count = 0
+        self._first_command_step_count = None
         torso_after_rad = float(self.io.sensors[TORSO_JOINT].getValue())
+        settle_info = None
+        if RESET_POST_SETTLE_ENABLED:
+            settle_info = self._settle_post_reset()
         fingerprint_lookup = getattr(self.io, "reset_fingerprint", None)
         fingerprint = fingerprint_lookup() if fingerprint_lookup is not None else None
         if isinstance(fingerprint, dict):
             fingerprint = dict(fingerprint)
             fingerprint["torso_sensor_after_rad"] = torso_after_rad
             fingerprint["torso_commanded_rad"] = float(SETTINGS.torso_height or 0.0)
+            if settle_info is not None:
+                fingerprint["post_reset_settle"] = settle_info
+            fingerprint["physics_step_count_at_reset"] = self._physics_step_count
         self._reset_fingerprint_pending = fingerprint
         self._reset_torso_before_rad = torso_before_rad
         self._reset_torso_after_rad = torso_after_rad
@@ -200,11 +216,14 @@ class WebotsBackend:
         for _ in range(n_steps):
             if self.visualization.step() == -1:
                 raise RuntimeError("Webots simulation stopped while stepping.")
+            self._physics_step_count += 1
         return self._observation()
 
     def apply(self, action: Action) -> ApplyResult:
         if self._stopped:
             raise RuntimeError("Cannot apply an action to a stopped backend.")
+        if self._first_command_step_count is None:
+            self._first_command_step_count = self._physics_step_count
         state = self._robot_state()
         validation = self._safety.validate(action, state)
         if not validation.accepted:
@@ -550,6 +569,8 @@ class WebotsBackend:
         contacts = contact_lookup() if contact_lookup else []
         wheel_lookup = getattr(self.io, "wheel_status", None)
         diagnostics: dict[str, object] = {
+            "physics_step_count": getattr(self, "_physics_step_count", 0),
+            "first_command_step_count": getattr(self, "_first_command_step_count", None),
             "torso_lift_joint_sensor_rad": float(self.io.sensors[TORSO_JOINT].getValue()),
             "base_drift_world_xyz_m": base_drift.tolist(),
             "base_drift_distance_m": float(np.linalg.norm(base_drift[:2])),
@@ -696,6 +717,76 @@ class WebotsBackend:
         for _ in range(head_steps):
             if self.visualization.step() == -1:
                 raise RuntimeError("Webots stopped while initializing the head posture.")
+
+    def _settle_post_reset(self) -> dict[str, object]:
+        """Step until base velocities and tilt-change are stable, or fail explicitly.
+
+        Campaign requirement (MEASURED intent): before first command, wait until base linear and
+        angular velocity magnitudes < thresholds and tilt change < threshold for N consecutive
+        steps, capped. Tilt is roll/pitch magnitude from base orientation; "tilt change" is
+        |tilt-step - tilt-prev| in degrees.
+        """
+        consecutive = 0
+        steps_used = 0
+        last_tilt_deg: float | None = None
+        reason = "max_steps"
+        for _ in range(int(RESET_POST_SETTLE_MAX_STEPS)):
+            if self.visualization.step() == -1:
+                raise RuntimeError("Webots simulation stopped while post-reset settling.")
+            self._physics_step_count += 1
+            steps_used += 1
+            vel = self.io.me.getVelocity()
+            if vel is None:
+                raise RuntimeError("Post-reset settle failed: base velocity unavailable.")
+            v = np.asarray(vel, dtype=float)
+            if v.shape[0] < 6 or not np.all(np.isfinite(v[:6])):
+                raise RuntimeError("Post-reset settle failed: base velocity is non-finite.")
+            lin = float(np.linalg.norm(v[:3]))
+            ang = float(np.linalg.norm(v[3:6]))
+            rot = np.asarray(self.io.me.getOrientation(), dtype=float).reshape((3, 3))
+            roll = math.atan2(rot[2, 1], rot[2, 2])
+            pitch = math.atan2(-rot[2, 0], math.sqrt(rot[2, 1] ** 2 + rot[2, 2] ** 2))
+            tilt_deg = math.degrees(math.sqrt(roll * roll + pitch * pitch))
+            tilt_delta = 0.0 if last_tilt_deg is None else abs(tilt_deg - last_tilt_deg)
+            last_tilt_deg = tilt_deg
+            stable = (
+                lin < float(RESET_POST_SETTLE_VELOCITY_THRESHOLD_M_S)
+                and ang < float(RESET_POST_SETTLE_ANG_VELOCITY_THRESHOLD_RAD_S)
+                and tilt_delta < float(RESET_POST_SETTLE_TILT_DELTA_DEG)
+            )
+            if stable:
+                consecutive += 1
+            else:
+                consecutive = 0
+            if consecutive >= int(RESET_POST_SETTLE_CONSECUTIVE_STEPS):
+                reason = "settled"
+                break
+        info = {
+            "enabled": True,
+            "steps_used": steps_used,
+            "consecutive_stable_steps": consecutive,
+            "required_consecutive_steps": int(RESET_POST_SETTLE_CONSECUTIVE_STEPS),
+            "reason": reason,
+            "thresholds": {
+                "linear_m_s": float(RESET_POST_SETTLE_VELOCITY_THRESHOLD_M_S),
+                "angular_rad_s": float(RESET_POST_SETTLE_ANG_VELOCITY_THRESHOLD_RAD_S),
+                "tilt_delta_deg": float(RESET_POST_SETTLE_TILT_DELTA_DEG),
+            },
+            "final": {
+                "linear_speed_m_s": lin if steps_used else None,
+                "angular_speed_rad_s": ang if steps_used else None,
+                "tilt_deg": last_tilt_deg,
+            },
+        }
+        if reason != "settled":
+            raise RuntimeError(
+                "Post-reset settle failed: "
+                f"reason={reason} steps_used={steps_used} "
+                f"consecutive={consecutive}/{RESET_POST_SETTLE_CONSECUTIVE_STEPS} "
+                f"final={info['final']}"
+            )
+        LOGGER.info("post_reset_settle: %s", info)
+        return info
 
     def _arm7_fk_world_pose(
         self,

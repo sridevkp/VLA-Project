@@ -589,6 +589,14 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                         break
             finally:
                 _stop_client(client)
+            # Let Webots exit on its own after simulationQuit(0) before the runner sends
+            # SIGTERM. SIGTERM can race with Webots' exit sequence and cause the runner's
+            # 30s timeout to escalate to SIGKILL (-9) even though Webots would have exited
+            # cleanly on its own. Waiting here avoids that race.
+            for _ in range(10):
+                if process.poll() is not None:
+                    break
+                time.sleep(1.0)
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
     return outcomes
@@ -649,6 +657,14 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                 )
             finally:
                 _stop_client(client)
+            # Let Webots exit on its own after simulationQuit(0) before the runner sends
+            # SIGTERM. SIGTERM can race with Webots' exit sequence and cause the runner's
+            # 30s timeout to escalate to SIGKILL (-9) even though Webots would have exited
+            # cleanly on its own. Waiting here avoids that race.
+            for _ in range(10):
+                if process.poll() is not None:
+                    break
+                time.sleep(1.0)
         except Exception as exc:
             return _error_outcome(
                 index,

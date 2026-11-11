@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 
 from vlarobot.backends.webots.config import (
     ARM_JOINTS,

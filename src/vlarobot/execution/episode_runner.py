@@ -199,8 +199,25 @@ def trace_digest(path: Path) -> str | None:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _trace_available(path: Path) -> bool:
+    """True when a trace file exists and can be read for comparison."""
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
 def trace_numeric_comparison(first: Path, second: Path) -> dict[str, object]:
-    """Max row-count and pose/time deltas between two same-seed traces, in event order."""
+    """Max row-count and pose/time deltas between two same-seed traces, in event order.
+
+    If either trace file is missing/unreadable, comparison is unavailable and reported as such
+    instead of raising.
+    """
+    if not _trace_available(first) or not _trace_available(second):
+        return {
+            "trace_comparison_available": False,
+            "missing_trace": str(second if _trace_available(first) else first),
+        }
     rows_first = [
         row for row in normalized_trace_rows(first) if row.get("event") == "state_boundary"
     ]
@@ -208,6 +225,7 @@ def trace_numeric_comparison(first: Path, second: Path) -> dict[str, object]:
         row for row in normalized_trace_rows(second) if row.get("event") == "state_boundary"
     ]
     report: dict[str, object] = {
+        "trace_comparison_available": True,
         "boundary_rows_equal": len(rows_first) == len(rows_second),
         "boundary_rows": min(len(rows_first), len(rows_second)),
     }
@@ -253,27 +271,80 @@ def normalized_outcome(row: EpisodeOutcome) -> dict[str, object]:
 
 
 def determinism_report(outcomes: list[EpisodeOutcome]) -> dict[str, object]:
-    """Outcomes, trace digests, and numeric deltas for repeated same-seed fresh-world episodes."""
+    """Outcomes, trace digests, and numeric deltas for repeated same-seed fresh-world episodes.
+
+    Episodes without a produced trace are reported as unavailable and compared only against the
+    first episode that produced a trace (when any). Missing traces make the determinism verdict
+    non-matching so callers fail clearly instead of crashing.
+    """
     digests = [trace_digest(row.trace_path) for row in outcomes]
-    first = normalized_outcome(outcomes[0]) if outcomes else None
-    outcomes_match = all(normalized_outcome(row) == first for row in outcomes[1:])
-    digests_match = len(outcomes) > 0 and None not in digests and len(set(digests)) == 1
+    available = [
+        (index, row, digest)
+        for index, (row, digest) in enumerate(zip(outcomes, digests, strict=True))
+        if _trace_available(row.trace_path) and digest is not None
+    ]
+    baseline_idx = available[0][0] if available else 0
+    baseline_row = outcomes[baseline_idx] if outcomes else None
+    baseline_outcome = normalized_outcome(baseline_row) if baseline_row is not None else None
+    outcomes_match = (
+        all(normalized_outcome(row) == baseline_outcome for row in outcomes[1:])
+        if outcomes
+        else False
+    )
+    available_digests = [digest for _, _, digest in available]
+    digests_match = (
+        len(available_digests) == len(outcomes)
+        and len(outcomes) > 0
+        and len(set(available_digests)) == 1
+    )
+    missing_traces = [
+        {
+            "index": index,
+            "trace_path": str(row.trace_path),
+            "log_path": str(row.log_path),
+            "failure_state": row.failure_state,
+            "failure_reason": row.failure_reason,
+        }
+        for index, row in enumerate(outcomes)
+        if not _trace_available(row.trace_path)
+    ]
     comparisons: list[dict[str, object]] = []
-    for index, row in enumerate(outcomes[1:], start=1):
+    for index, row in enumerate(outcomes):
+        if index == baseline_idx:
+            continue
+        pair = f"{baseline_idx}->{index}"
+        if not _trace_available(row.trace_path) or not _trace_available(
+            outcomes[baseline_idx].trace_path
+        ):
+            comparisons.append(
+                {
+                    "pair": pair,
+                    "outcome_match": normalized_outcome(row) == baseline_outcome,
+                    "digest_match": False,
+                    "trace_comparison_available": False,
+                    "reason": row.failure_reason or "missing trace",
+                    "log_path": str(row.log_path),
+                }
+            )
+            continue
         comparisons.append(
             {
-                "pair": f"0->{index}",
-                "outcome_match": normalized_outcome(row) == first,
-                "digest_match": digests[0] is not None and digests[index] == digests[0],
-                **trace_numeric_comparison(outcomes[0].trace_path, row.trace_path),
+                "pair": pair,
+                "outcome_match": normalized_outcome(row) == baseline_outcome,
+                "digest_match": digests[baseline_idx] is not None
+                and digests[index] == digests[baseline_idx],
+                **trace_numeric_comparison(outcomes[baseline_idx].trace_path, row.trace_path),
             }
         )
+    match = outcomes_match and digests_match and len(missing_traces) == 0
     return {
         "episodes": len(outcomes),
         "outcomes_match": outcomes_match,
         "trace_digests_match": digests_match,
-        "match": outcomes_match and digests_match,
-        "first_digest": digests[0] if digests else None,
+        "match": match,
+        "first_digest": digests[baseline_idx] if outcomes else None,
+        "baseline_index": baseline_idx,
+        "missing_traces": missing_traces,
         "comparisons": comparisons,
     }
 

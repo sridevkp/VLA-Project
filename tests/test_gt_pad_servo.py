@@ -31,7 +31,13 @@ def _obs(pad_mid_world, ee_base=(0.5, 0.0, 0.9), t=0.0):
         base_pose_world=Pose3D(Vec3(0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
         diagnostics={"finger_midpoint_world_xyz_m": list(pad_mid_world)},
     )
-    return Observation(t=t, rgb=np.zeros((1, 1, 3), dtype=np.uint8), depth=None, cam_info=cam, robot=robot)
+    return Observation(
+        t=t,
+        rgb=np.zeros((1, 1, 3), dtype=np.uint8),
+        depth=None,
+        cam_info=cam,
+        robot=robot,
+    )
 
 
 class FakeServoBackend:
@@ -63,16 +69,17 @@ def test_gt_pad_pregrasp_servo_converges_with_biased_fk():
     obs = _obs(backend.pad_world)
 
     def fake_move_to(_backend, current_q, target, _state, waypoint_records=None):
-        # Simulate that commanded base-frame XY correction moves measured pad by same world delta
-        # (base at identity here), while preserving a wrong-tool-axis effect in Z irrelevant to XY.
+        # Simulate that commanded base-frame XY correction moves measured pad by same
+        # world delta (base at identity here).
         prev = np.array(target, dtype=float)
-        # infer delta from previous hover target stored on policy via closure is complex; instead
-        # move pad toward target's XY intent by applying target change approximately.
-        nonlocal_target = policy._last_servo_target if hasattr(policy, "_last_servo_target") else prev
+        nonlocal_target = (
+            policy._last_servo_target if hasattr(policy, "_last_servo_target") else prev
+        )
         delta = np.array(target, dtype=float) - np.array(nonlocal_target, dtype=float)
         backend.pad_world = backend.pad_world + np.array([delta[0], delta[1], 0.0])
         policy._last_servo_target = np.array(target, dtype=float)
-        new_obs = _obs(backend.pad_world, ee_base=(float(target[0]), float(target[1]), float(target[2])))
+        ee_base = (float(target[0]), float(target[1]), float(target[2]))
+        new_obs = _obs(backend.pad_world, ee_base=ee_base)
         return np.zeros(len(kin.chain.links)), new_obs
 
     policy._last_servo_target = np.array([0.7, 0.2, 0.92], dtype=float)
@@ -80,8 +87,9 @@ def test_gt_pad_pregrasp_servo_converges_with_biased_fk():
     q = np.zeros(len(kin.chain.links))
     out = policy._servo_correct_pregrasp_xy(backend, obs, q, np.array([0.7, 0.2, 0.92]))
     assert out is not None
-    _q, obs2, target = out
-    err = backend.can_world[:2] - np.array(obs2.robot.diagnostics["finger_midpoint_world_xyz_m"])[:2]
+    _q, obs2, _target = out
+    pad_mid = np.array(obs2.robot.diagnostics["finger_midpoint_world_xyz_m"])[:2]
+    err = backend.can_world[:2] - pad_mid
     assert float(np.linalg.norm(err)) < 0.004
 
 

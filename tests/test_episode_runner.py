@@ -279,3 +279,35 @@ def test_format_determinism_report_lists_each_pair(tmp_path: Path) -> None:
     assert text.startswith("determinism episodes=1")
     # No pairs exist for a single episode.
     assert "pair=" not in text
+
+
+def test_determinism_report_handles_missing_trace_without_crash(tmp_path: Path) -> None:
+    first = tmp_path / "episode-00.jsonl"
+    missing = tmp_path / "episode-01.jsonl"
+    _write_trace(first, [_boundary_row()])
+    outcome_a = _outcome_row(0, first)
+    outcome_b = replace(
+        outcome_a,
+        index=1,
+        success=False,
+        final_state="FAILED",
+        failure_state="RUNNER",
+        failure_reason="TimeoutError: reset hung",
+        home_reached=False,
+        trace_path=missing,
+        log_path=tmp_path / "episode-01.log",
+    )
+
+    report = determinism_report([outcome_a, outcome_b])
+
+    assert report["match"] is False
+    assert report["trace_digests_match"] is False
+    assert report["missing_traces"]
+    missing_entry = report["missing_traces"][0]
+    assert missing_entry["index"] == 1
+    assert missing_entry["log_path"].endswith("episode-01.log")
+    assert missing_entry["failure_reason"] == "TimeoutError: reset hung"
+    comparisons = report["comparisons"]
+    assert isinstance(comparisons, list) and comparisons
+    assert comparisons[0]["trace_comparison_available"] is False
+    assert comparisons[0]["digest_match"] is False

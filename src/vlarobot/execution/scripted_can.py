@@ -61,6 +61,7 @@ from vlarobot.backends.webots.config import (
     TORSO_JOINT,
 )
 from vlarobot.backends.webots.kinematics import Kinematics
+from vlarobot.backends.webots.sim_kinematics import PROTO_PAD_CENTER_ARM7_M
 from vlarobot.core.types import (
     GripperCmd,
     GroundTruth,
@@ -354,6 +355,10 @@ class ScriptedCanPolicy:
                 self._trace_gt_tip(backend, observation, "DESCEND", "enter")
             if name == "home":
                 movement = self._move_to_joint_target(backend, current_q, home_q, state)
+            elif state == "DESCEND" and target is not None and self.grasp_servo == "gt_pad":
+                # Start descent from achieved pregrasp/hover pose (base frame)
+                hover = observation.robot.ee_pose.position.as_array().copy()
+                movement = self._servo_descend_to_grasp(backend, observation, current_q, hover)
             elif (
                 state in {"DESCEND", "LIFT", "TRANSIT", "PLACE_DESCEND", "RETREAT"}
                 and target is not None
@@ -391,6 +396,20 @@ class ScriptedCanPolicy:
                         target_base_xyz_m=lift_target.tolist(),
                     )
                 movement = realigned
+            if movement is not None and state == "PREGRASP" and self.grasp_servo == "gt_pad":
+                current_q, observation = movement
+                pregrasp_now = self._base_frame_targets(backend, observation)["pregrasp"]
+                servoed = self._servo_correct_pregrasp_xy(
+                    backend, observation, current_q, pregrasp_now, state="PREGRASP"
+                )
+                if servoed is None:
+                    movement = None
+                else:
+                    current_q, observation, trace_target = servoed
+                    # Keep lift target consistent with achieved hover XY.
+                    lift_target = trace_target.copy()
+                    lift_target = trace_target.copy()
+                    movement = (current_q, observation)
             if movement is None:
                 rejections += int(self._last_failure_is_safety)
                 failure_observation = self._last_observation or observation
@@ -924,6 +943,148 @@ class ScriptedCanPolicy:
         details.update(extra)
         self._trace_event("grasp_servo", **details)
 
+    def _arm7_world_pose_from_telemetry(
+        self, observation: Observation
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        telem = observation.robot.diagnostics.get("kinematics_telemetry")
+        if not isinstance(telem, dict):
+            return None
+        solids = telem.get("joint_endpoint_solids")
+        if not isinstance(solids, dict):
+            return None
+        arm7 = solids.get("arm_7_joint")
+        if not isinstance(arm7, dict):
+            return None
+        pose = arm7.get("world_pose") if "world_pose" in arm7 else arm7
+        if not isinstance(pose, dict):
+            return None
+        pos = pose.get("world_position_m") or pose.get("position")
+        rot = pose.get("world_orientation_matrix_row_major") or pose.get("orientation")
+        if not isinstance(pos, list) or len(pos) != 3 or not isinstance(rot, list) or len(rot) != 9:
+            return None
+        p_arr = np.asarray(pos, dtype=float)
+        r_arr = np.asarray(rot, dtype=float).reshape(3, 3)
+        if not np.all(np.isfinite(p_arr)) or not np.all(np.isfinite(r_arr)):
+            return None
+        return p_arr, r_arr
+
+    def _pad_midpoint_world_measured(
+        self, observation: Observation
+    ) -> tuple[np.ndarray, str] | None:
+        """Return (pad_mid_world_xyz, source). Uses finger midpoint if available, else
+        arm_7 endpoint pose composed with PROTO pad-center offset when telemetry available."""
+        pad = self._pad_midpoint_world(observation)
+        if pad is not None:
+            return pad, "finger_midpoint_diagnostics"
+        arm7 = self._arm7_world_pose_from_telemetry(observation)
+        if arm7 is not None:
+            p_arm7, r_arm7 = arm7
+            pad_world = p_arm7 + r_arm7 @ np.asarray(PROTO_PAD_CENTER_ARM7_M, dtype=float)
+            return pad_world, "arm7_endpoint_plus_proto_pad_center(UNVERIFIED_pose_source)"
+        return None
+
+    def _gt_pad_xy_error_world(
+        self, backend, observation: Observation
+    ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, str] | None:
+        got = self._pad_midpoint_world_measured(observation)
+        if got is None:
+            return None
+        pad_world, source = got
+        can_world, _ = self._can_world_pose(backend)
+        e_xy = (can_world - pad_world)[:2].copy()
+        return e_xy, float(np.linalg.norm(e_xy)), can_world, pad_world, source
+
+    def _servo_correct_pregrasp_xy(
+        self,
+        backend,
+        observation: Observation,
+        current_q: np.ndarray,
+        pregrasp_target_base: np.ndarray,
+        state: str = "PREGRASP",
+    ) -> tuple[np.ndarray, Observation, np.ndarray] | None:
+        """Bounded XY corrections at hover to align pad midpoint over can (oracle)."""
+        if self.grasp_servo != "gt_pad":
+            return current_q, observation, pregrasp_target_base
+        target = np.asarray(pregrasp_target_base, dtype=float).copy()
+        max_step = 0.010  # 10 mm
+        tol = 0.004
+        for iteration in range(1, 7):
+            err = self._gt_pad_xy_error_world(backend, observation)
+            if err is None:
+                self._last_failure_reason = "gt_pad servo failed: pad midpoint unavailable"
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "pregrasp_unavailable",
+                    iteration=iteration,
+                    reason=self._last_failure_reason,
+                )
+                return None
+            e_xy, e_norm, can_world, pad_world, source = err
+            self._log_servo(
+                backend,
+                observation,
+                state,
+                "pregrasp_iter",
+                iteration=iteration,
+                source=source,
+                target_base_xyz_m=target.tolist(),
+            )
+            if e_norm < tol:
+                return current_q, observation, target
+            step_world = e_xy.copy()
+            step_norm = float(np.linalg.norm(step_world))
+            if step_norm > max_step:
+                step_world = step_world * (max_step / step_norm)
+            # world XY correction -> base frame XY (ignore yaw coupling for small bounded step)
+            base_pose_world = observation.robot.base_pose_world
+            if base_pose_world is None:
+                self._last_failure_reason = "gt_pad servo failed: missing base_pose_world"
+                return None
+            R_wb = _quaternion_to_matrix(base_pose_world.orientation)
+            # Move pad toward can in world XY: d_world = step_world (bounded).
+            # Approx target delta in base: R_wb^T * d_world.
+            d_base = R_wb.T @ np.array([step_world[0], step_world[1], 0.0], dtype=float)
+            target = target + d_base
+            moved = self._move_to(backend, current_q, target, state)
+            if moved is None:
+                if self._last_failure_reason is None:
+                    self._last_failure_reason = "gt_pad servo correction move failed"
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "pregrasp_move_failed",
+                    iteration=iteration,
+                    reason=self._last_failure_reason,
+                )
+                return None
+            current_q, observation = moved
+        # final check
+        err = self._gt_pad_xy_error_world(backend, observation)
+        if err is None:
+            self._last_failure_reason = (
+                "gt_pad servo failed: pad midpoint unavailable after corrections"
+            )
+            return None
+        e_xy, e_norm, _can_world, _pad_world, source = err
+        self._log_servo(
+            backend,
+            observation,
+            state,
+            "pregrasp_final",
+            iteration=6,
+            source=source,
+            target_base_xyz_m=target.tolist(),
+        )
+        if e_norm >= tol:
+            self._last_failure_reason = (
+                f"gt_pad pregrasp did not converge: |e_xy|={e_norm:.6f}m >= {tol}m"
+            )
+            return None
+        return current_q, observation, target
+
     def _success_criteria(
         self, backend, observation: Observation, final_state: str
     ) -> CanSuccessCriteria:
@@ -1018,6 +1179,141 @@ class ScriptedCanPolicy:
             return self._base_frame_targets(backend, observation, can_world=can_world)[name]
 
         return provider
+
+    def _servo_descend_to_grasp(
+        self,
+        backend,
+        observation: Observation,
+        current_q: np.ndarray,
+        hover_target_base: np.ndarray,
+    ) -> tuple[np.ndarray, Observation] | None:
+        """GT-pad servo descent: XY corrections every 20mm, stop at measured pad z."""
+        state = "DESCEND"
+        target_xy_base = np.asarray(hover_target_base[:2], dtype=float).copy()
+        z = float(hover_target_base[2])
+        can_world, _ = self._can_world_pose(backend)
+        # target pad midpoint z = can centre z + grasp offset (GRASP_Z), per spec intent
+        target_pad_z = float(can_world[2] + GRASP_Z)
+        # don't start below a safe margin above can in commanded terms; measured stop governs
+        descended_since_correction = 0.0
+        step_down = 0.005  # 5 mm commanded steps
+        max_total = 0.30
+        total_descended = 0.0
+        last_meas = self._gt_pad_xy_error_world(backend, observation)
+        if last_meas is None:
+            self._last_failure_reason = "gt_pad descent failed: pad midpoint unavailable at start"
+            self._log_servo(
+                backend, observation, state, "descend_unavailable", reason=self._last_failure_reason
+            )
+            return None
+        _e_xy, _e_norm, _cw, pad_world, source = last_meas
+        self._log_servo(
+            backend, observation, state, "descend_start", source=source, target_pad_z_m=target_pad_z
+        )
+        while total_descended < max_total:
+            # stopping condition on measured pad z
+            meas = self._gt_pad_xy_error_world(backend, observation)
+            if meas is None:
+                self._last_failure_reason = "gt_pad descent failed: pad midpoint unavailable"
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "descend_measure_failed",
+                    reason=self._last_failure_reason,
+                    total_descended_m=total_descended,
+                )
+                return None
+            e_xy, e_norm, can_world, pad_world, source = meas
+            if float(pad_world[2]) <= target_pad_z:
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "descend_reached",
+                    source=source,
+                    target_pad_z_m=target_pad_z,
+                    total_descended_m=total_descended,
+                )
+                return current_q, observation
+            # re-measure/correct every 20mm of descent
+            if descended_since_correction >= 0.020 - 1e-9:
+                # bounded XY correction at current height (small step)
+                base_pose_world = observation.robot.base_pose_world
+                if base_pose_world is None:
+                    self._last_failure_reason = "gt_pad descent failed: missing base_pose_world"
+                    return None
+                R_wb = _quaternion_to_matrix(base_pose_world.orientation)
+                step_world = e_xy.copy()
+                nrm = float(np.linalg.norm(step_world))
+                if nrm > 0.010:
+                    step_world = step_world * (0.010 / nrm)
+                d_base = R_wb.T @ np.array([step_world[0], step_world[1], 0.0], dtype=float)
+                target_xy_base = target_xy_base + d_base[:2]
+                descended_since_correction = 0.0
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "descend_realign",
+                    source=source,
+                    total_descended_m=total_descended,
+                )
+            # command next downward waypoint at corrected XY
+            z = z - step_down
+            target = np.array([target_xy_base[0], target_xy_base[1], z], dtype=float)
+            # limit each correction/move step; use single-step move_to
+            moved = self._move_to(backend, current_q, target, state)
+            if moved is None:
+                if self._last_failure_reason is None:
+                    self._last_failure_reason = "gt_pad descent move failed"
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "descend_move_failed",
+                    reason=self._last_failure_reason,
+                    total_descended_m=total_descended,
+                )
+                return None
+            current_q, observation = moved
+            descended_since_correction += step_down
+            total_descended += step_down
+            self._log_servo(
+                backend,
+                observation,
+                state,
+                "descend_step",
+                source=source,
+                target_pad_z_m=target_pad_z,
+                total_descended_m=total_descended,
+            )
+        # final check
+        meas = self._gt_pad_xy_error_world(backend, observation)
+        if meas is not None:
+            _e_xy, _e_norm, _cw, pad_world, source = meas
+            if float(pad_world[2]) <= target_pad_z:
+                self._log_servo(
+                    backend,
+                    observation,
+                    state,
+                    "descend_reached",
+                    source=source,
+                    target_pad_z_m=target_pad_z,
+                    total_descended_m=total_descended,
+                )
+                return current_q, observation
+        self._last_failure_reason = "gt_pad descent failed: did not reach measured pad z"
+        self._log_servo(
+            backend,
+            observation,
+            state,
+            "descend_incomplete",
+            reason=self._last_failure_reason,
+            target_pad_z_m=target_pad_z,
+            total_descended_m=total_descended,
+        )
+        return None
 
     def _move_to(
         self,

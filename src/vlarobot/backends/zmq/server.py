@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
+import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import zmq
@@ -68,12 +71,71 @@ class SimServer:
         self._shutdown = False
         self.endpoint: str | None = None
         self.session_id = session_identity()
+        self._status_lock = threading.Lock()
+        self._current_request: str | None = None
+        self._current_request_started: float | None = None
+        self._last_completed: dict[str, object] | None = None
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread: threading.Thread | None = None
+        self._status_path: Path | None = None
+
+    def _set_busy(self, operation: str | None) -> None:
+        with self._status_lock:
+            self._current_request = operation
+            self._current_request_started = time.perf_counter() if operation else None
+
+    def _write_status(self, extra: dict[str, object] | None = None) -> None:
+        path = self._status_path
+        if path is None:
+            return
+        with self._status_lock:
+            op = self._current_request
+            started = self._current_request_started
+            age = (time.perf_counter() - started) if (op and started is not None) else None
+            payload: dict[str, object] = {
+                "session_id": self.session_id,
+                "endpoint": self.endpoint,
+                "busy": op is not None,
+                "request": op,
+                "request_age_s": age,
+                "sim_time": self._sim_time,
+                "last_completed": self._last_completed,
+                "updated_at": time.time(),
+            }
+            if extra:
+                payload.update(extra)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(payload, default=str), encoding="utf-8")
+            tmp.replace(path)
+        except Exception:
+            pass
+
+    def _watchdog_loop(self, interval_s: float = 2.0, warn_after_s: float = 5.0) -> None:
+        while not self._watchdog_stop.wait(interval_s):
+            with self._status_lock:
+                op = self._current_request
+                started = self._current_request_started
+            if op and started is not None:
+                age = time.perf_counter() - started
+                if age >= warn_after_s:
+                    _LOGGER.warning(
+                        "Simulator busy: request=%s age=%.3fs endpoint=%s", op, age, self.endpoint
+                    )
+                self._write_status()
+            else:
+                self._write_status()
 
     def handle(self, request: dict[str, Any]) -> dict[str, Any]:
         """Validate and dispatch one decoded protocol request."""
         seq = request["seq"]
         operation = request["type"]
         payload = request["payload"]
+        started = time.perf_counter()
+        self._set_busy(operation)
+        self._write_status()
+        _LOGGER.info("request_start op=%s seq=%s sim_time=%s", operation, seq, self._sim_time)
         try:
             if operation == "ping":
                 telemetry_enabled = bool(
@@ -131,15 +193,41 @@ class SimServer:
                 response_payload = {"status": "stopped"}
             else:
                 raise ProtocolError(f"Unknown simulator operation: {operation!r}.")
+            dur = time.perf_counter() - started
+            _LOGGER.info(
+                "request_end op=%s seq=%s duration_s=%.4f sim_time=%s",
+                operation,
+                seq,
+                dur,
+                self._sim_time,
+            )
+            if dur > 2.0:
+                _LOGGER.warning("slow_request op=%s seq=%s duration_s=%.4f", operation, seq, dur)
+            with self._status_lock:
+                self._last_completed = {"op": operation, "seq": seq, "duration_s": dur, "ok": True}
             return make_message(operation, seq, response_payload, sim_time=self._sim_time)
         except (ProtocolError, TypeError, ValueError, RuntimeError) as exc:
-            _LOGGER.warning("Simulator request %s failed: %s", operation, exc)
+            dur = time.perf_counter() - started
+            _LOGGER.warning(
+                "request_error op=%s seq=%s duration_s=%.4f error=%s", operation, seq, dur, exc
+            )
+            with self._status_lock:
+                self._last_completed = {
+                    "op": operation,
+                    "seq": seq,
+                    "duration_s": dur,
+                    "ok": False,
+                    "error": str(exc),
+                }
             return make_message(
                 operation,
                 seq,
                 error=str(exc),
                 sim_time=self._sim_time,
             )
+        finally:
+            self._set_busy(None)
+            self._write_status()
 
     def serve_forever(self, endpoint: str = DEFAULT_ENDPOINT) -> None:
         """Bind the REP socket and dispatch requests until a shutdown request arrives."""
@@ -158,7 +246,24 @@ class SimServer:
         # Resolve ephemeral ports (e.g. tcp://127.0.0.1:* -> actual address).
         bound = socket.getsockopt_string(zmq.LAST_ENDPOINT)
         self.endpoint = bound
-        _LOGGER.info("Simulator server listening on %s (session %s)", bound, self.session_id)
+        # Status file for out-of-band liveness diagnosis (watchdog updates request/age).
+        try:
+            port = int(bound.rsplit(":", 1)[-1])
+        except Exception:
+            port = 0
+        self._status_path = Path.cwd() / "runs" / "campaign-2026-11-11" / f"sim-status-{port}.json"
+        self._watchdog_stop.clear()
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop, name="sim-watchdog", daemon=True
+        )
+        self._watchdog_thread.start()
+        _LOGGER.info(
+            "Simulator server listening on %s (session %s status=%s)",
+            bound,
+            self.session_id,
+            self._status_path,
+        )
+        self._write_status({"event": "listening"})
         try:
             while not self._shutdown:
                 try:
@@ -180,5 +285,9 @@ class SimServer:
                     except zmq.ZMQError:
                         pass
         finally:
+            self._watchdog_stop.set()
+            if self._watchdog_thread is not None:
+                self._watchdog_thread.join(timeout=2.0)
+            self._write_status({"event": "stopped"})
             socket.close()
             context.term()

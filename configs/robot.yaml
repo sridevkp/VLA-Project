@@ -109,7 +109,7 @@ urdf_filename: tiago.urdf
 # diagnostics (key sim_kinematics_snapshot) and per-step GT Solid telemetry
 # (key kinematics_telemetry) to every observation; the default stays false so
 # normal runs carry no extra telemetry cost.
-export_sim_kinematics: true
+export_sim_kinematics: false
 # Kinematic model used by the policy FK/IK chain (ADR-0020): 'urdf' keeps the
 # repo URDF chain (M1-06a equivalence baseline); 'sim' builds the chain from the
 # JSON written by `uv run python -m vlarobot.cli export-sim-kinematics`.

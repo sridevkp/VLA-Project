@@ -23,6 +23,12 @@ def _obs(pad_mid_world, ee_base=(0.5, 0.0, 0.9), t=0.0):
         width=1,
         height=1,
     )
+    pad = np.asarray(pad_mid_world, dtype=float)
+    # ADR-0022: the gt_pad servo reference is the arm_7 Solid pose composed with the
+    # measured offset (0, 0, +0.202825) in the sim arm_7 frame. The fake provides the
+    # Solid position/orientation that composes to the intended pad midpoint (identity
+    # base/world), and the backend-composed diagnostics key itself.
+    arm7_pos = (pad - np.array([0.0, 0.0, 0.202825])).tolist()
     robot = RobotState(
         joint_pos={},
         joint_vel={},
@@ -30,7 +36,15 @@ def _obs(pad_mid_world, ee_base=(0.5, 0.0, 0.9), t=0.0):
         ee_pose=Pose3D(Vec3(*ee_base), (0.0, 0.0, 0.0, 1.0)),
         gripper_opening=0.04,
         base_pose_world=Pose3D(Vec3(0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
-        diagnostics={"finger_midpoint_world_xyz_m": list(pad_mid_world)},
+        diagnostics={
+            "pad_midpoint_arm7_solid_measured_world_xyz_m": pad.tolist(),
+            "arm_7_joint_ground_truth_world_xyz_m": arm7_pos,
+            "arm_7_joint_ground_truth_orientation_rows": [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+        },
     )
     return Observation(
         t=t,

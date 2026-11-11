@@ -89,6 +89,17 @@ closed_loop_waypoints: true
 # Local z offset from the finger endPoint Solid origin (slider joint) to the pad centre.
 # Matches tool_offset and the TiagoGripper.proto finger geometry (m).
 finger_tip_offset_m: 0.1741
+# MEASURED (ADR-0022): arm_7 endPoint Solid -> finger-pad midpoint offset in the sim
+# arm_7 Solid frame, measured at 4 safe poses (reset + small arm_1/arm_2/arm_4 moves),
+# per-axis spread <= 1.7e-7 m (runs/campaign-2026-11-11/phase3_finger_gt).
+# grasp_servo=gt_pad uses THIS; the legacy finger_tip_offset_m above is NOT used by the servo.
+pad_offset_arm7_simframe_m: [0.0, 0.0, 0.202825]
+# Can half-height from CAN.proto (R2025a): can lid z = can centre z + 0.0611 m.
+can_half_height_m: 0.0611
+# Pad-bottom offset below the Solid-based pad reference along the approach axis (m),
+# from the live contact-height probe (runs/campaign-2026-11-11/phase3_contact_probe).
+# null until the probe fills it; grasp_servo=gt_pad descent refuses while null.
+probe_pad_reference_to_pad_bottom_m: null
 # CAN radius for per-side finger clearance telemetry, from CAN.proto (m).
 can_radius_m: 0.03175
 # Table geometry, read from the `Table` instance in worlds/factory.wbt

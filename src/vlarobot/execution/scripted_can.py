@@ -22,6 +22,7 @@ from vlarobot.backends.webots.config import (
     BASE_DRIFT_RATE_WINDOW_S,
     BASE_DRIFT_WARN_POSITION_M,
     BASE_DRIFT_WARN_YAW_DEG,
+    CAN_HALF_HEIGHT_M,
     CAN_PLACE_Z_TOLERANCE_M,
     CAN_RADIUS_M,
     CAN_TILT_LIMIT_DEG,
@@ -45,12 +46,14 @@ from vlarobot.backends.webots.config import (
     LINEAR_WAYPOINT_SPACING_M,
     MAX_JOINT_STEP_RAD,
     MAX_TILT_DEG,
+    PAD_OFFSET_ARM7_SIMFRAME_M,
     PLACE_CLEAR,
     PLACE_TOLERANCE_M,
     PLACE_WORLD,
     PREGRASP_REALIGN,
     PREGRASP_ROUTE,
     PREGRASP_SETTLE_TOLERANCE_RAD,
+    PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M,
     STOP_AFTER,
     TABLE_CLEARANCE_REQUIRED_M,
     TABLE_FOOTPRINT_CENTRE_XY_M,
@@ -61,7 +64,6 @@ from vlarobot.backends.webots.config import (
     TORSO_JOINT,
 )
 from vlarobot.backends.webots.kinematics import Kinematics
-from vlarobot.backends.webots.sim_kinematics import PROTO_PAD_CENTER_ARM7_M
 from vlarobot.core.types import (
     GripperCmd,
     GroundTruth,
@@ -926,20 +928,30 @@ class ScriptedCanPolicy:
         self, backend, observation: Observation, state: str, phase: str, **extra
     ) -> None:
         can_xyz, _ = self._can_world_pose(backend)
-        pad = self._pad_midpoint_world(observation)
+        got = self._pad_midpoint_world_measured(observation)
+        pad, source = (None, None) if got is None else got
         details: dict[str, object] = {
             "state": state,
             "phase": phase,
             "sim_time_s": observation.t,
             "can_world_xyz_m": can_xyz.tolist(),
             "pad_mid_world_xyz_m": None if pad is None else pad.tolist(),
+            "pad_source": source,
         }
         if pad is not None:
-            e_xy = (can_xyz - pad)[:2]
-            details["e_xy_world_m"] = e_xy.tolist()
-            details["e_xy_norm_m"] = float(np.linalg.norm(e_xy))
+            delta = can_xyz - pad
+            details["e_xy_world_m"] = delta[:2].tolist()
+            details["e_xy_norm_m"] = float(np.linalg.norm(delta[:2]))
+            details["can_minus_pad_world_xyz_m"] = delta.tolist()
             details["pad_mid_z_m"] = float(pad[2])
             details["can_centre_z_m"] = float(can_xyz[2])
+            base_pose_world = observation.robot.base_pose_world
+            if base_pose_world is not None:
+                can_base = _world_to_base(can_xyz, base_pose_world)
+                pad_base = _world_to_base(pad, base_pose_world)
+                delta_base = can_base - pad_base
+                details["can_minus_pad_base_xyz_m"] = delta_base.tolist()
+                details["can_minus_pad_base_norm_m"] = float(np.linalg.norm(delta_base))
         details.update(extra)
         self._trace_event("grasp_servo", **details)
 
@@ -971,16 +983,42 @@ class ScriptedCanPolicy:
     def _pad_midpoint_world_measured(
         self, observation: Observation
     ) -> tuple[np.ndarray, str] | None:
-        """Return (pad_mid_world_xyz, source). Uses finger midpoint if available, else
-        arm_7 endpoint pose composed with PROTO pad-center offset when telemetry available."""
-        pad = self._pad_midpoint_world(observation)
-        if pad is not None:
-            return pad, "finger_midpoint_diagnostics"
-        arm7 = self._arm7_world_pose_from_telemetry(observation)
-        if arm7 is not None:
-            p_arm7, r_arm7 = arm7
-            pad_world = p_arm7 + r_arm7 @ np.asarray(PROTO_PAD_CENTER_ARM7_M, dtype=float)
-            return pad_world, "arm7_endpoint_plus_proto_pad_center(UNVERIFIED_pose_source)"
+        """Measured pad reference in world frame for grasp_servo=gt_pad (ADR-0022).
+
+        Pad midpoint = arm_7 endPoint Solid pose composed with the MEASURED constant offset
+        ``(0, 0, +0.202825) m`` in the sim arm_7 Solid frame (config
+        ``pad_offset_arm7_simframe_m``, measured at 4 safe poses, spread <= 1.7e-7 m).
+        The legacy ``finger_tip_offset_m`` (0.1741, PROTO slider geometry) is deliberately
+        NOT used here. Falls back to the same composition from the Solid position and
+        orientation diagnostics when the backend-composed key is absent (fake backends);
+        fails loudly (None) when neither is available.
+        """
+        diag = observation.robot.diagnostics
+        composed = diag.get("pad_midpoint_arm7_solid_measured_world_xyz_m")
+        if isinstance(composed, (list, tuple)) and len(composed) == 3:
+            arr = np.asarray(composed, dtype=float)
+            if np.all(np.isfinite(arr)):
+                return arr, "arm7_solid_plus_measured_offset"
+        arm7_pos = diag.get("arm_7_joint_ground_truth_world_xyz_m")
+        arm7_rows = diag.get("arm_7_joint_ground_truth_orientation_rows")
+        if (
+            isinstance(arm7_pos, (list, tuple))
+            and len(arm7_pos) == 3
+            and isinstance(arm7_rows, (list, tuple))
+            and len(arm7_rows) == 3
+        ):
+            position = np.asarray(arm7_pos, dtype=float)
+            rotation = np.asarray(arm7_rows, dtype=float).reshape(3, 3)
+            if np.all(np.isfinite(position)) and np.all(np.isfinite(rotation)):
+                pad_world = position + rotation @ np.asarray(
+                    PAD_OFFSET_ARM7_SIMFRAME_M, dtype=float
+                )
+                return pad_world, "arm7_solid_plus_measured_offset(composed)"
+        arm7_telemetry = self._arm7_world_pose_from_telemetry(observation)
+        if arm7_telemetry is not None:
+            p_arm7, r_arm7 = arm7_telemetry
+            pad_world = p_arm7 + r_arm7 @ np.asarray(PAD_OFFSET_ARM7_SIMFRAME_M, dtype=float)
+            return pad_world, "arm7_telemetry_plus_measured_offset"
         return None
 
     def _gt_pad_xy_error_world(
@@ -1187,13 +1225,28 @@ class ScriptedCanPolicy:
         current_q: np.ndarray,
         hover_target_base: np.ndarray,
     ) -> tuple[np.ndarray, Observation] | None:
-        """GT-pad servo descent: XY corrections every 20mm, stop at measured pad z."""
+        """GT-pad servo descent: XY corrections every 20mm, stop at the probe-measured pad
+        -bottom height (lid contact height from the contact-height probe, addition 2)."""
         state = "DESCEND"
+        if PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M is None:
+            self._last_failure_reason = (
+                "gt_pad descent stop height requires the contact-height probe offset; "
+                "probe_pad_reference_to_pad_bottom_m is null. Run the contact-height probe first."
+            )
+            self._log_servo(
+                backend,
+                observation,
+                state,
+                "descend_unconfigured",
+                reason=self._last_failure_reason,
+            )
+            return None
         target_xy_base = np.asarray(hover_target_base[:2], dtype=float).copy()
         z = float(hover_target_base[2])
         can_world, _ = self._can_world_pose(backend)
-        # target pad midpoint z = can centre z + grasp offset (GRASP_Z), per spec intent
-        target_pad_z = float(can_world[2] + GRASP_Z)
+        # Stopping height from the live contact-height probe (not PROTO arithmetic): stop
+        # when the measured pad bottom reaches the can lid (can centre z + half height).
+        target_pad_bottom_z = float(can_world[2] + CAN_HALF_HEIGHT_M)
         # don't start below a safe margin above can in commanded terms; measured stop governs
         descended_since_correction = 0.0
         step_down = 0.005  # 5 mm commanded steps
@@ -1208,10 +1261,15 @@ class ScriptedCanPolicy:
             return None
         _e_xy, _e_norm, _cw, pad_world, source = last_meas
         self._log_servo(
-            backend, observation, state, "descend_start", source=source, target_pad_z_m=target_pad_z
+            backend,
+            observation,
+            state,
+            "descend_start",
+            source=source,
+            target_pad_bottom_z_m=target_pad_bottom_z,
         )
         while total_descended < max_total:
-            # stopping condition on measured pad z
+            # stopping condition on the measured pad bottom (probe offset, addition 2)
             meas = self._gt_pad_xy_error_world(backend, observation)
             if meas is None:
                 self._last_failure_reason = "gt_pad descent failed: pad midpoint unavailable"
@@ -1225,14 +1283,16 @@ class ScriptedCanPolicy:
                 )
                 return None
             e_xy, e_norm, can_world, pad_world, source = meas
-            if float(pad_world[2]) <= target_pad_z:
+            pad_bottom_z = float(pad_world[2]) - PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M
+            if pad_bottom_z <= target_pad_bottom_z:
                 self._log_servo(
                     backend,
                     observation,
                     state,
                     "descend_reached",
                     source=source,
-                    target_pad_z_m=target_pad_z,
+                    target_pad_bottom_z_m=target_pad_bottom_z,
+                    pad_bottom_z_m=pad_bottom_z,
                     total_descended_m=total_descended,
                 )
                 return current_q, observation
@@ -1285,32 +1345,36 @@ class ScriptedCanPolicy:
                 state,
                 "descend_step",
                 source=source,
-                target_pad_z_m=target_pad_z,
+                target_pad_bottom_z_m=target_pad_bottom_z,
                 total_descended_m=total_descended,
             )
         # final check
         meas = self._gt_pad_xy_error_world(backend, observation)
         if meas is not None:
             _e_xy, _e_norm, _cw, pad_world, source = meas
-            if float(pad_world[2]) <= target_pad_z:
+            pad_bottom_z = float(pad_world[2]) - PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M
+            if pad_bottom_z <= target_pad_bottom_z:
                 self._log_servo(
                     backend,
                     observation,
                     state,
                     "descend_reached",
                     source=source,
-                    target_pad_z_m=target_pad_z,
+                    target_pad_bottom_z_m=target_pad_bottom_z,
+                    pad_bottom_z_m=pad_bottom_z,
                     total_descended_m=total_descended,
                 )
                 return current_q, observation
-        self._last_failure_reason = "gt_pad descent failed: did not reach measured pad z"
+        self._last_failure_reason = (
+            "gt_pad descent failed: did not reach the probe-measured pad-bottom stop height"
+        )
         self._log_servo(
             backend,
             observation,
             state,
             "descend_incomplete",
             reason=self._last_failure_reason,
-            target_pad_z_m=target_pad_z,
+            target_pad_bottom_z_m=target_pad_bottom_z,
             total_descended_m=total_descended,
         )
         return None
@@ -1457,6 +1521,7 @@ class ScriptedCanPolicy:
         count = max(2, int(float(np.linalg.norm(target - start)) / LINEAR_WAYPOINT_SPACING_M))
         q = self._commanded_vector()
         observation_now = observation
+        descend_mid_index = max(1, count // 2) if state == "DESCEND" else None
         for index, alpha in enumerate(np.linspace(0.0, 1.0, count + 1)[1:], start=1):
             live_target: np.ndarray | None = None
             if target_provider is None:
@@ -1531,6 +1596,10 @@ class ScriptedCanPolicy:
                 failed=False,
                 **waypoint_details,
             )
+            if descend_mid_index is not None and index == descend_mid_index:
+                # DESCEND mid (batch diagnostics: addition 3): can-minus-pad 3D vectors at
+                # the mid waypoint, in world and base frames.
+                self._trace_gt_tip(backend, settled, state, "mid")
         return self._commanded_vector(), observation_now
 
     def _command_and_wait(
@@ -1750,7 +1819,11 @@ class ScriptedCanPolicy:
             "arm_7_joint_endpoint_reset_offset_world_xyz_m",
             "arm_7_joint_endpoint_offset_change_world_xyz_m",
             "arm_7_joint_ground_truth_source",
+            "arm_7_joint_ground_truth_orientation_rows",
             "arm_7_joint_endpoint_fk_validation_available",
+            "pad_midpoint_arm7_solid_measured_world_xyz_m",
+            "base_velocity_linear_m_s",
+            "base_velocity_angular_rad_s",
             "ee_fk_world_xyz_m",
             "finger_tip_world_xyz_m",
             "finger_midpoint_world_xyz_m",
@@ -1830,6 +1903,26 @@ class ScriptedCanPolicy:
             "clearance_left_m": None,
             "clearance_right_m": None,
         }
+        # Measured pad reference (ADR-0022 Solid composition) vs can centre, 3D, world+base
+        # (batch diagnostics: addition 3). Independent of the legacy 0.1741-based midpoint.
+        pad_ref = diagnostics.get("pad_midpoint_arm7_solid_measured_world_xyz_m")
+        if not (isinstance(pad_ref, (list, tuple)) and len(pad_ref) == 3):
+            pad_ref_arr = None
+        else:
+            candidate = np.asarray(pad_ref, dtype=float)
+            pad_ref_arr = candidate if np.all(np.isfinite(candidate)) else None
+        if pad_ref_arr is not None:
+            payload["pad_ref_world_xyz_m"] = pad_ref_arr.tolist()
+            can_arr = np.asarray(can_world, dtype=float)
+            delta_world = can_arr - pad_ref_arr
+            payload["can_minus_padref_world_xyz_m"] = delta_world.tolist()
+            payload["can_minus_padref_norm_m"] = float(np.linalg.norm(delta_world))
+            if base_pose_world is not None:
+                delta_base = _world_to_base(can_arr, base_pose_world) - _world_to_base(
+                    pad_ref_arr, base_pose_world
+                )
+                payload["can_minus_padref_base_xyz_m"] = delta_base.tolist()
+                payload["can_minus_padref_base_norm_m"] = float(np.linalg.norm(delta_base))
         if not isinstance(gt_midpoint, (list, tuple)) or len(gt_midpoint) != 3:
             return payload
         gt_midpoint_arr = np.asarray(gt_midpoint, dtype=float)
@@ -2141,6 +2234,21 @@ class ScriptedCanPolicy:
         self._max_base_tilt_deg = max(
             self._max_base_tilt_deg, abs(tilt_roll_deg), abs(tilt_pitch_deg)
         )
+        if not reset and self._step_count == 1 and self.trace_path is not None:
+            # Batch diagnostics (addition 3): base state at the first post-reset command,
+            # so failures can be attributed to tilt/velocity without re-running.
+            diagnostics = observation.robot.diagnostics
+            self._trace_event(
+                "first_command_state",
+                state=state,
+                sim_time_s=observation.t,
+                base_tilt_roll_deg=tilt_roll_deg,
+                base_tilt_pitch_deg=tilt_pitch_deg,
+                base_drift_distance_m=drift_m,
+                base_drift_yaw_deg=drift_yaw_deg,
+                base_velocity_linear_m_s=diagnostics.get("base_velocity_linear_m_s"),
+                base_velocity_angular_rad_s=diagnostics.get("base_velocity_angular_rad_s"),
+            )
         torso = observation.robot.joint_pos.get(TORSO_JOINT)
         if torso is None:
             candidate = observation.robot.diagnostics.get("torso_lift_joint_sensor_rad")

@@ -19,6 +19,7 @@ from vlarobot.backends.webots.config import (
     HEAD_PAN,
     HEAD_TILT,
     OBSERVE_IMAGES,
+    PAD_OFFSET_ARM7_SIMFRAME_M,
     PROBE_MAX_STEPS_PER_JOINT,
     PROBE_STATIONARITY_STEPS,
     PROBE_STATIONARY_DELTA_RAD,
@@ -533,6 +534,26 @@ class WebotsBackend:
         arm7_endpoint = endpoint_lookup("arm_7_joint") if endpoint_lookup else None
         orientation_lookup = getattr(self.io, "joint_endpoint_world_orientation", None)
         arm7_orientation = orientation_lookup("arm_7_joint") if orientation_lookup else None
+        # MEASURED pad reference (ADR-0022): arm_7 Solid pose composed with the measured
+        # constant offset in the sim arm_7 Solid frame. This is the gt_pad servo reference.
+        pad_midpoint_measured = None
+        if arm7_endpoint is not None and arm7_orientation is not None:
+            pad_midpoint_measured = (
+                np.asarray(arm7_endpoint, dtype=float)
+                + np.asarray(arm7_orientation, dtype=float)
+                @ np.asarray(PAD_OFFSET_ARM7_SIMFRAME_M, dtype=float)
+            ).tolist()
+        # Base speed norms at this observation (batch diagnostics: addition 3).
+        base_lin_speed = None
+        base_ang_speed = None
+        velocity_lookup = getattr(self.io.me, "getVelocity", None)
+        if velocity_lookup is not None:
+            raw_velocity = velocity_lookup()
+            if isinstance(raw_velocity, (list, tuple)) and len(raw_velocity) >= 6:
+                velocity_array = np.asarray(raw_velocity, dtype=float)
+                if np.all(np.isfinite(velocity_array[:6])):
+                    base_lin_speed = float(np.linalg.norm(velocity_array[:3]))
+                    base_ang_speed = float(np.linalg.norm(velocity_array[3:6]))
         arm7_offset = (
             None
             if arm7_endpoint is None or arm7_world is None
@@ -585,6 +606,10 @@ class WebotsBackend:
             "arm_7_joint_ground_truth_world_xyz_m": arm7_endpoint,
             "arm_7_joint_ground_truth_source": "endPointSolid",
             "arm_7_joint_ground_truth_orientation_rows": arm7_orientation,
+            "pad_midpoint_arm7_solid_measured_world_xyz_m": pad_midpoint_measured,
+            "pad_offset_arm7_simframe_m": list(PAD_OFFSET_ARM7_SIMFRAME_M),
+            "base_velocity_linear_m_s": base_lin_speed,
+            "base_velocity_angular_rad_s": base_ang_speed,
             "arm_7_joint_endpoint_offset_world_xyz_m": (
                 arm7_offset.tolist() if arm7_offset is not None else None
             ),

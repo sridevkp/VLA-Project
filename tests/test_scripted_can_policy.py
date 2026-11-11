@@ -1474,6 +1474,7 @@ def test_gt_telemetry_records_fingers_and_flags_tool_offset_error(tmp_path) -> N
     assert {(row["state"], row["phase"]) for row in events} == {
         ("PREGRASP", "exit"),
         ("DESCEND", "enter"),
+        ("DESCEND", "mid"),
     }
     for event in events:
         assert event["tool_offset_error"] is True
@@ -1516,7 +1517,7 @@ def test_gt_telemetry_below_tolerance_has_no_calibration_proposal(tmp_path) -> N
 
     rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
     events = _gt_events(rows)
-    assert len(events) == 2
+    assert len(events) == 3
     for event in events:
         assert event["tool_offset_error"] is False
         assert "tool_offset_calibration_proposal" not in event
@@ -1533,6 +1534,7 @@ def test_gt_telemetry_fires_at_all_three_full_flow_boundaries(tmp_path) -> None:
     assert {(row["state"], row["phase"]) for row in events} == {
         ("PREGRASP", "exit"),
         ("DESCEND", "enter"),
+        ("DESCEND", "mid"),
         ("CLOSE", "enter"),
     }
     for event in events:

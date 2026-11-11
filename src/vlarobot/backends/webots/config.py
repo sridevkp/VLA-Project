@@ -120,6 +120,9 @@ class RobotSettings:
     pregrasp_realign: bool
     closed_loop_waypoints: bool
     finger_tip_offset_m: float
+    pad_offset_arm7_simframe_m: tuple[float, float, float]
+    can_half_height_m: float
+    probe_pad_reference_to_pad_bottom_m: float | None
     can_radius_m: float
     table_top_height_m: float
     table_footprint_centre_xy_m: tuple[float, float]
@@ -197,9 +200,28 @@ class RobotSettings:
             raise ValueError("pregrasp_realign must be a boolean.")
         if not isinstance(values.get("closed_loop_waypoints"), bool):
             raise ValueError("closed_loop_waypoints must be a boolean.")
-        for key in ("finger_tip_offset_m", "can_radius_m"):
+        for key in ("finger_tip_offset_m", "can_radius_m", "can_half_height_m"):
             if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
                 raise ValueError(f"{key} must be positive.")
+        for key, length in (("pad_offset_arm7_simframe_m", 3),):
+            value = values.get(key)
+            if (
+                not isinstance(value, (list, tuple))
+                or len(value) != length
+                or any(
+                    not isinstance(item, (int, float)) or not math.isfinite(item) for item in value
+                )
+            ):
+                raise ValueError(f"{key} must be a list of {length} finite numbers.")
+        probe_offset = values.get("probe_pad_reference_to_pad_bottom_m")
+        if probe_offset is not None and (
+            not isinstance(probe_offset, (int, float))
+            or probe_offset <= 0.0
+            or not math.isfinite(probe_offset)
+        ):
+            raise ValueError(
+                "probe_pad_reference_to_pad_bottom_m must be null or a positive finite number."
+            )
         for key in (
             "close_align_tol",
             "place_tolerance_m",
@@ -302,6 +324,7 @@ class RobotSettings:
             "head_joints",
             "table_footprint_centre_xy_m",
             "table_footprint_size_xy_m",
+            "pad_offset_arm7_simframe_m",
         ):
             values[key] = tuple(values[key])
         return cls(**values)
@@ -393,6 +416,12 @@ PREGRASP_ROUTE = SETTINGS.pregrasp_route
 PREGRASP_REALIGN = SETTINGS.pregrasp_realign
 CLOSED_LOOP_WAYPOINTS = SETTINGS.closed_loop_waypoints
 FINGER_TIP_OFFSET_M = SETTINGS.finger_tip_offset_m
+# MEASURED (ADR-0022): arm_7 endPoint Solid -> finger-pad midpoint offset in the sim
+# arm_7 Solid frame; 4 safe poses, per-axis spread <= 1.7e-7 m (phase3_finger_gt).
+PAD_OFFSET_ARM7_SIMFRAME_M = SETTINGS.pad_offset_arm7_simframe_m
+CAN_HALF_HEIGHT_M = SETTINGS.can_half_height_m
+# Live contact-height probe result (addition 2); null until the probe fills it.
+PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M = SETTINGS.probe_pad_reference_to_pad_bottom_m
 CAN_RADIUS_M = SETTINGS.can_radius_m
 TABLE_TOP_HEIGHT_M = SETTINGS.table_top_height_m
 TABLE_FOOTPRINT_CENTRE_XY_M = SETTINGS.table_footprint_centre_xy_m

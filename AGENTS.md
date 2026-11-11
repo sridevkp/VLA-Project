@@ -24,6 +24,7 @@ Risk-aware, world-model-driven VLA system for a TIAGo robot in Webots. Pure-Pyth
 4. Run the task's acceptance command and paste the output in the PR/summary.
 5. Update docs (`SETUP.md`, `VERSIONS.md`, `DECISIONS.md`) when you make or discover a decision.
 6. If something cannot be verified in your environment (e.g. Webots not installed), say so explicitly and list what remains unverified. Do not claim success for untested paths.
+7. When the user needs to do something manually, always provide clear step-by-step commands (in order), including working directory/terminal context where relevant.
 
 ## Commands (all cross-platform)
 ```text

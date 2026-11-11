@@ -37,7 +37,12 @@ class IKTrustRegionError(RuntimeError):
 
 
 class Kinematics:
-    def __init__(self, model_override: Literal["urdf", "sim"] | None = None):
+    def __init__(
+        self,
+        model_override: Literal["urdf", "sim"] | None = None,
+        *,
+        allow_unverified_tool: bool | None = None,
+    ):
         self.model = model_override if model_override is not None else KINEMATIC_MODEL
         self._sim: SimKinematics | None = None
         if self.model == "sim":
@@ -46,7 +51,15 @@ class Kinematics:
                     f"Sim kinematics snapshot not found: {SIM_KINEMATICS_PATH}; run "
                     "uv run python -m vlarobot.cli export-sim-kinematics first (ADR-0020)."
                 )
-            self._sim = load_snapshot(SIM_KINEMATICS_PATH)
+            allow = allow_unverified_tool
+            if allow is None:
+                try:
+                    from vlarobot.backends.webots.config import ALLOW_UNVERIFIED_TOOL
+
+                    allow = bool(ALLOW_UNVERIFIED_TOOL)
+                except Exception:
+                    allow = False
+            self._sim = load_snapshot(SIM_KINEMATICS_PATH, allow_unverified_tool=bool(allow))
             self.chain = build_chain(self._sim)
         else:
             if not URDF_PATH.exists():
@@ -93,6 +106,14 @@ class Kinematics:
         if self._sim is not None:
             return float(self._sim.torso_reference)
         return float(TORSO_HEIGHT or 0.0)
+
+    @property
+    def tool_source(self) -> str | None:
+        return None if self._sim is None else self._sim.tool_source
+
+    @property
+    def tool_frame_source(self) -> str | None:
+        return None if self._sim is None else self._sim.tool_frame_source
 
     def bounds(self, name):
         lo, hi = self.chain.links[self.idx[name]].bounds

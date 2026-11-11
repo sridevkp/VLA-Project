@@ -142,3 +142,16 @@ zmq_shutdown_timeout_ms: 10000
 zmq_export_poll_timeout_ms: 300000
 # ZMQ simulator endpoint port (overridable via VLAROBOT_ZMQ_PORT). Server fails loudly on bind failure.
 zmq_port: 5555
+
+# ADR-0020 follow-up: tool/model/servo/settle/marker controls (defaults preserve prior behavior where possible)
+grasp_servo: none  # none | gt_pad (oracle servo, M3 perception replacement; M1-06a runs use none)
+allow_unverified_tool: false  # if true, allow kinematic_model=sim with fallback/unverified tool source
+debug_markers: false  # draw non-colliding GT/pad/FK debug markers (no physics)
+# Post-reset settle before first command (determinism/stability): wait until base linear+angular
+# velocity and tilt-change stay below thresholds for N consecutive steps, or fail explicitly.
+reset_post_settle_enabled: true
+reset_post_settle_velocity_threshold_m_s: 0.0001
+reset_post_settle_ang_velocity_threshold_rad_s: 0.0001
+reset_post_settle_tilt_delta_deg: 0.01
+reset_post_settle_consecutive_steps: 20
+reset_post_settle_max_steps: 500

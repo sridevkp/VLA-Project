@@ -588,7 +588,8 @@ def export_sim_kinematics(
             f"(tolerance {EXPORT_POSTURE_FIT_TOL_M:.0e} m)"
         )
         typer.echo(
-            "next: set kinematic_model: sim in configs/robot.yaml and run "
+            "next: to validate, set export_sim_kinematics: true in configs/robot.yaml, "
+            "restart the Webots sim-server (controller process), then run "
             "uv run python -m vlarobot.cli validate-kinematics"
         )
     finally:
@@ -815,7 +816,18 @@ def validate_kinematics(
     samples: list[tuple[JointSample, str]] = []
     aborted: list[str] = []
     try:
-        client.ping()
+        ping = client.ping()
+        payload = ping.get("payload") if isinstance(ping, dict) else None
+        telem_on = None
+        if isinstance(payload, dict):
+            telem_on = payload.get("kinematics_telemetry_enabled")
+        if telem_on is False:
+            typer.echo(
+                "error: server reports kinematics_telemetry_enabled=false. Set "
+                "export_sim_kinematics: true in configs/robot.yaml and restart the "
+                "Webots sim-server/controller, then run this command again."
+            )
+            raise typer.Exit(code=1)
         observation = client.reset(ScenarioSpec(), seed=seed)
         if not isinstance(observation.robot.diagnostics.get("kinematics_telemetry"), dict):
             typer.echo(

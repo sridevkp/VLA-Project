@@ -143,6 +143,15 @@ class RobotSettings:
     zmq_shutdown_timeout_ms: int
     zmq_export_poll_timeout_ms: int
     zmq_port: int
+    grasp_servo: Literal["none", "gt_pad"]
+    allow_unverified_tool: bool
+    debug_markers: bool
+    reset_post_settle_enabled: bool
+    reset_post_settle_velocity_threshold_m_s: float
+    reset_post_settle_ang_velocity_threshold_rad_s: float
+    reset_post_settle_tilt_delta_deg: float
+    reset_post_settle_consecutive_steps: int
+    reset_post_settle_max_steps: int
 
     @classmethod
     def from_yaml(cls, path: Path) -> RobotSettings:
@@ -251,6 +260,21 @@ class RobotSettings:
                 raise ValueError(f"{key} must be a positive integer.")
         if not isinstance(values.get("zmq_port"), int) or not (1 <= values["zmq_port"] <= 65535):
             raise ValueError("zmq_port must be an integer port in [1, 65535].")
+        if values.get("grasp_servo") not in {"none", "gt_pad"}:
+            raise ValueError("grasp_servo must be 'none' or 'gt_pad'.")
+        for key in ("allow_unverified_tool", "debug_markers", "reset_post_settle_enabled"):
+            if not isinstance(values.get(key), bool):
+                raise ValueError(f"{key} must be a boolean.")
+        for key in (
+            "reset_post_settle_velocity_threshold_m_s",
+            "reset_post_settle_ang_velocity_threshold_rad_s",
+            "reset_post_settle_tilt_delta_deg",
+        ):
+            if not isinstance(values.get(key), (int, float)) or values[key] <= 0.0:
+                raise ValueError(f"{key} must be positive.")
+        for key in ("reset_post_settle_consecutive_steps", "reset_post_settle_max_steps"):
+            if not isinstance(values.get(key), int) or values[key] <= 0:
+                raise ValueError(f"{key} must be a positive integer.")
         for key in (
             "table_top_height_m",
             "table_clearance_required_m",
@@ -388,3 +412,14 @@ ZMQ_GET_GT_TIMEOUT_MS = SETTINGS.zmq_get_gt_timeout_ms
 ZMQ_SHUTDOWN_TIMEOUT_MS = SETTINGS.zmq_shutdown_timeout_ms
 ZMQ_EXPORT_POLL_TIMEOUT_MS = SETTINGS.zmq_export_poll_timeout_ms
 ZMQ_PORT = SETTINGS.zmq_port
+GRASP_SERVO = SETTINGS.grasp_servo
+ALLOW_UNVERIFIED_TOOL = SETTINGS.allow_unverified_tool
+DEBUG_MARKERS = SETTINGS.debug_markers
+RESET_POST_SETTLE_ENABLED = SETTINGS.reset_post_settle_enabled
+RESET_POST_SETTLE_VELOCITY_THRESHOLD_M_S = SETTINGS.reset_post_settle_velocity_threshold_m_s
+RESET_POST_SETTLE_ANG_VELOCITY_THRESHOLD_RAD_S = (
+    SETTINGS.reset_post_settle_ang_velocity_threshold_rad_s
+)
+RESET_POST_SETTLE_TILT_DELTA_DEG = SETTINGS.reset_post_settle_tilt_delta_deg
+RESET_POST_SETTLE_CONSECUTIVE_STEPS = SETTINGS.reset_post_settle_consecutive_steps
+RESET_POST_SETTLE_MAX_STEPS = SETTINGS.reset_post_settle_max_steps

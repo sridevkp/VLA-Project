@@ -65,6 +65,19 @@ from vlarobot.backends.webots.supervisor_kinematics import (
 
 LOGGER = logging.getLogger(__name__)
 
+# PROTO-derived gripper pad geometry in the arm_7/wrist frame (R2025a TiagoGripper.proto).
+# Derivation (q=0, geometric, UNVERIFIED live):
+# - Gripper mounted on arm_7 endEffectorSlot: translation [0, 0.016, 0],
+#   rotation axis-angle [0.5774, 0.5774, -0.5774, 2.0944] (arm_7 -> gripper).
+# - Left/right sliders axis [-1,0,0]/[1,0,0], maxPosition 0.045 m; left finger link Rz(pi).
+# - Main pad box in finger link: center [0.004, 0, -0.1741], size [0.0076, 0.05091, 0.08982]
+#   => pad bottom center z = -0.1741 - 0.08982/2 = -0.21901 in finger link.
+# - Transformed to arm_7 frame (both fingers at q=0): pad-center midpoint ~(0, 0.1901, 0) m,
+#   pad-bottom midpoint ~(0, 0.2350, 0) m (differs from legacy fallback [0,0,-finger_tip_offset_m]).
+PROTO_PAD_CENTER_ARM7_M = np.array([0.0, 0.1901, 0.0], dtype=float)
+PROTO_PAD_BOTTOM_ARM7_M = np.array([0.0, 0.2350, 0.0], dtype=float)
+
+
 #: Loader input schema marker written by supervisor_kinematics.SCHEMA_VERSION.
 REQUIRED_SCHEMA_VERSION = 1
 
@@ -110,6 +123,7 @@ class SimKinematics:
     torso_gap: np.ndarray  # torso child frame -> arm_1 parent frame (fixed)
     tool_offset: np.ndarray  # arm_7 endPoint frame -> tool frame (identity rotation)
     tool_source: str
+    tool_frame_source: str = "fallback"
     expected_child_transforms: list[np.ndarray] = field(default_factory=list)
     metadata: dict[str, object] = field(default_factory=dict)
 
@@ -242,15 +256,23 @@ def finalize_verified_snapshot(
         raise
 
 
-def load_snapshot(path: Path) -> SimKinematics:
+def load_snapshot(path: Path, *, allow_unverified_tool: bool = False) -> SimKinematics:
     """Load and validate a simulator kinematics JSON written by the exporter.
 
     If ``path`` is a stable base/pointer, resolves to the session-hashed snapshot.
+    Refuses fallback/unverified tool sources unless explicitly allowed.
     """
     path = resolve_snapshot_path(Path(path))
     with path.open("r", encoding="utf-8") as file:
         payload = json.load(file)
-    return kinematics_from_payload(payload, source=str(path))
+    model = kinematics_from_payload(payload, source=str(path))
+    if "UNVERIFIED" in (model.tool_source or "") and not allow_unverified_tool:
+        raise ValueError(
+            f"Snapshot {path}: tool_source={model.tool_source!r} "
+            f"(tool_frame_source={model.tool_frame_source!r}) fallback/unverified; "
+            "refusing kinematic_model=sim unless --allow-unverified-tool is passed."
+        )
+    return model
 
 
 def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKinematics:
@@ -352,8 +374,14 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
     torso_gap = _relative_transform(
         torso_child_payload, first_arm_parent_payload, "torso_child->arm_1_parent", source
     )
+
     fingers = _finger_payloads(payload, source)
-    tool_offset, tool_source = _tool_offset(entries[-1], fingers, source)
+    requested_tool_source = payload.get("tool_frame_source")
+    if not isinstance(requested_tool_source, str):
+        requested_tool_source = "fallback"
+    tool_offset, tool_source, tool_frame_source = _tool_offset(
+        entries[-1], fingers, source, tool_frame_source=requested_tool_source
+    )
     expected_child_transforms: list[np.ndarray] = []
     for arm_entry in arm_entries:
         child_payload = _complete_pose(arm_entry, "child", source)
@@ -370,6 +398,7 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
         torso_gap=torso_gap,
         tool_offset=tool_offset,
         tool_source=tool_source,
+        tool_frame_source=tool_frame_source,
         expected_child_transforms=expected_child_transforms,
         metadata={
             "source": source,
@@ -378,6 +407,9 @@ def kinematics_from_payload(payload: Any, *, source: str = "<memory>") -> SimKin
             "timestamp_utc": payload.get("timestamp_utc"),
             "sim_time_s": payload.get("sim_time_s"),
             "readability_report": payload.get("readability_report"),
+            "tool_frame_source": tool_frame_source,
+            "proto_pad_center_arm7_m": PROTO_PAD_CENTER_ARM7_M.tolist(),
+            "proto_pad_bottom_arm7_m": PROTO_PAD_BOTTOM_ARM7_M.tolist(),
         },
     )
     _validate_arm_parent_chain(model, source)
@@ -567,14 +599,14 @@ def _tool_offset(
     last_entry: dict[str, object],
     fingers: dict[str, dict[str, object]] | None,
     source: str,
-) -> tuple[np.ndarray, str]:
-    """arm_7 endPoint frame -> tool frame (finger pad midpoint), from the JSON.
+    *,
+    tool_frame_source: str = "fallback",
+) -> tuple[np.ndarray, str, str]:
+    """arm_7 endPoint frame -> tool frame.
 
-    Tool frame origin = midpoint of the two finger pad centres; orientation =
-    arm_7 frame (identity rotation contribution), matching the URDF chain's
-    translation-only TOOL_OFFSET semantics. Falls back to the configured
-    ``finger_tip_offset_m`` along arm_7's local -z when a finger Solid is not
-    readable (marked UNVERIFIED).
+    Returns (transform, tool_source_label, tool_frame_source).
+    If readable finger endpoint solids exist, returns measured pad midpoint.
+    Otherwise returns a fallback/PROTO-derived offset (UNVERIFIED).
     """
     arm7_child = _complete_pose(last_entry, "child", source)
     arm7_pose = _pose_from_payload(arm7_child)
@@ -584,26 +616,45 @@ def _tool_offset(
 
     if fingers is not None:
         pad_positions: list[np.ndarray] = []
+        ok = True
         for pose_payload in fingers.values():
             pose = _pose_from_payload(pose_payload)
-            assert pose.position is not None and pose.rotation is not None
+            if pose.position is None or pose.rotation is None:
+                ok = False
+                break
             R = np.asarray(pose.rotation, dtype=float).reshape(3, 3)
             pad_world = np.asarray(pose.position, dtype=float) + R @ np.array(
                 [0.0, 0.0, -FINGER_TIP_OFFSET_M]
             )
             pad_positions.append(pad_world)
-        midpoint_world = np.mean(np.stack(pad_positions), axis=0)
-        offset = R_arm7.T @ (midpoint_world - p_arm7)
-        return _homogeneous_translation(offset), "fingerEndpointMidpoint"
+        if ok and len(pad_positions) == 2:
+            midpoint_world = np.mean(np.stack(pad_positions), axis=0)
+            offset = R_arm7.T @ (midpoint_world - p_arm7)
+            return (
+                _homogeneous_translation(offset),
+                "fingerEndpointMidpoint",
+                "finger_endpoint_midpoint",
+            )
+
     LOGGER.warning(
-        "Snapshot %s: finger endPoint Solids unreadable; tool frame falls back to the "
-        "configured finger_tip_offset_m along arm_7 local -z (UNVERIFIED geometry), "
-        "finger-tip-offcan clearance reporting with can_radius_m %.5f stays policy-side.",
+        "Snapshot %s: finger endPoint Solids unreadable; tool frame uses UNVERIFIED "
+        "geometry (tool_frame_source=%s), can_radius_m %.5f stays policy-side.",
         source,
+        tool_frame_source,
         CAN_RADIUS_M,
     )
-    offset = np.array([0.0, 0.0, -FINGER_TIP_OFFSET_M])
-    return _homogeneous_translation(offset), "fingerTipOffsetFallback(UNVERIFIED)"
+    if tool_frame_source == "proto_pad_center":
+        offset = PROTO_PAD_CENTER_ARM7_M.copy()
+    elif tool_frame_source == "proto_pad_bottom":
+        offset = PROTO_PAD_BOTTOM_ARM7_M.copy()
+    else:
+        tool_frame_source = "fallback"
+        offset = np.array([0.0, 0.0, -FINGER_TIP_OFFSET_M], dtype=float)
+    return (
+        _homogeneous_translation(offset),
+        "fingerTipOffsetFallback(UNVERIFIED)",
+        tool_frame_source,
+    )
 
 
 def _finger_payloads(

@@ -76,7 +76,22 @@ class SimServer:
         payload = request["payload"]
         try:
             if operation == "ping":
-                response_payload = {"status": "ok", "session_id": self.session_id}
+                telemetry_enabled = bool(
+                    getattr(self.backend, "export_sim_kinematics_enabled", None)
+                )
+                if not telemetry_enabled:
+                    # Webots backend exposes config flag; fall back to settings attribute if present
+                    try:
+                        from vlarobot.backends.webots.config import EXPORT_SIM_KINEMATICS
+
+                        telemetry_enabled = bool(EXPORT_SIM_KINEMATICS)
+                    except Exception:
+                        telemetry_enabled = False
+                response_payload = {
+                    "status": "ok",
+                    "session_id": self.session_id,
+                    "kinematics_telemetry_enabled": telemetry_enabled,
+                }
             elif operation == "reset":
                 scenario = payload.get("scenario", ScenarioSpec())
                 seed = payload.get("seed", 0)

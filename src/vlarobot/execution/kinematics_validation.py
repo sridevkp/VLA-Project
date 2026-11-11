@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import Literal
 
 import numpy as np
 
@@ -496,7 +496,7 @@ def evaluate_model(
 ) -> ModelReport:
     if not samples:
         raise ValueError("At least one sample is required for validation.")
-    kin = Kinematics(model_override=model)
+    kin = Kinematics(model_override=model, allow_unverified_tool=True)
     torso_value = kin.torso_reference
     scored_links = tuple(name for name in REQUIRED_LINKS if name in _element_names(kin))
     if not scored_links:
@@ -573,7 +573,7 @@ def evaluate_sweep(
         except Exception:
             refinement = None
     return SweepReport(
-        models=cast(dict[str, ModelReport], reports),
+        models=reports,
         refinement=refinement,
         accepted_model=accepted_model,
         tool_status="VERIFIED" if tool_verified else "FALLBACK/UNVERIFIED",
@@ -592,7 +592,7 @@ def _rmse(residuals: np.ndarray) -> float:
 def propose_refinement(
     samples: Sequence[tuple[JointSample, str]], *, model: ModelName = "sim"
 ) -> RefinementReport:
-    kin = Kinematics(model_override=model)
+    kin = Kinematics(model_override=model, allow_unverified_tool=True)
     torso_value = kin.torso_reference
     residuals: list[np.ndarray] = []
     tool_rotations: list[np.ndarray] = []

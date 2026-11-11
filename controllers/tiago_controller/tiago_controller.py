@@ -36,4 +36,13 @@ if __name__ == "__main__":
         env=environment,
         check=False,
     )
+    # Crash forensics (ADR-0022): record the packaged server's exit status where the
+    # episode runner can find it. Pure diagnostics; no controller behaviour change.
+    stderr_path = os.environ.get("VLAROBOT_CONTROLLER_STDERR_PATH")
+    if stderr_path:
+        try:
+            with open(stderr_path, "a", encoding="utf-8") as fh:
+                fh.write(f"tiago_controller: server_exit_code={result.returncode}\n")
+        except OSError:
+            pass
     raise SystemExit(result.returncode)

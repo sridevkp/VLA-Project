@@ -301,6 +301,14 @@ def run_episodes(
         fresh_world=fresh_world,
         determinism_check=determinism_check,
     )
+    # Always persist the full outcomes (incl. failure reasons) for crash forensics.
+    summary_path = settings.trace_dir / f"{settings.trace_prefix}-summary.json"
+    try:
+        summary_path.write_text(
+            json.dumps([row.to_dict() for row in outcomes], indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
     typer.echo(format_summary_table(outcomes))
     if determinism_check > 0:
         typer.echo(format_determinism_report(determinism_report(outcomes)))

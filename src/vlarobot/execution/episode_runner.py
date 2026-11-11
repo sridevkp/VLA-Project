@@ -604,11 +604,15 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
         trace_path.unlink()
     log_path = settings.trace_dir / f"{suffix}.log"
     pid_path = settings.trace_dir / f"{suffix}.pid"
+    controller_log_path = settings.trace_dir / f"{suffix}.controller.log"
+    exit_path = settings.trace_dir / f"{suffix}.exit.json"
     endpoint, port = _episode_endpoint_port(settings)
     with log_path.open("w", encoding="utf-8", newline="") as log_file:
         command = build_webots_command(webots, settings.world, headless=settings.headless)
         env = webots_environment(webots)
         env["VLAROBOT_ZMQ_PORT"] = str(port)
+        # Crash forensics (ADR-0022): controller logs + fatal-signal dumps per episode.
+        env["VLAROBOT_CONTROLLER_STDERR_PATH"] = str(controller_log_path)
         process = _popen(command, env, log_file)
         _write_pid_file(pid_path, process.pid)
         startup_s = 0.0
@@ -661,6 +665,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
             )
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
+            _record_exit_codes(exit_path, process, controller_log_path)
 
 
 def _error_outcome(
@@ -792,6 +797,32 @@ def _stop_client(client: ZmqBackendClient) -> None:
 def _write_pid_file(pid_path: Path, pid: int) -> None:
     pid_path.parent.mkdir(parents=True, exist_ok=True)
     pid_path.write_text(str(pid), encoding="utf-8")
+
+
+def _record_exit_codes(
+    exit_path: Path, process: subprocess.Popen[str], controller_log: Path
+) -> None:
+    """Record Webots/controller exit evidence for crash forensics (ADR-0022).
+
+    ``webots_exit_code`` is ``None`` when the process could not be inspected. The tail of the
+    per-episode controller diagnostics file (including ``server_exit_code`` and any
+    faulthandler dump) is embedded so one file tells the whole story.
+    """
+    controller_tail: list[str] = []
+    try:
+        if controller_log.is_file():
+            lines = controller_log.read_text(encoding="utf-8", errors="replace").splitlines()
+            controller_tail = lines[-30:]
+    except OSError:
+        controller_tail = ["<unreadable controller log>"]
+    payload = {
+        "webots_exit_code": process.returncode,
+        "controller_log_tail": controller_tail,
+    }
+    try:
+        exit_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _remove_pid_file(pid_path: Path | None) -> None:

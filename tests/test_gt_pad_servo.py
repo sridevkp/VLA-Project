@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+import vlarobot.execution.scripted_can as sc
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.core.types import (
     ApplyResult,
@@ -121,3 +122,107 @@ def test_gt_pad_servo_converges_with_50mm_wrong_tool_axis_fk_bias():
     assert err is not None
     _e_xy, e_norm, _can, _pad, _src = err
     assert e_norm < 0.004
+
+
+def test_gt_pad_descend_refuses_when_probe_offset_is_none(monkeypatch):
+    backend = FakeServoBackend()
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+    monkeypatch.setattr(sc, "PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M", None)
+    res = policy._servo_descend_to_grasp(
+        backend, obs, np.zeros(len(kin.chain.links)), np.array([0.7, 0.2, 0.92])
+    )
+    assert res is None
+    assert policy._last_failure_reason is not None
+    assert "probe_pad_reference_to_pad_bottom_m is null" in policy._last_failure_reason
+
+
+def test_gt_pad_descend_stops_at_probe_lid_height():
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.7, 0.2, 0.88))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+
+    def fake_move_to(_backend, current_q, target, _state, waypoint_records=None):
+        backend.pad_world[2] = float(target[2])
+        ee_base = (float(target[0]), float(target[1]), float(target[2]))
+        return current_q, _obs(backend.pad_world, ee_base=ee_base)
+
+    policy._move_to = fake_move_to  # type: ignore[method-assign]
+    q = np.zeros(len(kin.chain.links))
+    res = policy._servo_descend_to_grasp(backend, obs, q, np.array([0.7, 0.2, 0.88]))
+    assert res is not None
+    _q_out, _obs_out = res
+    can_lid_z = 0.8 + sc.CAN_HALF_HEIGHT_M
+    assert sc.PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M is not None
+    pad_bottom_z = backend.pad_world[2] - sc.PROBE_PAD_REFERENCE_TO_PAD_BOTTOM_M
+    assert pad_bottom_z <= can_lid_z + 1e-6
+
+
+def test_gt_pad_close_guard_passes_when_aligned():
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.7, 0.2, 0.86))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+    q = np.zeros(len(kin.chain.links))
+    target = np.array([0.7, 0.2, 0.86])
+    res = policy._guard_close_alignment(backend, obs, q, target)
+    assert res is not None
+    _q_res, _obs_res, refined_target = res
+    assert np.allclose(refined_target, target)
+
+
+def test_gt_pad_close_guard_realigns_when_misaligned():
+    # 10 mm error in X (> CLOSE_ALIGN_TOL of 8 mm)
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.69, 0.2, 0.86))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+    q = np.zeros(len(kin.chain.links))
+    target = np.array([0.69, 0.2, 0.86])
+
+    def fake_move_linear(_backend, _obs_in, refined_target, _state, target_provider=None):
+        # Reposition pad to match refined target XY (aligned to can)
+        backend.pad_world[0] = 0.7
+        return q, _obs(backend.pad_world, ee_base=refined_target)
+
+    policy._move_linear = fake_move_linear  # type: ignore[method-assign]
+    res = policy._guard_close_alignment(backend, obs, q, target)
+    assert res is not None
+    _q_out, _obs_out, _refined = res
+    assert policy._last_failure_reason is None
+
+
+def test_gt_pad_close_guard_fails_when_residual_exceeds_tol():
+    # 20 mm error in X (> CLOSE_ALIGN_TOL of 8 mm)
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.68, 0.2, 0.86))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+    q = np.zeros(len(kin.chain.links))
+    target = np.array([0.68, 0.2, 0.86])
+
+    def fake_move_linear(_backend, _obs_in, refined_target, _state, target_provider=None):
+        # Residual error remains 15 mm > 8 mm
+        backend.pad_world[0] = 0.685
+        return q, _obs(backend.pad_world, ee_base=refined_target)
+
+    policy._move_linear = fake_move_linear  # type: ignore[method-assign]
+    res = policy._guard_close_alignment(backend, obs, q, target)
+    assert res is None
+    assert policy._last_failure_reason == "misaligned at close"
+
+
+def test_gt_pad_close_guard_fails_when_pad_midpoint_unavailable():
+    backend = FakeServoBackend(can_world=(0.7, 0.2, 0.8), pad_world=(0.7, 0.2, 0.86))
+    kin = Kinematics()
+    policy = ScriptedCanPolicy(kinematics=kin, grasp_servo="gt_pad")
+    obs = _obs(backend.pad_world)
+    # Clear pad diagnostics
+    obs.robot.diagnostics.clear()
+    q = np.zeros(len(kin.chain.links))
+    target = np.array([0.7, 0.2, 0.86])
+    res = policy._guard_close_alignment(backend, obs, q, target)
+    assert res is None
+    assert policy._last_failure_reason == "gt_pad close guard failed: pad midpoint unavailable"

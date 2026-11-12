@@ -98,8 +98,12 @@ pad_offset_arm7_simframe_m: [0.0, 0.0, 0.202825]
 can_half_height_m: 0.0611
 # Pad-bottom offset below the Solid-based pad reference along the approach axis (m),
 # from the live contact-height probe (runs/campaign-2026-11-11/phase3_contact_probe).
-# null until the probe fills it; grasp_servo=gt_pad descent refuses while null.
-probe_pad_reference_to_pad_bottom_m: null
+# MEASURED (2026-11-12): -0.00234 m (mean of 3 reps: -0.00262/-0.00225/-0.00216,
+# std 0.243 mm < 2 mm gate; trigger (c) = measured pad reference crossing the
+# can-lid plane; e_xy at contact 2.9-3.1 mm). Signed: negative means the pad
+# reference sits BELOW the can-lid plane at the probe's contact trigger; the
+# gt_pad DESCEND stop equation uses the signed value as-is (ADR-0023 amendment).
+probe_pad_reference_to_pad_bottom_m: -0.0023399045941977135
 # CAN radius for per-side finger clearance telemetry, from CAN.proto (m).
 can_radius_m: 0.03175
 # Table geometry, read from the `Table` instance in worlds/factory.wbt

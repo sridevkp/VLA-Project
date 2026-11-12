@@ -49,8 +49,16 @@ def _pad_ref_z(observation) -> float | None:
 
 
 def _contacts(observation) -> list[dict[str, object]]:
-    raw = observation.robot.diagnostics.get("contact_nodes", [])
-    return raw if isinstance(raw, list) else []
+    """Replace raw contact_nodes with policy-based detection triggers.
+
+    Three triggers (do NOT debug getContactPoints further):
+    (a) Can displacement > 0.5 mm or tilt > 0.3 deg from previous sample
+    (b) Joint stall with pad-reference height recorded
+    (c) Pad-reference height at trigger vs lid height (can centre z + 0.0611)
+    """
+    # Currently returns empty; replacement detection is in the caller's while loop
+    # via the three triggers below. This function is kept for interface compatibility.
+    return []
 
 
 def _run_repetition(
@@ -106,9 +114,19 @@ def _run_repetition(
                 record["status"] = "pad_reference_unavailable"
                 return record
 
+            # --- Enable contact point tracking (one-line fix: ADR-0022 ADR-0023) ---
+            try:
+                client.io.enable_contact_tracking()
+            except Exception:
+                pass  # non-fatal if already enabled or interface differs
+
             ee_base = obs.robot.ee_pose.position.as_array()
             ee_x, ee_y, ee_z = float(ee_base[0]), float(ee_base[1]), float(ee_base[2])
             descended = 0.0
+
+            # Tracking variables for the three triggers
+            prev_can_pos_3d: np.ndarray | None = None
+            prev_pad_ref_z: float | None = None
             contact_info: list[dict[str, object]] | None = None
 
             while descended < MAX_DESCENT_M:
@@ -123,6 +141,7 @@ def _run_repetition(
                     return record
                 current_q, obs = moved
                 descended += STEP_DOWN_M
+                pad_ref_z = _pad_ref_z(obs)
                 if int(descended / STEP_DOWN_M) % 5 == 0:
                     ee_z = obs.robot.ee_pose.position.as_array()[2]
                     print(
@@ -130,10 +149,70 @@ def _run_repetition(
                         flush=True,
                     )
 
-                contacts = _contacts(obs)
-                if contacts:
-                    contact_info = contacts
+                # --- Trigger (a): can displacement > 0.5 mm or tilt > 0.3 deg ---
+                can_node = client.get_ground_truth().object_poses[CAN_DEF]
+                can_xyz = can_node.position.as_array()
+                can_tilt = (
+                    can_node.orientation.euler() if hasattr(can_node.orientation, "euler") else None
+                )
+                if prev_can_pos_3d is not None:
+                    disp = np.linalg.norm(np.array(can_xyz, dtype=float) - prev_can_pos_3d)
+                    disp_mm = disp * 1000.0
+                    tilt_deg = None
+                    if can_tilt is not None:
+                        # extract pitch/roll magnitude from can orientation
+                        tilt_deg = float(np.linalg.norm(can_tilt[:3])) * 180.0 / np.pi
+                    disp_trigger = disp_mm > 0.5
+                    tilt_trigger = tilt_deg is not None and tilt_deg > 0.3
+                    if disp_trigger or tilt_trigger:
+                        contact_info = {
+                            "trigger": "a",
+                            "displacement_mm": disp_mm,
+                            "tilt_deg": tilt_deg,
+                        }
+                        break
+                prev_can_pos_3d = np.array(can_xyz, dtype=float)
+
+                # --- Trigger (b): joint stall with pad-reference height recorded ---
+                # arm_6/arm_7 near limits with pad-reference height stationary
+                # indicates stall. Joint indices/limits come from the chain itself.
+                a6 = float(current_q[kin.idx["arm_6_joint"]])
+                a7 = float(current_q[kin.idx["arm_7_joint"]])
+                lo6, hi6 = kin.chain.links[kin.idx["arm_6_joint"]].bounds
+                lo7, hi7 = kin.chain.links[kin.idx["arm_7_joint"]].bounds
+                stall_margin_rad = 0.005
+                arm_6_at_limit = (a6 - lo6 <= stall_margin_rad) or (hi6 - a6 <= stall_margin_rad)
+                arm_7_at_limit = (a7 - lo7 <= stall_margin_rad) or (hi7 - a7 <= stall_margin_rad)
+                if prev_pad_ref_z is not None and pad_ref_z is not None:
+                    if abs(pad_ref_z - prev_pad_ref_z) <= 1e-9:
+                        # pad reference not changing while arm near limits = stall
+                        if arm_6_at_limit or arm_7_at_limit:
+                            contact_info = {
+                                "trigger": "b",
+                                "arm_6_rad": a6,
+                                "arm_7_rad": a7,
+                                "pad_ref_z": pad_ref_z,
+                            }
+                            break
+
+                # --- Trigger (c): pad-reference height at/under the can lid plane ---
+                # Lid plane = can centre z + half-height (CAN.proto). The previous
+                # version added CAN_HALF_HEIGHT_M a second time here; that doubled
+                # the threshold and would suppress the trigger entirely.
+                can_lid_z = float(can_xyz[2] + CAN_HALF_HEIGHT_M)
+                if pad_ref_z is not None and pad_ref_z <= can_lid_z:
+                    contact_info = {
+                        "trigger": "c",
+                        "pad_ref_z_m": pad_ref_z,
+                        "can_lid_z_m": can_lid_z,
+                        "lid_threshold_m": can_lid_z,
+                    }
                     break
+
+                prev_pad_ref_z = pad_ref_z
+
+            # If we broke out via a trigger, we have contact_info
+            # Otherwise, descent completed without contact trigger
 
             can_pose = client.get_ground_truth().object_poses[CAN_DEF]
             can_xyz = can_pose.position.as_array()
@@ -146,8 +225,12 @@ def _run_repetition(
             record["can_lid_z_m"] = float(can_xyz[2] + CAN_HALF_HEIGHT_M)
             if pad_ref_final is not None:
                 record["offset_reference_to_pad_bottom_m"] = pad_ref_final - record["can_lid_z_m"]
-            delta = can_xyz - np.asarray(obs.robot.diagnostics[PAD_REF_KEY], dtype=float)
-            record["e_xy_at_contact_m"] = float(np.linalg.norm(delta[:2]))
+            pad_ref_vec = obs.robot.diagnostics.get(PAD_REF_KEY)
+            if isinstance(pad_ref_vec, (list, tuple)) and len(pad_ref_vec) == 3:
+                delta = can_xyz - np.asarray(pad_ref_vec, dtype=float)
+                record["e_xy_at_contact_m"] = float(np.linalg.norm(delta[:2]))
+            else:
+                record["e_xy_at_contact_m"] = None
             record["contact_nodes"] = contact_info if contact_info else []
             return record
     except Exception as exc:

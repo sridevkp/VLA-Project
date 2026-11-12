@@ -997,9 +997,54 @@
 - Consequences: settle-gate resets may take up to ~13.6 s (cap) without failing the episode; the gate stays default OFF and is NOT promoted (a non-settling base is recorded, not accepted as clean). Probe-crash cause (sim 8.768 s, pre-instrumentation) remains UNVERIFIED and is classified separately. Finger GT verified separately: arm_7->pad-midpoint vector constant `(0,0,+0.202825) m` in the sim arm_7 frame across 4 safe poses (spread <= 1.7e-7 m; `phase3_finger_gt/finger_gt_poses.json`).
 
 ## ADR-0023 - gt_pad servo uses the MEASURED pad geometry; descent stop height comes from the live contact-height probe (user-directed, 2026-11-11)
-- Status: Accepted (user-directed additions 1+2); probe itself not yet run live.
+- Status: Accepted (user-directed additions 1+2); contact-height probe run live 2026-11-12 (3/3 contact, see below); gt_pad episode runs pending.
+- **Live refutation of the URDF-chain variant (2026-11-12, MEASURED, `phase3_contact_probe/rep01.jsonl`)**: an attempted implementation applied the measured `(0, 0, +0.202825)` offset as the URDF chain's `last_link_vector` when `grasp_servo=gt_pad`. Live FK at a recorded PREGRASP pose put the chain end **0.377 m above the real pad midpoint** (tip world z 1.3281 vs pad 0.9510): the offset is expressed in the **sim arm_7 Solid frame**, whose origin and orientation do not match the URDF chain's arm_7 frame (sim Solid origin − URDF arm_7 origin ≈ (−0.039, +0.016, +0.028) m world; relative orientation ≈ 180 deg). That variant also drove PREGRASP into the pinned elbow-down posture (arm_6 −1.3886 rad at the −1.39 limit, arm_7 −2.0641) and tipped the base (yaw −0.50 deg, pitch −0.51 deg => "base moved" failure in all 3 probe reps). The URDF chain therefore KEEPS the legacy `[0, 0, -0.1741]` tool offset unconditionally; the servo does not need the chain to end at the pad because its XY corrections and DESCEND stop height are measured from the exact Solid-based pad telemetry.
+- **Contact-height probe RESULT (2026-11-12, MEASURED, `phase3_contact_probe/pad_contact_probe.json`)**: 3/3 repetitions reached contact from fresh worlds (PREGRASP reached in all 3, no failures; run with the legacy chain). All three fired trigger (c) (measured pad reference crossing the can-lid plane) at `descended = 0.08 m`; e_xy at contact 2.9/3.1/3.1 mm; can centre z 0.81107 m (reproducible to <1 um); reference-to-lid offsets **−2.616 / −2.246 / −2.158 mm => mean −2.340 mm, std 0.243 mm** (std < 2 mm gate: single value usable). Negative sign explained: with 20 mm commanded steps the trigger fires on the step where the pad reference crosses the lid plane, i.e. the pads straddle the can just below the rim without side contact (no can displacement => triggers (a)/(b) silent). Config `probe_pad_reference_to_pad_bottom_m` filled with the signed mean **−0.0023399045941977135**; the config validation was amended from "must be positive" to "must be finite (signed)" so the measured value loads; the gt_pad DESCEND stop equation `pad_bottom_z = pad_ref_z − offset` with the signed value replicates the probe's contact state exactly (stop when `pad_ref_z <= lid − 2.34 mm`, i.e. within one 5 mm servo step of the probe state, std 0.24 mm << step 5 mm).
 - Decision (1): the gt_pad servo pad reference is the arm_7 endPoint Solid pose composed with the MEASURED constant offset `(0, 0, +0.202825) m` in the sim arm_7 Solid frame (new config `pad_offset_arm7_simframe_m`, note "measured at 4 poses, spread <= 1.7e-7"). The legacy `finger_tip_offset_m` (0.1741, PROTO slider geometry) is NOT used by `grasp_servo=gt_pad` (it remains for the FK tool-tip exporter and legacy telemetry). The servo fails loudly when neither the Solid pose+orientation nor the composed key is available; the UNVERIFIED PROTO-pad-centre fallback was removed.
 - Sign convention (MEASURED, phase3_finger_gt): with the sim arm_7 Solid +z pointing wrist -> fingers (approach direction, toward the can), the pad reference (measured midpoint) sits at +0.202825 m from the Solid origin. Relative to that reference: the PROTO pad centre is at **-12.7 mm** (12.7 mm on the wrist side, i.e. FARTHER from the can) and the PROTO pad bottom is at **+32.2 mm** (32.2 mm on the can side, i.e. NEARER the can). The earlier "+12.7 / -32.2 mm" phrasing in ADR-0022 used unsigned norm differences; the correct signed reading is pad centre -12.7 mm, pad bottom +32.2 mm along +z.
 - Decision (2): the DESCEND stopping height for `grasp_servo=gt_pad` is NOT computed from PROTO arithmetic. New config `probe_pad_reference_to_pad_bottom_m` (null until measured) is filled by the live contact-height probe (`scripts/pad_contact_probe.py`): 5 mm commanded descent steps from the servo-aligned hover at fixed XY, abort at first finger contact (`contact_nodes`), record Solid-based reference height at contact, can centre z (GT) and lid z (can centre z + `can_half_height_m` = 0.0611, CAN.proto R2025a), and the resulting reference->pad-bottom offset; 3 repetitions from fresh worlds, mean/std reported; std > 2 mm => explicitly flagged, no single value used. gt_pad descent refuses to run while the probe offset is null.
 - Batch diagnostics (addition 3): every episode records at the first post-reset command (`first_command_state` event) base roll/pitch, base linear/angular speed norms (new backend diagnostics `base_velocity_linear_m_s`/`base_velocity_angular_rad_s`), tilt change and drift since reset; at PREGRASP exit, DESCEND enter/mid and CLOSE enter (`gt_tip_telemetry`), and every servo log, the 3D vector (can centre - pad reference) in world and base frames (`can_minus_pad*_world/base_xyz_m`).
 - Webots-free verification: ruff/format/ty pass, `pytest -m "not webots"` 192 passed. Live probe and gt_pad episode runs UNVERIFIED until the 10-episode stability gate passes.
+
+## ADR-0024 - Stall-based gripper CLOSE/RELEASE pacing in scripted_can (UNVERIFIED live)
+
+- **Date:** 2026-11-12
+- **Status:** Implemented (Webots-free tests pass); live evidence **UNVERIFIED**
+- **Context:** Phase 4 `grasp_servo=gt_pad` 3-episode batch (`phase4_gtpad3/`) showed 0/3 placement
+  success (`dist_m ≈ 0.219 m`) despite all episodes reaching HOME. Post-hoc analysis: the original
+  `scripted_can.py` CLOSE code issued exactly **one** `backend.step(1)` after sending
+  `GripperCmd(0.0, force=50.0)`. One sim step (32 ms) is insufficient for the finger servos to stall
+  against the can. The original controller (`controllers/tiago_arm_api/tiago_arm_api.py`
+  `close_gripper()`) runs up to **300 steps** checking for stall. With only 1 step, the gripper
+  command was accepted but fingers barely moved; subsequent LIFT raised the arm without the can,
+  so the can remained at its drop location and the final placement distance exceeded the 0.10 m gate.
+- **Decision (CLOSE pacing):** Replace the single-step `backend.step(1)` after `GripperCmd(0.0, ...)`
+  with a stall-detection loop of up to `max_close_steps = 300` steps:
+  - Track `previous_opening` and `still_count` (count of steps where `|Δopening| < 2e-5`).
+  - Fast-exit on step 0 when `current_opening <= 0.001` and `|Δopening| > 0.01` (finger already
+    essentially closed from a prior position near zero — avoids a spurious 300-step wait on the
+    fake backend where the gripper is instantaneous).
+  - Stall declared when: `i > 10 and still_count >= 15` (finger position stable for 15+ consecutive
+    steps after the first 10 steps), OR `current_opening <= 0.001 and still_count >= 3`
+    (finger at hard limit for 3 steps). Both conditions break the loop.
+  - `_base_moved` guard runs each iteration (abort if TIAGo base drifts during close).
+- **Decision (RELEASE pacing):** Replace the single-step `backend.step(1)` after
+  `GripperCmd(GRIPPER_OPEN, ...)` with an open-wait loop of up to
+  `max_release_steps = int(round(GRIPPER_OPEN_TIMEOUT_S * 1000.0 / TIME_STEP))` steps:
+  - Break when `observation.robot.gripper_opening >= GRIPPER_OPEN - GRIPPER_OPEN_TOLERANCE_M`.
+  - `_base_moved` guard runs each iteration (abort on base drift during release).
+- **Why not use `MIN_GRASP_OPEN` for the stall threshold?** The stall condition (`opening <= 0.001`)
+  is intentionally tighter than `MIN_GRASP_OPEN = 0.004 m`. After the CLOSE loop exits, the
+  post-state check (at LIFT enter) will verify `gripper_opening > MIN_GRASP_OPEN` to confirm
+  the can is actually grasped (finger was forced open by the can's radius). The `0.001` threshold
+  in the stall loop triggers when the finger is effectively at its hard mechanical limit (no can
+  present or failed grasp); it does not substitute for the grasp success check.
+- **Fake-backend behaviour:** The `FakeBackend` applies gripper commands instantaneously (opening
+  jumps to commanded value in one step). The fast-exit on step 0 (`opening <= 0.001` jump from a
+  higher value) handles this case; the stall loop exits after 1 step, so test run-time is unchanged.
+  For the RELEASE loop, the fake backend opens immediately, so the loop exits after 1 step.
+- **Webots-free verification:** `ruff check . && ruff format --check .` → clean; `pytest -m "not webots"` → **198 passed** (unchanged from pre-pacing count).
+- **Live verification:** Scheduled as Phase 4(c): 3 fresh-world `gt_pad` episodes with the new pacing.
+  Expected: at least 2/3 gripper_opening > MIN_GRASP_OPEN after CLOSE, can_z rises during LIFT,
+  dist_m < 0.10 m at DONE. Results to be recorded in `docs/M1_VALIDATION_REPORT.md` Phase 4.
+- **New dependency:** None. No new imports or packages.

@@ -266,6 +266,17 @@ def run_episodes(
         Literal["PREGRASP", "LIFT"] | None,
         typer.Option(help="Stop each episode after PREGRASP or LIFT."),
     ] = None,
+    grasp_servo: Annotated[
+        Literal["none", "gt_pad"],
+        typer.Option(
+            "--grasp-servo",
+            help=(
+                "Grasp servo mode (ADR-0023): 'none' keeps legacy open-loop motion; "
+                "'gt_pad' servos PREGRASP XY, DESCEND stop height, and CLOSE alignment "
+                "on the measured arm_7 pad reference."
+            ),
+        ),
+    ] = "none",
     startup_timeout_s: float = typer.Option(
         180.0, min=1.0, help="Seconds to wait for the Webots ZeroMQ server before failing."
     ),
@@ -294,6 +305,7 @@ def run_episodes(
         closed_loop_waypoints=closed_loop_waypoints,
         stop_after=stop_after,
         kinematic_model=kinematic_model,
+        grasp_servo=grasp_servo,
     )
     outcomes = run_episode_batch(
         settings,

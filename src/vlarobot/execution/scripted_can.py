@@ -507,32 +507,53 @@ class ScriptedCanPolicy:
                         failure_state="CLOSE",
                         failure_reason=self._last_failure_reason,
                     )
-                step_started = perf_counter() if self.timing_enabled else None
-                observation = backend.step(1)
-                if step_started is not None:
-                    self._add_timing("CLOSE", "backend_step_s", perf_counter() - step_started)
-                self._last_observation = observation
-                self._track_observation(observation, state="CLOSE")
-                if self._base_moved(observation, "CLOSE"):
-                    final_distance = self._placement_distance(backend, observation)
-                    self._trace_boundary(
-                        backend,
-                        observation,
-                        "CLOSE",
-                        "exit",
-                        target,
-                        failed=True,
-                        final_target_distance_m=final_distance,
-                    )
-                    return ScriptedCanResult(
-                        seed=seed,
-                        success=False,
-                        rejections=rejections,
-                        final_target_distance=final_distance,
-                        final_state="FAILED",
-                        failure_state="CLOSE",
-                        failure_reason=self._last_failure_reason,
-                    )
+                # Pace the gripper closing: step until fingers stall against the object or limit
+                previous_opening = float(observation.robot.gripper_opening)
+                still_count = 0
+                max_close_steps = 300
+                for i in range(max_close_steps):
+                    step_started = perf_counter() if self.timing_enabled else None
+                    observation = backend.step(1)
+                    if step_started is not None:
+                        self._add_timing("CLOSE", "backend_step_s", perf_counter() - step_started)
+                    self._last_observation = observation
+                    self._track_observation(observation, state="CLOSE")
+                    if self._base_moved(observation, "CLOSE"):
+                        final_distance = self._placement_distance(backend, observation)
+                        self._trace_boundary(
+                            backend,
+                            observation,
+                            "CLOSE",
+                            "exit",
+                            target,
+                            failed=True,
+                            final_target_distance_m=final_distance,
+                        )
+                        return ScriptedCanResult(
+                            seed=seed,
+                            success=False,
+                            rejections=rejections,
+                            final_target_distance=final_distance,
+                            final_state="FAILED",
+                            failure_state="CLOSE",
+                            failure_reason=self._last_failure_reason,
+                        )
+                    current_opening = float(observation.robot.gripper_opening)
+                    if (
+                        i == 0
+                        and current_opening <= 0.001
+                        and abs(current_opening - previous_opening) > 0.01
+                    ):
+                        break
+                    if abs(current_opening - previous_opening) < 2e-5:
+                        still_count += 1
+                    else:
+                        still_count = 0
+                    previous_opening = current_opening
+                    if (i > 10 and still_count >= 15) or (
+                        current_opening <= 0.001 and still_count >= 3
+                    ):
+                        break
                 self._trace_boundary(backend, observation, "CLOSE", "exit", target)
                 self.state_sim_durations["CLOSE"] = observation.t - self._state_sim_start["CLOSE"]
                 self.state_wall_durations["CLOSE"] = (
@@ -562,32 +583,36 @@ class ScriptedCanPolicy:
                         failure_state="RELEASE",
                         failure_reason=self._last_failure_reason,
                     )
-                step_started = perf_counter() if self.timing_enabled else None
-                observation = backend.step(1)
-                if step_started is not None:
-                    self._add_timing("RELEASE", "backend_step_s", perf_counter() - step_started)
-                self._last_observation = observation
-                self._track_observation(observation, state="RELEASE")
-                if self._base_moved(observation, "RELEASE"):
-                    final_distance = self._placement_distance(backend, observation)
-                    self._trace_boundary(
-                        backend,
-                        observation,
-                        "RELEASE",
-                        "exit",
-                        target,
-                        failed=True,
-                        final_target_distance_m=final_distance,
-                    )
-                    return ScriptedCanResult(
-                        seed=seed,
-                        success=False,
-                        rejections=rejections,
-                        final_target_distance=final_distance,
-                        final_state="FAILED",
-                        failure_state="RELEASE",
-                        failure_reason=self._last_failure_reason,
-                    )
+                max_release_steps = max(1, int(round(GRIPPER_OPEN_TIMEOUT_S * 1000.0 / TIME_STEP)))
+                for _ in range(max_release_steps):
+                    step_started = perf_counter() if self.timing_enabled else None
+                    observation = backend.step(1)
+                    if step_started is not None:
+                        self._add_timing("RELEASE", "backend_step_s", perf_counter() - step_started)
+                    self._last_observation = observation
+                    self._track_observation(observation, state="RELEASE")
+                    if self._base_moved(observation, "RELEASE"):
+                        final_distance = self._placement_distance(backend, observation)
+                        self._trace_boundary(
+                            backend,
+                            observation,
+                            "RELEASE",
+                            "exit",
+                            target,
+                            failed=True,
+                            final_target_distance_m=final_distance,
+                        )
+                        return ScriptedCanResult(
+                            seed=seed,
+                            success=False,
+                            rejections=rejections,
+                            final_target_distance=final_distance,
+                            final_state="FAILED",
+                            failure_state="RELEASE",
+                            failure_reason=self._last_failure_reason,
+                        )
+                    if observation.robot.gripper_opening >= GRIPPER_OPEN - GRIPPER_OPEN_TOLERANCE_M:
+                        break
                 self._trace_boundary(backend, observation, "RELEASE", "exit", target)
 
         final_distance = self._placement_distance(backend, observation)
@@ -851,7 +876,87 @@ class ScriptedCanPolicy:
         Here the guard is active only when ``pregrasp_realign`` is on, so the realign-off mode
         keeps the original semantics. A single refined descent is allowed; if the residual is
         still over ``close_align_tol`` the state fails with ``misaligned at close``.
+
+        ADR-0023 addition: with ``grasp_servo=gt_pad`` the alignment is measured and gated on
+        the MEASURED pad midpoint (Solid-based telemetry, exact) instead of the FK chain tip,
+        whose XY position carries a live-measured ~4.2 cm systematic error versus the real
+        fingertip midpoint; the re-descent target is shifted by the measured pad error so the
+        pad, not the virtual tip point, is centred on the CAN. ``grasp_servo=none`` keeps the
+        legacy tip-based measurement unchanged.
         """
+        if self.grasp_servo == "gt_pad":
+            meas = self._gt_pad_xy_error_world(backend, observation)
+            if meas is None:
+                self._last_failure_reason = "gt_pad close guard failed: pad midpoint unavailable"
+                self._trace_event(
+                    "close_alignment_check",
+                    state="CLOSE",
+                    sim_time_s=observation.t,
+                    xy_error_m=None,
+                    threshold_m=CLOSE_ALIGN_TOL,
+                    reason=self._last_failure_reason,
+                )
+                return None
+            e_xy, error_m, _can_world, _pad_world, source = meas
+            self._trace_event(
+                "close_alignment_check",
+                state="CLOSE",
+                sim_time_s=observation.t,
+                xy_error_m=error_m,
+                threshold_m=CLOSE_ALIGN_TOL,
+                source=source,
+            )
+            if error_m <= CLOSE_ALIGN_TOL:
+                return current_q, observation, target
+            base_pose_world = observation.robot.base_pose_world
+            if base_pose_world is None:
+                self._last_failure_reason = "gt_pad close guard failed: missing base_pose_world"
+                return None
+            R_wb = _quaternion_to_matrix(base_pose_world.orientation)
+            step_world = e_xy.copy()
+            step_norm = float(np.linalg.norm(step_world))
+            if step_norm > 0.010:  # same 10 mm bound as the servo XY corrections
+                step_world = step_world * (0.010 / step_norm)
+            d_base = R_wb.T @ np.array([step_world[0], step_world[1], 0.0], dtype=float)
+            refined = self._base_frame_targets(backend, observation)["grasp"] + d_base
+            # Static corrected target: a closed-loop provider would recompute the legacy
+            # tip-space target and re-introduce the FK error the correction removes.
+            moved = self._move_linear(backend, observation, refined, "CLOSE", target_provider=None)
+            if moved is None:
+                self._last_failure_reason = "misaligned at close"
+                self._trace_event(
+                    "close_misaligned",
+                    state="CLOSE",
+                    sim_time_s=observation.t,
+                    xy_error_m=error_m,
+                    threshold_m=CLOSE_ALIGN_TOL,
+                    reason=self._last_failure_reason,
+                )
+                return None
+            current_q, observation = moved
+            meas = self._gt_pad_xy_error_world(backend, observation)
+            residual_m = meas[1] if meas is not None else float("inf")
+            self._trace_event(
+                "close_realign",
+                state="CLOSE",
+                sim_time_s=observation.t,
+                xy_error_before_m=error_m,
+                xy_error_after_m=residual_m,
+                threshold_m=CLOSE_ALIGN_TOL,
+            )
+            if residual_m > CLOSE_ALIGN_TOL:
+                self._last_failure_reason = "misaligned at close"
+                self._trace_event(
+                    "close_misaligned",
+                    state="CLOSE",
+                    sim_time_s=observation.t,
+                    xy_error_m=residual_m,
+                    threshold_m=CLOSE_ALIGN_TOL,
+                    reason=self._last_failure_reason,
+                )
+                return None
+            return current_q, observation, refined
+
         error_m = self._tip_to_can_xy_m(backend, observation)
         self._trace_event(
             "close_alignment_check",

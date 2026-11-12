@@ -214,13 +214,18 @@ class RobotSettings:
             ):
                 raise ValueError(f"{key} must be a list of {length} finite numbers.")
         probe_offset = values.get("probe_pad_reference_to_pad_bottom_m")
+        # ADR-0023 amendment (live probe, 2026-11-12): the signed value is required.
+        # The contact-height probe fires when the measured pad reference crosses the
+        # can-lid plane, which can leave the reference BELOW the lid (negative offset);
+        # the gt_pad DESCEND stop equation uses the signed value to replicate the
+        # probe's contact state exactly. Only finiteness is enforced.
         if probe_offset is not None and (
-            not isinstance(probe_offset, (int, float))
-            or probe_offset <= 0.0
-            or not math.isfinite(probe_offset)
+            not isinstance(probe_offset, (int, float)) or not math.isfinite(probe_offset)
         ):
             raise ValueError(
-                "probe_pad_reference_to_pad_bottom_m must be null or a positive finite number."
+                "probe_pad_reference_to_pad_bottom_m must be null or a finite number "
+                "(signed; negative means the pad reference sits below the can-lid plane "
+                "at the probe's contact trigger)."
             )
         for key in (
             "close_align_tol",

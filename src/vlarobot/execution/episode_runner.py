@@ -68,6 +68,7 @@ class RunnerSettings:
     closed_loop_waypoints: bool | None = None
     stop_after: str | None = None
     kinematic_model: str | None = None
+    grasp_servo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ class EpisodeOutcome:
     kinematic_model: str | None = None
     snapshot_hash: str | None = None
     snapshot_path: str | None = None
+    grasp_servo: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """JSON-safe version of this outcome row."""
@@ -543,6 +545,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
             pregrasp_realign=settings.pregrasp_realign,
             closed_loop_waypoints=settings.closed_loop_waypoints,
             stop_after=settings.stop_after,
+            grasp_servo=settings.grasp_servo,
         )
         try:
             startup_started = perf_counter()
@@ -568,6 +571,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                                 kinematic_model=requested_model,
                                 snapshot_hash=snap_hash or None,
                                 snapshot_path=snap_path or None,
+                                grasp_servo=settings.grasp_servo,
                             )
                         )
                     except Exception as exc:
@@ -584,6 +588,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                                 kinematic_model=requested_model,
                                 snapshot_hash=snap_hash or None,
                                 snapshot_path=snap_path or None,
+                                grasp_servo=settings.grasp_servo,
                             )
                         )
                         break
@@ -640,6 +645,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                     pregrasp_realign=settings.pregrasp_realign,
                     closed_loop_waypoints=settings.closed_loop_waypoints,
                     stop_after=settings.stop_after,
+                    grasp_servo=settings.grasp_servo,
                 )
                 episode_started = perf_counter()
                 result = policy.execute(client, seed)
@@ -654,6 +660,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                     kinematic_model=requested_model,
                     snapshot_hash=snap_hash or None,
                     snapshot_path=snap_path or None,
+                    grasp_servo=settings.grasp_servo,
                 )
             finally:
                 _stop_client(client)
@@ -678,6 +685,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                 kinematic_model=requested_model,
                 snapshot_hash=snap_hash or None,
                 snapshot_path=snap_path or None,
+                grasp_servo=settings.grasp_servo,
             )
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
@@ -697,6 +705,7 @@ def _error_outcome(
     kinematic_model: str | None = None,
     snapshot_hash: str | None = None,
     snapshot_path: str | None = None,
+    grasp_servo: str | None = None,
 ) -> EpisodeOutcome:
     """Synthetic failed outcome for runner/policy exceptions (always recordable)."""
     return EpisodeOutcome(
@@ -721,6 +730,7 @@ def _error_outcome(
         kinematic_model=kinematic_model,
         snapshot_hash=snapshot_hash,
         snapshot_path=snapshot_path,
+        grasp_servo=grasp_servo,
     )
 
 
@@ -912,6 +922,7 @@ def _outcome(
     kinematic_model: str | None = None,
     snapshot_hash: str | None = None,
     snapshot_path: str | None = None,
+    grasp_servo: str | None = None,
 ) -> EpisodeOutcome:
     """Map one ``ScriptedCanResult`` onto a summary-table row."""
     return EpisodeOutcome(
@@ -938,4 +949,5 @@ def _outcome(
         kinematic_model=kinematic_model,
         snapshot_hash=snapshot_hash,
         snapshot_path=snapshot_path,
+        grasp_servo=grasp_servo,
     )

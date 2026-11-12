@@ -7,7 +7,7 @@
 | Phase 1 determinism/reset | NOT RUN | - | - | - |
 | Phase 2 gt_pad grasp | NOT RUN | - | - | - |
 | Phase 3 M1-07 (>=16/20) | NOT RUN | - | - | - |
-| Phase 4 M1-06a equivalence | NOT RUN | - | - | - |
+| Phase 4 gt_pad CLOSE pacing (ADR-0024) | IN PROGRESS | code committed, 198 tests pass; live UNVERIFIED | commit `6eaafd5` | Webots-required: phase4c/d/e pending |
 | Phase 5 kinematic model | NOT RUN | - | - | - |
 
 ## MEASURED / INFERRED / UNVERIFIED
@@ -70,3 +70,42 @@
 - ADR-0023: gt_pad servo uses MEASURED pad geometry + contact-height probe stop height. URDF chain modification was refuted live (2026-11-12, `rep01.jsonl` FK put chain tip 0.377m above real pad due to sim-vs-URDF arm_7 frame origin offset and 180° orientation difference, causing elbow-down joint-limit lock and base tip); the URDF chain KEEPS legacy `[0, 0, -0.1741]` unconditionally. The contact-height probe succeeded 3/3 (`pad_contact_probe.json`: trigger c, mean offset −2.340 mm, std 0.243 mm < 2 mm), and `probe_pad_reference_to_pad_bottom_m` is configured.
 - Pending: (c) 3 watched gt_pad episodes + screenshots, (d) 10 gt_pad vs 10 baseline batch, revised M1 acceptance. Windows live validation remains UNVERIFIED/HUMAN.
 - Human steps: none yet for Phase 3; screenshots requested at (c)/(d).
+
+### Phase 4 — gt_pad stall-based CLOSE/RELEASE pacing validation (ADR-0024)
+
+- **Status:** Code committed (commit `6eaafd5`); live evidence **UNVERIFIED** (Webots required).
+- **Code change:** `scripted_can.py` CLOSE now runs up to 300 steps with stall detection
+  (`still_count >= 15` after step 10, or `opening <= 0.001` for 3 steps). RELEASE waits up to
+  `GRIPPER_OPEN_TIMEOUT_S / TIME_STEP` steps until `opening >= GRIPPER_OPEN - GRIPPER_OPEN_TOLERANCE_M`.
+  Root cause of 0/3 success in `phase4_gtpad3/`: single `backend.step(1)` after CLOSE was
+  insufficient for fingers to stall against the can; gripper remained open and LIFT left the can
+  on the table. ADR-0024 details the fix.
+- **Webots-free gates:** `ruff/format` clean, `pytest -m "not webots"` **198 passed**.
+- **Phase 4(c) — HUMAN REQUIRED (3 watched gt_pad episodes):**
+  Run the following command (Webots must be running and healthy):
+  ```
+  uv run python -m vlarobot.cli run-episodes --n 3 --fresh-world --grasp-servo gt_pad --trace-dir runs/campaign-2026-11-11/phase4c_gtpad3_watched/
+  ```
+  **Key things to verify visually and from the JSONL trace:**
+  1. After CLOSE: `gripper_opening > 0.004` m (MIN_GRASP_OPEN) → fingers stalled against can.
+  2. During LIFT: `can_world_xyz_m[2]` increases (can rises from ~0.811 m toward ~0.86+ m).
+  3. At DONE: `dist_m < 0.10 m` and `success: true`.
+  **Screenshots:** CLOSE (fingers on can), LIFT apex (can in air), RELEASE (can placed), DONE.
+  **What to send back:** full command output, `episode-summary.json`, any trace snippets showing
+  `gripper_opening` at CLOSE exit, `can_world_xyz_m[2]` at LIFT apex, and `dist_m` at DONE.
+
+- **Phase 4(d) — 10 gt_pad episodes (after (c) confirms gripping works):**
+  ```
+  uv run python -m vlarobot.cli run-episodes --n 10 --fresh-world --grasp-servo gt_pad --trace-dir runs/campaign-2026-11-11/phase4d_gtpad10/
+  ```
+  Compare with baseline `phase3_gate10b/` (3/10 success, `grasp_servo=none`).
+  Update verdict table once results are in.
+
+- **Phase 4(e) — 20-episode M1-07 gate (if 4(d) ≥ 12/10 success):**
+  ```
+  uv run python -m vlarobot.cli run-episodes --n 20 --fresh-world --grasp-servo gt_pad --trace-dir runs/campaign-2026-11-11/phase4e_gtpad20/
+  ```
+  Acceptance: ≥ 16/20 (80%) success, all criteria (home_reached, place_distance_ok, can_height_ok,
+  can_tilt_ok) satisfied. This completes M1-07.
+
+- **Human steps required:** Phase 4(c) screenshots and verification listed above.

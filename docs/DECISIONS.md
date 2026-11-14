@@ -1267,3 +1267,51 @@
   final report contains actual measured results only.
 - **Training guard (clarification 9):** Colab training resumable from Drive checkpoints; local
   inference only; never depend on a Colab tunnel.
+
+## ADR-0030 - Seeded scenario generator design: families, obstacle entries, pre-registration (week 1, 2026-11-14)
+
+- **Context (week-1 deliverable of ADR-0029):** `ScenarioSpec.can_xy_yaw_offset` covered CAN xy/yaw
+  only; ADR-0029 requires three families (clear, cluttered, reach-limited), obstacle positions at
+  reset, split-by-seed scene counts (train 8 / validation 6 / test 10, frozen in `configs/eval.yaml`),
+  and a test split untouched until week 4.
+- **Decision — generator (`eval/scenarios.py::generate_scenes(split, seed, allow_test=...)`):**
+  scenes are drawn from `np.random.default_rng(SeedSequence([seed, split_salt]))`, so
+  `(split, seed)` deterministically defines the whole scene tuple (byte-identical on repeat);
+  families are assigned round-robin by index (train 3/3/2, validation 2/2/2, test 4/3/3).
+  The `test` split raises unless `allow_test=True` (fail-closed until week 4).
+  `mini_grid10` and `SCENARIOS` are untouched (M1 evidence must stay reproducible).
+- **Decision — geometry lives in `configs/scenarios.yaml` (pre-registered, week 1):**
+  world layout facts (CAN/HAM/APP poses, drift-guarded against `worlds/factory.wbt` by test),
+  family CAN radius bands (clear/cluttered 0–0.05 m, reach-limited 0.06–0.10 m — beyond the
+  measured M1-07 grid, r ≤ 0.0707), and obstacle modes:
+  *parked* r 0.55–0.70 m at θ ∈ [−30°, +10°] (on-table, ≥ 0.5 m from the CAN, away from the
+  −x place corridor) for clear/reach-limited; *near_can* r 0.13–0.20 m with
+  θ ∈ [−170°, +120°] for cluttered.
+- **Decision — place-corridor cone exclusion:** the near_can θ range excludes the cone
+  (120°, 190°) around the CAN because the fixed `PLACE_WORLD` (−1.0, −4.3) sits at 155.8°,
+  0.22 m from the default CAN; an obstacle ON the target would make placement physically
+  impossible for every experiment arm (degenerate scene for all arms). MEASURED worst-case
+  cluttered-obstacle clearance to `PLACE_WORLD` over seeds 0–59 × train+validation:
+  **0.0815 m** (worst angular separation 24.9°); the test asserts a 0.06 m design floor.
+- **Decision — pre-registration + anti-rescue:** geometry is committed before any baseline or
+  VLA result exists. Later changes are allowed only as feasibility repairs (scene unreachable
+  for the scripted expert by construction), each documented here. Such repairs RAISE the
+  week-2 gate threshold (`min(0.40, 0.60 × baseline)`), so they can never lower the bar for
+  the VLA; val/test remain untouched until their scheduled weeks.
+- **Decision — obstacle wire contract (`ScenarioSpec.objects`, no `core/types.py` change):**
+  each entry is a mapping `{"def": <existing DEF>, "xyz": [world x, y, z],
+  "yaw_offset": rad}` — absolute world translation, yaw composed onto the world-file rotation
+  (same world-Z convention as `can_xy_yaw_offset`). The Webots backend places them at reset,
+  caches the world-file pose on first contact, and restores cached nodes when a later scenario
+  omits them; the CAN DEF is rejected in objects (use `can_xy_yaw_offset`); missing DEF and
+  malformed entries fail loud; spawning new nodes stays `NotImplementedError`. `FakeBackend`
+  stores the scenario unchanged (no physics there).
+- **Decision — collision-proxy groundwork:** `WebotsBackend.get_ground_truth()` now also reports
+  the poses of obstacles tracked by a scenario (keyed by DEF). This is the read path for the
+  ADR-0029 displacement (>5 mm)/tilt (>5°) collision PROXY — labelled a proxy, with FK clearance
+  kept as a separate measurement in the metrics module (step 3).
+- **Consequences:** scene identity is stable for report joins
+  (`train-clear-i00-s0` style names + `metadata` = family/split/seed/index); the generator is
+  pure Python (no Webots import) and unit-tested; `configs/scenarios.yaml` ships via
+  package-data. Nothing in M1 behaviour changes (default scenarios have empty `objects`, and
+  the no-objects code path performs zero extra DEF lookups — asserted by existing tests).

@@ -135,8 +135,6 @@ class WebotsBackend:
             )
         if not isinstance(seed, int):
             raise TypeError("seed must be an integer.")
-        if scenario.objects:
-            raise NotImplementedError("Webots scenario spawning is scheduled for M2.")
 
         torso_before_rad = float(self.io.sensors[TORSO_JOINT].getValue())
         positions = dict(self._initial_joint_pos)
@@ -165,6 +163,7 @@ class WebotsBackend:
         self.can_node.getField("rotation").setSFRotation(can_rotation)
         self.io.me.getField("translation").setSFVec3f(self._initial_base_translation)
         self.io.me.getField("rotation").setSFRotation(self._initial_base_rotation)
+        self._apply_scenario_objects(scenario)
         self.io.robot.simulationResetPhysics()
         can_node = self.io.robot.getFromDef(CAN_DEF)
         if can_node is None:
@@ -285,6 +284,74 @@ class WebotsBackend:
             return ApplyResult(False, "TIAGo base navigation is not implemented in M1.")
         return ApplyResult(False, f"unsupported action type: {type(action).__name__}")
 
+    def _apply_scenario_objects(self, scenario: ScenarioSpec) -> None:
+        """Place scenario obstacles at reset; restore nodes a later scenario omits (ADR-0029).
+
+        Each entry must be a mapping with an existing ``def``, an absolute world ``xyz``,
+        and an optional ``yaw_offset`` composed onto the world-file rotation (the same
+        world-Z convention as ``can_xy_yaw_offset``). The world-file pose of every touched
+        node is cached on first contact, so a subsequent default reset restores it — the
+        CAN/CAN-less path above is unaffected when ``scenario.objects`` is empty and no
+        node has ever been placed. Spawning new nodes is not supported.
+        """
+        placements: dict[str, tuple[list[float], float]] = {}
+        for entry in scenario.objects:
+            if not isinstance(entry, dict) or "def" not in entry:
+                raise NotImplementedError(
+                    "scenario objects must reference existing DEF nodes via a 'def' key; "
+                    "spawning new nodes is not supported."
+                )
+            def_name = str(entry["def"])
+            if def_name == CAN_DEF:
+                raise ValueError(
+                    f"scenario objects must not place {CAN_DEF!r}; "
+                    "use ScenarioSpec.can_xy_yaw_offset for the CAN."
+                )
+            xyz = entry.get("xyz")
+            if not isinstance(xyz, (list, tuple)) or len(xyz) != 3:
+                raise ValueError(f"scenario object {def_name!r} needs 'xyz' with 3 world values.")
+            placements[def_name] = (
+                [float(value) for value in xyz],
+                float(entry.get("yaw_offset", 0.0)),
+            )
+
+        cache = getattr(self, "_initial_object_poses", None)
+        if cache is None:
+            cache = {}
+            self._initial_object_poses = cache
+
+        def node_for(def_name: str) -> Any:
+            node = self.io.robot.getFromDef(def_name)
+            if node is None:
+                raise RuntimeError(f"No node with DEF {def_name} for scenario object placement.")
+            return node
+
+        # Restore nodes placed by an earlier scenario but absent from this one.
+        for def_name in tuple(cache):
+            if def_name in placements:
+                continue
+            node = node_for(def_name)
+            initial_translation, initial_rotation = cache[def_name]
+            node.getField("translation").setSFVec3f(list(initial_translation))
+            node.getField("rotation").setSFRotation(list(initial_rotation))
+
+        for def_name, (xyz, yaw_offset) in placements.items():
+            node = node_for(def_name)
+            if def_name not in cache:
+                cache[def_name] = (
+                    [float(value) for value in node.getField("translation").getSFVec3f()],
+                    [float(value) for value in node.getField("rotation").getSFRotation()],
+                )
+            initial_translation, initial_rotation = cache[def_name]
+            node.getField("translation").setSFVec3f(xyz)
+            if yaw_offset != 0.0:
+                _, composed = compose_can_reset_pose(
+                    initial_translation, initial_rotation, (0.0, 0.0, yaw_offset)
+                )
+            else:
+                composed = list(initial_rotation)
+            node.getField("rotation").setSFRotation(composed)
+
     def get_ground_truth(self) -> GroundTruth:
         position = self.can_node.getPosition()
         rotation = np.asarray(self.can_node.getOrientation()).reshape((3, 3))
@@ -292,7 +359,24 @@ class WebotsBackend:
             Vec3(float(position[0]), float(position[1]), float(position[2])),
             _rotation_to_quaternion(rotation),
         )
-        return GroundTruth(object_poses={CAN_DEF: pose})
+        object_poses = {CAN_DEF: pose}
+        # Obstacles placed by a scenario are tracked for the displacement/tilt collision
+        # proxy (ADR-0029): their poses are read here so eval can diff reset vs end-of-run.
+        for def_name in tuple(getattr(self, "_initial_object_poses", ())):
+            node = self.io.robot.getFromDef(def_name)
+            if node is None:
+                continue
+            obstacle_position = node.getPosition()
+            obstacle_rotation = np.asarray(node.getOrientation()).reshape((3, 3))
+            object_poses[def_name] = Pose3D(
+                Vec3(
+                    float(obstacle_position[0]),
+                    float(obstacle_position[1]),
+                    float(obstacle_position[2]),
+                ),
+                _rotation_to_quaternion(obstacle_rotation),
+            )
+        return GroundTruth(object_poses=object_poses)
 
     def stop(self) -> None:
         if not self._stopped:

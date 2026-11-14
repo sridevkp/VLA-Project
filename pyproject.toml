@@ -43,7 +43,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.data-files]
-"configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml"]
+"configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml", "configs/scenarios.yaml"]
 
 [tool.setuptools.package-data]
 "vlarobot.backends.webots" = ["*.urdf"]

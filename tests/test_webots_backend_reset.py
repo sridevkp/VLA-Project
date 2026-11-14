@@ -164,22 +164,23 @@ def test_contact_tracking_reports_external_node_and_world_contact_points():
 
 
 class FakeRobot:
-    def __init__(self, can_node, me):
+    def __init__(self, can_node, me, objects=None):
         self.can_node = can_node
         self.me = me
         self.time = 10.0
         self.lookup_count = 0
+        self.nodes = {CAN_DEF: can_node, **{name: node for name, node in (objects or {}).items()}}
 
     def getFromDef(self, name):
-        assert name == CAN_DEF
         self.lookup_count += 1
-        return self.can_node
+        return self.nodes.get(name)
 
     def simulationResetPhysics(self):
         self.can_node = FakeCan(
             self.can_node.getField("translation").getSFVec3f(),
             self.can_node.getField("rotation").getSFRotation(),
         )
+        self.nodes[CAN_DEF] = self.can_node
 
     def step(self, time_step):
         self.time += time_step / 1000.0
@@ -235,7 +236,7 @@ class FakeMe:
         return [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
 
 
-def _make_backend():
+def _make_backend(obstacles=None):
     joint_names = ARM_JOINTS + [TORSO_JOINT]
     sensors = {name: FakeSensor(float(index)) for index, name in enumerate(joint_names)}
     motors = {name: FakeMotor(name, sensors[name]) for name in joint_names}
@@ -247,7 +248,7 @@ def _make_backend():
 
     can_node = FakeCan([1.0, 2.0, 3.0], [0.0, 0.0, 1.0, 0.0])
     me = FakeMe()
-    robot = FakeRobot(can_node, me)
+    robot = FakeRobot(can_node, me, objects=obstacles)
 
     class FakeIO:
         def __init__(self):
@@ -843,3 +844,77 @@ def test_reset_with_settle_gate_survives_persistent_jitter(monkeypatch):
     assert settle["steps_used"] == 3
     assert settle["fatal"] is False
     assert fingerprint["physics_step_count_at_reset"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Scenario objects at reset (ADR-0029 week 1: obstacle positions).
+# ---------------------------------------------------------------------------
+
+HAM_HOME = [-0.544929, -4.5081, 0.754298]
+APP_HOME = [-0.41, -4.44, 0.83]
+
+
+def _obstacle_world() -> dict[str, FakeCan]:
+    return {
+        "HAM": FakeCan(list(HAM_HOME), [0.0, 0.0, 1.0, 0.0]),
+        "APP": FakeCan(list(APP_HOME), [0.0, 0.0, 1.0, 0.0]),
+    }
+
+
+def _placed_scenario() -> ScenarioSpec:
+    return ScenarioSpec(
+        name="cluttered-test",
+        objects=(
+            {"def": "HAM", "xyz": [-0.70, -4.50, 0.754298], "yaw_offset": math.pi / 2},
+            {"def": "APP", "xyz": [-0.65, -4.40, 0.83], "yaw_offset": 0.0},
+        ),
+    )
+
+
+def test_reset_places_scenario_objects_and_restores_them_on_default_reset():
+    backend = _make_backend(obstacles=_obstacle_world())
+    placed = _placed_scenario()
+
+    backend.reset(placed, seed=0)
+
+    ham = backend.io.robot.nodes["HAM"]
+    app = backend.io.robot.nodes["APP"]
+    assert ham.getField("translation").getSFVec3f() == [-0.70, -4.50, 0.754298]
+    np.testing.assert_allclose(
+        ham.getField("rotation").getSFRotation(), [0.0, 0.0, 1.0, math.pi / 2], atol=1e-9
+    )
+    assert app.getField("translation").getSFVec3f() == [-0.65, -4.40, 0.83]
+    assert app.getField("rotation").getSFRotation() == [0.0, 0.0, 1.0, 0.0]
+
+    ground_truth = backend.get_ground_truth()
+    assert set(ground_truth.object_poses) == {CAN_DEF, "HAM", "APP"}
+    assert ground_truth.object_poses["HAM"].position.x == -0.70
+
+    # A default reset restores every placed node to its cached world-file pose.
+    backend.reset(ScenarioSpec(), seed=1)
+    assert ham.getField("translation").getSFVec3f() == HAM_HOME
+    assert app.getField("translation").getSFVec3f() == APP_HOME
+    assert ham.getField("rotation").getSFRotation() == [0.0, 0.0, 1.0, 0.0]
+
+    # Re-placing after a restore starts from the cached pose: no cumulative drift.
+    backend.reset(placed, seed=2)
+    assert ham.getField("translation").getSFVec3f() == [-0.70, -4.50, 0.754298]
+    np.testing.assert_allclose(
+        ham.getField("rotation").getSFRotation(), [0.0, 0.0, 1.0, math.pi / 2], atol=1e-9
+    )
+    assert app.getField("translation").getSFVec3f() == [-0.65, -4.40, 0.83]
+
+
+def test_reset_reports_unknown_object_def_and_malformed_entries():
+    # Unknown DEF: no node to move (the world cannot spawn it).
+    backend = _make_backend()
+    with pytest.raises(RuntimeError, match="No node with DEF HAM"):
+        backend.reset(_placed_scenario(), seed=0)
+
+    backend = _make_backend(obstacles=_obstacle_world())
+    with pytest.raises(NotImplementedError, match="spawning new nodes"):
+        backend.reset(ScenarioSpec(objects=({"proto": "Hammer"},)), seed=0)
+    with pytest.raises(ValueError, match="xyz"):
+        backend.reset(ScenarioSpec(objects=({"def": "HAM", "xyz": [1.0, 2.0]},)), seed=0)
+    with pytest.raises(ValueError, match="can_xy_yaw_offset"):
+        backend.reset(ScenarioSpec(objects=({"def": CAN_DEF, "xyz": [0.0, 0.0, 0.0]},)), seed=0)

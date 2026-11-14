@@ -712,6 +712,11 @@ class WebotsBackend:
         if isinstance(finger_tips, dict) and len(finger_tips) == 2:
             finger_midpoint = np.mean(np.asarray(list(finger_tips.values()), dtype=float), axis=0)
             finger_offset = finger_midpoint - ee_fk_world
+        finger_joint_sensor_rad = {
+            motor.getName(): float(sensor.getValue())
+            for motor, sensor in getattr(self.io, "fingers", [])
+            if sensor is not None
+        }
         arm_links: dict[str, object] = {
             "elbow": endpoint_lookup("arm_4_joint") if endpoint_lookup else None,
             "wrist": endpoint_lookup("arm_6_joint") if endpoint_lookup else None,
@@ -731,6 +736,7 @@ class WebotsBackend:
             "wheel_motors": wheel_lookup() if wheel_lookup else {},
             "contact_nodes": contacts,
             "arm_link_world_xyz_m": arm_links,
+            "finger_joint_sensor_rad": finger_joint_sensor_rad,
             "arm_7_joint_fk_world_xyz_m": arm7_world.tolist() if arm7_world is not None else None,
             "arm_7_joint_ground_truth_world_xyz_m": arm7_endpoint,
             "arm_7_joint_ground_truth_source": "endPointSolid",

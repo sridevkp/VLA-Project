@@ -44,11 +44,12 @@ def outcome_payload(result: ScriptedCanResult) -> dict[str, Any]:
 class ScriptedBaselinePolicy:
     """Eval-runner policy: run the scripted expert on one scene, return outcome keys."""
 
-    def __init__(self, scenario: ScenarioSpec) -> None:
+    def __init__(self, scenario: ScenarioSpec, *, trace_path: Any | None = None) -> None:
         self.scenario = scenario
+        self.trace_path = trace_path
 
     def execute(self, backend: Any, seed: int) -> Mapping[str, Any]:
-        policy = ScriptedCanPolicy(scenario=self.scenario)
+        policy = ScriptedCanPolicy(scenario=self.scenario, trace_path=self.trace_path)
         return outcome_payload(policy.execute(backend, seed))
 
 

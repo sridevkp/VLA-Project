@@ -12,10 +12,17 @@ uv run ty check src
 uv run pytest -m "not webots"
 ```
 
-The `dev` extra contains Ruff, pytest, ty, and pre-commit. The `sim` extra installs IKPy for the
-Webots backend. The remaining optional runtime extras (`core`, `perception`, `vla`, and `dashboard`)
-are declared in `pyproject.toml`. The `gpu` and `webots` pytest markers identify tests that require
-local hardware/simulator access.
+The `dev` extra contains Ruff, pytest, ty, and pre-commit (plus Pillow, used by the eval
+`EpisodeRecorder` to write JPEG frames — see ADR-0031). The `sim` extra installs IKPy for the
+Webots backend. The remaining optional runtime extras (`core`, `perception`, `vla`, `dashboard`,
+and `eval`) are declared in `pyproject.toml`. The `gpu` and `webots` pytest markers identify tests
+that require local hardware/simulator access.
+
+> **Sync caveat (MEASURED 2026-11-14):** always sync with **both** extras —
+> `uv sync --extra sim --extra dev`. A plain `uv sync --extra dev` prunes `ikpy`/`scipy` from the
+> environment and the test suite then fails at import. The `eval` extra (`pillow>=10.4`) is what a
+> production eval install would use; the `dev` group carries the same dependency so tests run
+> without it.
 
 ## Windows native
 

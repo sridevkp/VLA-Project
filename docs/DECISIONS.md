@@ -1315,3 +1315,47 @@
   pure Python (no Webots import) and unit-tested; `configs/scenarios.yaml` ships via
   package-data. Nothing in M1 behaviour changes (default scenarios have empty `objects`, and
   the no-objects code path performs zero extra DEF lookups — asserted by existing tests).
+
+## ADR-0031 - EpisodeRecorder: file contract, RecordingBackend decorator, Pillow dependency (week 1, 2026-11-14)
+
+- **Context (week-1 deliverable of ADR-0029):** eval and demo collection need per-episode
+  evidence (numeric streams, applied actions with safety verdicts, RGB frames, provenance) that
+  LeRobot conversion can consume later, without touching policy/controller behaviour
+  (AGENTS rule 10).
+- **Decision — file contract per episode** (`eval/recorder.py::EpisodeRecorder`):
+  `episode-XX.steps.npz` (t, joint_names/pos/vel, gripper, ee_xyz, base_pose, per-DEF gt_xyz
+  with **NaN rows where a step reported no pose**), `episode-XX.actions.jsonl` (one record per
+  applied action with `accepted`/`reason` from `safety_monitor.validate()`, timestamped from the
+  last recorded observation), `episode-XX.predicted.jsonl` (world-model predictions; empty until
+  M5), `episode-XX.meta.json` (scenario + metadata, reset seed, pipeline, **state-source
+  provenance flag** for report 4.3, step/frame counts, outcome), and `frames/episode-XX/*.jpg`.
+  The layout (image directory + tabular arrays + per-episode metadata) is LeRobot-convertible;
+  the converter ships with `collect-demos`.
+- **Decision — `RecordingBackend` decorator, not policy changes:** wraps any backend; `reset`/
+  `step` capture the returned observation plus one `get_ground_truth()` read, `apply` captures
+  the action and its safety verdict, everything else delegates via `__getattr__`. The scripted
+  policy run through the wrapper must produce an **identical `ScriptedCanResult`** to the
+  unwrapped run (asserted: `test_recording_backend_is_policy_transparent`). The wrapper reads
+  `get_ground_truth()` once per recorded step, so backends used with recording must keep that
+  method side-effect free (true for Fake/Webots: pure field reads).
+- **Decision — fail-loud misuse guards:** one open episode at a time; exactly one `reset` per
+  episode (`on_reset` raises on a second reset — `probe_initial_pregrasp` is a separate CLI
+  command with its own episode, unaffected); a mid-episode joint-key change raises; invalid
+  `frame_hz`/`jpeg_quality` raise at construction. Frame capture is rate-limited by
+  `frame_hz` (sim time, not wall clock) and can be disabled (`frame_hz=0` or
+  `record_frames=False`) for non-demo runs.
+- **Decision — Pillow for JPEG frames:** new dependency `pillow>=10.4` (licence **MIT-CMU**,
+  permissive; pure-Wheel, no compiler needed) added to the `dev` dependency group (tests) and a
+  new `project.optional-dependencies.eval` extra (production eval installs:
+  `uv sync --extra eval`). Imported lazily inside `_write_frame`, so a missing Pillow fails with
+  an actionable message only when frames are requested. **Windows install UNVERIFIED** in this
+  environment (Linux MEASURED: Pillow 13.0.0 installs via uv); standard wheels exist for CPython
+  3.11 on Windows, but that path has not been run here.
+- **Decision — env sync caveat (MEASURED):** tests need `uv sync --extra sim --extra dev`; a
+  plain `uv sync --extra dev` prunes `ikpy`/`scipy` and breaks the suite. Documented in
+  `docs/SETUP.md`.
+- **Consequences:** recordings are byte-deterministic for identical fake-backend runs (npz array
+  contents, JSONL, and JPEG bytes compared across two runs by test); the npz container itself is
+  not byte-stable (zip entry timestamps) so determinism assertions compare array contents.
+  Wall-clock never enters the recording (all timestamps are sim time). No public interface in
+  `core/` changed.

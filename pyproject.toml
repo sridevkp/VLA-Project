@@ -17,6 +17,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pillow>=10.4",
     "pre-commit>=4.0",
     "pytest>=8.0",
     "ruff>=0.11",
@@ -31,6 +32,10 @@ sim = [
 perception = []
 vla = []
 dashboard = []
+# Eval recording (EpisodeRecorder JPEG frames); licence MIT-CMU, see ADR-0031.
+eval = [
+    "pillow>=10.4",
+]
 # Keep the `dev` extra for the documented `uv sync --extra dev` command.
 dev = [
     "pre-commit>=4.0",

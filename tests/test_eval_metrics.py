@@ -345,6 +345,7 @@ def test_compute_episode_metrics_keeps_proxy_contacts_and_fk_separate(tmp_path: 
     assert metrics.success is False
     assert metrics.failure_state == "PLACE"
     assert metrics.failure_reason == "distance"
+    assert metrics.evaluation_failure_category == "PLACE"
     assert metrics.final_target_distance_m == pytest.approx(0.12)
     assert metrics.can_height_error_m == pytest.approx(0.01)
     assert metrics.can_tilt_deg == pytest.approx(2.5)
@@ -391,6 +392,7 @@ def test_metrics_to_row_and_writers_roundtrip(tmp_path: Path) -> None:
         success=True,
         failure_state=None,
         failure_reason=None,
+        evaluation_failure_category="success",
         final_target_distance_m=0.01,
         can_height_error_m=None,
         can_tilt_deg=None,

@@ -391,6 +391,39 @@ def min_fk_clearance_m(
 # ---------------------------------------------------------------------------
 
 
+def derive_evaluation_failure_category(
+    outcome: Mapping[str, Any], *, success: bool, failure_state: str | None
+) -> str:
+    """Derive an explicit evaluation failure category from measured outcome fields.
+
+    Raw policy ``failure_state``/``failure_reason`` are preserved separately; this category
+    exists so completed unsuccessful tasks are never summarized merely as ``none``. Derived
+    only from recorded outcome flags (no thresholds changed).
+    """
+    if success:
+        return "success"
+    if failure_state == "EXCEPTION":
+        return "EXCEPTION"
+    if failure_state:
+        return str(failure_state)
+
+    reasons: list[str] = []
+    final_state = outcome.get("final_state")
+    if final_state not in (None, "home"):
+        reasons.append(f"ended_{str(final_state).lower()}")
+    if outcome.get("home_reached") is False:
+        reasons.append("home_not_reached")
+    if outcome.get("place_distance_ok") is False:
+        reasons.append("place_distance")
+    if outcome.get("can_height_ok") is False:
+        reasons.append("can_height")
+    if outcome.get("can_tilt_ok") is False:
+        reasons.append("can_tilt")
+    if not reasons:
+        reasons.append("task_unsuccessful")
+    return "completed_unsuccessful:" + "+".join(reasons)
+
+
 @dataclass(frozen=True)
 class EpisodeMetrics:
     """One episode's metric row (all values MEASURED from the recording/outcome)."""
@@ -401,6 +434,7 @@ class EpisodeMetrics:
     success: bool
     failure_state: str | None
     failure_reason: str | None
+    evaluation_failure_category: str
     final_target_distance_m: float | None
     can_height_error_m: float | None
     can_tilt_deg: float | None
@@ -441,13 +475,18 @@ def compute_episode_metrics(
     if seed is None:
         seed = record.meta.get("seed", 0)
 
+    success = bool(outcome["success"])
+    failure_state = _optional_str(outcome.get("failure_state"))
     return EpisodeMetrics(
         scene=scene_id(record.meta),
         seed=int(seed),
         arm=str(record.meta.get("pipeline", "unknown")),
-        success=bool(outcome["success"]),
-        failure_state=_optional_str(outcome.get("failure_state")),
+        success=success,
+        failure_state=failure_state,
         failure_reason=_optional_str(outcome.get("failure_reason")),
+        evaluation_failure_category=derive_evaluation_failure_category(
+            outcome, success=success, failure_state=failure_state
+        ),
         final_target_distance_m=_optional_float(outcome.get("final_target_distance")),
         can_height_error_m=_optional_float(outcome.get("can_height_error_m")),
         can_tilt_deg=_optional_float(outcome.get("can_tilt_deg")),

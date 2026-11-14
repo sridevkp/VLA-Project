@@ -310,6 +310,7 @@ def _exception_metrics(entry: EvalEpisode, pipeline: str, error: Exception) -> E
         success=False,
         failure_state="EXCEPTION",
         failure_reason=f"{type(error).__name__}: {error}",
+        evaluation_failure_category="EXCEPTION",
         final_target_distance_m=None,
         can_height_error_m=None,
         can_tilt_deg=None,
@@ -399,8 +400,13 @@ def _build_summary(
             }
         )
 
-    failures = Counter(
-        str(row["failure_state"]) if row["failure_state"] else "none"
+    raw_failures = Counter(
+        str(row.get("failure_state")) if row.get("failure_state") else "none"
+        for row in rows
+        if not row["success"]
+    )
+    failure_categories = Counter(
+        str(row.get("evaluation_failure_category") or "task_unsuccessful")
         for row in rows
         if not row["success"]
     )
@@ -431,7 +437,8 @@ def _build_summary(
             "threshold": settings.gate.threshold(success.rate),
         },
         "per_scene": per_scene,
-        "failure_states": dict(sorted(failures.items())),
+        "failure_states": dict(sorted(failure_categories.items())),
+        "raw_failure_states": dict(sorted(raw_failures.items())),
         "collision_proxy": {
             "label": "PROXY: object displacement >5 mm or tilt >5 deg (NOT collision detection)",
             "episodes_with_hit": proxy_hits,

@@ -1006,10 +1006,11 @@
 - Batch diagnostics (addition 3): every episode records at the first post-reset command (`first_command_state` event) base roll/pitch, base linear/angular speed norms (new backend diagnostics `base_velocity_linear_m_s`/`base_velocity_angular_rad_s`), tilt change and drift since reset; at PREGRASP exit, DESCEND enter/mid and CLOSE enter (`gt_tip_telemetry`), and every servo log, the 3D vector (can centre - pad reference) in world and base frames (`can_minus_pad*_world/base_xyz_m`).
 - Webots-free verification: ruff/format/ty pass, `pytest -m "not webots"` 192 passed. Live probe and gt_pad episode runs UNVERIFIED until the 10-episode stability gate passes.
 
-## ADR-0024 - Stall-based gripper CLOSE/RELEASE pacing in scripted_can (UNVERIFIED live)
+## ADR-0024 - Stall-based gripper CLOSE/RELEASE pacing in scripted_can (LIVE VERIFIED)
 
 - **Date:** 2026-11-12
-- **Status:** Implemented (Webots-free tests pass); live evidence **UNVERIFIED**
+- **Status:** Implemented (Webots-free tests pass); **live VERIFIED 2026-11-13**
+  (gate episode `runs/campaign-2026-11-11/phase4_closepacing/episode-00.jsonl`, 1/1 success).
 - **Context:** Phase 4 `grasp_servo=gt_pad` 3-episode batch (`phase4_gtpad3/`) showed 0/3 placement
   success (`dist_m ≈ 0.219 m`) despite all episodes reaching HOME. Post-hoc analysis: the original
   `scripted_can.py` CLOSE code issued exactly **one** `backend.step(1)` after sending
@@ -1044,7 +1045,146 @@
   higher value) handles this case; the stall loop exits after 1 step, so test run-time is unchanged.
   For the RELEASE loop, the fake backend opens immediately, so the loop exits after 1 step.
 - **Webots-free verification:** `ruff check . && ruff format --check .` → clean; `pytest -m "not webots"` → **198 passed** (unchanged from pre-pacing count).
-- **Live verification:** Scheduled as Phase 4(c): 3 fresh-world `gt_pad` episodes with the new pacing.
-  Expected: at least 2/3 gripper_opening > MIN_GRASP_OPEN after CLOSE, can_z rises during LIFT,
-  dist_m < 0.10 m at DONE. Results to be recorded in `docs/M1_VALIDATION_REPORT.md` Phase 4.
+- **Live verification (MEASURED, 2026-11-13):** Gate episode (1 fresh-world `gt_pad`, seed 0,
+  `phase4_closepacing/`) met all three acceptance signals:
+  1. **CLOSE stall:** exit `gripper_opening_m = 0.0314 m` > `MIN_GRASP_OPEN = 0.004 m` —
+     fingers stalled against the can (can radius 0.03175 m) instead of closing through it.
+     CLOSE took ~31 sim steps (t=94.272 → 95.264) before the stall loop exited.
+  2. **Can lifted:** `can_world_xyz_m[2]` 0.8116 → 0.8983 m during LIFT (**+86.7 mm**), carried
+     through TRANSIT (to −1.037, −4.249) and placed at 0.8117 m.
+  3. **DONE:** `dist_m = 0.0493 m` < 0.10 gate, `success=true`, `home_reached=true`,
+     `can_height_ok=true` (error 12 µm), `can_tilt_ok=true` (0.068°). RELEASE pacing exited at
+     `opening = 0.0433 m` (≥ GRIPPER_OPEN − tolerance).
+  This is the **first successful gt_pad episode** in the campaign (pre-pacing: 0/3, baseline: 0/10).
+- **Collision finding (MEASURED, 2026-11-13):** The earlier working hypothesis that finger–can
+  collision geometry might be absent in `worlds/factory.wbt` is **refuted**. In the pre-pacing
+  `phase4_gtpad3/` runs the single-step CLOSE left fingers at 0.044 m when LIFT began; the arm
+  rose past the lid overhang before the fingers could reach the contact threshold, and the fingers
+  then closed to 0.0005 m *above/after* the can during TRANSIT — i.e. the "close-through-can"
+  observation was an artifact of premature LIFT, not missing collision geometry. With the 300-step
+  stationary close, fingers reach the can surface while still alongside it and stall at 0.0314 m.
+  Note: `contact_nodes` remained `[]` even at the successful stall — the field does not record
+  finger–can contacts (telemetry gap; stall opening + can motion are the reliable signals).
+- **Regression analysis (2026-11-13, Webots-free, MEASURED against git history):**
+  The single-step CLOSE was a **brain-only regression introduced by the M1 port**, not a
+  deliberate design change:
+  - **Original (tree at `1b2e4da`) waited for the stall before LIFT** — two implementations,
+    identical semantics:
+    - `controllers/tiago_arm_api/tiago_arm_api.py:333-351` `close_gripper()`:
+      `:340` `for i in range(300)`, `:345` `still = still + 1 if abs(cur - prev) < 2e-5 else 0`,
+      `:347` `if i > 10 and still >= 15: break`, `:351` `return opening > MIN_GRASP_OPEN, opening`
+      (`:19` `MIN_GRASP_OPEN = 0.004  # fingers stalled wider than this => something is held`).
+    - `controllers/tiago_controller/gripper.py:46-64` `Gripper.close()`:
+      `:54` `for i in range(300)`, `:60` `if i > 10 and still >= 15`, `:64`
+      `return opening > MIN_GRASP_OPEN, opening`.
+    - LIFT transition gated on the stall result: `tiago_arm_api.py:450-452`
+      `grasped, _ = close_gripper()` → `wait(20)` → `state = "LIFT" if grasped else "RETRY"`;
+      same at `controllers/tiago_controller/pick_place.py:121-123`.
+  - **Brain at introduction (`a420649` "M1 port and safety envelope"):**
+    `git show a420649:src/vlarobot/execution/scripted_can.py:73` `GripperCmd(0.0, force=50.0)` →
+    `:83` `backend.step(1)` (one step) → straight to the next waypoint. No stall wait, no
+    `grasped` gate; RELEASE likewise `:85`/`:95` single step. The port dropped the original's
+    300-step stall loop.
+  - **This is a defect for M1-06a equivalence** (the brain must reproduce original OFF
+    semantics). It escaped the equivalence test because `dce35d5`
+    (`tests/test_move_linear_original_equivalence.py`) covers only `move_linear`/IK arithmetic
+    on the FakeBackend — it never exercises the gripper.
+  - **Fix (this ADR, no flag):** the stall loops now live in the **common path** —
+    `scripted_can.py:459` `if name == "grasp":` → `:510-556` (CLOSE, `max_close_steps = 300` at
+    `:513`, stall at `:553-555`) and `:562` `elif name == "release":` → `:586-615` (RELEASE,
+    exit at `:614`) — so **all pipelines including `grasp_servo=none`** get the original's
+    semantics by default; nothing gates either loop on `grasp_servo`.
+  - **Baseline `phase3_gate10b/` ran the buggy single-step version (MEASURED):** ep01/ep06
+    CLOSE enter 9.536 → exit 9.568 = **1.0 step (0.032 s)**, exit `gripper_opening = 0.04405`
+    (fingers barely moved from 0.045); RELEASE exit `0.00096` (one step, then fingers opened
+    passively during RETREAT/HOME). Identical to pre-pacing `phase4_gtpad3/` (CLOSE 1 step,
+    exit `0.04404`) vs the paced gate run (CLOSE **31 steps**, exit `0.03143`). **The baseline's
+    close/lift timing was therefore the same single-step version, and its 3 "reached HOME, can
+    never lifted" failures (ep01/06/09, `dist 0.2196`) may include this same bug.** The other 7
+    baseline failures (4× DESCEND move-timeout with arm_6 pinned at its −1.39 rad limit, 2×
+    DESCEND IK-solve-failed in the 0.15 rad trust region — arm_6 also at −0.0012 margin, 1× CLOSE
+    misaligned) are a different kind and are unaffected by close pacing.
+  - **Remaining divergence (documented, not fixed):** the original gated LIFT on `grasped`
+    (`"LIFT" if grasped else "RETRY"`); the brain is a linear waypoint flow with no RETRY state
+    and no `MIN_GRASP_OPEN` check before LIFT (`MIN_GRASP_OPEN` is configured in
+    `configs/robot.yaml:23` but unused by the policy). With the stall loop in place a failed
+    grasp still fails the episode via the placement-distance gate. Adding RETRY would change
+    the policy structure and is out of scope for M1.
 - **New dependency:** None. No new imports or packages.
+
+## ADR-0025 - M1-07 gate revised: fixed-scenario repeatability + 10-scene mini-generalization (user-directed, 2026-11-13)
+
+- **Context (MEASURED, phase4d gt_pad ×10 batch):** the episode seed only seeds the IK
+  random-restart RNG (`scripted_can.py:257` → `kinematics.py:92 default_rng(seed)`); the world
+  resets to fixed poses, so the CAN pose is identical across all episodes of both campaign
+  batches (|Δ| ~1e-7 m). gt_pad seeds 0/1/2 produced bit-identical trajectories (21 DESCEND
+  servo records with identical md5, CLOSE t=98.848, end t=111.904, all `success=true`); seeds
+  3/4 diverged at trajectory level (different servo series, end t=97.024/90.464) yet passed every
+  criterion. The original 20-seed gate therefore measured repeatability at ONE fixed scene, not
+  scene generalization, and costs ~8 h wall time.
+- **Decision (user-directed, 2026-11-13):** M1-07 is satisfied by BOTH:
+  (a) **5 consecutive fresh-world gt_pad episodes** with the unchanged success criteria
+      (`DONE` at `HOME`, base-frame distance ≤ 0.10 m, can z within 0.02 m of rest, tilt < 15°);
+  (b) **a 10-scene mini-generalization run:** CAN xy offset on a ±5 cm grid (9 positions =
+      3×3 at {-0.05, 0, +0.05}² m) plus 1 rotated-yaw scene (same world otherwise), applied
+      via the Supervisor at reset, one fresh world per scene, unchanged success criterion.
+  Per-position results are reported. **≥ 8/10 full successes in (b) → M1 PASSED; otherwise
+  M1 PASSED WITH LIMITATION**, with the failing positions carried into M2.
+  This **replaces the 20-seed gate** (`docs/ARCHITECTURE.md` M1-07 updated in the same change).
+- **Implementation (first piece of M2's ScenarioGenerator):** a config-driven helper that
+  spawns/moves the CAN to (x, y, yaw) at reset, exposed through `ScenarioSpec` — a public
+  interface change, recorded here per AGENTS.md rule 3 — and honored by both the Webots backend
+  (the Supervisor field writes already used in `backend.reset`) and `FakeBackend` (CI). Nothing
+  is thrown away: M2's seeded `ScenarioGenerator` extends this helper to vary can pose and
+  distractors by seed, and `cli eval --pipeline scripted` will consume it.
+- **Scope limits:** if reaching an extreme grid position would require moving the base, that is
+  REPORTED, not fixed — no base-positioning work in M1. No thresholds, tolerances, or success
+  criteria change anywhere in this decision.
+- **Status:** decision ACTIVE; **implementation landed 2026-11-13** —
+  `core/types.py::ScenarioSpec.can_xy_yaw_offset`, `backends/webots/frames.py::
+  compose_can_reset_pose` (pure, import-safe), `backends/webots/backend.py::reset` composing
+  the offset into the Supervisor field writes, `eval/scenarios.py::mini_grid10()`,
+  `cli run-episodes --scenario` → `RunnerSettings.scenario` → policy → `backend.reset`,
+  `EpisodeOutcome.scenario` for per-position reporting; tests in `tests/test_scenarios.py`
+  and `tests/test_webots_backend_reset.py`; gates `ruff check`/`ruff format --check`/
+  `pytest -m "not webots"` green (208 passed). The grid/scene constants live in
+  `eval/scenarios.py` (evaluation scene set, not robot tuning — the robot config schema is
+  strict). **Live evidence MEASURED 2026-11-14:** gate (b) run
+  (`runs/campaign-2026-11-11/phase6_scene10/`, command in `docs/M1_VALIDATION_REPORT.md`
+  Phase 4(e)) completed EXIT=0 with **9/10 full successes (90%), Wilson 95% CI [60%, 98%] ≥
+  8/10 → gate (b) PASSES → M1-07 PASSES**. Per-scene: only `grid_dx-0.05_dy-0.05`
+  (farthest corner) failed — deterministic IK rejection at PREGRASP realign
+  (`error=0.014551 m` vs `0.005 m` limit, abort at sim 5.28 s), reproduced identically on
+  relaunch (so not the server restart); `yaw90_center` succeeded (dist 0.0621 m) with the
+  scene plumbing exercised. Base never commanded to move — drift ≤ 3.9 mm across all 10
+  episodes (hold jitter only); the far corner needs base repositioning, reported and carried
+  to M2 per the scope limit above. Mean 1376 s/episode (111–2157 s), 3.82 h total episode
+  wall. A separate
+  **~8.4 h inter-episode stall** was observed between ep02 and ep03 of
+  the phase4d batch (no machine suspend; per-request step durations normal at mean 0.344 s;
+  stall brackets the opencode session-idle window) — INFERRED to be background-shell freezing
+  during session idle; batch throughput therefore depends on session activity.
+
+## ADR-0026 - Waive M1-06a live 5+5 equivalence batch for the M1 verdict (user-directed, 2026-11-14)
+
+- **Context (MEASURED):** `docs/ARCHITECTURE.md` §M1 acceptance requires live evidence for
+  **both** M1-06a and M1-07 ("do not start M2 until both gates are accepted"). M1-07 is now
+  satisfied (ADR-0025: (a) 10/10, (b) 9/10 ≥ 8/10). M1-06a's live batch was never collected:
+  **0/5** `m1-06a-original-v2-*` traces exist on disk and only **1/5** brain traces
+  (`runs/m1-06a-brain-01.jsonl`); every prior ADR lists M1-06a as UNVERIFIED, and ADR-0009
+  already records that the trace-comparison *tooling* "does not constitute live M1-06a
+  evidence". The original-side runs are operator-heavy (fixture worktree at `1b2e4da`,
+  Webots restart + URL refresh per run; steps in `docs/MANUAL.md`).
+- **Decision (user-directed, 2026-11-14):** the M1 verdict is closed on the revised M1-07
+  gate alone. The M1-06a live 5+5 equivalence batch is **WAIVED for the M1 verdict** and
+  recorded as a known evidence gap. Equivalence evidence for M1 instead rests on: the
+  Webots-free unit tests (`tests/test_move_linear_original_equivalence.py`), the
+  `compare-traces` contract tooling (`src/vlarobot/execution/trace_compare.py`, ADR-0008/0009
+  semantics), and the original-vs-brain defect analysis that produced ADR-0024 (the one
+  real behavioural divergence found — one-step CLOSE — was fixed and is live-verified by
+  phase4/phase4d/phase6).
+- **Consequences:** M1 is declared **PASSED** with M1-06a's live prefix-equivalence
+  explicitly **UNVERIFIED** (no 5+5 run); this waiver changes the evidence bar for the
+  M1 verdict, not any controller behaviour, threshold, tolerance, or success criterion.
+  M2 may start. The waiver can be revisited later by running the `docs/MANUAL.md` batch;
+  nothing in M2 depends on it.

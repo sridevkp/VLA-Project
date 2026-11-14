@@ -1,23 +1,38 @@
 # Batch Analysis — 10-Episode Baseline (MEASURED)
 
 **Source:** `runs/campaign-2026-11-11/phase3_gate10b/` (10 fresh-world episodes, all features OFF, `--n 10 --fresh-world`)
-**Gate result:** 10/10 crash-free (`webots_exit_code=0` all). Task success: 3/10.
-**Wilson 95% CI for success rate:** 3/10 → ~[13.5%, 57.1%] (small sample, wide interval).
+**Gate result:** 10/10 crash-free (`webots_exit_code=0` all). Task success: **0/10** (runner verdict
+`success=false` for every episode; `place_distance_ok=false` everywhere).
+**Wilson 95% CI for success rate:** 0/10 → [0%, 27.8%] (small sample, wide interval).
+**Correction (2026-11-13):** an earlier reading of this batch claimed "3/10 success" by treating
+`final_state=home` (ep01/06/09) as success. `episode-summary.json` records `success=false` for all
+10: those 3 episodes reached HOME with the can never lifted (`final_target_distance_m=0.2196` >
+0.10 gate, `place_distance_ok=false`). The honest baseline is 0/10.
+
+**Close-pacing caveat (2026-11-13, MEASURED):** this baseline ran the **single-step CLOSE**
+regression (1 sim step after `GripperCmd(0.0)`, exit `gripper_opening=0.04405`; see ADR-0024
+regression analysis). The original controller at `1b2e4da` waited up to 300 steps for the finger
+stall before LIFT. So the 3 "reached HOME, can never lifted" failures (ep01/06/09) **may include
+the same bug** the gt_pad pre-pacing batch suffered from — baseline and pre-pacing gt_pad are not
+independent evidence against the policy. The other 7 failures (4× DESCEND move-timeout with arm_6
+pinned at its −1.39 rad limit; 2× DESCEND IK-solve-failed in the 0.15 rad trust region, arm_6 also
+at −0.0012 margin; 1× CLOSE misaligned) are different kinds and are unaffected by close pacing.
+A corrected-close baseline re-run (5 episodes, `grasp_servo=none`) is the clean comparison.
 
 ## Per-episode failure table (addition 1)
 
 | Ep | Failure state | Waypoint at failure | IK error | IK tilt | arm_6 @ PREGRASP | arm_6 limit margin | Base roll/pitch @ first cmd | Can xy in base frame |
 |----|-------------|---------------------|----------|---------|------------------|-------------------|----------------------------|----------------------|
 | 00 | CLOSE misaligned | CLOSE exit | — | — | −1.3888 rad | **0.0012 rad** | 0.000 / −0.000 deg | can_xy − padref_xy = (0.020, 0.039) m |
-| 01 | success (home) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
+| 01 | reached home, can never lifted (dist 0.2196 > 0.10, success=false) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
 | 02 | DESCEND timeout | last waypoint (dist 0.223m) | — | — | −1.3880 rad | **0.0020 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.014, 0.034) m |
 | 03 | DESCEND timeout | last waypoint (dist 0.223m) | — | — | −1.3880 rad | **0.0020 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.014, 0.034) m |
 | 04 | DESCEND IK failed | waypoint target (0.636, −0.225, 0.758) | >0.005 m | — | −1.3888 rad | **0.0012 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
 | 05 | DESCEND IK failed | waypoint target (0.636, −0.225, 0.758) | >0.005 m | — | −1.3888 rad | **0.0012 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
-| 06 | success (home) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
+| 06 | reached home, can never lifted (dist 0.2196 > 0.10, success=false) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
 | 07 | DESCEND timeout | last waypoint (dist 0.223m) | — | — | −1.3880 rad | **0.0020 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.014, 0.034) m |
 | 08 | DESCEND timeout | last waypoint (dist 0.223m) | — | — | −1.3880 rad | **0.0020 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.014, 0.034) m |
-| 09 | success (home) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
+| 09 | reached home, can never lifted (dist 0.2196 > 0.10, success=false) | — | — | — | −1.3900 rad | **0.0000 rad** | 0.012 / 0.006 deg | can_xy − padref_xy = (0.020, 0.040) m |
 
 **Key pattern:** Two distinct failure modes:
 1. **DESCEND IK failures (ep04, ep05):** IK rejected at target `(0.636, −0.225, 0.758)` — this is the hover target at `arm_6 ≈ −1.3888 rad`, only **0.0012 rad from the −1.39 rad limit**. arm_6 is effectively pinned.

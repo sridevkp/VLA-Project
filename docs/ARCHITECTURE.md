@@ -253,11 +253,21 @@ Each milestone has an **acceptance test** an agent can run; a milestone is not d
   divergence. This prefix test is not a successful-placement claim.
 - **M1-07 scripted-expert hardening (required before M2):** execute the complete
   `INIT → PREGRASP → DESCEND → CLOSE → LIFT → TRANSIT → PLACE_DESCEND → RELEASE → RETREAT → HOME`
-  flow in 20 Webots episodes. At least 80% must finish at `DONE` after reaching `HOME` and place the
-  CAN within `0.10 m` of the target, measured in the robot base frame. Preserve JSONL state-boundary,
-  commanded/achieved pose, IK, joint, gripper/stall/contact, and CAN world/base trace evidence.
+  flow under two conditions (revised 2026-11-13 per ADR-0025, replacing the 20-seed design after
+  evidence that the episode seed does not vary the scene): **(a)** 5 consecutive fresh-world
+  episodes with the unchanged success criteria (`DONE` after reaching `HOME`, CAN within
+  `0.10 m` of the target in the robot base frame, CAN z within `0.02 m` of rest, tilt < 15°);
+  **(b)** 10 scenes that vary the CAN pose at reset via the Supervisor — a 3×3 `±5 cm` xy grid
+  plus one rotated-yaw scene — one fresh world per scene, same criterion. At least 8/10 in (b)
+  passes the gate; otherwise M1 closes as PASSED WITH LIMITATION and the failing positions carry
+  into M2. Preserve JSONL state-boundary, commanded/achieved pose, IK, joint,
+  gripper/stall/contact, and CAN world/base trace evidence.
 - **Acceptance:** M1-06a and M1-07 live evidence meet the criteria above; `FakeBackend` unit tests
-  pass in CI. Keep M1-06 pending live runs and do not start M2 until both gates are accepted.
+  pass in CI. ~~Keep M1-06 pending live runs and do not start M2 until both gates are accepted.~~
+  **Waived 2026-11-14 (ADR-0026, user-directed):** M1 closes on M1-07 alone — (a) 10/10
+  fixed-scene, (b) 9/10 [60%, 98%] ≥ 8/10 (MEASURED, `phase6_scene10/`). The M1-06a live 5+5
+  prefix-equivalence batch (0/5 original, 1/5 brain traces) remains **UNVERIFIED** and may be
+  run later per `docs/MANUAL.md`; M2 may start.
 
 **M1 motion pacing contract:** Every arm waypoint is followed by lockstep `step(1)` calls until
 all measured arm joints are within the original controller's settle tolerance, or its per-move

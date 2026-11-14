@@ -350,6 +350,61 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
     typer.echo(f"  out={out_dir} episodes_csv={report.episodes_csv.name} wall_s={wall_s:.1f}")
 
 
+@app.command("reset-repro-check")
+def reset_repro_check(
+    out: Annotated[
+        Path | None,
+        typer.Option(help="Output directory (default: runs/eval/reset-repro-<split>-s<seed>)."),
+    ] = None,
+    split: Annotated[
+        Literal["train", "validation"],
+        typer.Option(help="Scene split (test fail-closed by default)."),
+    ] = "train",
+    seed: Annotated[int, typer.Option(help="Seed selecting target/other scenarios.")] = 0,
+    webots: Annotated[
+        str | None,
+        typer.Option("--webots", help="Webots executable (defaults to WEBOTS_HOME, then PATH)."),
+    ] = None,
+    world: Annotated[
+        Path | None,
+        typer.Option(help="Webots world file (default: worlds/factory.wbt)."),
+    ] = None,
+    headless: Annotated[
+        bool,
+        typer.Option("--headless/--no-headless", help="Run Webots headless."),
+    ] = False,
+    startup_timeout_s: Annotated[
+        float,
+        typer.Option(min=1.0, help="Seconds to wait for the Webots server."),
+    ] = 180.0,
+) -> None:
+    """MEASURED (Webots): prove reset independence (fresh vs reused session) (ADR-0029)."""
+    from vlarobot.eval.reset_repro import run_reset_repro
+
+    out_dir = out or Path("runs") / "eval" / f"reset-repro-{split}-s{seed}"
+    try:
+        report = run_reset_repro(
+            webots=webots,
+            world=world,
+            out_dir=out_dir,
+            split=split,
+            seed=seed,
+            headless=headless,
+            startup_timeout_s=startup_timeout_s,
+        )
+    except Exception as error:  # noqa: BLE001
+        typer.echo(f"reset-repro-check failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    comp = report["comparison"]
+    typer.echo(
+        f"reset-repro ok={comp['ok']} max_abs_diff={comp['max_abs_diff']:.6g} "
+        f"target={report['target_scenario']} other={report['other_scenario']}"
+    )
+    if comp["notes"]:
+        typer.echo(f"  notes={comp['notes']}")
+    typer.echo(f"  out={out_dir / 'reset_repro.json'}")
+
+
 @app.command("collect-demos")
 def collect_demos(
     n: Annotated[int, typer.Option("--n", min=1, help="Number of demo episodes to collect.")] = 80,

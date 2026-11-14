@@ -230,6 +230,16 @@ Rule: **nothing in P0 may require ROS or Linux-only tooling.** Training can be L
 
 ## 5. Milestones (build order)
 
+> **Campaign override — ADR-0029 (owner, 2026-11-14, controlling):** a four-calendar-week
+> campaign (2026-11-14 → **2026-12-12**) re-bases this order: **VLA is a CORE deliverable**
+> (week-2 gate decides whether SmolVLA or the scripted expert is the primary proposer), the
+> surrogate is an **analytic geometric-kinematic model — no MuJoCo** (deviation documented in
+> ADR-0029), and sizes are frozen in `configs/eval.yaml` (train 8 / validation 6 / test 10
+> scenes by seed, three families, 5 arms, 3 seeds/scene for VLA arms and for the scripted
+> baseline). The test split stays untouched until week 4. The submitted **WorldMind Phase I
+> report (Oct 2026)** is the contract; milestone acceptance tests below apply where the report
+> and ADR-0029 are silent. Do not renegotiate ADR-0029 scope, deadlines, or thresholds.
+
 Priority: **P0** = required for research questions 1–3 · **P1** = strongly desirable · **P2** = optional extension.
 Each milestone has an **acceptance test** an agent can run; a milestone is not done until it passes on Windows and Linux.
 
@@ -280,6 +290,11 @@ IK, target, or motor velocity settings. See ADR-0010 for intentional differences
 controller and trace field semantics.
 
 ### M2 — Evaluation & data harness (P0, ~1 week)
+
+> **ADR-0029 (controlling):** the eval CLI is `eval --pipeline baseline --split train`
+> (sizes frozen in `configs/eval.yaml`; `scripted` accepted as an alias of `baseline`);
+> the scenario generator must cover the three families (clear, cluttered, reach-limited) with
+> can xy/yaw **and obstacle positions** at reset; the test split must not be run before week 4.
 - `ScenarioSpec` + seeded scenario generator (object poses/colours/types, obstacles; Webots Supervisor spawns/moves nodes).
 - `EpisodeRecorder` writing (obs, state, action, outcome, predicted, ground truth) to a LeRobot-compatible-convertible format (parquet/npz + mp4 or JPEG frames).
 - Metrics module: success, grasp success, collisions (contact events from Supervisor), time, placement error, + CSV/JSON reports; mean/std/CI over N seeds.
@@ -295,6 +310,11 @@ controller and trace field semantics.
 - **Acceptance:** 30-sentence test set parsed ≥ 95% correct; ambiguous "pick up the bottle" with 2 bottles returns a clarification.
 
 ### M5 — World state, scene graph, surrogate sim (P0, ~3 weeks)
+
+> **Deviation — ADR-0029 (owner):** for this campaign the surrogate is an **analytic
+> geometric-kinematic model, no MuJoCo**; the MuJoCo import path below is deferred, and a
+> learned residual is attempted only if week 3 finishes early. Documented as a plan deviation
+> in ADR-0029 / `docs/REPORT_CONFORMANCE.md`.
 - `WorldState`, scene graph relations (on, inside, next-to, blocking, reachable-from), MJCF/URDF import of TIAGo + objects into MuJoCo, rollout API, collision/reachability/stability checks.
 - Prediction-error logging (predicted vs Webots outcome).
 - **Acceptance:** surrogate reachability/collision agrees with Webots outcome ≥ 90% on 200 logged candidate actions; scene-graph unit tests; rollout of 32 candidates < 1 s on a laptop CPU.
@@ -310,6 +330,14 @@ controller and trace field semantics.
 - **Acceptance:** with injected failures (object nudged, grasp slip), recovery success ≥ 70% and no unsafe command passes the safety layer.
 
 ### M8 — VLA integration (P1, ~3–4 weeks)
+
+> **Elevated to CORE by ADR-0029 (owner):** SmolVLA is the primary proposer candidate with a
+> **week-2 gate** on the 8 train scenes × 3 seeds
+> (`success >= min(40%, 60% × scripted baseline)` — literal `min`, owner answer); failure keeps
+> the scripted expert primary and the VLA as its own reported arm. Training runs on Google Colab
+> (T4, resumable Drive checkpoints); **inference is local** — never a Colab tunnel.
+> Wall-clock plan: demos + fine-tune in weeks 1–2, ActionAdapter + VLA-only eval in week 2,
+> RiskGate integration in week 3, frozen test in week 4 (ADR-0029).
 1. Inspect `lerobot/smolvla_base` config (`input_features`, `output_features`, state/action dims, camera keys) — record in `docs/VLA_NOTES.md`.
 2. `collect-demos`: run the scripted expert over randomised scenes → LeRobot dataset (EE-delta + gripper, 1–3 cameras, state, instruction text). Use the automatic generator for thousands of episodes; keep the ≥ docs-recommended minimum per task variant (verify in LeRobot docs).
 3. Fine-tune SmolVLA (Linux/WSL2/cloud GPU) → checkpoint → `ModelServer`.

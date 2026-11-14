@@ -1188,3 +1188,82 @@
   M1 verdict, not any controller behaviour, threshold, tolerance, or success criterion.
   M2 may start. The waiver can be revisited later by running the `docs/MANUAL.md` batch;
   nothing in M2 depends on it.
+
+## ADR-0029 - OWNER DECISION: four-calendar-week campaign (WorldMind Phase I conformance); supersedes ADR-0028 timeline (2026-11-14)
+
+- **Status:** ACTIVE — controlling owner decision. Do not redesign or renegotiate its
+  milestones, deadlines, thresholds, scene counts, experiment arms or scope.
+  (Numbering note: ADR-0027/0028 are not present in this file; the owner's numbering is kept.)
+- **Contract:** the submitted **WorldMind Phase I report (Oct 2026)** is the contract; where it
+  is silent, the Steering Directive applies. The report PDF is **NOT in this repo** — owner must
+  supply it before conformance work (HUMAN STEP, week 1). **No threshold/criteria changes.**
+  **VLA is a CORE deliverable.**
+- **Deadline:** hard, **4 calendar weeks from 2026-11-14 → 2026-12-12**. Week boundaries:
+  W1 ends 11-20 (report 11-21), W2 ends 11-27 (gate by 11-27), W3 ends 12-04, W4 days 1-3 =
+  12-05..12-07 (frozen test), days 4-7 = 12-08..12-11 (docs + demo).
+- **Compute:** GPU = Google Colab (T4-class, sessions disconnect): all training resumable with
+  checkpoints on Google Drive; inference runs LOCALLY (export the checkpoint; no tunnel to Colab).
+- **SIZES (frozen now in `configs/eval.yaml`; the test split stays untouched until week 4):**
+  train 8, validation 6, test 10 scenes, **by seed**, three families (clear, cluttered,
+  reach-limited). Arms: scripted baseline; VLA-only; VLA + heuristic risk veto (no prediction);
+  VLA + world model (no veto); full system. VLA arms use **3 seeds per scene**.
+- **DESIGN:** VLA (SmolVLA) = primary proposer in `CandidateGenerator`; surrogate predicts each
+  sampled chunk; **RiskGate** — hard constraints fail closed, then ranking by
+  `J = wg*Jg + wl*Jl + wr*Jr + wu*Ju` (report Eq 3.8); **empty safe set → defined outcome**
+  (re-observe, next candidate family such as base standoff, else abort with a recorded reason);
+  **verify-and-retry once**. Scripted expert = demonstrator, baseline and fallback proposer.
+  **Document the deviation from report Eq 3.2** (SmolVLA cannot consume a predicted state, so the
+  architecture is propose-and-evaluate). **Oracle state with provenance flags** (report 4.3 allows
+  it). **Surrogate = analytic geometric-kinematic model, no MuJoCo** (deviation from the previous
+  M5 plan, documented); learned residual only if week 3 finishes early. **Collision metric =
+  displacement (>5 mm) / tilt (>5 deg) proxy plus FK clearance, labelled a proxy.**
+- **GATE, end of week 2 (decided):** on the 8 train scenes x 3 seeds, VLA-only success
+  `>= min(40%, 60% of the scripted baseline's rate on the same scenes)`. Pass → VLA is the
+  primary proposer. Fail → scripted proposer becomes primary for the main comparison; the VLA
+  stays as its own arm and is reported as a MEASURED partial result. **Never tune on
+  validation/test to rescue it.**
+  - **Interpretation resolved (owner answer, 2026-11-14):** the **literal `min`** as written —
+    the threshold is the WEAKER of the two bounds (baseline 90% → threshold 40%, not 54%).
+    `max` was considered and rejected: it would tighten a written criterion.
+  - **Baseline repetitions resolved (owner answer, 2026-11-14):** the scripted baseline runs
+    **3 seeds per scene, the same seeds as the VLA arms** (paired (scene, seed) structure for
+    McNemar; 24 train episodes; frozen in `configs/eval.yaml`).
+- **WEEK 1:** speed (profile per-step cost; rendering stays ON for demo collection; larger
+  descent increments once aligned, final approach unchanged; per-episode ports for 2-3 parallel
+  instances; prove outcome equivalence over >= 10 episodes each before using
+  `observe_images=false` or no-rendering for non-demo runs). Scenario generator (can xy/yaw and
+  obstacle positions at reset), recorder, metrics, `cli eval --pipeline baseline --split train`,
+  baseline numbers. Demo collection: `collect-demos` → LeRobot format (RGB, state, instruction,
+  7-D EE-delta + gripper actions through the existing IK/safety layer), ~80 episodes with
+  perturbed can poses in the reachable envelope; check LeRobot docs for demo-count guidance
+  first; verify the policy config (dims, camera keys, normalisation) and write
+  `docs/VLA_NOTES.md`. Save real screenshots/traces from week 1 on for the report.
+- **WEEK 2:** finish demos; Colab notebook/script for resumable fine-tuning with exact commands
+  and runtime estimate (owner runs it); local model server, ActionAdapter (normalisation,
+  EE->IK, limits, chunk execution, invalid-output rejection with tests); VLA-only evaluation;
+  surrogate in parallel with prediction error vs Webots outcomes (RMSE/MAE for continuous
+  targets, Brier score for probabilistic binary outcomes — not conflated) by quantity and scene
+  family; apply the gate.
+- **WEEK 3:** K sampled chunks per decision (state the sampling method), surrogate prediction,
+  RiskGate, retry loop; weights and thresholds chosen on VALIDATION only; full pipeline on
+  validation.
+- **WEEK 4 (days 1-3):** frozen test campaign across all arms; Wilson intervals; McNemar on
+  paired scenes (**pairing unit = (scene, seed); repeated seeds within scenes accounted for by
+  scene-level clustering**, not naive episode-level independence); failure categories; veto and
+  no-safe frequencies; planning latency; **Table 5.1 metrics exactly** (every metric of the
+  submitted report is preserved; additional metrics may supplement, not replace). (Days 4-7):
+  `docs/MATH.md` (Eqs 3.1-3.12, 4.1, 5.1 → code), `docs/REPORT_CONFORMANCE.md` (table: each
+  report objective/table/equation → implementation, evidence path, any deviation),
+  `docs/REPORT_FIGURES.md` (every figure of the submitted report with the real trace +
+  screenshot; Fig 4.1 shows a UR5/V-REP window and must be replaced; Figs 4.2-4.7 are mock-ups;
+  risk values in Fig 4.7 must come from logs), demo run. Results only from MEASURED data.
+- **REPORTING:** 5-line summary and gate check at each week boundary plus a HUMAN STEPS list
+  (what the owner must run on Colab, when). MEASURED/INFERRED/UNVERIFIED labels; no single-run
+  claims; process hygiene; commit small. **Missed gate: say so and propose the smallest further
+  cut; never silently expand scope or relax a criterion.**
+- **Deviations to document (clarification 7):** (a) propose-and-evaluate VLA vs report Eq 3.2;
+  (b) analytic surrogate vs the previous MuJoCo-based implementation plan (M5).
+- **Conformance guard (clarifications 2/8):** Table 5.1 metrics are preserved verbatim; the
+  final report contains actual measured results only.
+- **Training guard (clarification 9):** Colab training resumable from Drive checkpoints; local
+  inference only; never depend on a Colab tunnel.

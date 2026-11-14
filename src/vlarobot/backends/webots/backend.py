@@ -170,6 +170,20 @@ class WebotsBackend:
             raise RuntimeError(f"No node with DEF {CAN_DEF} after resetting physics.")
         self.can_node = can_node
         self.io.can_node = can_node
+        # Ensure CAN and tracked obstacles have no residual velocities after global reset.
+        for node in (self.can_node,):
+            if node is not None and hasattr(node, "resetPhysics"):
+                try:
+                    node.resetPhysics()
+                except Exception:
+                    pass
+        for def_name in tuple(getattr(self, "_initial_object_poses", ())):
+            obj = self.io.robot.getFromDef(def_name)
+            if obj is not None and hasattr(obj, "resetPhysics"):
+                try:
+                    obj.resetPhysics()
+                except Exception:
+                    pass
         if self.io.robot.step(self.io.ts) == -1:
             raise RuntimeError("Webots simulation stopped while restoring the reset pose.")
         self.io.apply_hold_base()
@@ -351,6 +365,12 @@ class WebotsBackend:
             else:
                 composed = list(initial_rotation)
             node.getField("rotation").setSFRotation(composed)
+            # Clear residual dynamics before the global physics reset settles contacts.
+            if hasattr(node, "resetPhysics"):
+                try:
+                    node.resetPhysics()
+                except Exception:
+                    pass
 
     def get_ground_truth(self) -> GroundTruth:
         position = self.can_node.getPosition()

@@ -3,13 +3,18 @@
 One episode becomes:
 
 - ``episode-XX.steps.npz`` — numeric streams: time, joint positions/velocities, gripper
-  opening, EE position, base pose, and ground-truth object poses (per-DEF, NaN where a
-  step did not report one).
+  opening, EE position, base pose, and ground-truth object poses per DEF (position
+  ``gt_xyz`` **and orientation ``gt_quat``** as (x, y, z, w); NaN rows where a step did
+  not report one).
 - ``episode-XX.actions.jsonl`` — every applied action with its safety verdict, plus
   outcome/predicted records kept separate (``episode-XX.meta.json``,
   ``episode-XX.predicted.jsonl``).
+- ``episode-XX.contacts.jsonl`` — **actual-collision channel**: one record per step whose
+  diagnostics reported non-robot contact nodes (empty file = no contact detected). Kept
+  separate from the displacement/tilt collision *proxy* (ADR-0029), which is derived from
+  ``gt_xyz``/``gt_quat`` by ``eval/metrics.py``.
 - ``episode-XX.meta.json`` — scenario, split/family provenance, pipeline, state-source
-  provenance flag (report 4.3), frame/step counts, and the recorded outcome.
+  provenance flag (report 4.3), frame/step/contact counts, and the recorded outcome.
 - ``frames/episode-XX/NNNNNN.jpg`` — RGB frames at ``frame_hz`` (optional; needs Pillow).
 
 The layout is LeRobot-convertible (image directory + tabular arrays + per-episode
@@ -56,6 +61,7 @@ class EpisodePaths:
     steps: Path
     actions: Path
     predicted: Path
+    contacts: Path
     frames_dir: Path
 
 
@@ -104,6 +110,7 @@ class EpisodeRecorder:
             steps=self.output_dir / f"episode-{index:02d}.steps.npz",
             actions=self.output_dir / f"episode-{index:02d}.actions.jsonl",
             predicted=self.output_dir / f"episode-{index:02d}.predicted.jsonl",
+            contacts=self.output_dir / f"episode-{index:02d}.contacts.jsonl",
             frames_dir=frames_dir,
         )
         self._episode = {
@@ -122,8 +129,11 @@ class EpisodeRecorder:
             "base_pose": [],
             "gt_names": set(),
             "gt_rows": [],
+            "gt_quat_rows": [],
             "actions": self._paths.actions.open("w", encoding="utf-8"),
             "predicted": self._paths.predicted.open("w", encoding="utf-8"),
+            "contacts_file": self._paths.contacts.open("w", encoding="utf-8"),
+            "contact_steps": 0,
             "outcome": None,
             "frame_count": 0,
             "next_frame_t": 0.0,
@@ -168,6 +178,20 @@ class EpisodeRecorder:
         poses = ground_truth.object_poses if ground_truth is not None else {}
         episode["gt_names"].update(poses)
         episode["gt_rows"].append({name: pose.position for name, pose in poses.items()})
+        episode["gt_quat_rows"].append({name: pose.orientation for name, pose in poses.items()})
+
+        # Actual-collision channel (kept separate from the displacement/tilt proxy).
+        diagnostics = state.diagnostics
+        contact_nodes = diagnostics.get("contact_nodes") if isinstance(diagnostics, dict) else None
+        if contact_nodes:
+            labels = [
+                item.get("node_name", "") if isinstance(item, dict) else str(item)
+                for item in contact_nodes
+            ]
+            episode["contacts_file"].write(
+                json.dumps({"t": float(observation.t), "nodes": labels}) + "\n"
+            )
+            episode["contact_steps"] = int(episode["contact_steps"]) + 1
 
         if self.record_frames:
             t = float(observation.t)
@@ -203,19 +227,26 @@ class EpisodeRecorder:
         assert episode["actions"] is not None and episode["predicted"] is not None
         episode["actions"].close()
         episode["predicted"].close()
+        episode["contacts_file"].close()
 
         joint_names = episode["joint_names"] or []
         gt_names = sorted(episode["gt_names"])
         gt_array = np.full((len(episode["times"]), len(gt_names), 3), np.nan, dtype=np.float64)
-        for row_index, row in enumerate(episode["gt_rows"]):
+        gt_quat = np.full((len(episode["times"]), len(gt_names), 4), np.nan, dtype=np.float64)
+        for row_index, (position_row, quat_row) in enumerate(
+            zip(episode["gt_rows"], episode["gt_quat_rows"], strict=True)
+        ):
             for column, name in enumerate(gt_names):
-                position = row.get(name)
+                position = position_row.get(name)
                 if position is not None:
                     gt_array[row_index, column] = (
                         float(position.x),
                         float(position.y),
                         float(position.z),
                     )
+                orientation = quat_row.get(name)
+                if orientation is not None:
+                    gt_quat[row_index, column] = [float(value) for value in orientation]
         np.savez_compressed(
             paths.steps,
             t=np.asarray(episode["times"], dtype=np.float64),
@@ -227,6 +258,7 @@ class EpisodeRecorder:
             base_pose=np.asarray(episode["base_pose"], dtype=np.float64),
             gt_names=np.asarray(gt_names),
             gt_xyz=gt_array,
+            gt_quat=gt_quat,
         )
 
         scenario: ScenarioSpec | None = episode["scenario"]
@@ -240,6 +272,7 @@ class EpisodeRecorder:
             "step_count": len(episode["times"]),
             "frame_count": int(episode["frame_count"]),
             "frame_hz": self.frame_hz if self.record_frames else 0.0,
+            "contact_steps": int(episode["contact_steps"]),
             "gt_names": gt_names,
             "outcome": episode["outcome"],
         }

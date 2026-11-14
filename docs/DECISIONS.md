@@ -1359,3 +1359,54 @@
   not byte-stable (zip entry timestamps) so determinism assertions compare array contents.
   Wall-clock never enters the recording (all timestamps are sim time). No public interface in
   `core/` changed.
+
+## ADR-0032 - Metrics module: statistics primitives, collision-proxy vs contacts vs FK clearance, scene-clustered pairing (week 1, 2026-11-14)
+
+- **Context (week-1 deliverable of ADR-0029):** campaign reporting needs one authoritative
+  implementation of the statistics and the three collision-adjacent measurements, with the
+  (scene, seed) pairing rule and the independence limitation encoded in code rather than
+  convention. Contract: `docs/STATISTICS.md`.
+- **Decision — statistics primitives** (`eval/metrics.py`): Wilson 95% interval for all
+  proportions (better small-n/boundary coverage than Wald; e.g. 0/10 → (0.000, 0.278));
+  mean + sample std (ddof=1, NaN for n=1, never 0); **RMSE/MAE only for continuous
+  targets**, **Brier only for probabilistic binary outcomes**, never conflated;
+  `mcnemar_exact(b, c)` = two-sided exact p (Binomial(b+c, ½), doubled smaller tail,
+  capped at 1). `summarize_success` enforces count+rate+CI (no single-run claims).
+- **Decision — pairing unit is (scene, seed), inference unit is the scene.**
+  `paired_comparison(a, b)` requires identical `(scene, seed)` keys (raises otherwise) and
+  returns BOTH levels: episode-level McNemar (pairs preserved, p labelled **descriptive
+  and anti-conservative** — repeated seeds within a scene are correlated, 30 pairs ≠ 30
+  independent observations) and the **scene-level exact sign test** as the cluster-aware
+  analysis, with `independent_units` = scene count. Per-scene rows keep within-scene
+  variation (rates + sample std per arm) visible. `scene_id()` strips the `-s<seed>`
+  suffix for pairing.
+- **Decision — three collision-adjacent channels stay separate (labelled everywhere):**
+  1. **PROXY** = object displacement from its **reset pose** > 5 mm OR tilt > 5° (frozen
+     thresholds from `configs/eval.yaml`; strict `>`; max excursion drives the hit, final
+     reset→last values also reported; NaN rows skipped; no tracked objects → `hit=False`
+     with `None` magnitudes). Columns are prefixed `proxy_`.
+  2. **Actual collision** = simulator contact nodes, recorded by the EpisodeRecorder into
+     `episode-XX.contacts.jsonl` (new channel, added with this ADR) and read back by
+     `load_episode`; reported as `contact_steps`/`contact_nodes`, never merged with or
+     derived from the proxy (both cross-cases asserted by tests).
+  3. **FK clearance** = `min_fk_clearance_m(points, objects)`, pure-geometry
+     surface-to-surface clearance (negative = penetration), its own column
+     `fk_min_clearance_m`. Eval may not import `backends/`, so callers supply FK points.
+     It is not a proxy substitute.
+- **Decision — recorder extension (same commit):** `steps.npz` now also carries `gt_quat`
+  (N × D × 4, (x, y, z, w), NaN-padded like `gt_xyz`) for the tilt half of the proxy;
+  `EpisodePaths` gains `contacts`; `meta.json` gains `contact_steps` and `gt_names`.
+  The actual-collision channel exists because `GroundTruth.contacts` is never populated —
+  real contacts surface in `robot.diagnostics["contact_nodes"]` (Webots
+  `RobotIO.contact_nodes()`), which the RecordingBackend already captures per step.
+- **Decision — output writers:** `write_csv` (first-seen column order) and `write_json`
+  (dataclasses/NumPy/tuples/Path encoded) for per-episode rows and summaries.
+- **Status of Table 5.1:** the submitted WorldMind Phase I report is still not in the repo
+  (HUMAN STEP). This module provides primitives/plumbing only; **no function is claimed to
+  implement a Table 5.1 metric**, and the conformance mapping stays blocked until the
+  owner supplies the report (ADR-0029 clarification 2/8: all eight metrics preserved
+  verbatim, supplement only).
+- **Consequences:** 14 new tests (Wilson/McNemar/Brier known values, tilt geometry,
+  proxy thresholds + strictness + NaN/empty handling, channel separation, FK clearance,
+  episode-vs-scene pairing counts, writers); full suite **242 passed**, ruff/format green.
+  No public interface in `core/` changed; no frozen config changed.

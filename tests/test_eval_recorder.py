@@ -66,8 +66,9 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
     paths = recorder.paths
     assert paths is not None
 
-    for path in (paths.meta, paths.steps, paths.actions, paths.predicted):
+    for path in (paths.meta, paths.steps, paths.actions, paths.predicted, paths.contacts):
         assert path.is_file(), path
+    assert paths.contacts.read_text(encoding="utf-8") == ""  # FakeBackend reports no contacts
     assert not paths.frames_dir.exists()  # frame_hz=0 disables frame capture
 
     with np.load(paths.steps) as data:
@@ -81,6 +82,7 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
             "base_pose",
             "gt_names",
             "gt_xyz",
+            "gt_quat",
         }
         np.testing.assert_allclose(data["t"], [0.0, 0.032, 0.064, 0.096])
         assert list(data["joint_names"]) == [f"arm_{index}_joint" for index in range(1, 8)]
@@ -88,9 +90,10 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
         assert data["gripper"].shape == (4,)
         assert data["ee_xyz"].shape == (4, 3)
         assert data["base_pose"].shape == (4, 3)
-        # FakeBackend reports no object poses: the array exists with zero columns.
+        # FakeBackend reports no object poses: the arrays exist with zero columns.
         assert list(data["gt_names"]) == []
         assert data["gt_xyz"].shape == (4, 0, 3)
+        assert data["gt_quat"].shape == (4, 0, 4)
 
     actions = [json.loads(line) for line in paths.actions.read_text(encoding="utf-8").splitlines()]
     assert len(actions) == 2
@@ -112,6 +115,7 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
     assert meta["step_count"] == 4
     assert meta["frame_count"] == 0
     assert meta["frame_hz"] == 0.0
+    assert meta["contact_steps"] == 0
     assert meta["outcome"] == {"success": True, "final_state": "home"}
 
 
@@ -138,6 +142,11 @@ def test_recorder_captures_ground_truth_rows_and_pads_missing_with_nan(tmp_path:
         np.testing.assert_allclose(gt_xyz[1, 0], [-0.799879, -4.38998, 0.810949])
         assert np.isnan(gt_xyz[2, 0]).all()
         assert np.isnan(gt_xyz[3, 0]).all()
+        # Orientation rides along (needed for the tilt half of the collision proxy).
+        gt_quat = data["gt_quat"]
+        assert gt_quat.shape == (4, 1, 4)
+        np.testing.assert_allclose(gt_quat[0, 0], [0.0, 0.0, 0.0, 1.0])
+        assert np.isnan(gt_quat[2, 0]).all()
 
 
 def test_recorder_captures_frames_at_the_configured_rate(tmp_path: Path) -> None:
@@ -242,6 +251,35 @@ def test_recording_backend_is_policy_transparent(tmp_path: Path) -> None:
         "success": plain_result.success,
         "final_state": plain_result.final_state,
     }
+
+
+def test_recorder_captures_actual_contact_nodes_separately(tmp_path: Path) -> None:
+    class _ContactBackend(FakeBackend):
+        def step(self, n_steps: int = 1):
+            observation = super().step(n_steps)
+            observation.robot.diagnostics = {"contact_nodes": [{"node_name": "TABLE"}]}
+            return observation
+
+    recorder = EpisodeRecorder(tmp_path / "run", frame_hz=0.0)
+    wrapped = RecordingBackend(_ContactBackend(), recorder)
+    recorder.open_episode(0, seed=0, pipeline="scripted", provenance="measured")
+    wrapped.reset(ScenarioSpec(), seed=0)  # no diagnostics on the reset observation
+    wrapped.step(1)
+    wrapped.step(1)
+    recorder.close_episode()
+
+    paths = recorder.paths
+    assert paths is not None
+    rows = [json.loads(line) for line in paths.contacts.read_text(encoding="utf-8").splitlines()]
+    assert rows == [
+        {"t": 0.032, "nodes": ["TABLE"]},
+        {"t": 0.064, "nodes": ["TABLE"]},
+    ]
+    meta = json.loads(paths.meta.read_text(encoding="utf-8"))
+    assert meta["contact_steps"] == 2
+    # The proxy inputs (gt arrays) stay empty: the two channels never merge.
+    with np.load(paths.steps) as data:
+        assert data["gt_xyz"].shape == (3, 0, 3)
 
 
 def test_recorder_fails_loud_when_misused(tmp_path: Path) -> None:

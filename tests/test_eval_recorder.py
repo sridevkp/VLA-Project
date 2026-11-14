@@ -79,6 +79,7 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
             "joint_vel",
             "gripper",
             "ee_xyz",
+            "ee_quat",
             "base_pose",
             "gt_names",
             "gt_xyz",
@@ -89,6 +90,7 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
         assert data["joint_pos"].shape == (4, 7)
         assert data["gripper"].shape == (4,)
         assert data["ee_xyz"].shape == (4, 3)
+        assert data["ee_quat"].shape == (4, 4)
         assert data["base_pose"].shape == (4, 3)
         # FakeBackend reports the CAN at its world home for a default scenario (ADR-0033).
         assert list(data["gt_names"]) == ["CAN"]

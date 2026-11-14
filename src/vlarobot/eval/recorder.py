@@ -126,6 +126,7 @@ class EpisodeRecorder:
             "joint_vel": [],
             "gripper": [],
             "ee_xyz": [],
+            "ee_quat": [],
             "base_pose": [],
             "gt_names": set(),
             "gt_rows": [],
@@ -171,6 +172,7 @@ class EpisodeRecorder:
                 float(state.ee_pose.position.z),
             ]
         )
+        episode["ee_quat"].append([float(value) for value in state.ee_pose.orientation])
         episode["base_pose"].append(
             [float(state.base_pose.x), float(state.base_pose.y), float(state.base_pose.yaw)]
         )
@@ -255,6 +257,7 @@ class EpisodeRecorder:
             joint_vel=np.asarray(episode["joint_vel"], dtype=np.float64),
             gripper=np.asarray(episode["gripper"], dtype=np.float64),
             ee_xyz=np.asarray(episode["ee_xyz"], dtype=np.float64),
+            ee_quat=np.asarray(episode["ee_quat"], dtype=np.float64),
             base_pose=np.asarray(episode["base_pose"], dtype=np.float64),
             gt_names=np.asarray(gt_names),
             gt_xyz=gt_array,

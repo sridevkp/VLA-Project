@@ -310,24 +310,58 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
         )
     else:
         world_path = world or RUNNER_DEFAULT_WORLD
+        # Fresh session per episode for reset independence (shared-session reset integrity
+        # was not established; MEASURED evidence required). Each episode is run in its own
+        # Webots process and recorded; the final report is assembled from all recordings.
         try:
-            with launch_webots_session(
-                webots=webots,
-                world=world_path,
-                trace_dir=out_dir,
-                trace_prefix=f"eval-{canonical}-{split}-s{seed}",
-                headless=headless,
-                startup_timeout_s=startup_timeout_s,
-            ) as session:
-                startup_s = session.startup_s
-                report = run_evaluation(
-                    plan,
-                    session.client,
-                    config,
-                    policy_factory=scripted_policy_factory,
-                    settings=settings,
-                    startup_s=startup_s,
+            from vlarobot.eval.runner import _completed_recording
+
+            total = len(plan)
+            for i, entry in enumerate(plan, 1):
+                if resume and _completed_recording(out_dir, entry, canonical) is not None:
+                    typer.echo(f"eval episode {i}/{total} index={entry.index}: resumed")
+                    continue
+                typer.echo(
+                    f"eval episode {i}/{total} index={entry.index} seed={entry.seed}: starting"
                 )
+                ep_prefix = f"eval-{canonical}-{split}-s{seed}-ep{entry.index:02d}"
+                with launch_webots_session(
+                    webots=webots,
+                    world=world_path,
+                    trace_dir=out_dir,
+                    trace_prefix=ep_prefix,
+                    headless=headless,
+                    startup_timeout_s=startup_timeout_s,
+                ) as session:
+                    startup_s += session.startup_s
+                    run_evaluation(
+                        [entry],
+                        session.client,
+                        config,
+                        policy_factory=scripted_policy_factory,
+                        settings=settings,
+                        startup_s=session.startup_s,
+                    )
+            # Assemble final report from all completed recordings (no new episodes run).
+            report = run_evaluation(
+                plan,
+                FakeBackend(),
+                EvalRunConfig(
+                    out_dir=out_dir,
+                    pipeline=canonical,
+                    split=split,
+                    base_seed=seed,
+                    backend=backend,
+                    measurement=measurement,
+                    state_source="oracle",
+                    record_frames=frames,
+                    frame_hz=frame_hz,
+                    resume=True,
+                ),
+                policy_factory=scripted_policy_factory,
+                settings=settings,
+                startup_s=startup_s,
+            )
         except Exception as error:  # noqa: BLE001 - surface a single CLI failure
             typer.echo(f"eval failed: {type(error).__name__}: {error}", err=True)
             raise typer.Exit(code=1) from error

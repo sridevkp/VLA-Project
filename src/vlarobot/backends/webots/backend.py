@@ -224,6 +224,23 @@ class WebotsBackend:
             self._arm7_reset_link_rotation = None
         else:
             self._arm7_endpoint_offset_world, self._arm7_reset_link_rotation = endpoint_offset
+        # Re-assert scenario object poses after reset settling: posture/hold steps can
+        # perturb physics objects in a reused session, so restore and clear dynamics.
+        self._apply_scenario_objects(scenario)
+        for def_name in tuple(getattr(self, "_initial_object_poses", ())):
+            obj = self.io.robot.getFromDef(def_name)
+            if obj is not None and hasattr(obj, "resetPhysics"):
+                try:
+                    obj.resetPhysics()
+                except Exception:
+                    pass
+        if hasattr(self.can_node, "resetPhysics"):
+            try:
+                self.can_node.resetPhysics()
+            except Exception:
+                pass
+        if self.io.robot.step(self.io.ts) == -1:
+            raise RuntimeError("Webots simulation stopped while finalizing reset object poses.")
         # ADR-0020 addendum: reset stays fast (< 5 s) and performs no probes.
         # Kinematics export is served on demand via the dedicated export_kinematics
         # request (chunked polling) so probing cannot block a normal reset.

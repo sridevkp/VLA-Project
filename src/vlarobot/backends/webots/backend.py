@@ -37,7 +37,7 @@ from vlarobot.backends.webots.config import (
     SETTINGS,
     TORSO_JOINT,
 )
-from vlarobot.backends.webots.frames import Frames
+from vlarobot.backends.webots.frames import Frames, compose_can_reset_pose
 from vlarobot.backends.webots.gripper import Gripper
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.robot_io import RobotIO
@@ -153,8 +153,16 @@ class WebotsBackend:
             }
         )
         self.io.set_joint_positions(positions)
-        self.can_node.getField("translation").setSFVec3f(self._initial_can_translation)
-        self.can_node.getField("rotation").setSFRotation(self._initial_can_rotation)
+        can_translation = self._initial_can_translation
+        can_rotation = self._initial_can_rotation
+        if scenario.can_xy_yaw_offset is not None:
+            # Scene perturbation for M1-07(b)/M2 ScenarioGenerator (ADR-0025): move/rotate
+            # the CAN relative to the world-file pose at every reset.
+            can_translation, can_rotation = compose_can_reset_pose(
+                can_translation, can_rotation, scenario.can_xy_yaw_offset
+            )
+        self.can_node.getField("translation").setSFVec3f(can_translation)
+        self.can_node.getField("rotation").setSFRotation(can_rotation)
         self.io.me.getField("translation").setSFVec3f(self._initial_base_translation)
         self.io.me.getField("rotation").setSFRotation(self._initial_base_rotation)
         self.io.robot.simulationResetPhysics()

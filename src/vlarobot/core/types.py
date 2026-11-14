@@ -75,6 +75,9 @@ class ScenarioSpec:
     name: str = "default"
     objects: tuple[dict[str, object], ...] = ()
     metadata: dict[str, object] = field(default_factory=dict)
+    # World-frame CAN pose perturbation applied at reset: (dx, dy, yaw) added to the
+    # world-file pose (first piece of M2's ScenarioGenerator, ADR-0025). None = world pose.
+    can_xy_yaw_offset: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)

@@ -195,6 +195,7 @@ class ScriptedCanPolicy:
         grasp_servo: str | None = None,
         stop_after: str | None = None,
         timing_enabled: bool = False,
+        scenario: ScenarioSpec | None = None,
     ) -> None:
         self.kinematics = kinematics or Kinematics()
         self.trace_path = trace_path
@@ -212,6 +213,8 @@ class ScriptedCanPolicy:
         if self.pregrasp_route not in {"interpolated", "safe_via"}:
             raise ValueError("pregrasp_route must be 'interpolated' or 'safe_via'.")
         self.timing_enabled = timing_enabled
+        # Scene passed to every backend.reset() in this episode (ADR-0025); None = world pose.
+        self.scenario = ScenarioSpec() if scenario is None else scenario
         self._seed = 0
         self._last_failure_reason: str | None = None
         self._last_failure_is_safety = False
@@ -275,7 +278,7 @@ class ScriptedCanPolicy:
         if self.trace_path is not None:
             self.trace_path.parent.mkdir(parents=True, exist_ok=True)
         reset_started = perf_counter()
-        observation = backend.reset(ScenarioSpec(), seed)
+        observation = backend.reset(self.scenario, seed)
         self._add_timing("INIT", "backend_reset_s", perf_counter() - reset_started)
         self._last_observation = observation
         self._reset_base_pose_world = observation.robot.base_pose_world
@@ -658,7 +661,7 @@ class ScriptedCanPolicy:
         self._last_failure_is_safety = False
         probe_started = perf_counter()
         reset_started = perf_counter()
-        observation = backend.reset(ScenarioSpec(), seed)
+        observation = backend.reset(self.scenario, seed)
         self._last_observation = observation
         self._reset_base_pose_world = observation.robot.base_pose_world
         reset_duration = perf_counter() - reset_started

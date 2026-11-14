@@ -1,3 +1,4 @@
+import math
 from typing import Any, cast
 
 import numpy as np
@@ -344,6 +345,26 @@ def test_reset_twice_reacquires_can_and_restores_identical_episode_state():
     assert backend.io.robot.lookup_count == 2
     assert backend.gripper.last_close_stalled is None
     assert backend.gripper.last_close_opening is None
+
+
+def test_reset_applies_scenario_can_xy_yaw_offset():
+    """ADR-0025: the scenario offset moves/rotates the CAN at reset, composed from the
+    world-file pose, and a later default reset restores it."""
+    backend = _make_backend()
+    backend.reset(ScenarioSpec(name="grid", can_xy_yaw_offset=(0.05, -0.05, math.pi / 2)), seed=0)
+
+    translation = backend.can_node.getField("translation").getSFVec3f()
+    rotation = backend.can_node.getField("rotation").getSFRotation()
+    np.testing.assert_allclose(translation, [1.05, 1.95, 3.0], atol=1e-9)
+    np.testing.assert_allclose(rotation, [0.0, 0.0, 1.0, math.pi / 2], atol=1e-9)
+    can_pose = backend.get_ground_truth().object_poses[CAN_DEF]
+    np.testing.assert_allclose(can_pose.position.as_array(), [1.05, 1.95, 3.0], atol=1e-9)
+
+    backend.reset(ScenarioSpec(), seed=1)
+    translation = backend.can_node.getField("translation").getSFVec3f()
+    np.testing.assert_allclose(translation, [1.0, 2.0, 3.0], atol=1e-9)
+    rotation = backend.can_node.getField("rotation").getSFRotation()
+    np.testing.assert_allclose(rotation, [0.0, 0.0, 1.0, 0.0], atol=1e-9)
 
 
 def _assert_mapping_close(first, second, tolerance):

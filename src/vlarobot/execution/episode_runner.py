@@ -17,7 +17,7 @@ import socket
 import subprocess
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import IO
@@ -29,6 +29,7 @@ from vlarobot.backends.webots.sim_kinematics import (
 )
 from vlarobot.backends.zmq.client import REQUEST_TIMEOUTS_MS, ZmqBackendClient
 from vlarobot.backends.zmq.server import endpoint_for_port
+from vlarobot.core.types import ScenarioSpec
 from vlarobot.execution.scripted_can import ScriptedCanPolicy, ScriptedCanResult
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -69,6 +70,9 @@ class RunnerSettings:
     stop_after: str | None = None
     kinematic_model: str | None = None
     grasp_servo: str | None = None
+    # Named scene set (ADR-0025): episode i runs scene i (cycles when n exceeds the set).
+    # Resolved by the CLI from vlarobot.eval.scenarios so this module stays eval-agnostic.
+    scenario: tuple[ScenarioSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,7 @@ class EpisodeOutcome:
     snapshot_hash: str | None = None
     snapshot_path: str | None = None
     grasp_servo: str | None = None
+    scenario: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """JSON-safe version of this outcome row."""
@@ -106,6 +111,17 @@ class EpisodeOutcome:
         payload["trace_path"] = str(self.trace_path)
         payload["log_path"] = str(self.log_path)
         return payload
+
+
+def scenario_for_index(settings: RunnerSettings, index: int) -> ScenarioSpec:
+    """Scene for episode ``index``: the configured set cycled by index, else the default scene.
+
+    The default scene keeps the world-file pose, so batches without ``--scenario`` behave
+    exactly as before ADR-0025.
+    """
+    if not settings.scenario:
+        return ScenarioSpec()
+    return settings.scenario[index % len(settings.scenario)]
 
 
 def build_webots_command(webots: str, world: Path, *, headless: bool = False) -> list[str]:
@@ -466,6 +482,10 @@ def run_episodes(
     ``K`` times, each in its own fresh world, and the caller compares outcomes/traces.
     """
     if determinism_check > 0:
+        # A determinism check repeats ONE scene: pin the scene set to its first entry so
+        # scene cycling cannot masquerade as nondeterminism (ADR-0025).
+        if settings.scenario:
+            settings = replace(settings, scenario=settings.scenario[:1])
         outcomes: list[EpisodeOutcome] = []
         for index in range(determinism_check):
             try:
@@ -482,6 +502,7 @@ def run_episodes(
                         0.0,
                         failure_state="RUNNER",
                         failure_reason=f"{type(exc).__name__}: {exc}",
+                        scenario=scenario_for_index(settings, index).name,
                     )
                 )
         return outcomes
@@ -502,6 +523,7 @@ def run_episodes(
                         0.0,
                         failure_state="RUNNER",
                         failure_reason=f"{type(exc).__name__}: {exc}",
+                        scenario=scenario_for_index(settings, index).name,
                     )
                 )
         return outcomes
@@ -558,6 +580,8 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                 for index in range(n):
                     episode_started = perf_counter()
                     try:
+                        # One policy serves the session; re-select the scene per episode.
+                        policy.scenario = scenario_for_index(settings, index)
                         result = policy.execute(client, settings.seed + index)
                         outcomes.append(
                             _outcome(
@@ -572,6 +596,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                                 snapshot_hash=snap_hash or None,
                                 snapshot_path=snap_path or None,
                                 grasp_servo=settings.grasp_servo,
+                                scenario=scenario_for_index(settings, index).name,
                             )
                         )
                     except Exception as exc:
@@ -589,6 +614,7 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
                                 snapshot_hash=snap_hash or None,
                                 snapshot_path=snap_path or None,
                                 grasp_servo=settings.grasp_servo,
+                                scenario=scenario_for_index(settings, index).name,
                             )
                         )
                         break
@@ -646,6 +672,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                     closed_loop_waypoints=settings.closed_loop_waypoints,
                     stop_after=settings.stop_after,
                     grasp_servo=settings.grasp_servo,
+                    scenario=scenario_for_index(settings, index),
                 )
                 episode_started = perf_counter()
                 result = policy.execute(client, seed)
@@ -661,6 +688,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                     snapshot_hash=snap_hash or None,
                     snapshot_path=snap_path or None,
                     grasp_servo=settings.grasp_servo,
+                    scenario=scenario_for_index(settings, index).name,
                 )
             finally:
                 _stop_client(client)
@@ -686,6 +714,7 @@ def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> Episo
                 snapshot_hash=snap_hash or None,
                 snapshot_path=snap_path or None,
                 grasp_servo=settings.grasp_servo,
+                scenario=scenario_for_index(settings, index).name,
             )
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
@@ -706,6 +735,7 @@ def _error_outcome(
     snapshot_hash: str | None = None,
     snapshot_path: str | None = None,
     grasp_servo: str | None = None,
+    scenario: str | None = None,
 ) -> EpisodeOutcome:
     """Synthetic failed outcome for runner/policy exceptions (always recordable)."""
     return EpisodeOutcome(
@@ -731,6 +761,7 @@ def _error_outcome(
         snapshot_hash=snapshot_hash,
         snapshot_path=snapshot_path,
         grasp_servo=grasp_servo,
+        scenario=scenario,
     )
 
 
@@ -923,6 +954,7 @@ def _outcome(
     snapshot_hash: str | None = None,
     snapshot_path: str | None = None,
     grasp_servo: str | None = None,
+    scenario: str | None = None,
 ) -> EpisodeOutcome:
     """Map one ``ScriptedCanResult`` onto a summary-table row."""
     return EpisodeOutcome(
@@ -950,4 +982,5 @@ def _outcome(
         snapshot_hash=snapshot_hash,
         snapshot_path=snapshot_path,
         grasp_servo=grasp_servo,
+        scenario=scenario,
     )

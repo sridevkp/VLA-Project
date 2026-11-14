@@ -23,6 +23,7 @@ from vlarobot.backends.webots.smoke import create_webots_robot, run_smoke
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
 from vlarobot.core.types import JointTarget, Observation, ScenarioSpec
+from vlarobot.eval.scenarios import SCENARIOS, get_scenarios
 from vlarobot.execution.episode_runner import (
     RunnerSettings,
     determinism_report,
@@ -277,11 +278,30 @@ def run_episodes(
             ),
         ),
     ] = "none",
+    scenario: Annotated[
+        str | None,
+        typer.Option(
+            "--scenario",
+            help=(
+                "Named scene set from vlarobot.eval.scenarios (e.g. 'mini-grid10'); "
+                "episode i runs scene i, cycling when --n exceeds the set (ADR-0025)."
+            ),
+        ),
+    ] = None,
     startup_timeout_s: float = typer.Option(
         180.0, min=1.0, help="Seconds to wait for the Webots ZeroMQ server before failing."
     ),
 ) -> None:
     """Run Webots episodes with clean process isolation and summarize outcomes."""
+    scene_set: tuple[ScenarioSpec, ...] = ()
+    if scenario is not None:
+        try:
+            scene_set = get_scenarios(scenario)
+        except KeyError:
+            raise typer.BadParameter(
+                f"unknown scenario {scenario!r}; available: {', '.join(sorted(SCENARIOS))}",
+                param_hint="--scenario",
+            ) from None
     if headless:
         typer.echo(
             "Note: headless mode disables Webots rendering; the scripted policy reads RGB every "
@@ -306,6 +326,7 @@ def run_episodes(
         stop_after=stop_after,
         kinematic_model=kinematic_model,
         grasp_servo=grasp_servo,
+        scenario=scene_set,
     )
     outcomes = run_episode_batch(
         settings,

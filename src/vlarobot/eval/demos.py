@@ -18,6 +18,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+import numpy as np
+
 from vlarobot.core.types import ScenarioSpec
 from vlarobot.eval.recorder import EpisodeRecorder, RecordingBackend
 from vlarobot.eval.runner import EvalEpisode, PolicyFactory, _plan_scene_id
@@ -173,3 +175,98 @@ def collect_demos(
         failures=failures,
         total_wall_s=perf_counter() - run_started,
     )
+
+
+# ---------------------------------------------------------------------------
+# Demo action derivation helpers (dataset prep; representation must be verified
+# against target VLA config — see docs/VLA_NOTES.md). Additive/derived only.
+# ---------------------------------------------------------------------------
+
+
+def _quat_normalize(q: np.ndarray) -> np.ndarray:
+    n = float(np.linalg.norm(q))
+    if n == 0.0:
+        return np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+    return q / n
+
+
+def _quat_conj(q: np.ndarray) -> np.ndarray:
+    return np.array([-q[0], -q[1], -q[2], q[3]], dtype=np.float64)
+
+
+def _quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return np.array(
+        [
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz,
+        ],
+        dtype=np.float64,
+    )
+
+
+def _quat_to_rotvec(q: np.ndarray) -> np.ndarray:
+    """Quaternion (x,y,z,w) to rotation vector (axis*angle, rad)."""
+    q = _quat_normalize(q.astype(np.float64))
+    if q[3] < 0.0:
+        q = -q
+    w = float(np.clip(q[3], -1.0, 1.0))
+    angle = 2.0 * float(np.arccos(w))
+    s = float(np.sqrt(max(0.0, 1.0 - w * w)))
+    if s < 1e-12 or angle < 1e-12:
+        return np.zeros(3, dtype=np.float64)
+    axis = q[:3] / s
+    return axis * angle
+
+
+def derive_ee_delta_actions(steps_npz: Path) -> list[dict[str, Any]]:
+    """Derive per-transition EE deltas + gripper from a recorded episode.
+
+    Returns N-1 records for consecutive step pairs (i -> i+1): dx,dy,dz (m), rotation
+    vector d_rotvec (rad, axis*angle for q_{i+1}*inv(q_i), same frame as recorded ee_quat),
+    gripper opening, and gripper_delta. A 7-D action can be formed as
+    [dx,dy,dz,drx,dry,drz,gripper_or_gripper_cmd] depending on the target policy contract
+    (VERIFY against `policy.config` / docs/VLA_NOTES.md).
+    """
+    steps_npz = Path(steps_npz)
+    with np.load(steps_npz) as data:
+        t = np.asarray(data["t"], dtype=np.float64)
+        ee_xyz = np.asarray(data["ee_xyz"], dtype=np.float64)
+        gripper = np.asarray(data["gripper"], dtype=np.float64)
+        ee_quat = np.asarray(data["ee_quat"], dtype=np.float64) if "ee_quat" in data.files else None
+    rows: list[dict[str, Any]] = []
+    for i in range(len(t) - 1):
+        dpos = ee_xyz[i + 1] - ee_xyz[i]
+        if ee_quat is not None:
+            dq = _quat_mul(_quat_normalize(ee_quat[i + 1]), _quat_conj(_quat_normalize(ee_quat[i])))
+            drot = _quat_to_rotvec(dq)
+        else:
+            drot = np.zeros(3, dtype=np.float64)
+        rows.append(
+            {
+                "t_from": float(t[i]),
+                "t_to": float(t[i + 1]),
+                "dx": float(dpos[0]),
+                "dy": float(dpos[1]),
+                "dz": float(dpos[2]),
+                "drx": float(drot[0]),
+                "dry": float(drot[1]),
+                "drz": float(drot[2]),
+                "gripper": float(gripper[i + 1]),
+                "gripper_delta": float(gripper[i + 1] - gripper[i]),
+            }
+        )
+    return rows
+
+
+def write_derived_actions_jsonl(steps_npz: Path, out_path: Path) -> Path:
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = derive_ee_delta_actions(steps_npz)
+    with out_path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+    return out_path

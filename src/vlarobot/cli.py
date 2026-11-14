@@ -350,6 +350,27 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
     typer.echo(f"  out={out_dir} episodes_csv={report.episodes_csv.name} wall_s={wall_s:.1f}")
 
 
+@app.command("derive-demo-actions")
+def derive_demo_actions(
+    steps: Annotated[Path, typer.Argument(help="Path to episode-XX.steps.npz")],
+    out: Annotated[
+        Path | None,
+        typer.Option(help="Output JSONL path (default: <steps>.derived-actions.jsonl)."),
+    ] = None,
+) -> None:
+    """Derive per-transition EE-delta + gripper actions from recorded steps (dataset prep)."""
+    from vlarobot.eval.demos import write_derived_actions_jsonl
+
+    if not steps.is_file():
+        typer.echo(f"steps file not found: {steps}", err=True)
+        raise typer.Exit(code=1)
+    out_path = out or steps.with_suffix("").with_suffix(".derived-actions.jsonl")
+    written = write_derived_actions_jsonl(steps, out_path)
+    # count rows
+    n_rows = sum(1 for _ in written.read_text(encoding="utf-8").splitlines() if _.strip())
+    typer.echo(f"derived_actions={n_rows} out={written}")
+
+
 @app.command("reset-repro-check")
 def reset_repro_check(
     out: Annotated[

@@ -350,6 +350,126 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
     typer.echo(f"  out={out_dir} episodes_csv={report.episodes_csv.name} wall_s={wall_s:.1f}")
 
 
+@app.command("collect-demos")
+def collect_demos(
+    n: Annotated[int, typer.Option("--n", min=1, help="Number of demo episodes to collect.")] = 80,
+    seed: Annotated[
+        int, typer.Option(help="Base seed (iterated by seed blocks for coverage).")
+    ] = 0,
+    split: Annotated[
+        Literal["train", "validation"],
+        typer.Option(help="Scene split. The test split is fail-closed until week 4 (ADR-0029)."),
+    ] = "train",
+    out: Annotated[
+        Path | None,
+        typer.Option(help="Output directory (default: runs/demos/<split>-s<seed>-n<n>)."),
+    ] = None,
+    instruction: Annotated[
+        str,
+        typer.Option(help="Task instruction recorded per episode."),
+    ] = "Pick up the can and place it at the target location.",
+    backend: Annotated[
+        Literal["fake", "webots"],
+        typer.Option(help="Episode backend: 'fake' (plumbing test) or 'webots' (measured demos)."),
+    ] = "webots",
+    webots: Annotated[
+        str | None,
+        typer.Option("--webots", help="Webots executable (defaults to WEBOTS_HOME, then PATH)."),
+    ] = None,
+    world: Annotated[
+        Path | None,
+        typer.Option(help="Webots world file (default: worlds/factory.wbt)."),
+    ] = None,
+    headless: Annotated[
+        bool,
+        typer.Option("--headless/--no-headless", help="Run Webots headless."),
+    ] = False,
+    frames: Annotated[
+        bool,
+        typer.Option("--frames/--no-frames", help="Record RGB frames (needed for vision demos)."),
+    ] = True,
+    frame_hz: Annotated[
+        float,
+        typer.Option("--frame-hz", min=0.0, help="Frame capture rate in sim Hz."),
+    ] = 10.0,
+    startup_timeout_s: Annotated[
+        float,
+        typer.Option(min=1.0, help="Seconds to wait for the Webots server."),
+    ] = 180.0,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume/--no-resume", help="Skip episodes already marked completed in the manifest."
+        ),
+    ] = False,
+) -> None:
+    """Collect scripted-expert demos in a LeRobot-convertible layout (ADR-0029/M8 prep)."""
+    from vlarobot.backends.fake import FakeBackend
+    from vlarobot.eval.demos import build_demo_plan
+    from vlarobot.eval.demos import collect_demos as collect_demo_episodes
+    from vlarobot.eval.settings import load_eval_settings
+    from vlarobot.execution.scripted_baseline import scripted_policy_factory
+
+    settings = load_eval_settings()
+    try:
+        plan = build_demo_plan(
+            n, base_seed=seed, split=split, instruction=instruction, settings=settings
+        )
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+    out_dir = out or Path("runs") / "demos" / f"{split}-s{seed}-n{n}"
+    state_source = "oracle"
+    measurement = "measured" if backend == "webots" else "fake"
+    started = time.perf_counter()
+
+    if backend == "fake":
+        result = collect_demo_episodes(
+            plan,
+            FakeBackend(),
+            out_dir,
+            policy_factory=scripted_policy_factory,
+            state_source=state_source,
+            pipeline="scripted",
+            record_frames=frames,
+            frame_hz=frame_hz,
+            resume=resume,
+        )
+    else:
+        world_path = world or RUNNER_DEFAULT_WORLD
+        try:
+            with launch_webots_session(
+                webots=webots,
+                world=world_path,
+                trace_dir=out_dir,
+                trace_prefix=f"demos-{split}-s{seed}",
+                headless=headless,
+                startup_timeout_s=startup_timeout_s,
+            ) as session:
+                result = collect_demo_episodes(
+                    plan,
+                    session.client,
+                    out_dir,
+                    policy_factory=scripted_policy_factory,
+                    state_source=state_source,
+                    pipeline="scripted",
+                    record_frames=frames,
+                    frame_hz=frame_hz,
+                    resume=resume,
+                )
+        except Exception as error:  # noqa: BLE001
+            typer.echo(f"collect-demos failed: {type(error).__name__}: {error}", err=True)
+            raise typer.Exit(code=1) from error
+
+    wall_s = time.perf_counter() - started
+    typer.echo(
+        f"collect-demos split={split} backend={backend} measurement={measurement} "
+        f"episodes={result.episodes} successes={result.successes} failures={result.failures}"
+    )
+    typer.echo(f"  out={out_dir} manifest={result.manifest_path.name} wall_s={wall_s:.1f}")
+
+
 @app.command("run-episodes")
 def run_episodes(
     n: int = typer.Option(1, "--n", min=1, help="Number of episodes to run."),

@@ -34,7 +34,11 @@ def test_zmq_backend_client_and_server_round_trip() -> None:
         observation = client.step(2)
         assert observation.t == pytest.approx(0.064)
         assert observation.robot.gripper_opening == 0.02
-        assert client.get_ground_truth().object_poses == {}
+        gt = client.get_ground_truth()
+        assert list(gt.object_poses) == ["CAN"]
+        np.testing.assert_allclose(
+            gt.object_poses["CAN"].position.as_array(), [-0.799879, -4.38998, 0.810949]
+        )
         client.close()
 
         reconnected_client = ZmqBackendClient(server.endpoint, timeout_ms=5_000)

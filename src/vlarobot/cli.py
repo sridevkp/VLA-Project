@@ -25,10 +25,14 @@ from vlarobot.backends.zmq.server import DEFAULT_ENDPOINT
 from vlarobot.core.types import JointTarget, Observation, ScenarioSpec
 from vlarobot.eval.scenarios import SCENARIOS, get_scenarios
 from vlarobot.execution.episode_runner import (
+    DEFAULT_WORLD as RUNNER_DEFAULT_WORLD,
+)
+from vlarobot.execution.episode_runner import (
     RunnerSettings,
     determinism_report,
     format_determinism_report,
     format_summary_table,
+    launch_webots_session,
     resolve_webots,
 )
 from vlarobot.execution.episode_runner import (
@@ -192,6 +196,158 @@ def can_regression(
         typer.echo(f"summary success={successes}/{seeds} rejections={rejections}")
     finally:
         client.close()
+
+
+@app.command()
+def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
+    pipeline: Annotated[
+        str,
+        typer.Option(
+            "--pipeline",
+            help="Arm to run: 'baseline'/'scripted' (week 1). Other arms fail loud.",
+        ),
+    ] = "baseline",
+    split: Annotated[
+        Literal["train", "validation"],
+        typer.Option(help="Scene split. The test split is fail-closed until week 4 (ADR-0029)."),
+    ] = "train",
+    n: Annotated[
+        int,
+        typer.Option("--n", min=0, help="Episodes to run (0 = every planned episode)."),
+    ] = 0,
+    seed: Annotated[
+        int, typer.Option(help="Base seed (baseline repeats use seed, seed+1, ...).")
+    ] = 0,
+    out: Annotated[
+        Path | None,
+        typer.Option(help="Output directory (default: runs/eval/<pipeline>-<split>-s<seed>)."),
+    ] = None,
+    backend: Annotated[
+        Literal["fake", "webots"],
+        typer.Option(help="Episode backend: 'fake' (fast, CI) or 'webots' (measured)."),
+    ] = "fake",
+    webots: Annotated[
+        str | None,
+        typer.Option("--webots", help="Webots executable (defaults to WEBOTS_HOME, then PATH)."),
+    ] = None,
+    world: Annotated[
+        Path | None,
+        typer.Option(help="Webots world file (default: worlds/factory.wbt)."),
+    ] = None,
+    headless: Annotated[
+        bool,
+        typer.Option(
+            "--headless/--no-headless", help="Run Webots headless (no-rendering is UNVERIFIED)."
+        ),
+    ] = False,
+    frames: Annotated[
+        bool,
+        typer.Option("--frames/--no-frames", help="Record RGB frames (needs Pillow)."),
+    ] = False,
+    frame_hz: Annotated[
+        float,
+        typer.Option("--frame-hz", min=0.0, help="Frame capture rate in sim Hz (0 disables)."),
+    ] = 1.0,
+    startup_timeout_s: Annotated[
+        float,
+        typer.Option(min=1.0, help="Seconds to wait for the Webots server."),
+    ] = 180.0,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume/--no-resume", help="Skip episodes whose outcome is already recorded."
+        ),
+    ] = False,
+) -> None:
+    """Run the frozen baseline evaluation campaign and write a report (ADR-0029/0033)."""
+    from vlarobot.backends.fake import FakeBackend
+    from vlarobot.eval.runner import (
+        EvalRunConfig,
+        build_episode_plan,
+        canonical_pipeline,
+        run_evaluation,
+    )
+    from vlarobot.eval.settings import load_eval_settings
+    from vlarobot.execution.scripted_baseline import scripted_policy_factory
+
+    try:
+        canonical = canonical_pipeline(pipeline)
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+    settings = load_eval_settings()
+    try:
+        plan = build_episode_plan(split, seed, n=n, settings=settings)
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+    out_dir = out or Path("runs") / "eval" / f"{canonical}-{split}-s{seed}"
+    measurement = "measured" if backend == "webots" else "fake"
+    config = EvalRunConfig(
+        out_dir=out_dir,
+        pipeline=canonical,
+        split=split,
+        base_seed=seed,
+        backend=backend,
+        measurement=measurement,
+        state_source="oracle",
+        record_frames=frames,
+        frame_hz=frame_hz,
+        resume=resume,
+    )
+
+    started = time.perf_counter()
+    startup_s = 0.0
+    if backend == "fake":
+        report = run_evaluation(
+            plan,
+            FakeBackend(),
+            config,
+            policy_factory=scripted_policy_factory,
+            settings=settings,
+        )
+    else:
+        world_path = world or RUNNER_DEFAULT_WORLD
+        try:
+            with launch_webots_session(
+                webots=webots,
+                world=world_path,
+                trace_dir=out_dir,
+                trace_prefix=f"eval-{canonical}-{split}-s{seed}",
+                headless=headless,
+                startup_timeout_s=startup_timeout_s,
+            ) as session:
+                startup_s = session.startup_s
+                report = run_evaluation(
+                    plan,
+                    session.client,
+                    config,
+                    policy_factory=scripted_policy_factory,
+                    settings=settings,
+                    startup_s=startup_s,
+                )
+        except Exception as error:  # noqa: BLE001 - surface a single CLI failure
+            typer.echo(f"eval failed: {type(error).__name__}: {error}", err=True)
+            raise typer.Exit(code=1) from error
+
+    wall_s = time.perf_counter() - started
+    success = report.summary["success"]
+    gate = report.summary["week2_gate"]
+    typer.echo(
+        f"eval pipeline={canonical} split={split} backend={backend} measurement={measurement} "
+        f"episodes={report.summary['n_episodes']} seeds={report.summary['seeds']}"
+    )
+    typer.echo(
+        f"  success={success['successes']}/{success['total']} rate={success['rate']:.3f} "
+        f"wilson95=[{success['ci_low']:.3f}, {success['ci_high']:.3f}]"
+    )
+    typer.echo(
+        f"  gate_threshold={gate['threshold']:.3f} "
+        f"(rule: {gate['rule']}, baseline_rate={gate['baseline_rate']:.3f})"
+    )
+    typer.echo(f"  out={out_dir} episodes_csv={report.episodes_csv.name} wall_s={wall_s:.1f}")
 
 
 @app.command("run-episodes")

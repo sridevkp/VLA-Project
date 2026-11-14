@@ -1410,3 +1410,60 @@
   proxy thresholds + strictness + NaN/empty handling, channel separation, FK clearance,
   episode-vs-scene pairing counts, writers); full suite **242 passed**, ruff/format green.
   No public interface in `core/` changed; no frozen config changed.
+
+## ADR-0033 - Baseline eval command, seed-major episode plan, FakeBackend can-aware GT (week 1, 2026-11-14)
+
+- **Context (week-1 deliverable of ADR-0029):** week 1 needs `eval --pipeline baseline
+  --split train` to run the scripted baseline, record every episode, and emit a reproducible
+  report (episodes CSV + summary JSON) before the week-2 VLA gate.
+
+- **Decision — CLI and fail-closed guards** (`cli.py:eval`, ADR-0029): `--pipeline` accepts
+  `baseline` and the alias `scripted` (canonical name `baseline`); other arms fail loud
+  ("not implemented") in week 1. `--split` is `train|validation` only; the `test` split is
+  not offered and `build_episode_plan` refuses it without an explicit week-4 override, so the
+  frozen test set stays untouched (ADR-0029). `--n` defaults to 0 (every planned episode) and
+  fails loud when `n` exceeds the plan. `--backend fake|webots` with provenance labelled
+  `fake` vs `measured`; frames off by default. `--out` defaults to
+  `runs/eval/<pipeline>-<split>-s<seed>`. A shared Webots session (`launch_webots_session`,
+  one process, soft reset per episode) serves a run so N episodes do not pay N startups.
+
+- **Decision — seed-major episode plan and pairing semantics** (`eval/runner.py`,
+  `docs/STATISTICS.md`): `configs/eval.yaml` freezes 3 baseline seeds per scene, and the
+  generator draws geometry from the seed. The plan is therefore **seed-major**: for each
+  `base_seed + k` it generates that seed's full split, so a train baseline is
+  `[seed, seed+1, seed+2] × 8 scenes = 24` episodes. The pairing key is `(scene_id, seed)`
+  where `scene_id` strips the generator's `-s<seed>` suffix; because the seed also perturbs
+  geometry, a paired unit is a scene slot/family within one repetition, not a fixed geometry.
+  Consequences for McNemar (descriptive/anti-conservative at episode level) and the
+  scene-level cluster-aware analysis are recorded in `docs/STATISTICS.md` (ADR-0032).
+
+- **Decision — backend/policy seam (no `backends/` import in eval):** `eval/runner.py` depends
+  only on `core` and `eval` modules. The CLI supplies the connected backend and
+  `execution.scripted_baseline.scripted_policy_factory`, which adapts `ScriptedCanPolicy` to
+  the plain outcome mapping `eval.metrics` reads. `fk_min_clearance_m` is reported as
+  unmeasured (`null`) until an FK-point source is wired (standalone measurement, never
+  invented). Each episode is wrapped by `RecordingBackend`; an exception becomes a recorded
+  failure row so one bad episode does not lose the run.
+
+- **Decision — FakeBackend can-aware ground truth:** `FakeBackend` now reports the CAN at
+  world home (`CAN_WORLD_XYZ`, mirroring `configs/scenarios.yaml` `world.can_xyz`, drift-
+  guarded by test) plus `can_xy_yaw_offset`, and obstacle DEFs from `scenario.objects` as
+  absolute world translations with `yaw_offset` encoded as a world-Z (x, y, z, w) quaternion.
+  This makes the scripted expert's CAN lookup and eval GT/proxy paths usable on the fake
+  backend (default scenarios now report `{"CAN": ...}` rather than an empty pose map; affected
+  tests updated). The fake backend remains pure Python with no simulator dependency.
+
+- **Decision — report contents:** `episodes.csv` (one row per episode, flattened metrics
+  including proxy/contact/FK channels), `summary.json` (Wilson 95% success interval, per-scene
+  variation with rates/CIs and seed lists, week-2 gate threshold `min(0.40, 0.60×baseline)`,
+  failure-state counts, proxy/contact tallies, continuous stats mean±std over finite values,
+  backend/provenance/state-source labels), `plan.json`, and `timings.json` (per-episode wall
+  time + run total; not a metric). A `--resume` run reuses a completed, plan-matching episode
+  recording and re-runs incomplete/exception recordings.
+
+- **Consequences:** a fast, deterministic fake-backend eval (`eval --backend fake --n 1`)
+  produces byte-identical metric rows and summary statistics across runs (MEASURED by tests).
+  **Webots-measured baseline numbers are not produced in this commit** (running the full 24-
+  episode train baseline takes ~9.2 h single instance at the phase6 rate; throughput/
+  equivalence proofs and the MEASURED baseline are step 4/5 follow-on work, reported
+  UNVERIFIED here). No public interface in `core/` changed; no frozen config changed.

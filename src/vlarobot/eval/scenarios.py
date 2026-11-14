@@ -241,10 +241,11 @@ def generate_scenes(
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise TypeError("seed must be an integer.")
 
+    campaign_sizes = sizes or load_eval_settings().sizes
     counts = {
-        "train": (sizes or load_eval_settings()).sizes.train,
-        "validation": (sizes or load_eval_settings()).sizes.validation,
-        "test": (sizes or load_eval_settings()).sizes.test,
+        "train": campaign_sizes.train,
+        "validation": campaign_sizes.validation,
+        "test": campaign_sizes.test,
     }
     lib = library or load_scenario_library()
     rng = np.random.default_rng(np.random.SeedSequence([int(seed), lib.split_salts[split]]))

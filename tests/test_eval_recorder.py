@@ -90,10 +90,14 @@ def test_recorder_roundtrip_writes_all_streams(tmp_path: Path) -> None:
         assert data["gripper"].shape == (4,)
         assert data["ee_xyz"].shape == (4, 3)
         assert data["base_pose"].shape == (4, 3)
-        # FakeBackend reports no object poses: the arrays exist with zero columns.
-        assert list(data["gt_names"]) == []
-        assert data["gt_xyz"].shape == (4, 0, 3)
-        assert data["gt_quat"].shape == (4, 0, 4)
+        # FakeBackend reports the CAN at its world home for a default scenario (ADR-0033).
+        assert list(data["gt_names"]) == ["CAN"]
+        assert data["gt_xyz"].shape == (4, 1, 3)
+        np.testing.assert_allclose(
+            data["gt_xyz"][:, 0, :], np.tile([-0.799879, -4.38998, 0.810949], (4, 1))
+        )
+        assert data["gt_quat"].shape == (4, 1, 4)
+        np.testing.assert_allclose(data["gt_quat"][:, 0, :], np.tile([0.0, 0.0, 0.0, 1.0], (4, 1)))
 
     actions = [json.loads(line) for line in paths.actions.read_text(encoding="utf-8").splitlines()]
     assert len(actions) == 2
@@ -277,9 +281,13 @@ def test_recorder_captures_actual_contact_nodes_separately(tmp_path: Path) -> No
     ]
     meta = json.loads(paths.meta.read_text(encoding="utf-8"))
     assert meta["contact_steps"] == 2
-    # The proxy inputs (gt arrays) stay empty: the two channels never merge.
+    # Actual contacts stay in their own channel; GT still records the CAN each step.
     with np.load(paths.steps) as data:
-        assert data["gt_xyz"].shape == (3, 0, 3)
+        assert list(data["gt_names"]) == ["CAN"]
+        assert data["gt_xyz"].shape == (3, 1, 3)
+        np.testing.assert_allclose(
+            data["gt_xyz"][:, 0, :], np.tile([-0.799879, -4.38998, 0.810949], (3, 1))
+        )
 
 
 def test_recorder_fails_loud_when_misused(tmp_path: Path) -> None:

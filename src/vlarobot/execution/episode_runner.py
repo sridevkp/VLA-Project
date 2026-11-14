@@ -16,7 +16,8 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
@@ -631,6 +632,76 @@ def _run_shared_session(settings: RunnerSettings, n: int) -> list[EpisodeOutcome
         finally:
             _terminate_process(process, settings.shutdown_timeout_s, pid_path=pid_path)
     return outcomes
+
+
+@dataclass(frozen=True)
+class WebotsSession:
+    """One live Webots process plus its connected brain-side client."""
+
+    client: ZmqBackendClient
+    endpoint: str
+    port: int
+    process: subprocess.Popen[str]
+    log_path: Path
+    pid_path: Path
+    startup_s: float
+
+
+@contextmanager
+def launch_webots_session(
+    *,
+    webots: str | None = None,
+    world: Path = DEFAULT_WORLD,
+    trace_dir: Path,
+    trace_prefix: str = "session",
+    headless: bool = False,
+    startup_timeout_s: float = 180.0,
+    shutdown_timeout_s: float = SHUTDOWN_TIMEOUT_S,
+    grace_s: float = 10.0,
+) -> Iterator[WebotsSession]:
+    """Launch one Webots process that can serve many episodes (soft reset per episode).
+
+    Yields a connected client once the lockstep server answers ``ping()``. On exit the client
+    asks the simulator to quit, Webots gets ``grace_s`` to exit on its own, then the whole
+    process tree is terminated (polite, then forced). Process hygiene matches
+    :func:`run_episodes`; the log and pid file land in ``trace_dir``.
+    """
+    trace_dir = Path(trace_dir)
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    resolved = resolve_webots(webots)
+    log_path = trace_dir / f"{trace_prefix}.log"
+    pid_path = trace_dir / f"{trace_prefix}.pid"
+    port = _reserve_free_port()
+    endpoint = endpoint_for_port(port)
+    with log_path.open("w", encoding="utf-8", newline="") as log_file:
+        command = build_webots_command(resolved, world, headless=headless)
+        env = webots_environment(resolved)
+        env["VLAROBOT_ZMQ_PORT"] = str(port)
+        process = _popen(command, env, log_file)
+        _write_pid_file(pid_path, process.pid)
+        try:
+            startup_started = perf_counter()
+            client = wait_for_simulator(endpoint, process, startup_timeout_s)
+            startup_s = perf_counter() - startup_started
+            try:
+                yield WebotsSession(
+                    client=client,
+                    endpoint=endpoint,
+                    port=port,
+                    process=process,
+                    log_path=log_path,
+                    pid_path=pid_path,
+                    startup_s=startup_s,
+                )
+            finally:
+                _stop_client(client)
+                # Let Webots exit on its own after simulationQuit(0); SIGTERM can race with
+                # its shutdown sequence and force an unnecessary SIGKILL.
+                deadline = perf_counter() + max(0.0, grace_s)
+                while perf_counter() < deadline and process.poll() is None:
+                    time.sleep(0.1)
+        finally:
+            _terminate_process(process, shutdown_timeout_s, pid_path=pid_path)
 
 
 def _run_fresh_episode(settings: RunnerSettings, index: int, seed: int) -> EpisodeOutcome:

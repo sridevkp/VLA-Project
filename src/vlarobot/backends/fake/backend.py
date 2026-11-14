@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from typing import Any
 
@@ -38,6 +39,15 @@ _CAMERA_INFO = CameraInfo(
     width=64,
     height=48,
 )
+# Mirrors configs/scenarios.yaml world.can_xyz (drift-guarded by tests/test_scenarios.py).
+CAN_WORLD_XYZ = (-0.799879, -4.38998, 0.810949)
+_IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
+
+
+def _yaw_to_quat(yaw: float) -> tuple[float, float, float, float]:
+    """World-Z rotation as an (x, y, z, w) quaternion."""
+    half = 0.5 * float(yaw)
+    return (0.0, 0.0, math.sin(half), math.cos(half))
 
 
 class FakeBackend:
@@ -47,6 +57,8 @@ class FakeBackend:
         self,
         safety_monitor: SafetyMonitor | None = None,
         step_duration: float = 0.032,
+        *,
+        can_world_xyz: tuple[float, float, float] = CAN_WORLD_XYZ,
     ) -> None:
         if step_duration <= 0.0:
             raise ValueError("step_duration must be positive.")
@@ -57,6 +69,7 @@ class FakeBackend:
             )
         )
         self.step_duration = step_duration
+        self.can_world_xyz = tuple(float(value) for value in can_world_xyz)
         self._time = 0.0
         self._seq = 0
         self._stopped = False
@@ -120,7 +133,24 @@ class FakeBackend:
         return ApplyResult(True)
 
     def get_ground_truth(self) -> GroundTruth:
-        return GroundTruth()
+        object_poses: dict[str, Pose3D] = {}
+        can_xyz = self.can_world_xyz
+        can_quat = _IDENTITY_QUAT
+        offset = self._scenario.can_xy_yaw_offset
+        if offset is not None:
+            dx, dy, yaw = (float(value) for value in offset)
+            can_xyz = (can_xyz[0] + dx, can_xyz[1] + dy, can_xyz[2])
+            can_quat = _yaw_to_quat(yaw)
+        object_poses["CAN"] = Pose3D(Vec3(*can_xyz), can_quat)
+        for entry in self._scenario.objects:
+            def_name = str(entry.get("def", ""))
+            xyz = entry.get("xyz")
+            if not def_name or xyz is None:
+                continue
+            values = tuple(float(value) for value in xyz)
+            yaw_offset = float(entry.get("yaw_offset", 0.0))
+            object_poses[def_name] = Pose3D(Vec3(*values), _yaw_to_quat(yaw_offset))
+        return GroundTruth(object_poses=object_poses)
 
     def stop(self) -> None:
         self._stopped = True

@@ -178,8 +178,8 @@ def run_evaluation(
     if not plan:
         raise ValueError("plan must contain at least one episode.")
     indices = [entry.index for entry in plan]
-    if indices != list(range(len(plan))):
-        raise ValueError("plan indices must be contiguous from 0.")
+    if len(set(indices)) != len(indices):
+        raise ValueError("plan indices must be unique.")
     if config.split not in SPLITS:
         raise ValueError(f"unknown split {config.split!r}; available: {', '.join(SPLITS)}")
 

@@ -329,15 +329,23 @@ def _plan_scene_id(entry: EvalEpisode) -> str:
 
 
 def _completed_recording(out_dir: Path, entry: EvalEpisode, pipeline: str) -> EpisodeRecord | None:
-    """Load a finished recording for ``--resume`` after checking it belongs to this plan."""
+    """Load a finished recording for ``--resume`` after checking it belongs to this plan.
+
+    A missing, unloadable/partial, or EXCEPTION/incomplete recording is treated as not
+    completed so the episode is re-run (never double-counted). Only a loadable, plan-matching
+    recording with a usable outcome is reused.
+    """
     meta_path = out_dir / f"{_EPISODE_STEM.format(index=entry.index)}.meta.json"
     if not meta_path.is_file():
         return None
-    record = load_episode(meta_path)
+    try:
+        record = load_episode(meta_path)
+    except Exception:  # noqa: BLE001 - partial/corrupt previous attempt: rerun
+        return None
     meta = record.meta
     outcome = meta.get("outcome")
     if not isinstance(outcome, Mapping):
-        raise ValueError(f"{meta_path}: recording has no outcome; rerun without --resume.")
+        return None
     if meta.get("scenario") is None or outcome.get("failure_state") == "EXCEPTION":
         # The previous attempt raised before the episode was usable; run it again.
         return None

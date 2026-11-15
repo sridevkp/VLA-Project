@@ -43,8 +43,16 @@ from vlarobot.eval.recorder import EpisodeRecorder, RecordingBackend
 from vlarobot.eval.scenarios import SPLITS, ScenarioLibrary, generate_scenes
 from vlarobot.eval.settings import EvalSettings, load_eval_settings
 
-PIPELINE_ALIASES: dict[str, str] = {"baseline": "baseline", "scripted": "baseline"}
-IMPLEMENTED_PIPELINES = ("baseline",)
+PIPELINE_ALIASES: dict[str, str] = {
+    "baseline": "baseline",
+    "scripted": "baseline",
+    "scripted_baseline": "baseline",
+    "vla_only": "vla_only",
+    "vla_risk_veto": "vla_risk_veto",
+    "vla_world_model": "vla_world_model",
+    "full_system": "full_system",
+}
+IMPLEMENTED_PIPELINES = tuple(sorted(set(PIPELINE_ALIASES.values())))
 _EPISODE_STEM = "episode-{index:02d}"
 
 
@@ -433,8 +441,12 @@ def _build_summary(
         },
         "week2_gate": {
             "rule": "VLA-only success >= min(0.40, 0.60 * scripted baseline rate)",
-            "baseline_rate": success.rate,
-            "threshold": settings.gate.threshold(success.rate),
+            "baseline_rate": success.rate
+            if canonical_pipeline(config.pipeline) == "baseline"
+            else None,
+            "threshold": settings.gate.threshold(success.rate)
+            if canonical_pipeline(config.pipeline) == "baseline"
+            else None,
         },
         "per_scene": per_scene,
         "failure_states": dict(sorted(failure_categories.items())),

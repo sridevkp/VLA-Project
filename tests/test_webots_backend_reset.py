@@ -320,7 +320,9 @@ def test_reset_twice_reacquires_can_and_restores_identical_episode_state():
 
     first = _observation_signature(first_observation)
     second = _observation_signature(second_observation)
-    assert first[0] == second[0] == 0.0
+    # Match the existing final reset physics step; controller timing is unchanged.
+    assert first[0] == pytest.approx(backend.io.ts / 1000)
+    assert second[0] == pytest.approx(first[0])
     np.testing.assert_array_equal(first[1], second[1])
     assert first[2] == second[2]
     _assert_mapping_close(first[3], second[3], tolerance=1e-3)

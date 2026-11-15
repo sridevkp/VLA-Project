@@ -272,6 +272,8 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
 
     try:
         canonical = canonical_pipeline(pipeline)
+        if canonical != "baseline":
+            raise ValueError("explicit policy factory required; use the comparison runner")
     except ValueError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error

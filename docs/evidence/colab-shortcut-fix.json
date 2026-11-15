@@ -1,0 +1,21 @@
+{
+  "root_cause_source": "owner-authenticated Colab filesystem report",
+  "project_shortcut": "/content/drive/MyDrive/vlarobot_smolvla",
+  "confirmed_canonical_target": "/content/drive/.shortcut-targets-by-id/1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla",
+  "complete_json_is_symlink": false,
+  "project_shortcut_is_symlink": true,
+  "fix": "pin and resolve trusted project entrypoint before constructing run paths; reject internal links and noncanonical write paths",
+  "targeted_regressions_passed": 29,
+  "cpu_suite_passed": 315,
+  "cpu_suite_deselected": 1,
+  "deselected_reason": "legacy TEST scene-generation unit intentionally excluded",
+  "cpu_suite_seconds": 195.09,
+  "scoped_lint_format": "src tests tools passed",
+  "updated_colab_cells": 3,
+  "all_production_size_sha256_gates_preserved": true,
+  "actual_authenticated_colab_audit_executed_here": false,
+  "training_started": false,
+  "original_checkpoints_modified": false,
+  "existing_recovery_directories_removed": false,
+  "test_evaluation_run": false
+}

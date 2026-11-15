@@ -12,6 +12,8 @@ from pathlib import Path
 from checkpoint_guard import (
     install_guards,
     latest,
+    path_audit,
+    require_canonical_path,
     require_isolated,
     sha256,
     verify_checkpoint,
@@ -21,7 +23,9 @@ from checkpoint_guard import (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("audit", "prepare", "restore-check", "train", "export"))
+    parser.add_argument(
+        "mode", choices=("path-audit", "audit", "prepare", "restore-check", "train", "export")
+    )
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--original", type=Path, required=True)
     parser.add_argument("--recovery", type=Path, required=True)
@@ -36,6 +40,21 @@ def main() -> None:
     required = training.CHECKPOINT_FILES
     source = args.original / "checkpoints/017000"
     require_isolated(args.original, args.recovery)
+    if args.mode == "path-audit":
+        result = path_audit(source)
+        mounts = Path("/proc/self/mountinfo")
+        if mounts.is_file():
+            result["drive_mountinfo"] = [
+                line
+                for line in mounts.read_text(encoding="utf-8").splitlines()
+                if "drive" in line.lower()
+            ]
+        print(json.dumps(result, indent=2))
+        return
+    require_canonical_path(args.original)
+    require_canonical_path(args.recovery)
+    if args.export is not None:
+        require_canonical_path(args.export)
     if args.mode == "audit":
         results = {}
         for number in (17000, 18000, 19000, 20000):

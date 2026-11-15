@@ -1,5 +1,12 @@
 # Proposed recovery from 017000 — training not executed
 
+Shortcut fix (v3): the owner confirmed `vlarobot_smolvla` is the only symlink
+ancestor; COMPLETE.json itself is regular. Resolve this trusted project entrypoint
+once to the exact confirmed `.shortcut-targets-by-id` target before constructing
+any Drive-backed original, recovery, export or metadata paths. No generic symlink
+exception is permitted. Checkpoint roots/descendants remain strictly protected.
+Preserve any existing failed recovery directory; v3 uses a new recovery output.
+
 Correction: the owner reports missing model tensors at 018000–020000 and missing
 optimizer tensors at 019000–020000. Do NOT download weights from 020000 unless
 physical presence is re-established. Earlier download instructions are superseded.
@@ -54,28 +61,41 @@ approved `training.py`, `checkpoint_export.py`, YAML, dataset, model configurati
 or source.zip is replaced. Hashes are recorded with recovery provenance.
 
 1. Upload these two prepared files to `MyDrive/vlarobot_smolvla/`:
-   `runs/recovery-prep-v2/recovery-tools-v2.zip` and
-   `runs/recovery-prep-v2/recovery-tools-v2-sha256.json` from the isolated worktree.
+   `runs/recovery-prep-v3/recovery-tools-v3.zip` and
+   `runs/recovery-prep-v3/recovery-tools-v3-sha256.json` from the isolated worktree.
 2. On a T4 runtime, rerun only Drive mount, pinned environment/bundle setup and
    approved-data validation cells if needed. Do NOT rerun diagnostic preflight,
    the original Train or resume cell, or the original Export cell.
 3. Add this new cell. It audits without training:
 
 ```python
-import hashlib, json, subprocess, zipfile
+import hashlib, importlib.util, json, subprocess, zipfile
 from pathlib import Path
 
-HELPERS = Path('/content/recovery-tools-v2')
-bundle = DRIVE / 'recovery-tools-v2.zip'
-expected = json.loads((DRIVE / 'recovery-tools-v2-sha256.json').read_text())['sha256']
-assert expected == '958013d958b386774a99745870095f5e841b76478b09e177eb9a0b29fa3ec76d'
+HELPERS = Path('/content/recovery-tools-v3')
+SHORTCUT = Path('/content/drive/MyDrive/vlarobot_smolvla')
+bundle = SHORTCUT / 'recovery-tools-v3.zip'
+expected = json.loads((SHORTCUT / 'recovery-tools-v3-sha256.json').read_text())['sha256']
+assert expected == 'e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70'
 assert hashlib.sha256(bundle.read_bytes()).hexdigest() == expected
 with zipfile.ZipFile(bundle) as archive:
     assert set(archive.namelist()) == {'checkpoint_guard.py', 'restore_gate.py', 'recover_training.py'}
     archive.extractall(HELPERS)
-RECOVERY = DRIVE / 'recovery' / 'training-tiago-step17000-v1'
+spec = importlib.util.spec_from_file_location('recovery_guard_v3', HELPERS / 'checkpoint_guard.py')
+assert spec is not None and spec.loader is not None
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+EXPECTED_ROOT = Path('/content/drive/.shortcut-targets-by-id/'
+                     '1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla')
+DRIVE_ROOT = guard.resolve_project_root(SHORTCUT, EXPECTED_ROOT)
+ORIGINAL = DRIVE_ROOT / 'training-tiago-v1'
+RECOVERY = DRIVE_ROOT / 'recovery' / 'training-tiago-step17000-v2'
+guard.require_isolated(ORIGINAL, RECOVERY)
+guard.require_canonical_path(ORIGINAL)
+guard.require_canonical_path(RECOVERY)
+print('CANONICAL_DRIVE_ROOT_VERIFIED', DRIVE_ROOT)
 COMMON = [str(PYTHON), str(HELPERS / 'recover_training.py')]
-PATHS = ['--project', str(SOURCE), '--original', str(TRAIN_OUT),
+PATHS = ['--project', str(SOURCE), '--original', str(ORIGINAL),
          '--recovery', str(RECOVERY), '--dataset', str(DATASET)]
 subprocess.run([*COMMON, 'audit', *PATHS], check=True)
 ```
@@ -86,11 +106,17 @@ This audit hashes all entries in COMPLETE, not only model and optimizer tensors.
 Expected summary: 17000 `verified: true`; 18000, 19000 and 20000
 `verified: false`; `selected` ends with `training-tiago-v1/checkpoints/017000`.
 The exact file count comes from the real manifest, not a hardcoded expected count.
+The selected path must now use the canonical `.shortcut-targets-by-id` prefix,
+not the `MyDrive/vlarobot_smolvla` shortcut spelling. `DATASET` and `SOURCE` remain
+the approved local paths from the notebook; no dataset, configuration or original
+TRAIN_OUT variable is rewritten. Source ZIP and dataset-provenance paths on Drive
+are derived from `ORIGINAL.parent`, which is the canonical project root.
 
 4. Once search and audit establish the route, prepare a separate copy, without
    training:
 
 ```python
+assert not RECOVERY.exists(), 'Preserve existing recovery; choose a new unused version'
 subprocess.run([*COMMON, 'prepare', *PATHS], check=True)
 ```
 
@@ -165,7 +191,7 @@ print('RECOVERY_UPDATES_VERIFIED: 3000 updates; final step 20000')
 7. After strict final-state/update-count checks, export in another new cell:
 
 ```python
-RECOVERED_EXPORT = DRIVE / 'recovery' / 'exports' / 'training-tiago-recovery-v1-step-020000'
+RECOVERED_EXPORT = DRIVE_ROOT / 'recovery' / 'exports' / 'training-tiago-recovery-v2-step-020000'
 subprocess.run([*COMMON, 'export', *PATHS, '--export', str(RECOVERED_EXPORT)], check=True)
 ```
 
@@ -197,8 +223,8 @@ subprocess.run([str(PYTHON), '-c', check_code, str(HELPERS), str(SOURCE),
 ```python
 import shutil
 
-LOCAL_ZIP = Path('/content/tiago-recovered-export-v1.zip')
-ARCHIVE_DIR = DRIVE / 'recovery' / 'archives'
+LOCAL_ZIP = Path('/content/tiago-recovered-export-v2.zip')
+ARCHIVE_DIR = DRIVE_ROOT / 'recovery' / 'archives'
 ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 DRIVE_ZIP = ARCHIVE_DIR / LOCAL_ZIP.name
 assert not LOCAL_ZIP.exists() and not DRIVE_ZIP.exists()

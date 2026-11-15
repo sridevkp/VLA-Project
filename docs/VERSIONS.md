@@ -54,3 +54,7 @@ approved installed LeRobot stack. It introduces no dependencies or training
 configuration changes. Linux guard tests pass; Windows and authenticated Colab
 execution remain unverified. Recovery is a separately identified continuation,
 not a bit-for-bit replay (dataloader cursor is not checkpointed by this LeRobot).
+
+Recovery helpers v3 add only standard-library canonical project-root handling
+and diagnostic path auditing. They supersede v2 for the confirmed Drive shortcut
+layout. Model/dataset/configuration and the pre-update CUDA restore gate are unchanged.

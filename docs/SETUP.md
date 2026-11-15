@@ -148,3 +148,8 @@ Proposed 017000 recovery is documented in TRAINED_EXPORT_RECOVERY.md. The separa
 `tools/recovery` helpers add no dependency and do not edit approved source bundles.
 Use audit/prepare before any opt-in training. Never rerun the original production
 cell as part of this recovery, and never infer completeness from COMPLETE.json alone.
+
+For the owner-confirmed Colab project shortcut, use the v3 bundle and the three
+audit/prepare/restore-only cells in COLAB_SHORTCUT_FIX.md. Preserve old recovery
+directories. The trusted project entrypoint is canonicalized before constructing
+run paths; all internal symlink and hash checks remain active.

@@ -4,14 +4,59 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+
+def resolve_project_root(root: Path, expected: Path) -> Path:
+    """Resolve only the explicitly trusted project entrypoint, not its descendants."""
+    expected = Path(os.path.abspath(expected))
+    canonical = root.resolve(strict=True)
+    if expected.resolve(strict=True) != expected or canonical != expected or not canonical.is_dir():
+        raise ValueError("project shortcut target differs from the confirmed canonical root")
+    return canonical
+
+
+def path_audit(root: Path, name: str = "COMPLETE.json") -> dict[str, Any]:
+    """Report leaf and ancestor lstat semantics; never implicitly trust a link."""
+    root = Path(os.path.abspath(root))
+    leaf = root / name
+    entries = []
+    for path in (leaf, root, *root.parents):
+        try:
+            info = path.lstat()
+            entries.append(
+                {
+                    "path": str(path),
+                    "is_symlink": path.is_symlink(),
+                    "link_target": os.readlink(path) if path.is_symlink() else None,
+                    "resolved": str(path.resolve(strict=True)),
+                    "lstat_mode": oct(info.st_mode),
+                    "is_mount": path.is_mount(),
+                }
+            )
+        except OSError as error:
+            entries.append({"path": str(path), "error": str(error)})
+    return {"root": str(root), "entries_leaf_first": entries}
 
 
 def require_isolated(original: Path, recovery: Path) -> None:
     original, recovery = original.resolve(), recovery.resolve()
     if original == recovery or original in recovery.parents or recovery in original.parents:
         raise ValueError("recovery must not overlap the original production directory")
+
+
+def require_canonical_path(path: Path) -> None:
+    """Reject descendant aliases before writing even to a not-yet-existing output."""
+    if not path.is_absolute() or ".." in path.parts:
+        raise ValueError("run/output path must be canonical and absolute, without traversal")
+    absolute = Path(os.path.abspath(path))
+    for component in (absolute, *absolute.parents):
+        if component.is_symlink():
+            raise ValueError(f"symlink in canonical run/output path: {component}")
+    if absolute.resolve() != absolute:
+        raise ValueError(f"run/output path differs from canonical spelling: {absolute}")
 
 
 def sha256(path: Path) -> str:
@@ -21,18 +66,41 @@ def sha256(path: Path) -> str:
 
 def regular(root: Path, name: str) -> Path:
     relative = PurePosixPath(name)
-    if relative.is_absolute() or ".." in relative.parts or "\\" in name or ":" in name:
+    if (
+        not relative.parts
+        or relative.is_absolute()
+        or ".." in relative.parts
+        or "\\" in name
+        or ":" in name
+    ):
         raise ValueError(f"unsafe manifest path: {name}")
-    path = root.joinpath(*relative.parts)
-    if root.is_symlink() or any(p.is_symlink() for p in (path, *path.parents)):
-        raise ValueError(f"symlink in manifest path: {name}")
+    root = Path(os.path.abspath(root))
+    # Callers construct paths from the once-resolved project root. No symlink
+    # exceptions apply to checkpoint/export roots or their internal components.
+    if root.is_symlink():
+        raise ValueError(f"symlink at approved checkpoint/export root: {root}")
+    for ancestor in root.parents:
+        if ancestor.is_symlink():
+            raise ValueError(f"symlink in checkpoint/export ancestor: {ancestor}")
+    canonical_root = root.resolve(strict=True)
+    path = root
+    for part in relative.parts:
+        path = path / part
+        if path.is_symlink():
+            raise ValueError(f"symlink in manifest descendant: {path}")
     if not path.is_file() or path.stat().st_size <= 0:
         raise ValueError(f"missing/empty file: {path}")
-    return path
+    resolved = path.resolve(strict=True)
+    if not resolved.is_relative_to(canonical_root):
+        raise ValueError(f"manifest path escapes approved root: {name}")
+    return resolved
 
 
 def verify_checkpoint(checkpoint: Path, required: tuple[str, ...]) -> dict[str, Any]:
     marker = regular(checkpoint, "COMPLETE.json")
+    for entry in checkpoint.rglob("*"):
+        if entry.is_symlink():
+            raise ValueError(f"symlink in checkpoint descendant: {entry}")
     marker_hash = sha256(marker)
     record = json.loads(marker.read_text(encoding="utf-8"))
     if record.get("schema_version") != 2 or record.get("step") != int(checkpoint.name):

@@ -1,5 +1,24 @@
 # Architecture Decision Records
 
+## ADR-0040: Resolve the confirmed Drive project shortcut before constructing run paths
+
+- Date: 2026-11-15. Root-cause evidence: owner-authenticated Colab lstat/resolve
+  results identify the project ancestor as a Drive shortcut; COMPLETE.json is a
+  regular file. The old all-ancestor rejection was overbroad for that entrypoint.
+- Resolve only the explicitly trusted project root, requiring its exact confirmed
+  canonical target. Construct original, new recovery, export and metadata paths
+  from that result. No ancestor allowlist or broad symlink exception is installed.
+- Reject symlinked checkpoint roots/descendants, traversal and canonical escapes;
+  keep canonical original/recovery isolation and every size/SHA-256 gate.
+- Preserve failed recovery directories. v3 helpers use a fresh versioned output
+  and retain the actual CUDA restoration gate before optimizer updates.
+- Real and malicious symlinks are created only in requested temporary regression
+  fixtures. Windows symlink tests skip if OS privileges prohibit their creation;
+  no repository or deployment symlinks are created.
+- No dependency, approved source archive, production checkpoint or frozen criterion
+  changes. No training or TEST evaluation executed.
+
+
 ## ADR-0039: Preserve original production evidence during state recovery
 
 - Date: 2026-11-15. Status: recovery procedure prepared, training not executed.

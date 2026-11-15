@@ -1,5 +1,11 @@
 # Production training handoff — 2026-11-15
 
+Latest owner update: production completed 20,000 steps, including 4,000 updates
+after restoring production checkpoint 16,000. The portable inference export
+returned code 0. These are user-supplied records pending local artifact inspection.
+The final sampled-change flag is false; its per-update sampling semantics do not
+establish equality to initialization. See `TRAINED_EXPORT_ACCEPTANCE.md`.
+
 The owner reports a successful authenticated T4 diagnostic: 20 optimizer updates,
 1.0675 steps/s, 2.73 GiB peak reserved memory, and complete checkpoint restoration.
 These measurements are owner-reported, not independently read from Drive here.

@@ -1,0 +1,13 @@
+{
+  "source": "owner authenticated Colab report; not independently verified local artifacts",
+  "optimizer_step": 20000,
+  "restored_training_step": 16000,
+  "actual_calls_this_invocation": 4000,
+  "approved_successful_episodes": 80,
+  "portable_export_returncode": 0,
+  "sampled_parameters_changed": false,
+  "final_weights_compared_with_initialization": false,
+  "local_inference_verified": false,
+  "frozen_train_vla_evaluation_completed": false,
+  "test_accessed": false
+}

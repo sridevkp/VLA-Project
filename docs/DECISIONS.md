@@ -1,5 +1,25 @@
 # Architecture Decision Records
 
+## ADR-0042: Prepare private receiver without provisioning credentials or services
+
+- Date: 2026-11-16. Status: CPU readiness work completed; network/GPU gates blocked.
+- Existing Tailscale is online; no SSH listener or expected host key was found.
+  Prepare a private-address-only SSH config and forced command dispatcher without
+  creating credentials, starting a server or changing tailnet/firewall policy.
+- Forced commands permit only fixed golden-input emit and fixed-root receive.
+  Owner approval/provisioning and verified host-key distribution precede activation.
+- Full-size local receiver test passed, including fsync and fresh-process SHA.
+  Do not substitute local throughput for authenticated Colab network measurements.
+- The current runtime remains17-only/single-invocation by design. Preserve18/19
+  checkpoints after interruption; do not silently reset to17 or count logical
+  committed steps as all physical optimizer calls. Partial resume remains blocked
+  until its lineage and remaining-update plan are separately reviewed.
+- Add an offline strict-final import gate; learned inference/evaluation commands
+  are prepared, not executed. No TEST access or frozen experiment changes.
+- No new dependencies installed. Tailscale/OpenSSH already exist on this Linux
+  host; any Colab networking enrollment remains an owner-managed external action.
+
+
 ## ADR-0041: Require independently acknowledged recovery artifacts
 
 - Date: 2026-11-16. Status: implemented/tested locally; external transfer and GPU

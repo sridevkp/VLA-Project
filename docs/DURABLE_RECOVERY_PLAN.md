@@ -74,36 +74,43 @@ The large golden input stays on Linux and is fetched directly over SSH.
 import hashlib, json, os, shutil, subprocess, sys, zipfile
 from pathlib import Path
 
-HELPERS = Path('/content/durable-tools-v4')
-PROJECT_DRIVE = Path('/content/drive/MyDrive/vlarobot_smolvla').resolve(strict=True)
-assert PROJECT_DRIVE == Path('/content/drive/.shortcut-targets-by-id/'
-    '1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla')
-bundle = PROJECT_DRIVE / 'recovery-tools-v4.zip'
-assert hashlib.sha256(bundle.read_bytes()).hexdigest() == '92aa2aa33b58625acce1bc18e91ae2fcee1b66d39bdc6d08a90ee47844509171'
+HELPERS = Path("/content/durable-tools-v4")
+PROJECT_DRIVE = Path("/content/drive/MyDrive/vlarobot_smolvla").resolve(strict=True)
+assert PROJECT_DRIVE == Path(
+    "/content/drive/.shortcut-targets-by-id/1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla"
+)
+bundle = PROJECT_DRIVE / "recovery-tools-v4.zip"
+assert (
+    hashlib.sha256(bundle.read_bytes()).hexdigest()
+    == "92aa2aa33b58625acce1bc18e91ae2fcee1b66d39bdc6d08a90ee47844509171"
+)
 with zipfile.ZipFile(bundle) as archive:
     for item in archive.infolist():
         name = Path(item.filename)
-        assert not name.is_absolute() and '..' not in name.parts
+        assert not name.is_absolute() and ".." not in name.parts
         assert (item.external_attr >> 16) & 0o170000 != 0o120000
     archive.extractall(HELPERS)
 sys.path.insert(0, str(HELPERS))
-gold = json.loads((HELPERS / 'checkpoint-017000.sha256.json').read_text())
-assert gold['step'] == 17000
+gold = json.loads((HELPERS / "checkpoint-017000.sha256.json").read_text())
+assert gold["step"] == 17000
 ```
 
 ### Cell 2: read-only Drive diagnostics (CPU, authentication may prompt)
 
 ```python
 from google.colab import auth
+
 auth.authenticate_user()
 import google.auth
 from googleapiclient.discovery import build
 from drive_diagnostics import inspect_drive
 
-credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/drive.metadata.readonly'])
-service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
-report = inspect_drive(service, '1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK')
-Path('/content/drive-persistence-diagnostics.json').write_text(json.dumps(report, indent=2))
+credentials, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/drive.metadata.readonly"]
+)
+service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+report = inspect_drive(service, "1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK")
+Path("/content/drive-persistence-diagnostics.json").write_text(json.dumps(report, indent=2))
 print(json.dumps(report, indent=2))
 ```
 
@@ -124,36 +131,68 @@ each new attempt. The Linux remote paths below are already prepared. No receiver
 daemon is needed: SSH invokes the standard-library Python receiver per transfer.
 
 ```python
-CONFIG = Path('/content/durable-ssh.json')
+CONFIG = Path("/content/durable-ssh.json")
 cfg = {
-    'destination': 'CHANGE_ME@reachable-linux-host', 'port': 22,
-    'identity_file': '/content/authorized_recovery_key',
-    'known_hosts': '/content/verified_known_hosts',
-    'remote_python': '/home/tj330/programs/VLA-Project/.venv/bin/python',
-    'remote_helper': '/home/tj330/programs/VLA-Project-analytic/tools/recovery/durable_transfer.py',
-    'remote_root': '/home/tj330/programs/VLA-Project/runs/independent-recovery-v1',
-    'run_id': 'durable-recovery-v1', 'timeout_s': 1800,
-    'canary_receipt': '/content/durable-canary-receipt-v1.json',
-    'canary_sha256': gold['sha256'],
+    "destination": "CHANGE_ME@reachable-linux-host",
+    "port": 22,
+    "identity_file": "/content/authorized_recovery_key",
+    "known_hosts": "/content/verified_known_hosts",
+    "remote_python": "/home/tj330/programs/VLA-Project/.venv/bin/python",
+    "remote_helper": "/home/tj330/programs/VLA-Project-analytic/tools/recovery/durable_transfer.py",
+    "remote_root": "/home/tj330/programs/VLA-Project/runs/independent-recovery-v1",
+    "run_id": "durable-recovery-v1",
+    "timeout_s": 1800,
+    "canary_receipt": "/content/durable-canary-receipt-v1.json",
+    "canary_sha256": gold["sha256"],
 }
-assert 'CHANGE_ME' not in cfg['destination']
-assert Path(cfg['identity_file']).is_file() and Path(cfg['known_hosts']).is_file()
-os.chmod(cfg['identity_file'], 0o600)
+assert "CHANGE_ME" not in cfg["destination"]
+assert Path(cfg["identity_file"]).is_file() and Path(cfg["known_hosts"]).is_file()
+os.chmod(cfg["identity_file"], 0o600)
 CONFIG.write_text(json.dumps(cfg, indent=2))
-INPUT_ZIP = Path('/content/checkpoint-017000.zip')
-TRANSFER = [str(PYTHON), str(HELPERS / 'durable_transfer.py')]
-REMOTE_INPUT = '/home/tj330/programs/VLA-Project-analytic/runs/durable-recovery-prep-v1/checkpoint-017000.zip'
-subprocess.run([*TRANSFER, 'pull', '--file', REMOTE_INPUT, '--out', str(INPUT_ZIP),
-    '--expected-sha256', gold['sha256'], '--bytes', str(gold['bytes']),
-    '--config', str(CONFIG)], check=True)
-subprocess.run([*TRANSFER, 'send', '--file', str(INPUT_ZIP), '--config', str(CONFIG),
-    '--artifact-id', cfg['run_id'] + '-canary-017000',
-    '--receipt', cfg['canary_receipt']], check=True)
-canary = json.loads(Path(cfg['canary_receipt']).read_text())
-assert canary['receiver_readback_verified'] and canary['directory_fsync']
-print('INDEPENDENT_STORAGE_CANARY_PASSED', canary)
-print('Approximate 6 GB handoff overhead seconds:',
-      6_000_000_000 * canary['sender_elapsed_s'] / canary['bytes'])
+INPUT_ZIP = Path("/content/checkpoint-017000.zip")
+TRANSFER = [str(PYTHON), str(HELPERS / "durable_transfer.py")]
+REMOTE_INPUT = (
+    "/home/tj330/programs/VLA-Project-analytic/runs/durable-recovery-prep-v1/checkpoint-017000.zip"
+)
+subprocess.run(
+    [
+        *TRANSFER,
+        "pull",
+        "--file",
+        REMOTE_INPUT,
+        "--out",
+        str(INPUT_ZIP),
+        "--expected-sha256",
+        gold["sha256"],
+        "--bytes",
+        str(gold["bytes"]),
+        "--config",
+        str(CONFIG),
+    ],
+    check=True,
+)
+subprocess.run(
+    [
+        *TRANSFER,
+        "send",
+        "--file",
+        str(INPUT_ZIP),
+        "--config",
+        str(CONFIG),
+        "--artifact-id",
+        cfg["run_id"] + "-canary-017000",
+        "--receipt",
+        cfg["canary_receipt"],
+    ],
+    check=True,
+)
+canary = json.loads(Path(cfg["canary_receipt"]).read_text())
+assert canary["receiver_readback_verified"] and canary["directory_fsync"]
+print("INDEPENDENT_STORAGE_CANARY_PASSED", canary)
+print(
+    "Approximate 6 GB handoff overhead seconds:",
+    6_000_000_000 * canary["sender_elapsed_s"] / canary["bytes"],
+)
 ```
 
 Allow roughly 47 minutes for 3000 updates based on the earlier preflight, PLUS
@@ -166,27 +205,39 @@ for saved states, archives, portable weights and bounded-memory wire files.
 ### Cell 4: stage original 017000 locally, prepare and verify CUDA restore
 
 ```python
-INPUT = Path('/content/durable-input-v1')
-ORIGINAL = INPUT / 'training-tiago-v1'
-RECOVERY = Path('/content/durable-recovery-v1')
+INPUT = Path("/content/durable-input-v1")
+ORIGINAL = INPUT / "training-tiago-v1"
+RECOVERY = Path("/content/durable-recovery-v1")
 assert not INPUT.exists() and not RECOVERY.exists()  # preserve all older attempts
-saved = ORIGINAL / 'checkpoints/017000'
+saved = ORIGINAL / "checkpoints/017000"
 saved.mkdir(parents=True)
 with zipfile.ZipFile(INPUT_ZIP) as archive:
-    assert set(archive.namelist()) == set(gold['files_sha256']) | {'COMPLETE.json'}
+    assert set(archive.namelist()) == set(gold["files_sha256"]) | {"COMPLETE.json"}
     archive.extractall(saved)  # exact golden names above, all hash-verified on input
-SOURCE_ZIP = STAGING / 'source.zip'  # from unchanged approved notebook setup
-assert hashlib.sha256(SOURCE_ZIP.read_bytes()).hexdigest() == '2d3cb4bd06ac8313b1bb3cdb5aae7f916c2b614dd3884172c4570be9ff36b2f5'
-shutil.copyfile(SOURCE_ZIP, INPUT / 'source.zip')
-shutil.copyfile(HELPERS / 'evidence/original-optimizer-steps.jsonl',
-                ORIGINAL / 'optimizer-steps.jsonl')  # historical context, not new updates
-COMMAND = [str(PYTHON), str(HELPERS / 'recover_training.py')]
-PATHS = ['--project', str(SOURCE), '--dataset', str(DATASET),
-         '--original', str(ORIGINAL), '--recovery', str(RECOVERY)]
-subprocess.run([*COMMAND, 'audit', *PATHS], check=True)
-subprocess.run([*COMMAND, 'prepare', *PATHS], check=True)
-subprocess.run([*COMMAND, 'restore-check', *PATHS], check=True)
-print('STOP: review actual CUDA restore, storage canary and capacity before training')
+SOURCE_ZIP = STAGING / "source.zip"  # from unchanged approved notebook setup
+assert (
+    hashlib.sha256(SOURCE_ZIP.read_bytes()).hexdigest()
+    == "2d3cb4bd06ac8313b1bb3cdb5aae7f916c2b614dd3884172c4570be9ff36b2f5"
+)
+shutil.copyfile(SOURCE_ZIP, INPUT / "source.zip")
+shutil.copyfile(
+    HELPERS / "evidence/original-optimizer-steps.jsonl", ORIGINAL / "optimizer-steps.jsonl"
+)  # historical context, not new updates
+COMMAND = [str(PYTHON), str(HELPERS / "recover_training.py")]
+PATHS = [
+    "--project",
+    str(SOURCE),
+    "--dataset",
+    str(DATASET),
+    "--original",
+    str(ORIGINAL),
+    "--recovery",
+    str(RECOVERY),
+]
+subprocess.run([*COMMAND, "audit", *PATHS], check=True)
+subprocess.run([*COMMAND, "prepare", *PATHS], check=True)
+subprocess.run([*COMMAND, "restore-check", *PATHS], check=True)
+print("STOP: review actual CUDA restore, storage canary and capacity before training")
 ```
 
 Expected: all12 original files verified, restored_step17000, actual SmolVLA on CUDA,

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "artifact_id": "cpu-fullsize-017000",
+  "filename": "checkpoint-017000.zip",
+  "bytes": 1610503770,
+  "sha256": "e34c9596d0fdaef579b734829d45a60c257370d9de4e17348055de6734366109",
+  "receiver_path": "/home/tj330/programs/VLA-Project-analytic/runs/fullsize-receiver-cpu-v1/artifacts/cpu-fullsize-017000/checkpoint-017000.zip",
+  "receiver_readback_verified": true,
+  "file_fsync": true,
+  "directory_fsync": true,
+  "receiver_free_bytes_after": 275100401664,
+  "sender_elapsed_s": 23.03463908098638,
+  "transport": "LOCAL_SUBPROCESS_NOT_SSH",
+  "source_bytes": 1610503770,
+  "fresh_process_readback_verified": true,
+  "fresh_process_readback_s": 3.2855480409925804,
+  "authenticated_network_measured": false,
+  "network_transfer_overhead_s": null,
+  "MiB_per_s_local": 66.67767081239933
+}

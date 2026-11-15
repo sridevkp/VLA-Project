@@ -20,57 +20,70 @@ Run only these three new cells, in order. None starts an optimizer update.
 import hashlib, importlib.util, json, subprocess, zipfile
 from pathlib import Path
 
-HELPERS = Path('/content/recovery-tools-v3')
-SHORTCUT = Path('/content/drive/MyDrive/vlarobot_smolvla')
-bundle = SHORTCUT / 'recovery-tools-v3.zip'
-expected = json.loads((SHORTCUT / 'recovery-tools-v3-sha256.json').read_text())['sha256']
-assert expected == 'e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70'
+HELPERS = Path("/content/recovery-tools-v3")
+SHORTCUT = Path("/content/drive/MyDrive/vlarobot_smolvla")
+bundle = SHORTCUT / "recovery-tools-v3.zip"
+expected = json.loads((SHORTCUT / "recovery-tools-v3-sha256.json").read_text())["sha256"]
+assert expected == "e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70"
 assert hashlib.sha256(bundle.read_bytes()).hexdigest() == expected
 with zipfile.ZipFile(bundle) as archive:
-    assert set(archive.namelist()) == {'checkpoint_guard.py', 'restore_gate.py', 'recover_training.py'}
+    assert set(archive.namelist()) == {
+        "checkpoint_guard.py",
+        "restore_gate.py",
+        "recover_training.py",
+    }
     archive.extractall(HELPERS)
-spec = importlib.util.spec_from_file_location('recovery_guard_v3', HELPERS / 'checkpoint_guard.py')
+spec = importlib.util.spec_from_file_location("recovery_guard_v3", HELPERS / "checkpoint_guard.py")
 assert spec is not None and spec.loader is not None
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
-EXPECTED_ROOT = Path('/content/drive/.shortcut-targets-by-id/'
-                     '1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla')
+EXPECTED_ROOT = Path(
+    "/content/drive/.shortcut-targets-by-id/1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla"
+)
 DRIVE_ROOT = guard.resolve_project_root(SHORTCUT, EXPECTED_ROOT)
-ORIGINAL = DRIVE_ROOT / 'training-tiago-v1'
-RECOVERY = DRIVE_ROOT / 'recovery' / 'training-tiago-step17000-v2'
+ORIGINAL = DRIVE_ROOT / "training-tiago-v1"
+RECOVERY = DRIVE_ROOT / "recovery" / "training-tiago-step17000-v2"
 guard.require_isolated(ORIGINAL, RECOVERY)
 guard.require_canonical_path(ORIGINAL)
 guard.require_canonical_path(RECOVERY)
-print('CANONICAL_DRIVE_ROOT_VERIFIED', DRIVE_ROOT)
-COMMON = [str(PYTHON), str(HELPERS / 'recover_training.py')]
-PATHS = ['--project', str(SOURCE), '--original', str(ORIGINAL),
-         '--recovery', str(RECOVERY), '--dataset', str(DATASET)]
-subprocess.run([*COMMON, 'audit', *PATHS], check=True)
+print("CANONICAL_DRIVE_ROOT_VERIFIED", DRIVE_ROOT)
+COMMON = [str(PYTHON), str(HELPERS / "recover_training.py")]
+PATHS = [
+    "--project",
+    str(SOURCE),
+    "--original",
+    str(ORIGINAL),
+    "--recovery",
+    str(RECOVERY),
+    "--dataset",
+    str(DATASET),
+]
+subprocess.run([*COMMON, "audit", *PATHS], check=True)
 ```
 
 ## 2. Prepare an unused isolated recovery directory
 
 ```python
-assert not RECOVERY.exists(), 'Preserve existing recovery; choose a new unused version'
-subprocess.run([*COMMON, 'prepare', *PATHS], check=True)
+assert not RECOVERY.exists(), "Preserve existing recovery; choose a new unused version"
+subprocess.run([*COMMON, "prepare", *PATHS], check=True)
 ```
 
 ## 3. Verify actual CUDA restoration, then stop
 
 ```python
-subprocess.run([*COMMON, 'restore-check', *PATHS], check=True)
-restored = json.loads((RECOVERY / 'restore-check.json').read_text())
-assert restored['actual_installed_smolvla'] is True
-assert restored['device'] == 'cuda'
-assert restored['restored_step'] == 17000
-assert restored['optimizer_updates_at_restore_gate'] == 0
-assert restored['adamw_parameter_groups_verified'] is True
-assert restored['scheduler_verified'] is True
-assert restored['original_directory_write_protection'] is True
-assert restored['model_tensor_values_verified'] > 0
-assert restored['optimizer_tensor_values_verified'] > 0
-assert restored['rng_tensors_verified'] > 0
-print('READY: actual CUDA state restored at 17000; zero optimizer updates')
+subprocess.run([*COMMON, "restore-check", *PATHS], check=True)
+restored = json.loads((RECOVERY / "restore-check.json").read_text())
+assert restored["actual_installed_smolvla"] is True
+assert restored["device"] == "cuda"
+assert restored["restored_step"] == 17000
+assert restored["optimizer_updates_at_restore_gate"] == 0
+assert restored["adamw_parameter_groups_verified"] is True
+assert restored["scheduler_verified"] is True
+assert restored["original_directory_write_protection"] is True
+assert restored["model_tensor_values_verified"] > 0
+assert restored["optimizer_tensor_values_verified"] > 0
+assert restored["rng_tensors_verified"] > 0
+print("READY: actual CUDA state restored at 17000; zero optimizer updates")
 ```
 
 Expected audit output: `CANONICAL_DRIVE_ROOT_VERIFIED` followed by the reported

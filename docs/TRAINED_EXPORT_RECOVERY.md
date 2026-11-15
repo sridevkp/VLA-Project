@@ -77,32 +77,45 @@ or source.zip is replaced. Hashes are recorded with recovery provenance.
 import hashlib, importlib.util, json, subprocess, zipfile
 from pathlib import Path
 
-HELPERS = Path('/content/recovery-tools-v3')
-SHORTCUT = Path('/content/drive/MyDrive/vlarobot_smolvla')
-bundle = SHORTCUT / 'recovery-tools-v3.zip'
-expected = json.loads((SHORTCUT / 'recovery-tools-v3-sha256.json').read_text())['sha256']
-assert expected == 'e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70'
+HELPERS = Path("/content/recovery-tools-v3")
+SHORTCUT = Path("/content/drive/MyDrive/vlarobot_smolvla")
+bundle = SHORTCUT / "recovery-tools-v3.zip"
+expected = json.loads((SHORTCUT / "recovery-tools-v3-sha256.json").read_text())["sha256"]
+assert expected == "e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70"
 assert hashlib.sha256(bundle.read_bytes()).hexdigest() == expected
 with zipfile.ZipFile(bundle) as archive:
-    assert set(archive.namelist()) == {'checkpoint_guard.py', 'restore_gate.py', 'recover_training.py'}
+    assert set(archive.namelist()) == {
+        "checkpoint_guard.py",
+        "restore_gate.py",
+        "recover_training.py",
+    }
     archive.extractall(HELPERS)
-spec = importlib.util.spec_from_file_location('recovery_guard_v3', HELPERS / 'checkpoint_guard.py')
+spec = importlib.util.spec_from_file_location("recovery_guard_v3", HELPERS / "checkpoint_guard.py")
 assert spec is not None and spec.loader is not None
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
-EXPECTED_ROOT = Path('/content/drive/.shortcut-targets-by-id/'
-                     '1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla')
+EXPECTED_ROOT = Path(
+    "/content/drive/.shortcut-targets-by-id/1xSPhmxF4hK0yTXPkPXGS8bziahI5LsVK/vlarobot_smolvla"
+)
 DRIVE_ROOT = guard.resolve_project_root(SHORTCUT, EXPECTED_ROOT)
-ORIGINAL = DRIVE_ROOT / 'training-tiago-v1'
-RECOVERY = DRIVE_ROOT / 'recovery' / 'training-tiago-step17000-v2'
+ORIGINAL = DRIVE_ROOT / "training-tiago-v1"
+RECOVERY = DRIVE_ROOT / "recovery" / "training-tiago-step17000-v2"
 guard.require_isolated(ORIGINAL, RECOVERY)
 guard.require_canonical_path(ORIGINAL)
 guard.require_canonical_path(RECOVERY)
-print('CANONICAL_DRIVE_ROOT_VERIFIED', DRIVE_ROOT)
-COMMON = [str(PYTHON), str(HELPERS / 'recover_training.py')]
-PATHS = ['--project', str(SOURCE), '--original', str(ORIGINAL),
-         '--recovery', str(RECOVERY), '--dataset', str(DATASET)]
-subprocess.run([*COMMON, 'audit', *PATHS], check=True)
+print("CANONICAL_DRIVE_ROOT_VERIFIED", DRIVE_ROOT)
+COMMON = [str(PYTHON), str(HELPERS / "recover_training.py")]
+PATHS = [
+    "--project",
+    str(SOURCE),
+    "--original",
+    str(ORIGINAL),
+    "--recovery",
+    str(RECOVERY),
+    "--dataset",
+    str(DATASET),
+]
+subprocess.run([*COMMON, "audit", *PATHS], check=True)
 ```
 
 Require every 017000 file verified and selected, with 018000–020000 rejected as
@@ -121,8 +134,8 @@ are derived from `ORIGINAL.parent`, which is the canonical project root.
    training:
 
 ```python
-assert not RECOVERY.exists(), 'Preserve existing recovery; choose a new unused version'
-subprocess.run([*COMMON, 'prepare', *PATHS], check=True)
+assert not RECOVERY.exists(), "Preserve existing recovery; choose a new unused version"
+subprocess.run([*COMMON, "prepare", *PATHS], check=True)
 ```
 
 Preparation checks the approved dataset, saved batch8/seed0/steps20000/save1000,
@@ -136,19 +149,19 @@ the initial recovery copy, inference export/archive and runtime overhead.
    before the training cell:
 
 ```python
-subprocess.run([*COMMON, 'restore-check', *PATHS], check=True)
-restored = json.loads((RECOVERY / 'restore-check.json').read_text())
-assert restored['actual_installed_smolvla'] is True
-assert restored['device'] == 'cuda'
-assert restored['restored_step'] == 17000
-assert restored['optimizer_updates_at_restore_gate'] == 0
-assert restored['adamw_parameter_groups_verified'] is True
-assert restored['scheduler_verified'] is True
-assert restored['original_directory_write_protection'] is True
-assert restored['model_tensor_values_verified'] > 0
-assert restored['optimizer_tensor_values_verified'] > 0
-assert restored['rng_tensors_verified'] > 0
-print('READY: actual CUDA state restored at 17000; zero optimizer updates')
+subprocess.run([*COMMON, "restore-check", *PATHS], check=True)
+restored = json.loads((RECOVERY / "restore-check.json").read_text())
+assert restored["actual_installed_smolvla"] is True
+assert restored["device"] == "cuda"
+assert restored["restored_step"] == 17000
+assert restored["optimizer_updates_at_restore_gate"] == 0
+assert restored["adamw_parameter_groups_verified"] is True
+assert restored["scheduler_verified"] is True
+assert restored["original_directory_write_protection"] is True
+assert restored["model_tensor_values_verified"] > 0
+assert restored["optimizer_tensor_values_verified"] > 0
+assert restored["rng_tensors_verified"] > 0
+print("READY: actual CUDA state restored at 17000; zero optimizer updates")
 ```
 
 This executes the installed training initialization path, compares every saved
@@ -167,7 +180,7 @@ restore gate before allowing its first policy update.
    Add a new cell:
 
 ```python
-subprocess.run([*COMMON, 'train', *PATHS, '--execute-recovery'], check=True)
+subprocess.run([*COMMON, "train", *PATHS, "--execute-recovery"], check=True)
 ```
 
 The helper restores the copied 017000 state and overrides only output directory.
@@ -180,24 +193,24 @@ pending that audit. Never recover with the original production training cell.
 After normal completion, verify actual records in a new cell:
 
 ```python
-events = [json.loads(s) for s in (RECOVERY / 'optimizer-steps.jsonl').read_text().splitlines()]
+events = [json.loads(s) for s in (RECOVERY / "optimizer-steps.jsonl").read_text().splitlines()]
 first, last = events[0], events[-1]
-assert first['optimizer_step'] == 17001
-assert first['restored_training_step'] == 17000
-assert first['actual_calls_this_invocation'] == 1
-assert last['optimizer_step'] == 20000
-assert last['restored_training_step'] == 17000
-assert last['actual_calls_this_invocation'] == 3000
-assert first['actual_post_step_hook'] and last['actual_post_step_hook']
-assert last['approved_successful_episodes'] == 80
-print('RECOVERY_UPDATES_VERIFIED: 3000 updates; final step 20000')
+assert first["optimizer_step"] == 17001
+assert first["restored_training_step"] == 17000
+assert first["actual_calls_this_invocation"] == 1
+assert last["optimizer_step"] == 20000
+assert last["restored_training_step"] == 17000
+assert last["actual_calls_this_invocation"] == 3000
+assert first["actual_post_step_hook"] and last["actual_post_step_hook"]
+assert last["approved_successful_episodes"] == 80
+print("RECOVERY_UPDATES_VERIFIED: 3000 updates; final step 20000")
 ```
 
 7. After strict final-state/update-count checks, export in another new cell:
 
 ```python
-RECOVERED_EXPORT = DRIVE_ROOT / 'recovery' / 'exports' / 'training-tiago-recovery-v2-step-020000'
-subprocess.run([*COMMON, 'export', *PATHS, '--export', str(RECOVERED_EXPORT)], check=True)
+RECOVERED_EXPORT = DRIVE_ROOT / "recovery" / "exports" / "training-tiago-recovery-v2-step-020000"
+subprocess.run([*COMMON, "export", *PATHS, "--export", str(RECOVERED_EXPORT)], check=True)
 ```
 
 Export requires physically hashed 020000 training state, recovered optimizer
@@ -206,7 +219,7 @@ requires model, processor and normalization assets. Partial exports are preserve
 on failure; choose a new version. Recheck durability in a fresh process:
 
 ```python
-check_code = '''
+check_code = """
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
@@ -218,9 +231,19 @@ verify_checkpoint(Path(sys.argv[3]) / 'checkpoints/020000', CHECKPOINT_FILES)
 verify_export(Path(sys.argv[4]), CHECKPOINT_FILES, 20000)
 require_trained_export(Path(sys.argv[4]))
 print('Fresh-process checkpoint/export read-back passed')
-'''
-subprocess.run([str(PYTHON), '-c', check_code, str(HELPERS), str(SOURCE),
-                str(RECOVERY), str(RECOVERED_EXPORT)], check=True)
+"""
+subprocess.run(
+    [
+        str(PYTHON),
+        "-c",
+        check_code,
+        str(HELPERS),
+        str(SOURCE),
+        str(RECOVERY),
+        str(RECOVERED_EXPORT),
+    ],
+    check=True,
+)
 ```
 
 8. Create and verify an explicit archive rather than asking Drive to ZIP a folder:
@@ -228,34 +251,39 @@ subprocess.run([str(PYTHON), '-c', check_code, str(HELPERS), str(SOURCE),
 ```python
 import shutil
 
-LOCAL_ZIP = Path('/content/tiago-recovered-export-v2.zip')
-ARCHIVE_DIR = DRIVE_ROOT / 'recovery' / 'archives'
+LOCAL_ZIP = Path("/content/tiago-recovered-export-v2.zip")
+ARCHIVE_DIR = DRIVE_ROOT / "recovery" / "archives"
 ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 DRIVE_ZIP = ARCHIVE_DIR / LOCAL_ZIP.name
 assert not LOCAL_ZIP.exists() and not DRIVE_ZIP.exists()
-manifest = json.loads((RECOVERED_EXPORT / 'export-manifest.json').read_text())
-expected_files = dict(manifest['files_sha256'])
-expected_files['export-manifest.json'] = hashlib.sha256(
-    (RECOVERED_EXPORT / 'export-manifest.json').read_bytes()).hexdigest()
-with zipfile.ZipFile(LOCAL_ZIP, 'x', compression=zipfile.ZIP_STORED) as archive:
+manifest = json.loads((RECOVERED_EXPORT / "export-manifest.json").read_text())
+expected_files = dict(manifest["files_sha256"])
+expected_files["export-manifest.json"] = hashlib.sha256(
+    (RECOVERED_EXPORT / "export-manifest.json").read_bytes()
+).hexdigest()
+with zipfile.ZipFile(LOCAL_ZIP, "x", compression=zipfile.ZIP_STORED) as archive:
     for name in expected_files:
         archive.write(RECOVERED_EXPORT / name, name)
 with zipfile.ZipFile(LOCAL_ZIP) as archive:
     assert archive.testzip() is None
-    assert archive.getinfo('model.safetensors').file_size > 0
+    assert archive.getinfo("model.safetensors").file_size > 0
     for name, digest in expected_files.items():
         with archive.open(name) as stream:
-            assert hashlib.file_digest(stream, 'sha256').hexdigest() == digest
-with LOCAL_ZIP.open('rb') as stream:
-    archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+            assert hashlib.file_digest(stream, "sha256").hexdigest() == digest
+with LOCAL_ZIP.open("rb") as stream:
+    archive_hash = hashlib.file_digest(stream, "sha256").hexdigest()
 shutil.copyfile(LOCAL_ZIP, DRIVE_ZIP)
-with DRIVE_ZIP.open('rb') as stream:
-    assert hashlib.file_digest(stream, 'sha256').hexdigest() == archive_hash
-transfer = {'archive': DRIVE_ZIP.name, 'sha256': archive_hash,
-            'bytes': DRIVE_ZIP.stat().st_size, 'step': 20000,
-            'model_sha256': manifest['files_sha256']['model.safetensors']}
-(ARCHIVE_DIR / 'recovery-transfer-sha256.json').write_text(json.dumps(transfer, indent=2))
-print('TRANSFER_ARCHIVE_VERIFIED', json.dumps(transfer, indent=2))
+with DRIVE_ZIP.open("rb") as stream:
+    assert hashlib.file_digest(stream, "sha256").hexdigest() == archive_hash
+transfer = {
+    "archive": DRIVE_ZIP.name,
+    "sha256": archive_hash,
+    "bytes": DRIVE_ZIP.stat().st_size,
+    "step": 20000,
+    "model_sha256": manifest["files_sha256"]["model.safetensors"],
+}
+(ARCHIVE_DIR / "recovery-transfer-sha256.json").write_text(json.dumps(transfer, indent=2))
+print("TRANSFER_ARCHIVE_VERIFIED", json.dumps(transfer, indent=2))
 ```
 
 Download that single ZIP and its `recovery-transfer-sha256.json`, not a Drive

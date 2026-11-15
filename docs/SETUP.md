@@ -159,3 +159,7 @@ DURABLE_RECOVERY_PLAN.md for the owner-reviewed independent SSH transfer plan,
 read-only Drive diagnostics and local-output restoration. Do not launch training
 until the real endpoint canary and actual CUDA restoration pass. The Linux backup
 is preserved and packaged separately; no original recovery directory is removed.
+
+Current PASS/BLOCKED status, private receiver templates, owner key/host-key steps,
+interruption limits and prepared import/TRAIN commands are in
+DURABLE_READINESS_REPORT.md. No SSH listener or credential is provisioned by setup.

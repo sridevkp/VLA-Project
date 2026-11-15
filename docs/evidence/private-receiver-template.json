@@ -1,0 +1,15 @@
+{
+  "sshd_config": "Port 2222\nAddressFamily inet\nListenAddress 100.86.97.108\nHostKey /home/tj330/programs/VLA-Project-analytic/runs/receiver-private-v1/host_ed25519\nPidFile /home/tj330/programs/VLA-Project-analytic/runs/receiver-private-v1/sshd.pid\nAuthorizedKeysFile /home/tj330/programs/VLA-Project-analytic/runs/receiver-private-v1/authorized_keys\nStrictModes yes\nUsePAM no\nPubkeyAuthentication yes\nAuthenticationMethods publickey\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers tj330\nDisableForwarding yes\nPermitTTY no\nPermitTunnel no\nPermitUserRC no\nLogLevel VERBOSE\nForceCommand /home/tj330/programs/VLA-Project/.venv/bin/python /home/tj330/programs/VLA-Project-analytic/tools/recovery/receiver_dispatch.py --config /home/tj330/programs/VLA-Project-analytic/runs/receiver-private-v1/receiver-server.json\n",
+  "server_config": {
+    "python": "/home/tj330/programs/VLA-Project/.venv/bin/python",
+    "helper": "/home/tj330/programs/VLA-Project-analytic/tools/recovery/durable_transfer.py",
+    "receiver_root": "/home/tj330/programs/VLA-Project/runs/independent-recovery-v1",
+    "golden_archive": "/home/tj330/programs/VLA-Project-analytic/runs/durable-recovery-prep-v1/checkpoint-017000.zip"
+  },
+  "files_sha256": {
+    "sshd_config": "f856c6b57ca8223c47d6a43927a132416681f904ca05cdb720b8094d294011d8",
+    "receiver-server.json": "e96cb882d770fa002a8f52acba16a16404e5c87bdb53789567f39cb171c39da4"
+  },
+  "keys_created": false,
+  "server_started": false
+}

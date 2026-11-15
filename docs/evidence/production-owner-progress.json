@@ -1,0 +1,14 @@
+{
+  "source": "user-supplied Google Drive training-progress.json fields",
+  "independently_verified_local_artifacts": false,
+  "run_kind": "smolvla-finetune",
+  "optimizer_step": 14700,
+  "restored_training_step": 0,
+  "actual_calls_this_invocation": 14700,
+  "actual_post_step_hook": true,
+  "smolvla_training_started": true,
+  "sampled_parameters_changed": true,
+  "approved_successful_episodes": 80,
+  "reset_or_restart_requested": false,
+  "configuration_changed": false
+}

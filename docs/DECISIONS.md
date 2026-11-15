@@ -1,5 +1,18 @@
 # Architecture Decision Records
 
+## ADR-0038: Qualify physical validation and geometry evidence by provenance
+
+- Date: 2026-11-15. Implemented locally on the isolated analytic branch.
+- Preserve mixed-runtime validation separately; the fresh canonical campaign is
+  15/18. Audit physical lift/placement independently of HOME.
+- Source-derived geometry corrections remain diagnostic until full coverage is
+  certified. Unknown geometry retains veto power.
+- Missing authoritative report definitions remain parameterized, not invented.
+- Record owner-reported production progress separately from local verification;
+  never restart active Colab training to apply local safeguards.
+- No public core interface, dependency, training artifact or frozen criterion changes.
+
+
 ## ADR-0001: Establish M0 Python project foundation
 
 - **Date:** 2026-11-07

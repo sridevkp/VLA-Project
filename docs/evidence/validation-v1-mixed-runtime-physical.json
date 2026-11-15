@@ -1,0 +1,633 @@
+{
+  "status": "MEASURED completed mixed-runtime diagnostic, not a matched reference campaign",
+  "episodes": 18,
+  "overall": {
+    "successes": 15,
+    "total": 18,
+    "rate": 0.8333333333333334,
+    "ci_low": 0.6077796189608429,
+    "ci_high": 0.9416342319413855
+  },
+  "per_scene": {
+    "validation-clear-i00": {
+      "successes": 3,
+      "total": 3,
+      "rate": 1.0,
+      "ci_low": 0.43850296824495455,
+      "ci_high": 1.0
+    },
+    "validation-cluttered-i01": {
+      "successes": 3,
+      "total": 3,
+      "rate": 1.0,
+      "ci_low": 0.43850296824495455,
+      "ci_high": 1.0
+    },
+    "validation-reach-limited-i02": {
+      "successes": 1,
+      "total": 3,
+      "rate": 0.3333333333333333,
+      "ci_low": 0.06149194472039615,
+      "ci_high": 0.7923403991979523
+    },
+    "validation-clear-i03": {
+      "successes": 3,
+      "total": 3,
+      "rate": 1.0,
+      "ci_low": 0.43850296824495455,
+      "ci_high": 1.0
+    },
+    "validation-cluttered-i04": {
+      "successes": 3,
+      "total": 3,
+      "rate": 1.0,
+      "ci_low": 0.43850296824495455,
+      "ci_high": 1.0
+    },
+    "validation-reach-limited-i05": {
+      "successes": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "ci_low": 0.20765960080204765,
+      "ci_high": 0.9385080552796037
+    }
+  },
+  "per_family": {
+    "clear": {
+      "successes": 6,
+      "total": 6,
+      "rate": 1.0,
+      "ci_low": 0.6096657120978346,
+      "ci_high": 1.0
+    },
+    "cluttered": {
+      "successes": 6,
+      "total": 6,
+      "rate": 1.0,
+      "ci_low": 0.6096657120978346,
+      "ci_high": 1.0
+    },
+    "reach-limited": {
+      "successes": 3,
+      "total": 6,
+      "rate": 0.5,
+      "ci_low": 0.18761630648265054,
+      "ci_high": 0.8123836935173494
+    }
+  },
+  "records": [
+    {
+      "index": 0,
+      "scene": "validation-clear-i00",
+      "family": "clear",
+      "seed": 0,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.14044395432325785,
+      "final_can_world_xyz_m": [
+        -1.0083566708710288,
+        -4.306492402542221,
+        0.8110697045045248
+      ],
+      "final_target_distance_m": 0.01451192638640369,
+      "final_height_error_m": 9.828609067508154e-06,
+      "final_tilt_deg": 0.06596548081183061,
+      "home_max_joint_error_rad": 0.017349611980067695,
+      "recorded_steps": 663,
+      "sim_duration_s": 21.184,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 1,
+      "scene": "validation-cluttered-i01",
+      "family": "cluttered",
+      "seed": 0,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13345269510465374,
+      "final_can_world_xyz_m": [
+        -1.0102912287643995,
+        -4.302762674162901,
+        0.8110372512964291
+      ],
+      "final_target_distance_m": 0.014587601576066827,
+      "final_height_error_m": -2.262459904700531e-05,
+      "final_tilt_deg": 0.010763324896561911,
+      "home_max_joint_error_rad": 0.014789198321639893,
+      "recorded_steps": 849,
+      "sim_duration_s": 27.136,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 2,
+      "scene": "validation-reach-limited-i02",
+      "family": "reach-limited",
+      "seed": 0,
+      "success": false,
+      "checks": {
+        "measured_home_return": false,
+        "placement_distance": false,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 1.1875556360729789e-05,
+      "final_can_world_xyz_m": [
+        -0.7669709782650405,
+        -4.466403647046675,
+        0.8110708460589665
+      ],
+      "final_target_distance_m": 0.2865157706290725,
+      "final_height_error_m": 1.0970163486612172e-05,
+      "final_tilt_deg": 0.06608801284385567,
+      "home_max_joint_error_rad": 1.5092161027636108,
+      "recorded_steps": 166,
+      "sim_duration_s": 5.28,
+      "failure_state": "PREGRASP",
+      "failure_reason": "IK rejected: error=0.007946m (limit 0.005000m), tilt=0.195deg (limit 15.000deg)"
+    },
+    {
+      "index": 3,
+      "scene": "validation-clear-i03",
+      "family": "clear",
+      "seed": 0,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13747357779638159,
+      "final_can_world_xyz_m": [
+        -1.0110583988358453,
+        -4.30402357670403,
+        0.811068926380484
+      ],
+      "final_target_distance_m": 0.015398167993046627,
+      "final_height_error_m": 9.050485011985465e-06,
+      "final_tilt_deg": 0.06287511258970514,
+      "home_max_joint_error_rad": 0.01836514154540031,
+      "recorded_steps": 728,
+      "sim_duration_s": 23.264,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 4,
+      "scene": "validation-cluttered-i04",
+      "family": "cluttered",
+      "seed": 0,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13558479486378494,
+      "final_can_world_xyz_m": [
+        -1.0095659104826975,
+        -4.303086471543712,
+        0.811071521652442
+      ],
+      "final_target_distance_m": 0.014128256518447497,
+      "final_height_error_m": -3.600167719497449e-09,
+      "final_tilt_deg": 0.06870065671922745,
+      "home_max_joint_error_rad": 0.015736626672482837,
+      "recorded_steps": 935,
+      "sim_duration_s": 29.888,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 5,
+      "scene": "validation-reach-limited-i05",
+      "family": "reach-limited",
+      "seed": 0,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13934964379062642,
+      "final_can_world_xyz_m": [
+        -1.0087404424806463,
+        -4.304224842628425,
+        0.8110573974795982
+      ],
+      "final_target_distance_m": 0.013896041697949389,
+      "final_height_error_m": -2.4784158976220994e-06,
+      "final_tilt_deg": 0.047413177939923,
+      "home_max_joint_error_rad": 0.019580392897288492,
+      "recorded_steps": 754,
+      "sim_duration_s": 24.096,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 6,
+      "scene": "validation-clear-i00",
+      "family": "clear",
+      "seed": 1,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.14119598548915424,
+      "final_can_world_xyz_m": [
+        -1.0032408941892483,
+        -4.310391407412606,
+        0.8110421621987466
+      ],
+      "final_target_distance_m": 0.014752737943742504,
+      "final_height_error_m": -1.771369672620704e-05,
+      "final_tilt_deg": 0.019693007677835283,
+      "home_max_joint_error_rad": 0.016009032242293327,
+      "recorded_steps": 650,
+      "sim_duration_s": 20.767999999999997,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 7,
+      "scene": "validation-cluttered-i01",
+      "family": "cluttered",
+      "seed": 1,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.1350436170482382,
+      "final_can_world_xyz_m": [
+        -1.0101446419257916,
+        -4.303867132587899,
+        0.8110703091735927
+      ],
+      "final_target_distance_m": 0.014712825498963755,
+      "final_height_error_m": 1.0433278120558498e-05,
+      "final_tilt_deg": 0.0666674044136863,
+      "home_max_joint_error_rad": 0.016956806874352463,
+      "recorded_steps": 1027,
+      "sim_duration_s": 32.83200000000001,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 8,
+      "scene": "validation-reach-limited-i02",
+      "family": "reach-limited",
+      "seed": 1,
+      "success": false,
+      "checks": {
+        "measured_home_return": false,
+        "placement_distance": false,
+        "placement_height": false,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13150326165778348,
+      "final_can_world_xyz_m": [
+        -0.9724491803477513,
+        -4.333034015559747,
+        0.9386705605505278
+      ],
+      "final_target_distance_m": 0.1252862908214134,
+      "final_height_error_m": 0.12761068465505554,
+      "final_tilt_deg": 1.1074679957187887,
+      "home_max_joint_error_rad": 1.5665118630615098,
+      "recorded_steps": 627,
+      "sim_duration_s": 20.032,
+      "failure_state": "TRANSIT",
+      "failure_reason": "IK solve failed: no solution within 0.150000 rad trust region met position tolerance 0.015000 m; best error=0.015873 m, tilt=0.397 deg"
+    },
+    {
+      "index": 9,
+      "scene": "validation-clear-i03",
+      "family": "clear",
+      "seed": 1,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13751714435972484,
+      "final_can_world_xyz_m": [
+        -1.011411877812766,
+        -4.302429934167284,
+        0.8110705735046964
+      ],
+      "final_target_distance_m": 0.015320869616195916,
+      "final_height_error_m": 1.0697609224341598e-05,
+      "final_tilt_deg": 0.0666262058257336,
+      "home_max_joint_error_rad": 0.016098814124164692,
+      "recorded_steps": 791,
+      "sim_duration_s": 25.279999999999998,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 10,
+      "scene": "validation-cluttered-i04",
+      "family": "cluttered",
+      "seed": 1,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13329074224211535,
+      "final_can_world_xyz_m": [
+        -1.0022982293034528,
+        -4.310679125779421,
+        0.811067207698742
+      ],
+      "final_target_distance_m": 0.014764347200058581,
+      "final_height_error_m": 7.33180326917271e-06,
+      "final_tilt_deg": 0.06455514745159101,
+      "home_max_joint_error_rad": 0.01694315883211765,
+      "recorded_steps": 994,
+      "sim_duration_s": 31.776,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 11,
+      "scene": "validation-reach-limited-i05",
+      "family": "reach-limited",
+      "seed": 1,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13795635990907185,
+      "final_can_world_xyz_m": [
+        -1.0088879625401557,
+        -4.306748741337435,
+        0.8110684797655008
+      ],
+      "final_target_distance_m": 0.014939092406270216,
+      "final_height_error_m": 8.603870024437299e-06,
+      "final_tilt_deg": 0.06439059784822185,
+      "home_max_joint_error_rad": 0.01665335504809931,
+      "recorded_steps": 815,
+      "sim_duration_s": 26.048,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 12,
+      "scene": "validation-clear-i00",
+      "family": "clear",
+      "seed": 2,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13208579012863875,
+      "final_can_world_xyz_m": [
+        -1.0069731387696592,
+        -4.307881247948095,
+        0.8110504488069483
+      ],
+      "final_target_distance_m": 0.014482137358257388,
+      "final_height_error_m": -9.427088524693872e-06,
+      "final_tilt_deg": 0.03476702197678289,
+      "home_max_joint_error_rad": 0.0154680275269351,
+      "recorded_steps": 824,
+      "sim_duration_s": 26.336000000000002,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 13,
+      "scene": "validation-cluttered-i01",
+      "family": "cluttered",
+      "seed": 2,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13487890286876958,
+      "final_can_world_xyz_m": [
+        -0.9864533627215328,
+        -4.306997421665018,
+        0.8110669706162801
+      ],
+      "final_target_distance_m": 0.018197262548259017,
+      "final_height_error_m": 7.094720814726507e-06,
+      "final_tilt_deg": 0.06216498830082027,
+      "home_max_joint_error_rad": 0.014984759472230436,
+      "recorded_steps": 825,
+      "sim_duration_s": 26.368,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 14,
+      "scene": "validation-reach-limited-i02",
+      "family": "reach-limited",
+      "seed": 2,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13079470799462467,
+      "final_can_world_xyz_m": [
+        -1.0127750226371637,
+        -4.293846571819309,
+        0.8110702555452486
+      ],
+      "final_target_distance_m": 0.017310855169275566,
+      "final_height_error_m": 1.0379649777014777e-05,
+      "final_tilt_deg": 0.06637594466311277,
+      "home_max_joint_error_rad": 0.018894517321880914,
+      "recorded_steps": 827,
+      "sim_duration_s": 26.432,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 15,
+      "scene": "validation-clear-i03",
+      "family": "clear",
+      "seed": 2,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13086545604747746,
+      "final_can_world_xyz_m": [
+        -0.9976786754347661,
+        -4.310236149965638,
+        0.8110662633517273
+      ],
+      "final_target_distance_m": 0.014451520254057217,
+      "final_height_error_m": 6.387456243484024e-06,
+      "final_tilt_deg": 0.06154111825892999,
+      "home_max_joint_error_rad": 0.018892118193850158,
+      "recorded_steps": 547,
+      "sim_duration_s": 17.471999999999998,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 16,
+      "scene": "validation-cluttered-i04",
+      "family": "cluttered",
+      "seed": 2,
+      "success": true,
+      "checks": {
+        "measured_home_return": true,
+        "placement_distance": true,
+        "placement_height": true,
+        "upright": true
+      },
+      "max_can_rise_m": 0.1370381821585276,
+      "final_can_world_xyz_m": [
+        -1.0106891458355587,
+        -4.302995575306111,
+        0.8110490741249585
+      ],
+      "final_target_distance_m": 0.014908126504661667,
+      "final_height_error_m": 0.0007265115636515551,
+      "final_tilt_deg": 0.03226582971002663,
+      "home_max_joint_error_rad": 0.016955962577903504,
+      "recorded_steps": 944,
+      "sim_duration_s": 30.176000000000005,
+      "failure_state": null,
+      "failure_reason": null
+    },
+    {
+      "index": 17,
+      "scene": "validation-reach-limited-i05",
+      "family": "reach-limited",
+      "seed": 2,
+      "success": false,
+      "checks": {
+        "measured_home_return": false,
+        "placement_distance": false,
+        "placement_height": false,
+        "upright": true
+      },
+      "max_can_rise_m": 0.13909384407477632,
+      "final_can_world_xyz_m": [
+        -0.973602870797888,
+        -4.338196816731654,
+        0.942271680863557
+      ],
+      "final_target_distance_m": 0.12985617358453533,
+      "final_height_error_m": 0.13121180496808016,
+      "final_tilt_deg": 2.0068576164916396,
+      "home_max_joint_error_rad": 1.7382811583543296,
+      "recorded_steps": 344,
+      "sim_duration_s": 10.976,
+      "failure_state": "TRANSIT",
+      "failure_reason": "IK solve failed: no solution within 0.150000 rad trust region met position tolerance 0.015000 m; best error=0.016650 m, tilt=0.418 deg"
+    }
+  ],
+  "failure_states": {
+    "PREGRASP": 1,
+    "TRANSIT": 2
+  },
+  "files_sha256": {
+    "episode-00.meta.json": "bd403a47b0ec9482ec1402646891328dbf87500d2294fbf6fa7f7080a60f9a55",
+    "episode-00.steps.npz": "46eaccc13a5e4f7b2d9c68fac82ca5ae44ae387e9efe1a6b2e2622052e6a7963",
+    "episode-01.meta.json": "9de703f4290d5c023f33a7af28eabaadc849cfc903a9d4c245546dab33b1a551",
+    "episode-01.steps.npz": "9181188098d867d588faf3643670d9744024269381aa86d94f1c665c635ad20f",
+    "episode-02.meta.json": "a3991f3d03dadc36879710d498d7d1f47329705ab0e50da26bfa76b57236e5ab",
+    "episode-02.steps.npz": "7c4b505ecd13e08e572311f4b080790c8fdfca838e3c1f90a42557cded2f340c",
+    "episode-03.meta.json": "0103990f7e5d75004648900f542a6098a6c5e5724ace9d1780c674ac2e4d155a",
+    "episode-03.steps.npz": "ecfb5b7d2961e80ddf5602edb73ed0b0d7e97fb22c98f1cba6498a93d091e491",
+    "episode-04.meta.json": "1678594f5b4d55e98508ce86df8f50cccb3ea85ffd6f9018f6cb74a7541375fe",
+    "episode-04.steps.npz": "1ffedc040397a29364af6fb0686f35781b7e8638502b57ce610c47de826476e2",
+    "episode-05.meta.json": "dacb9fe300392c170fb219bb2423ef777ca2173adbe1446ed5519f0ff2d6ca00",
+    "episode-05.steps.npz": "c20776626e6ada100359480c069bc8ce15490a23f732d0289680e11b96877b7f",
+    "episode-06.meta.json": "44f0eef62bf94fe34cb4aa1e83bd0805f4a7a1a073d28b3be0835cac064bdfb8",
+    "episode-06.steps.npz": "7a1bb28eddcad2938434559b17acf99e0588756e86f50b3521959d28812dfb95",
+    "episode-07.meta.json": "3567d2fa654e9ef4b35167e05137f8b26ea83cd8f6e32c7095480def4aeb6711",
+    "episode-07.steps.npz": "ddb92cc0ffa2e64e9d2d503a7a2b9df6a58fe1c882c17047ecf06bfabbd4ea08",
+    "episode-08.meta.json": "8fc9a2aa72836c923000e96b1aa4565437a3abb04fce7b9cc5f97baceb9c513b",
+    "episode-08.steps.npz": "18d2eaf43317857933dde75e4d040b2d02e5f31688665619f0f8b797a26e7af0",
+    "episode-09.meta.json": "b8ba6fab03bb42e7e2c6f4566d99feb1657e6b6b0840ceb70ed72a46a6f65756",
+    "episode-09.steps.npz": "fe114be88c696502a151af2d806b6b9727d268ea4f66c0e59bc21f3afb15509b",
+    "episode-10.meta.json": "cb0f6d1e8d4f31a09af2230902b530b710fbd6fe3f7450bdc2f0fc39bae04284",
+    "episode-10.steps.npz": "e3761259c59647d0895f8f203b12985577127f3c0f23e5f491145d09486de104",
+    "episode-11.meta.json": "e86244b840e561cbeea9b3895e2f904d4896faa4933f60643900e36742317cdd",
+    "episode-11.steps.npz": "ef00b61d8858846bbd79c583bdfaf057e4279a5bf5bdc5fe4b98bab8ca26c8b3",
+    "episode-12.meta.json": "72cc06687885af7f7237e0a306bbe61255ce3c4a0033205218f954835fb31c1a",
+    "episode-12.steps.npz": "02ba890a720202efa2d4ea5050b1fc677e15aaf8dec15a9a81bd5e9ecb701558",
+    "episode-13.meta.json": "598dfae01a900a98ffde298e8ccf19ca3940ea8268a839e282846acb5d9370a2",
+    "episode-13.steps.npz": "f3bb1a0c21925bc561871b89631b55df07cfa2b65d213bf22a75e53316bd3237",
+    "episode-14.meta.json": "72261d90a874647fe59ac2cd1482d204eaaa6846963b34b65881158b1e2fa2f5",
+    "episode-14.steps.npz": "ce4c480f6d529af50c9bc97eba94aa8a614eb918fe5fe35c59f7aeac6993e8b4",
+    "episode-15.meta.json": "4087e430216267ee121504b0bad1c15f9e796a4883a7ff28adc2d3837f099dfa",
+    "episode-15.steps.npz": "c951089f8e96af1444bfc42a7f3ddf9d4cb9ca31a8b8f969c52895fad8452973",
+    "episode-16.meta.json": "6a54171e01caa39bb2c33183d04dc1292e84a16208d4aaa183c81cd78a609e36",
+    "episode-16.steps.npz": "9b21ae37732aa1e86adb0abf9d87069d8e0ae9193ebabc9067d63bcb34603c74",
+    "episode-17.meta.json": "e611fa75f38dff51778f80af38e5bc76a7e8d2af19fb83da631e5da3300b0755",
+    "episode-17.steps.npz": "e6749076d86199169b0275c2d387810bfd538eaf91d8ead225818463f5ff46be"
+  },
+  "test_accessed": false,
+  "training_data_admitted": false,
+  "reproducibility_limits": [
+    "one fresh session per pair; no exact-pair repeated trials",
+    "serial then three workers; interrupted artifacts retained",
+    "seeds vary geometry; repeated scene indices require clustering",
+    "Wilson intervals are descriptive; no seed-only determinism or TEST claim"
+  ],
+  "runtime_qualification": {
+    "status": "mixed-environment diagnostic, not matched reference baseline",
+    "indices_0_to_3_brain": {
+      "numpy": "2.4.6",
+      "ikpy": "4.4.4",
+      "prefix": "/home/tj330/programs/VLA-Project/.venv"
+    },
+    "indices_4_to_17_brain": {
+      "numpy": "2.2.6",
+      "ikpy": "4.5.0",
+      "prefix": "/home/tj330/programs/VLA-Project/.venv-vla"
+    },
+    "physical_result": "15/18 with frozen scene/seed plan and thresholds",
+    "replacement": "runs/validation-evidence-v2-canonical",
+    "baseline_artifacts_modified": false,
+    "training_artifacts_modified": false
+  }
+}

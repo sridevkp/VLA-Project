@@ -96,14 +96,17 @@ def regular(root: Path, name: str) -> Path:
     return resolved
 
 
-def verify_checkpoint(checkpoint: Path, required: tuple[str, ...]) -> dict[str, Any]:
+def verify_checkpoint(
+    checkpoint: Path, required: tuple[str, ...], *, expected_step: int | None = None
+) -> dict[str, Any]:
     marker = regular(checkpoint, "COMPLETE.json")
     for entry in checkpoint.rglob("*"):
         if entry.is_symlink():
             raise ValueError(f"symlink in checkpoint descendant: {entry}")
     marker_hash = sha256(marker)
     record = json.loads(marker.read_text(encoding="utf-8"))
-    if record.get("schema_version") != 2 or record.get("step") != int(checkpoint.name):
+    step_number = int(checkpoint.name) if expected_step is None else expected_step
+    if record.get("schema_version") != 2 or record.get("step") != step_number:
         raise ValueError("checkpoint schema/step mismatch")
     sizes, hashes = record.get("files_and_sizes", {}), record.get("files_sha256", {})
     if not isinstance(sizes, dict) or not isinstance(hashes, dict):

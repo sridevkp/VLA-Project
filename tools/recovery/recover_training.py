@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--export", type=Path)
     parser.add_argument("--execute-recovery", action="store_true")
+    parser.add_argument("--durability-config", type=Path)
     args = parser.parse_args()
     sys.path.insert(0, str(args.project.resolve() / "src"))
     from vlarobot.vla import training
@@ -140,6 +141,11 @@ def main() -> None:
         if args.mode == "train" and not args.execute_recovery:
             raise ValueError("no training started: explicit --execute-recovery required")
         if args.mode == "train":
+            if args.durability_config is None:
+                raise ValueError("independent storage configuration required before training")
+            from durable_sink import validate_canary
+
+            validate_canary(args.durability_config)
             restored = json.loads((args.recovery / "restore-check.json").read_text())
             if (
                 restored.get("restored_step") != 17000
@@ -156,6 +162,10 @@ def main() -> None:
             args.dataset,
             stop_after_restore=args.mode == "restore-check",
         )
+        if args.mode == "train":
+            from durable_sink import install_sink
+
+            install_sink(args.recovery, args.durability_config)
         original_arguments = training.training_arguments
 
         def recovery_arguments(dataset: Path, output: Path, **kwargs: object) -> list[str]:

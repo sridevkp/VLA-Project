@@ -1,0 +1,14 @@
+{
+  "sha256": "92aa2aa33b58625acce1bc18e91ae2fcee1b66d39bdc6d08a90ee47844509171",
+  "files_sha256": {
+    "checkpoint_guard.py": "a737fc384da90f56ceee9744cb7cf1432fdb1429fcd877d1828e7f2d896d3973",
+    "drive_diagnostics.py": "59bb24b3ef291600726f8ed82a609dc334b2615698c539ee2fabd871ab1d3335",
+    "durable_sink.py": "b539a911c2f7926f371461e6647e0ffce8ecf3fc0bf204010d643e1089aa73e1",
+    "durable_transfer.py": "2c73cf1c6d22351cca1f095016c4e750e25a3fc892f701b65e81e3179393fee9",
+    "package_backup.py": "5788c34e604a3cd558c77847b7d31358c528de981c3454a50401ed9d1a7134e7",
+    "recover_training.py": "c6435cfa57e5cf73a682c5ca04110f4dda0e05803e1673251d11189873e3b291",
+    "restore_gate.py": "7b4caf30c63ae58799a5fbee00b37b9bfdf493e2382024342c8c04be178ba70a"
+  },
+  "training_started": false,
+  "network_transfer_executed": false
+}

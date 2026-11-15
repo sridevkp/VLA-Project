@@ -1,5 +1,27 @@
 # Architecture Decision Records
 
+## ADR-0041: Require independently acknowledged recovery artifacts
+
+- Date: 2026-11-16. Status: implemented/tested locally; external transfer and GPU
+  execution await owner-reviewed endpoint/authentication and readiness checks.
+- All12 files in the Linux 017000 backup match their COMPLETE sizes and hashes,
+  including the owner-supplied tensor identities. Preserve that backup unchanged.
+- Owner reports a completed recovery whose model/export/archive later disappeared
+  from Drive. Root cause remains unproven; prepare read-only account quota,
+  ownership and tensor/trash metadata diagnostics rather than blaming quota/cache.
+- Future recovery writes locally in Colab; the existing frozen save cadence gains
+  synchronous authenticated SSH handoffs to independent Linux storage. Final
+  portable model export is handed off before the full resumable checkpoint.
+- Linux receiver uses exclusive artifact directories, size/SHA checks, fsync and
+  read-back receipts. Missing receipts fail closed. Retain partial attempts and
+  provenance; never overwrite original runs. A full-size canary and capacity checks
+  precede training, alongside the actual CUDA state-restoration gate.
+- No Python dependencies added. Existing OpenSSH client/service and owner-managed
+  credentials/host keys are required; no networking service is launched here.
+- No dataset/model/training configuration, core interface, gate or TEST changes.
+  Recovery remains separately labeled; dataloader cursor replay is not claimed.
+
+
 ## ADR-0040: Resolve the confirmed Drive project shortcut before constructing run paths
 
 - Date: 2026-11-15. Root-cause evidence: owner-authenticated Colab lstat/resolve

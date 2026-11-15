@@ -1,5 +1,10 @@
 # Proposed recovery from 017000 — training not executed
 
+2026-11-16: the owner reports another completed recovery lost model/export/archive
+files after Drive disconnection. The Drive-output training/export instructions
+below are historical and superseded by DURABLE_RECOVERY_PLAN.md (v4). Do not launch
+them. Use the preserved Linux backup and independently acknowledged transfers.
+
 Shortcut fix (v3): the owner confirmed `vlarobot_smolvla` is the only symlink
 ancestor; COMPLETE.json itself is regular. Resolve this trusted project entrypoint
 once to the exact confirmed `.shortcut-targets-by-id` target before constructing

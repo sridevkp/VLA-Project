@@ -58,3 +58,9 @@ not a bit-for-bit replay (dataloader cursor is not checkpointed by this LeRobot)
 Recovery helpers v3 add only standard-library canonical project-root handling
 and diagnostic path auditing. They supersede v2 for the confirmed Drive shortcut
 layout. Model/dataset/configuration and the pre-update CUDA restore gate are unchanged.
+
+Durable recovery v4 adds standard-library transfer/packaging tools and uses the
+existing system OpenSSH client with strict host-key checking. The independent
+receiver is Linux. Colab's existing Google auth/Drive SDK is used only for optional
+read-only diagnostics in the notebook kernel; no training dependency pins change.
+Real SSH/Colab execution and Windows sender compatibility remain unverified here.

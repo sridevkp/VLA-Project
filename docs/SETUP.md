@@ -153,3 +153,9 @@ For the owner-confirmed Colab project shortcut, use the v3 bundle and the three
 audit/prepare/restore-only cells in COLAB_SHORTCUT_FIX.md. Preserve old recovery
 directories. The trusted project entrypoint is canonicalized before constructing
 run paths; all internal symlink and hash checks remain active.
+
+Durable recovery v4 supersedes the Drive-output training proposal. Follow
+DURABLE_RECOVERY_PLAN.md for the owner-reviewed independent SSH transfer plan,
+read-only Drive diagnostics and local-output restoration. Do not launch training
+until the real endpoint canary and actual CUDA restoration pass. The Linux backup
+is preserved and packaged separately; no original recovery directory is removed.

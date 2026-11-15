@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import copy
 import math
 from collections.abc import Callable
 
 from vlarobot.core.types import JointTarget, Pose3D, RobotState
+from vlarobot.world_model.state_copy import copy_robot
 
 
 class VelocityLimitedKinematics:
@@ -25,7 +25,7 @@ class VelocityLimitedKinematics:
     def step(self, state: RobotState, target: JointTarget, dt_s: float) -> RobotState:
         if not math.isfinite(dt_s) or dt_s <= 0:
             raise ValueError("explicit positive simulation step required")
-        result = copy.deepcopy(state)
+        result = copy_robot(state)
         result.joint_vel = {name: 0.0 for name in state.joint_pos}
         for name, value in target.q.items():
             if (
@@ -42,3 +42,27 @@ class VelocityLimitedKinematics:
             result.joint_vel[name] = move / dt_s
         result.ee_pose = self.forward(result.joint_pos)
         return result
+
+
+class MemoizedForward:
+    """Exact per-chunk memoization of a deterministic geometry-certified FK callable."""
+
+    def __init__(self, forward: Callable[[dict[str, float]], Pose3D], *, geometry_id: str) -> None:
+        if not geometry_id:
+            raise ValueError("fixed geometry fingerprint required for FK memoization")
+        self.forward, self.geometry_id = forward, geometry_id
+        self.values: dict[tuple[tuple[str, float], ...], Pose3D] = {}
+        self.calls = 0
+        self.hits = 0
+
+    def clear(self) -> None:
+        self.values.clear()
+
+    def __call__(self, joints: dict[str, float]) -> Pose3D:
+        key = tuple(sorted(joints.items()))
+        self.calls += 1
+        if key not in self.values:
+            self.values[key] = self.forward(joints)
+        else:
+            self.hits += 1
+        return self.values[key]

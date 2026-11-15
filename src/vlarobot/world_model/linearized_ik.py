@@ -14,12 +14,12 @@ from vlarobot.world_model.rollout import quaternion_product
 def pose_error(target: Pose3D, actual: Pose3D) -> np.ndarray:
     """Base-frame translation and shortest base-left orientation rotation vector."""
     a, b = np.asarray(target.orientation), np.asarray(actual.orientation)
-    q = quaternion_product(a, np.r_[-b[:3], b[3]])
+    q = quaternion_product(a, np.array((-b[0], -b[1], -b[2], b[3])))
     if q[3] < 0:
         q = -q
     length = np.linalg.norm(q[:3])
     rotation = q[:3] * (2 * math.atan2(length, q[3]) / length if length else 2.0)
-    return np.r_[target.position.as_array() - actual.position.as_array(), rotation]
+    return np.concatenate((target.position.as_array() - actual.position.as_array(), rotation))
 
 
 class LinearizedIK:
@@ -59,12 +59,28 @@ class LinearizedIK:
         self.reference: dict[str, float] | None = None
         self.jacobian: np.ndarray | None = None
         self.refreshes = 0
+        self._initial_key: tuple | None = None
+        self._initial_jacobian: np.ndarray | None = None
+        self._system: np.ndarray | None = None
 
     def reset(self, state: RobotState) -> None:
         self.reference = None
         self.jacobian = None
         self.refreshes = 0
-        self._refresh(state.joint_pos)
+        geometry_id = getattr(self.forward, "geometry_id", None)
+        key = (geometry_id, tuple(sorted(state.joint_pos.items())))
+        if geometry_id and self._initial_key == key:
+            assert self._initial_jacobian is not None
+            self.jacobian = self._initial_jacobian.copy()
+            self.reference = dict(state.joint_pos)
+            self._system = self.jacobian @ self.jacobian.T + self.damping * np.eye(6)
+            self.refreshes = 1
+        else:
+            self._refresh(state.joint_pos)
+            if geometry_id:
+                self._initial_key = key
+                assert self.jacobian is not None
+                self._initial_jacobian = self.jacobian.copy()
 
     def _refresh(self, joints: dict[str, float]) -> None:
         if any(n not in joints or not math.isfinite(joints[n]) for n in self.names):
@@ -77,6 +93,7 @@ class LinearizedIK:
             columns.append(pose_error(self.forward(right), self.forward(left)) / (2 * self.eps))
         self.jacobian = np.column_stack(columns)
         self.reference = dict(joints)
+        self._system = self.jacobian @ self.jacobian.T + self.damping * np.eye(6)
         self.refreshes += 1
 
     def solve(self, target: Pose3D, state: RobotState) -> JointTarget | None:
@@ -89,13 +106,19 @@ class LinearizedIK:
             error = pose_error(target, self.forward(current))
             assert self.jacobian is not None
             j = self.jacobian
-            delta = j.T @ np.linalg.solve(j @ j.T + self.damping * np.eye(6), error)
+            assert self._system is not None
+            delta = j.T @ np.linalg.solve(self._system, error)
             q = dict(current)
             for i, name in enumerate(self.names):
                 low, high = self.bounds[name]
-                q[name] = float(
-                    np.clip(current[name] + np.clip(delta[i], -self.trust, self.trust), low, high)
-                )
+                value = float(delta[i])
+                if math.isfinite(value):
+                    step = max(-self.trust, min(self.trust, value))
+                    q[name] = max(low, min(high, current[name] + step))
+                else:
+                    q[name] = float(
+                        np.clip(current[name] + np.clip(value, -self.trust, self.trust), low, high)
+                    )
             residual = pose_error(target, self.forward(q))
             if (
                 np.isfinite(residual).all()

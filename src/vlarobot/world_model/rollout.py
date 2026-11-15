@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -23,14 +22,31 @@ from vlarobot.core.types import (
     WorldState,
 )
 from vlarobot.world_model.kinematic import VelocityLimitedKinematics
+from vlarobot.world_model.state_copy import copy_world
 
 
 def quaternion_product(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Compose normalized xyzw rotations; reject malformed state rather than repair silently."""
     for q in (a, b):
-        if q.shape != (4,) or not np.isfinite(q).all() or not np.isclose(q @ q, 1):
+        if q.shape != (4,) or not np.isfinite(q).all():
             raise ValueError("unit xyzw quaternion required")
-    return np.r_[a[3] * b[:3] + b[3] * a[:3] + np.cross(a[:3], b[:3]), a[3] * b[3] - a[:3] @ b[:3]]
+        norm = q @ q
+        # Exact NumPy float64 isclose defaults; retain NumPy's dtype behavior otherwise.
+        valid = (
+            abs(float(norm) - 1.0) <= 1e-8 + 1e-5 if q.dtype == np.float64 else np.isclose(norm, 1)
+        )
+        if not valid:
+            raise ValueError("unit xyzw quaternion required")
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return np.array(
+        (
+            aw * bx + bw * ax + (ay * bz - az * by),
+            aw * by + bw * ay + (az * bx - ax * bz),
+            aw * bz + bw * az + (ax * by - ay * bx),
+            aw * bw - a[:3] @ b[:3],
+        )
+    )
 
 
 def rotate(q: np.ndarray, point: np.ndarray) -> np.ndarray:
@@ -114,10 +130,10 @@ class AnalyticSurrogate:
             or attachment.release_half_aperture_m <= 0
         ):
             raise ValueError("attachment requires an explicitly observed held object")
-        current = copy.deepcopy(state)
+        current = copy_world(state)
         if self.prepare_inverse is not None:
             self.prepare_inverse(current.robot)
-        states, reasons, released = [copy.deepcopy(current)], [], []
+        states, reasons, released = [copy_world(current)], [], []
         velocities = {name: np.zeros(3) for name in ids}
         assumptions = [
             "nominal velocity tracking",
@@ -128,7 +144,7 @@ class AnalyticSurrogate:
         if attachment:
             assumptions.append("rigid observed attachment until aperture release")
         for action in chunk.actions:
-            previous = copy.deepcopy(current)
+            previous = copy_world(current)
             just_released = None
             if not self.validate(action, current.robot):
                 reasons.append("safety-monitor-veto")
@@ -141,9 +157,9 @@ class AnalyticSurrogate:
                 if isinstance(action, EEDelta):
                     r = action.drot.as_array()
                     angle = np.linalg.norm(r)
-                    delta = np.r_[
-                        r * (np.sin(angle / 2) / angle if angle else 0.5), np.cos(angle / 2)
-                    ]
+                    delta = np.empty(4)
+                    delta[:3] = r * (np.sin(angle / 2) / angle if angle else 0.5)
+                    delta[3] = np.cos(angle / 2)
                     q = quaternion_product(delta, np.asarray(current.robot.ee_pose.orientation))
                     position = current.robot.ee_pose.position.as_array() + action.dpos.as_array()
                     target = Pose3D(
@@ -215,7 +231,7 @@ class AnalyticSurrogate:
                 reasons.append(
                     "arm-sweep-collision" if verdict is False else "unverified-arm-sweep"
                 )
-            states.append(copy.deepcopy(current))
+            states.append(copy_world(current))
         return Trajectory(
             tuple(states),
             chunk.dt,

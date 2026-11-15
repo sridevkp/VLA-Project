@@ -34,6 +34,8 @@ class SweptArmCheck:
         geometry: Callable[[WorldState], tuple[Capsule, ...]],
         *,
         required_links: tuple[str, ...],
+        required_objects: frozenset[str],
+        scene_complete: bool,
         dt_s: float,
         margin_m: float,
         adjacent_pairs: frozenset[frozenset[str]],
@@ -49,6 +51,7 @@ class SweptArmCheck:
         ):
             raise ValueError("explicit complete geometry contract, dt and positive margin required")
         self.geometry, self.required = geometry, frozenset(required_links)
+        self.required_objects, self.scene_complete = required_objects, scene_complete
         self.dt, self.margin = dt_s, margin_m
         self.adjacent, self.contacts = adjacent_pairs, permitted_contact_objects
 
@@ -57,6 +60,10 @@ class SweptArmCheck:
         return bool(np.all(a[0] <= b[1]) and np.all(b[0] <= a[1]))
 
     def __call__(self, before: WorldState, after: WorldState) -> bool | None:
+        if self.scene_complete is not True or not self.required_objects.issubset(
+            {o.object_id for o in before.scene.objects}
+        ):
+            return None
         if before.robot.base_pose != after.robot.base_pose:
             return None
         sampled = [self.geometry(before), self.geometry(after)]

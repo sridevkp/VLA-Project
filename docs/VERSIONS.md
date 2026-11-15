@@ -45,3 +45,6 @@ questions remain open wherever noted.
 | TIAGo URDF import into MuJoCo | MuJoCo is not installed and surrogate import is not implemented | UNVERIFIED; test at M5 |
 | Licences of selected model weights/software | No detector, segmenter, LLM, VLA runtime, or checkpoint has been selected for the new pipeline | Model licences remain UNVERIFIED until selection; the current locked Python dependencies have permissive licenses (see `DECISIONS.md`) |
 | Webots collision/contact-event access | M0 smoke world only checks camera and stepping | UNVERIFIED; validate the contact metric when implementing M2 evaluation |
+
+
+ADR-0037 adds only standard-library/numpy implementation code. No dependency, model, simulator velocity or training configuration was changed. Local profile uses existing IKPy/scipy through the accepted registered FK adapter; physical collision coverage and probabilistic calibration remain unverified.

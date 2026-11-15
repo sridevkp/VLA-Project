@@ -235,12 +235,20 @@ def test_arm_swept_volume_certificate_and_unknown_coverage():
         return (Capsule("arm", (0.0, 0.0, 0.5), (1.0, 0.0, 0.5), 0.02, 0.1),)
 
     check = SweptArmCheck(
-        geometry, required_links=("arm",), dt_s=0.032, margin_m=0.01, adjacent_pairs=frozenset()
+        geometry,
+        required_links=("arm",),
+        required_objects=frozenset(),
+        scene_complete=True,
+        dt_s=0.032,
+        margin_m=0.01,
+        adjacent_pairs=frozenset(),
     )
     assert check(state, copy.deepcopy(state)) is False
     incomplete = SweptArmCheck(
         geometry,
         required_links=("arm", "missing"),
+        required_objects=frozenset(),
+        scene_complete=True,
         dt_s=0.032,
         margin_m=0.01,
         adjacent_pairs=frozenset(),
@@ -248,6 +256,8 @@ def test_arm_swept_volume_certificate_and_unknown_coverage():
     assert incomplete(state, state) is None
     state.scene.objects.clear()
     assert check(state, state) is True
+    check.scene_complete = False
+    assert check(state, state) is None
 
 
 def test_common_recorder_all_five_arms_are_explicitly_simulated(tmp_path):

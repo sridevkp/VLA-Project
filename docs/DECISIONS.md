@@ -1467,3 +1467,6 @@
   episode train baseline takes ~9.2 h single instance at the phase6 rate; throughput/
   equivalence proofs and the MEASURED baseline are step 4/5 follow-on work, reported
   UNVERIFIED here). No public interface in `core/` changed; no frozen config changed.
+
+
+ADR-0037 — Isolated deterministic analytic rollout and five-arm mechanics (2026-11-15). Conditional attachment requires explicitly observed holding and never declares grasp from closing. Swept geometry requires coverage/speed certificates. Probabilities, report Eq. 3.8 components and validation-selected weights are explicit inputs, not guessed defaults. Approximate Jacobian planning IK is rejected on exact FK residual failure and does not replace execution IK. Registered replay and latency evidence are in WORLDMIND_DEVELOPMENT_CHECKPOINT.md; the 32-candidate latency target is not yet met. No contract, source training bundle, dataset, model, baseline or test split changed.

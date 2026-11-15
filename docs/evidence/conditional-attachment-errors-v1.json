@@ -1,0 +1,89 @@
+{
+  "status": "MEASURED oracle-initialized conditional rigid carry diagnostic",
+  "not_grasp_success_prediction": true,
+  "not_placement_prediction": true,
+  "episodes": 80,
+  "initialization": "TRAIN TRANSIT-entry oracle poses, conditioned on successful carry",
+  "future_input": "recorded commanded joints only",
+  "base_motion_model": "fixed initial base pose; drift contributes to error",
+  "test_accessed": false,
+  "brier_score": null,
+  "probabilities_calibrated": false,
+  "families": {
+    "clear": {
+      "1": {
+        "windows": 35,
+        "can_world_position_rmse_m": 0.007293964305461063,
+        "can_world_position_mae_m": 0.007110148946617944,
+        "can_world_orientation_rmse_rad": 0.016195716095358036,
+        "stationary_can_world_rmse_m": 0.00850501176612017
+      },
+      "10": {
+        "windows": 35,
+        "can_world_position_rmse_m": 0.011016247118650811,
+        "can_world_position_mae_m": 0.010177298877473595,
+        "can_world_orientation_rmse_rad": 0.023473094961191033,
+        "stationary_can_world_rmse_m": 0.05994412793957716
+      },
+      "50": {
+        "windows": 28,
+        "can_world_position_rmse_m": 0.01424752039676475,
+        "can_world_position_mae_m": 0.012808664932220317,
+        "can_world_orientation_rmse_rad": 0.0228233480455893,
+        "stationary_can_world_rmse_m": 0.2038386866629341
+      }
+    },
+    "cluttered": {
+      "1": {
+        "windows": 31,
+        "can_world_position_rmse_m": 0.007276975103318151,
+        "can_world_position_mae_m": 0.007128901996878869,
+        "can_world_orientation_rmse_rad": 0.015642207389779512,
+        "stationary_can_world_rmse_m": 0.008503417723750639
+      },
+      "10": {
+        "windows": 31,
+        "can_world_position_rmse_m": 0.010090015690567875,
+        "can_world_position_mae_m": 0.009587673200336716,
+        "can_world_orientation_rmse_rad": 0.0229119891400757,
+        "stationary_can_world_rmse_m": 0.05984938759179317
+      },
+      "50": {
+        "windows": 26,
+        "can_world_position_rmse_m": 0.01587606828944297,
+        "can_world_position_mae_m": 0.014176544660820967,
+        "can_world_orientation_rmse_rad": 0.02696008399025909,
+        "stationary_can_world_rmse_m": 0.20493273474541604
+      }
+    },
+    "reach-limited": {
+      "1": {
+        "windows": 14,
+        "can_world_position_rmse_m": 0.007320165292663656,
+        "can_world_position_mae_m": 0.006884303629376043,
+        "can_world_orientation_rmse_rad": 0.01586629821830259,
+        "stationary_can_world_rmse_m": 0.007754094677389947
+      },
+      "10": {
+        "windows": 14,
+        "can_world_position_rmse_m": 0.01256531575266053,
+        "can_world_position_mae_m": 0.01094140495663669,
+        "can_world_orientation_rmse_rad": 0.024092071866200625,
+        "stationary_can_world_rmse_m": 0.06845298029888154
+      },
+      "50": {
+        "windows": 11,
+        "can_world_position_rmse_m": 0.020838370921147598,
+        "can_world_position_mae_m": 0.019602252780285778,
+        "can_world_orientation_rmse_rad": 0.024328953996902988,
+        "stationary_can_world_rmse_m": 0.25091945738616134
+      }
+    }
+  },
+  "source_sha256": {
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/execution/attachment_validation.py": "0cb73f71cfe742462f3ee220f3500b88b520d3cf0ed383a7456e634ea9b819e1",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/rollout.py": "dee6487d7b319561af6c7168a299d0f59caa400d0078abbab31fe710963d0b3e",
+    "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/accepted.json": "10fa9cc159556d9b35f68233f73655df16835a837bf1b1f1265537d44a052665"
+  }
+}

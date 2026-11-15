@@ -140,3 +140,6 @@ sim_time=0.320s image_shape=(480, 640, 4)
 The Webots installation must include `lib/controller/python`. The cross-platform environment setup
 is provided by `vlarobot.env.configure_webots_environment`; it sets `WEBOTS_HOME` and adds the
 controller API directory to both `PYTHONPATH` and the running Python process's import path.
+
+
+Isolated WorldMind development commands and evidence: WORLDMIND_DEVELOPMENT_CHECKPOINT.md. Run pure-model tests without Webots; the recorded profile accepts the original project as an explicit read-only registered FK adapter. The TEST geometry generation unit is intentionally excluded before Week 4. Colab uses the approved main-worktree artifacts exclusively.

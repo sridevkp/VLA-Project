@@ -460,3 +460,6 @@ Definition of done: tests pass on Windows+Linux CI, docs updated, DECISIONS.md e
 **M1-02** — "Move the existing controller modules to `backends/webots/` behind `RobotBackend` per §6; add `SimServer` (ZMQ REP, lockstep) and `ZmqBackendClient`; add `FakeBackend`. Regression: scripted pick-and-place over 10 seeds matches the pre-refactor success rate."
 
 For M2+ create task cards from §5 using the template above; implement one card per agent session, keep PRs small, and require the acceptance command output in the PR description.
+
+
+ADR-0037 isolated analytic continuation: state trajectories are provided by world_model.rollout; core Predictor rollout requires calibrated Outcome probabilities. No core type/interface/wire signature changed. Five frozen arms share eval.comparison plans and metrics, with TEST denied before any generation. Scientific acceptance remains pending physical validation, calibrated risk definitions and planning latency.

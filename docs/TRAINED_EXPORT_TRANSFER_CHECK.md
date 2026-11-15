@@ -1,5 +1,9 @@
 # Transferred production export: blocked by missing weights
 
+Superseded recovery assumption: the owner subsequently confirmed model tensors
+are missing in Drive checkpoints 018000–020000. Do not download from 020000
+unless physical presence is re-established. Use TRAINED_EXPORT_RECOVERY.md.
+
 Inspected the direct contents of the primary worktree's `runs/trained-export`
 without modifying any transferred file. The existing installed-environment import
 validator fails in `require_trained_export` with `FileNotFoundError` for

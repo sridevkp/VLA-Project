@@ -48,3 +48,9 @@ questions remain open wherever noted.
 
 
 ADR-0037 adds only standard-library/numpy implementation code. No dependency, model, simulator velocity or training configuration was changed. Local profile uses existing IKPy/scipy through the accepted registered FK adapter; physical collision coverage and probabilistic calibration remain unverified.
+
+The 017000 recovery helper uses the existing Python 3.11 standard library and
+approved installed LeRobot stack. It introduces no dependencies or training
+configuration changes. Linux guard tests pass; Windows and authenticated Colab
+execution remain unverified. Recovery is a separately identified continuation,
+not a bit-for-bit replay (dataloader cursor is not checkpointed by this LeRobot).

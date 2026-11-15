@@ -1,5 +1,22 @@
 # Architecture Decision Records
 
+## ADR-0039: Preserve original production evidence during state recovery
+
+- Date: 2026-11-15. Status: recovery procedure prepared, training not executed.
+- Owner reports missing tensors at 018000–020000 and verified model/optimizer at
+  017000. Full 017000 manifest verification remains required in authenticated Colab.
+- Approved selector already rejects missing required tensors; stale manifests do
+  not prove missing files were accepted. Do not invent an upstream deletion cause.
+- Apply stricter all-entry, read-back and final-export guards in a separate helper
+  process. Preserve approved bundles and source files on disk.
+- Copy verified 017000 to a new versioned recovery directory. Restore full state
+  and override output path only; target 20000, batch8, seed0, save1000 remain frozen.
+- Original logs remain separate; replacement lineage and update counts must be
+  explicit. Dataloader cursor/worker state are not restored, so exact replay is
+  not claimed. No automatic training, evaluation or TEST access is authorized here.
+- No public core interface or dependency changes.
+
+
 ## ADR-0038: Qualify physical validation and geometry evidence by provenance
 
 - Date: 2026-11-15. Implemented locally on the isolated analytic branch.

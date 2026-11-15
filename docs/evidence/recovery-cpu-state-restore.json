@@ -1,0 +1,11 @@
+{
+  "synthetic_cpu_state_restore_only": true,
+  "restored_step": 17000,
+  "model_equal": true,
+  "optimizer_equal": true,
+  "scheduler_equal": true,
+  "python_numpy_torch_rng_equal": true,
+  "cuda_restore_verified": false,
+  "production_training_started": false,
+  "loop_updates_17000_to_20000": 3000
+}

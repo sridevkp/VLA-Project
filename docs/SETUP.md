@@ -143,3 +143,8 @@ controller API directory to both `PYTHONPATH` and the running Python process's i
 
 
 Isolated WorldMind development commands and evidence: WORLDMIND_DEVELOPMENT_CHECKPOINT.md. Run pure-model tests without Webots; the recorded profile accepts the original project as an explicit read-only registered FK adapter. The TEST geometry generation unit is intentionally excluded before Week 4. Colab uses the approved main-worktree artifacts exclusively.
+
+Proposed 017000 recovery is documented in TRAINED_EXPORT_RECOVERY.md. The separate
+`tools/recovery` helpers add no dependency and do not edit approved source bundles.
+Use audit/prepare before any opt-in training. Never rerun the original production
+cell as part of this recovery, and never infer completeness from COMPLETE.json alone.

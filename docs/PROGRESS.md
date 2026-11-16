@@ -1361,3 +1361,5 @@ uv run python -m vlarobot.cli run-episodes --determinism-check 3
   determinism re-run, offline re-eval of completed telemetry report, M1-06a/M1-07/M1 gates: UNVERIFIED.**
 
 Local recovered step20000 model validation: actual strict CPU import and TRAIN observation inference PASS (14.086s,50x7 float32). Physical adapter compatibility FAIL:35/50 gripper targets exceed0.045m (max0.0454760753). Stopped; no evaluation, further policy calls, clipping, TEST access or parameter changes. See LOCAL_MODEL_VALIDATION_STEP20000.md.
+
+Read-only gripper root-cause audit:80 TRAIN episodes/63081 frames; all labels exactly match accepted-command replay. Physical labels only0/0.045m, no invalid labels after existing exact float32 endpoint handling. Saved35/50 overshoots arise on an unconstrained learned output path; no demonstrated unit mismatch or label corruption. No new inference, correction, Webots or evaluation. See GRIPPER_ROOT_CAUSE_REPORT.md.

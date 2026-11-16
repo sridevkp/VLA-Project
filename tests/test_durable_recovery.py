@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sys
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -181,8 +182,9 @@ def checkpoint_fixture(recovery, step):
     return path, names
 
 
+@pytest.mark.parametrize("drive_mode", (False, True))
 def test_final_hook_prioritizes_portable_model_and_retries_without_updates(
-    tmp_path, modules, monkeypatch
+    tmp_path, modules, monkeypatch, drive_mode
 ):
     _, sink = modules
     recovery = tmp_path / "content/run-v4"
@@ -190,7 +192,24 @@ def test_final_hook_prioritizes_portable_model_and_retries_without_updates(
     checkpoint_fixture(recovery, 17000)
     canary = tmp_path / "canary.json"
     canary.write_text(json.dumps({"receiver_free_bytes_after": 10**12}), encoding="utf-8")
-    (recovery / "recovery-provenance.json").write_text("{}", encoding="utf-8")
+    processor = tmp_path / "processor"
+    processor.mkdir()
+    (processor / "config.json").write_bytes(b"processor metadata")
+    processor_hash = hashlib.sha256((processor / "config.json").read_bytes()).hexdigest()
+    (tmp_path / "processor-files.sha256.json").write_text(
+        json.dumps({"config.json": processor_hash}), encoding="utf-8"
+    )
+    (recovery / "recovery-provenance.json").write_text(
+        json.dumps(
+            {
+                "account_migration": {
+                    "processor_directory": str(processor),
+                    "processor_files_sha256": {"config.json": processor_hash},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     (recovery / "training-restore-check.json").write_text("{}", encoding="utf-8")
     (recovery / "optimizer-steps.jsonl").write_text(
         json.dumps(
@@ -228,27 +247,51 @@ def test_final_hook_prioritizes_portable_model_and_retries_without_updates(
         ),
     )
     monkeypatch.setattr(
-        sink, "validate_canary", lambda p: {"run_id": "durable-v4", "canary_receipt": str(canary)}
+        sink,
+        "validate_canary",
+        lambda p: {
+            "run_id": "durable-v4",
+            "canary_receipt": str(canary),
+            "transport": "drive_api" if drive_mode else "ssh",
+        },
     )
     attempts = []
 
     def transfer(artifact, config, artifact_id, receipt):
         attempts.append(artifact_id)
-        if len(attempts) == 1:
+        if len(attempts) == 1 and not drive_mode:
             raise TimeoutError("synthetic network interruption")
 
     monkeypatch.setattr(sink, "send", transfer)
+    if drive_mode:
+        module = importlib.import_module("drive_handoff")
+        monkeypatch.setattr(module, "send", transfer)
+        monkeypatch.setattr(
+            module, "DriveAPI", lambda cfg: SimpleNamespace(capacity=lambda n: None)
+        )
     sink.install_sink(recovery, tmp_path / "config", local_root=tmp_path / "content")
     assert training.mark_checkpoint_complete(saved) == saved
-    assert attempts == [
+    expected = [
         "durable-v4-portable-020000-attempt-1",
         "durable-v4-portable-020000-attempt-2",
         "durable-v4-checkpoint-020000-attempt-1",
     ]
+    if drive_mode:
+        expected = [
+            "durable-v4-portable-020000-attempt-1",
+            "durable-v4-checkpoint-020000-attempt-1",
+        ]
+    assert attempts == expected
     assert (saved / "pretrained_model/model.safetensors").read_bytes() == b"state"
+    with zipfile.ZipFile(recovery / "handoff/checkpoint-020000.zip") as archive:
+        assert archive.read("recovery-evidence/processor/config.json") == b"processor metadata"
+        assert "recovery-evidence/processor-files.sha256.json" in archive.namelist()
 
 
-def test_all_transfer_failures_stop_callback_preserving_local_state(tmp_path, modules, monkeypatch):
+@pytest.mark.parametrize("drive_mode", (False, True))
+def test_all_transfer_failures_stop_callback_preserving_local_state(
+    tmp_path, modules, monkeypatch, drive_mode
+):
     _, sink = modules
     recovery = tmp_path / "content/run"
     saved, required = checkpoint_fixture(recovery, 18000)
@@ -268,17 +311,29 @@ def test_all_transfer_failures_stop_callback_preserving_local_state(tmp_path, mo
         SimpleNamespace(training=training, checkpoint_export=SimpleNamespace()),
     )
     monkeypatch.setattr(
-        sink, "validate_canary", lambda p: {"run_id": "failure-v4", "canary_receipt": str(canary)}
+        sink,
+        "validate_canary",
+        lambda p: {
+            "run_id": "failure-v4",
+            "canary_receipt": str(canary),
+            "transport": "drive_api" if drive_mode else "ssh",
+        },
     )
 
     def fail(*args):
         raise TimeoutError("synthetic outage")
 
     monkeypatch.setattr(sink, "send", fail)
+    if drive_mode:
+        module = importlib.import_module("drive_handoff")
+        monkeypatch.setattr(module, "send", fail)
+        monkeypatch.setattr(
+            module, "DriveAPI", lambda cfg: SimpleNamespace(capacity=lambda n: None)
+        )
     sink.install_sink(recovery, tmp_path / "config", local_root=tmp_path / "content")
     with pytest.raises(TimeoutError):
         training.mark_checkpoint_complete(saved)
-    assert len(list((recovery / "receipts").glob("*.failed.json"))) == 3
+    assert len(list((recovery / "receipts").glob("*.failed.json"))) == (1 if drive_mode else 3)
     assert (saved / "training_state/optimizer_state.safetensors").read_bytes() == b"state"
 
 

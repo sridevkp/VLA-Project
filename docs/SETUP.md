@@ -168,3 +168,14 @@ For a second Google account, use notebooks/smolvla_account_migration.ipynb and t
 v5 copy-paste cells in DURABLE_RECOVERY_PLAN.md. Do not reuse the original account's
 shortcut ID, cached authentication or canary receipt. The v4 plan is archived in
 docs/history; the approved source/data ZIPs and original notebook remain unchanged.
+# Current-session Drive recovery handoff
+
+After second-account migration Cells 1–4, use
+[the v6 replacement cells](DRIVE_HANDOFF_REPLACEMENT_CELLS.md) in the same kernel.
+Only the small helper patch is uploaded; source, dataset and installed environment
+are reused. Google authorization must permit read access and creation of app-owned
+files in the second account. The worker needs no new SDK dependency: it uses stdlib
+HTTPS and a private local access-token file refreshed by the existing Colab kernel.
+The helper creates a new second-owned My Drive folder; no original evidence is
+updated or deleted. Actual API persistence and CUDA restoration are owner-session
+stop gates, not locally verified claims. Training remains commented out.

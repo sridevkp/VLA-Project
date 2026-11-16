@@ -71,3 +71,11 @@ The11 metadata files are byte-for-byte copies pinned by the original portable
 export manifest. Actual installed config and pre/postprocessor loading passed on
 CPU with no model construction/inference or optimizer update; new-account CUDA,
 Google authentication, permissions and transport remain unverified locally.
+# Recovery transport v6 (2026-11-16)
+
+Drive API resumable checkpoint handoff replaces unavailable SSH for the current
+second-account session. No model, optimizer, dataset, batch, seed, step target,
+save cadence, source bundle or ML dependency pin changes. Worker transport uses
+Python 3.11 stdlib; Google authentication/SDK stays in the already configured
+Colab notebook kernel. Actual Google permissions and CUDA restore remain unverified
+locally; mocked REST tests do not certify the production session.

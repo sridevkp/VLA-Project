@@ -1,5 +1,12 @@
 # Durable recovery plan — second-account migration (v5)
 
+**Current session after completed Cells 1–4:** use
+[Drive API replacement cells (v6)](DRIVE_HANDOFF_REPLACEMENT_CELLS.md).
+They replace the SSH handoff and old Cells 5–8 with a new second-account-owned
+Drive folder and synchronous API integrity verification. The v5 procedure below
+is preserved as historical evidence; its private SSH route is not required by v6.
+No training is launched by the replacement cells as delivered.
+
 **Prepared, not executed. NO-GO until the new session passes all stop gates.**
 No training, evaluation, credential creation or service startup is performed by
 this preparation. The original approved notebook, source/data bundles, 017000

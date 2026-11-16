@@ -1,4 +1,4 @@
-"""Fail-closed independent checkpoint handoff on the frozen save cadence."""
+"""Fail-closed verified checkpoint handoff on the frozen save cadence."""
 
 from __future__ import annotations
 
@@ -52,6 +52,10 @@ def archive_tree(folder: Path, output: Path, *, extras: dict[str, Path] | None =
 
 def validate_canary(config_file: Path) -> dict[str, Any]:
     config = json.loads(config_file.read_text(encoding="utf-8"))
+    if config.get("transport") == "drive_api":
+        from drive_handoff import validate_canary as validate_drive
+
+        return validate_drive(config_file)
     identifier(config["run_id"] + "-checkpoint-020000-attempt-3")
     identifier(config["run_id"] + "-portable-020000-attempt-3")
     ssh_command(config)
@@ -71,7 +75,7 @@ def validate_canary(config_file: Path) -> dict[str, Any]:
 
 
 def install_sink(recovery: Path, config_file: Path, *, local_root: Path = Path("/content")) -> None:
-    """All bytes and receipts remain local until the independent Linux ACK."""
+    """Block the optimizer until the selected persistence backend verifies the save."""
     from vlarobot.vla import checkpoint_export, training
 
     config = validate_canary(config_file)
@@ -84,25 +88,34 @@ def install_sink(recovery: Path, config_file: Path, *, local_root: Path = Path("
     initial_bytes = sum(initial["files_and_sizes"].values())
     model_bytes = initial["files_and_sizes"]["pretrained_model/model.safetensors"]
     local_required = 8 * initial_bytes + 3 * model_bytes
-    receiver_required = 12 * initial_bytes + 4 * model_bytes
-    canary = json.loads(Path(config["canary_receipt"]).read_text(encoding="utf-8"))
     if shutil.disk_usage(recovery).free < local_required:
         raise ValueError("insufficient Colab-local headroom for frozen saves/archives/wire files")
-    if canary.get("receiver_free_bytes_after", 0) < receiver_required:
-        raise ValueError("independent receiver headroom not established by canary receipt")
+    drive_mode = config.get("transport") == "drive_api"
+    if drive_mode:
+        from drive_handoff import DriveAPI
+        from drive_handoff import send as send_drive
+
+        DriveAPI(config).capacity(3 * initial_bytes + model_bytes + 64 * 1024**2)
+        sender = send_drive
+    else:
+        receiver_required = 12 * initial_bytes + 4 * model_bytes
+        canary = json.loads(Path(config["canary_receipt"]).read_text(encoding="utf-8"))
+        if canary.get("receiver_free_bytes_after", 0) < receiver_required:
+            raise ValueError("independent receiver headroom not established by canary receipt")
+        sender = send
 
     def deliver(artifact: Path, artifact_id: str) -> None:
         for attempt in range(1, 4):
             attempt_id = artifact_id + f"-attempt-{attempt}"
             receipt = recovery / "receipts" / (attempt_id + ".json")
             try:
-                send(artifact, config_file, attempt_id, receipt)
+                sender(artifact, config_file, attempt_id, receipt)
             except Exception as error:
                 receipt.parent.mkdir(exist_ok=True)
                 failure = receipt.with_suffix(".failed.json")
                 with failure.open("x", encoding="utf-8") as stream:
                     json.dump({"attempt": attempt, "error_type": type(error).__name__}, stream)
-                if attempt == 3:
+                if drive_mode or attempt == 3:
                     raise
             else:
                 return
@@ -149,9 +162,26 @@ def install_sink(recovery: Path, config_file: Path, *, local_root: Path = Path("
             "recovery-evidence/training-restore-check.json": recovery
             / "training-restore-check.json",
         }
+        provenance = json.loads((recovery / "recovery-provenance.json").read_text(encoding="utf-8"))
+        relocation = provenance.get("account_migration")
+        if relocation:
+            processor = Path(relocation["processor_directory"])
+            for name, expected in relocation["processor_files_sha256"].items():
+                asset = processor / name
+                if sha256(asset) != expected:
+                    raise ValueError("processor snapshot changed before checkpoint handoff")
+                evidence["recovery-evidence/processor/" + name] = asset
+            evidence["recovery-evidence/processor-files.sha256.json"] = (
+                processor.parent / "processor-files.sha256.json"
+            )
         archive_tree(checkpoint, package, extras=evidence)
         deliver(package, config["run_id"] + f"-checkpoint-{step:06d}")
-        print(f"INDEPENDENT_CHECKPOINT_RECEIPT_VERIFIED step={step}", flush=True)
+        label = (
+            "DRIVE_API_CHECKPOINT_VERIFIED"
+            if drive_mode
+            else "INDEPENDENT_CHECKPOINT_RECEIPT_VERIFIED"
+        )
+        print(f"{label} step={step}", flush=True)
         return result
 
     training.mark_checkpoint_complete = mark

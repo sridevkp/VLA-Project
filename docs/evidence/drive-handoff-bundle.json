@@ -1,0 +1,21 @@
+{
+  "sha256": "cc30fc162fae8f23462c32d71195bd26390e23a08631eb1c3e1a6a8d36a3b47d",
+  "transport": "drive_api",
+  "helper_files_sha256": {
+    "account_migration.py": "60034c400e77599c86a6f26bb93490afd32b4c5f52d425bff8b2ce9ca7c29ed3",
+    "checkpoint_guard.py": "a737fc384da90f56ceee9744cb7cf1432fdb1429fcd877d1828e7f2d896d3973",
+    "drive_diagnostics.py": "59bb24b3ef291600726f8ed82a609dc334b2615698c539ee2fabd871ab1d3335",
+    "drive_handoff.py": "8cce5583cef82383db7a165e8fb7ade1fc77c875729b8e80ce6d00d3d64cf0dd",
+    "drive_handoff_setup.py": "a798a73f3050ec7f55ed4c56bd76c70330ffa180c4e0dc7e0e8b07b495d974b4",
+    "durable_sink.py": "3b73a5d650126158088e0a3c3f9af129a55f9ed85b4984cdeefdd7563e507bd6",
+    "durable_transfer.py": "2c73cf1c6d22351cca1f095016c4e750e25a3fc892f701b65e81e3179393fee9",
+    "local_import_gate.py": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e",
+    "package_backup.py": "5788c34e604a3cd558c77847b7d31358c528de981c3454a50401ed9d1a7134e7",
+    "receiver_dispatch.py": "3480e21117c8c0678da0a6a8d034c0acef77b254fcf46a719002272e87c53d25",
+    "recover_training.py": "4d4d874fee2863f58af21cd9e88031459b0ac71c62083ce7822a17cd4343f22e",
+    "restore_gate.py": "071cf660ee012a432fe51b1314ad7fd53a3cad072e1400c6a6e9867acc849063"
+  },
+  "training_started": false,
+  "actual_drive_api_upload_tested": false,
+  "original_checkpoint_modified": false
+}

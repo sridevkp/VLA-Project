@@ -1,0 +1,52 @@
+{
+  "transport": "drive_api",
+  "checkpoint_creation": "colab_local_only",
+  "destination": "new_second_account_owned_my_drive_root_child",
+  "training_authorization": "manual_future_launch_only",
+  "training_started": false,
+  "gpu_restore_executed": false,
+  "actual_google_api_upload_tested": false,
+  "full_size_google_transfer_measured": false,
+  "original_evidence_modified": false,
+  "test_split_accessed": false,
+  "frozen_contract": {
+    "source_step": 17000,
+    "target_step": 20000,
+    "additional_updates": 3000,
+    "batch_size": 8,
+    "seed": 0,
+    "checkpoint_cadence": 1000,
+    "approved_successful_episodes": 80
+  },
+  "transport_tests": {
+    "focused_passed": 60,
+    "real_google_session": "BLOCKED_pending_owner_cells_5B_to_7"
+  },
+  "stop_gates": [
+    "second_account_principal_and_new_folder_ownership",
+    "drive_quota_and_api_canary_readback",
+    "linux_pinned_all_manifest_entries_017000",
+    "actual_cuda_model_adamw_scheduler_rng_restore_17000",
+    "synchronous_each_save_sha256_persistence"
+  ],
+  "owner_actions": [
+    "upload_v6_helper_in_current_notebook_after_completed_cells_1_to_4",
+    "authorize_google_read_and_app_file_writes_in_second_account",
+    "run_5A_5B_6_7_and_stop_on_any_error",
+    "manually_launch_commented_cell_8_only_after_gates_pass",
+    "download_final_portable_zip_and_receipt_to_linux_immediately"
+  ],
+  "retention_limitation": "API proof is point in time; Drive is not an independent provider and future retention remains unproven",
+  "partial_resume_limitation": "After durable 018000 or 019000 interruption preserve state; no blind reset. Existing single-invocation gate requires separate lineage/update audit.",
+  "global_ruff": "inherited_E402_in_approved_smolvla_finetune_colab_notebook_unchanged",
+  "scoped_ruff": "PASS",
+  "global_format": "PASS",
+  "cpu_suite": {
+    "passed": 363,
+    "deselected": 1,
+    "warnings": 496,
+    "seconds": 163.5,
+    "command": "PYTHONPATH=src /home/tj330/programs/VLA-Project/.venv/bin/python -m pytest -m 'not webots and not gpu' -k 'not generate_scenes_counts_families_and_test_split_guard' -q",
+    "excluded_reason": "legacy unit test generates TEST geometry; no frozen TEST access permitted"
+  }
+}

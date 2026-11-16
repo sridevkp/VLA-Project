@@ -86,3 +86,5 @@ save cadence, source bundle or ML dependency pin changes. Worker transport uses
 Python 3.11 stdlib; Google authentication/SDK stays in the already configured
 Colab notebook kernel. Actual Google permissions and CUDA restore remain unverified
 locally; mocked REST tests do not certify the production session.
+
+Measured recovered step20000 local runtime: Python3.11.18, torch2.7.1+cpu, torchvision0.22.1+cpu, LeRobot0.4.3, transformers4.57.1, safetensors0.8.0, numpy2.2.6. Actual CPU inference passed; no exposed NVIDIA device or CUDA build, so RTX3050 4GB fit is unverified. Physical gripper outputs fail frozen bounds; see LOCAL_MODEL_VALIDATION_STEP20000.md. No dependency changes were made.

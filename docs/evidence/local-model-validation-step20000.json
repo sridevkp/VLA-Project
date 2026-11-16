@@ -1,0 +1,397 @@
+{
+  "status": "FAIL_STOPPED_BEFORE_EVALUATION",
+  "checks": {
+    "model_integrity": "PASS",
+    "model_loading": "PASS",
+    "processor_compatibility": "PASS",
+    "action_inference": "PASS",
+    "project_adapter_integration": "FAIL_GRIPPER_BOUNDS"
+  },
+  "integrity": {
+    "zip": "/home/tj330/Downloads/acct2-durable-v1-drive-v1-portable-020000-attempt-1.zip",
+    "receipt": "/home/tj330/Downloads/acct2-durable-v1-drive-v1-portable-020000-attempt-1.receipt.json",
+    "bytes": 1202740976,
+    "sha256": "3de511c1728855a682e87025bd8d30b93d639e7cd3527b3a0c99955382d027d0",
+    "receipt_sha256": "bd98f110b808d80d39733e3e883bb09b150c4434c21808f751ec89f7ece824b8",
+    "archive_crc": "PASS",
+    "all_manifest_hashes": "PASS",
+    "manifest_files": 21,
+    "checkpoint_step": 20000,
+    "export": "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000",
+    "extracted_read_only": true,
+    "training_evidence": {
+      "run_kind": "smolvla-finetune",
+      "seed": 0,
+      "stats_sha256": "62669ddd180ccd830bf3403e47104ed7d9241015b2f4017620fad87e33b554f6",
+      "source_provenance_sha256": "de7aff693700bbb0c8f0abb0b5a41564e52a6d1b17fb838f4590cef39564f602",
+      "approved_successful_episodes": 80,
+      "optimizer_step": 20000,
+      "actual_calls_this_invocation": 3000,
+      "restored_training_step": 17000,
+      "actual_post_step_hook": true,
+      "smolvla_training_started": true,
+      "optimizer_class": "AdamW",
+      "sampled_parameter_tensors": 8,
+      "sample_before_sha256": "5d4b752e5571e55e0e8db2ff4fc8f090983630e66d50e243695e22945bf10de6",
+      "sample_after_sha256": "ea0cadb7e79260e055abc9b688e1462003f7c3c400d084a7f189c21ec2cea227",
+      "sampled_parameters_changed": true,
+      "elapsed_s_this_invocation": 3534.961657781001,
+      "learning_rates": [
+        2.50000060142902e-06
+      ]
+    }
+  },
+  "existing_import": {
+    "trained_export_verified": true,
+    "approved_dataset_identity_verified": true,
+    "chunk_shape": [
+      50,
+      7
+    ],
+    "physical_actions_finite": true,
+    "inference_wall_s": 14.086286406003637,
+    "metadata": {
+      "service": "tiago-smolvla-v1",
+      "camera_key": "observation.images.camera1",
+      "state_names": [
+        "arm_1_joint_rad",
+        "arm_2_joint_rad",
+        "arm_3_joint_rad",
+        "arm_4_joint_rad",
+        "arm_5_joint_rad",
+        "arm_6_joint_rad",
+        "arm_7_joint_rad",
+        "gripper_half_aperture_m"
+      ],
+      "action_names": [
+        "dx_m",
+        "dy_m",
+        "dz_m",
+        "drx_rad",
+        "dry_rad",
+        "drz_rad",
+        "gripper_target_m"
+      ],
+      "chunk_size": 50,
+      "device": "cpu",
+      "export_manifest_sha256": "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1"
+    },
+    "checkpoint_manifest_sha256": "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1",
+    "robot_commands_sent": 0,
+    "task_success": "UNMEASURED",
+    "test_split_used": false
+  },
+  "processor_action_audit": {
+    "model_integrity": "PASS",
+    "model_loading": "PASS_existing_strict_loader_actual_inference",
+    "processor_compatibility": "PASS",
+    "action_inference": "PASS",
+    "project_adapter_integration": "FAIL",
+    "blocking_failure": "gripper commands outside unchanged [0,0.045] m",
+    "invalid_gripper_indices": [
+      1,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      22,
+      23,
+      24,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      34,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41
+    ],
+    "invalid_gripper_values_m": [
+      0.0451897531747818,
+      0.04500473290681839,
+      0.04521636664867401,
+      0.04534381628036499,
+      0.04515864700078964,
+      0.04512409120798111,
+      0.045186400413513184,
+      0.04504162073135376,
+      0.04534952715039253,
+      0.04516077786684036,
+      0.04537290334701538,
+      0.04535975307226181,
+      0.04538044333457947,
+      0.045476075261831284,
+      0.04535076022148132,
+      0.04518192261457443,
+      0.045202601701021194,
+      0.04538250342011452,
+      0.045372165739536285,
+      0.04534464329481125,
+      0.04511173814535141,
+      0.04515228793025017,
+      0.04534182697534561,
+      0.04504089802503586,
+      0.04511350393295288,
+      0.045001786202192307,
+      0.04515000432729721,
+      0.045398496091365814,
+      0.04531776160001755,
+      0.04504748433828354,
+      0.045053791254758835,
+      0.04520825296640396,
+      0.04512374848127365,
+      0.04514632374048233,
+      0.045106492936611176
+    ],
+    "action_min": [
+      -0.0004035973106510937,
+      -0.0005324767553247511,
+      -0.026897985488176346,
+      -0.0007991493912413716,
+      -0.30068880319595337,
+      -0.05971754342317581,
+      0.04416652396321297
+    ],
+    "action_max": [
+      0.04112675040960312,
+      0.006234495900571346,
+      0.00032361745252273977,
+      0.0807425007224083,
+      0.002322412095963955,
+      0.007638289127498865,
+      0.045476075261831284
+    ],
+    "first_action": [
+      -0.0004035973106510937,
+      -0.0005324767553247511,
+      5.675968714058399e-05,
+      -0.0007653954671695828,
+      0.0014333073049783707,
+      0.004923577886074781,
+      0.044908665120601654
+    ],
+    "action_shape": [
+      50,
+      7
+    ],
+    "action_dtype": "float32",
+    "preprocessed_shapes": {
+      "observation.state": [
+        1,
+        8
+      ],
+      "observation.images.camera1": [
+        1,
+        3,
+        480,
+        640
+      ],
+      "observation.language.tokens": [
+        1,
+        48
+      ],
+      "observation.language.attention_mask": [
+        1,
+        48
+      ]
+    },
+    "state_normalization_exact": true,
+    "rgb_identity_exact": true,
+    "saved_stats_match_approved_dataset": true,
+    "postprocessor_roundtrip_max_error": 0.0,
+    "denormalization_check": "round-trip of recorded physical outputs through installed postprocessor; original normalized inference intermediates were not recorded",
+    "stats": {
+      "action.mean": [
+        -0.0005846312851645052,
+        -8.874219929566607e-05,
+        -0.00031948418472893536,
+        -0.0003838987904600799,
+        0.010153943672776222,
+        -0.0016958300257101655,
+        0.02861039899289608
+      ],
+      "action.std": [
+        0.012769882567226887,
+        0.021437423303723335,
+        0.009027926251292229,
+        0.0450783334672451,
+        0.04753502085804939,
+        0.07826706022024155,
+        0.021654436364769936
+      ],
+      "observation.state.mean": [
+        0.6490890979766846,
+        0.6768916845321655,
+        -0.3534834682941437,
+        1.0076172351837158,
+        1.017549753189087,
+        -0.9990085959434509,
+        0.028852678835392,
+        0.03795405849814415
+      ],
+      "observation.state.std": [
+        0.2645508944988251,
+        0.2889413833618164,
+        0.36464163661003113,
+        0.456268310546875,
+        0.47980210185050964,
+        0.4244478642940521,
+        1.139204740524292,
+        0.008479975163936615
+      ]
+    },
+    "source_observation": {
+      "parquet": "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/data/chunk-000/file-000.parquet",
+      "episode_index": 0,
+      "frame_index": 0,
+      "split": "train",
+      "image_format": "JPEG",
+      "encoded_sha256": "5c03d6c882e0e186e53703897c4061f6e53d7fbb9ffa31d96ac7a5c6da2ba214",
+      "rgb_sha256": "ef74bc1be861b50880e4ed658b34bf446f968b819f4f44b7737a3879dccc68f4",
+      "state": [
+        0.07103975862264633,
+        -5.633010368910618e-05,
+        -2.2896536393091083e-05,
+        2.1903721062699333e-05,
+        -5.501205578184454e-06,
+        1.8481290453564725e-06,
+        -1.6805232689875993e-06,
+        1.4364845810632687e-06
+      ],
+      "instruction": "Pick up the can and place it at the target location."
+    },
+    "cpu_inference_wall_s": 14.086286406003637,
+    "cuda_available": false,
+    "torch_version": "2.7.1+cpu",
+    "torch_cuda_build": null,
+    "rtx3050_4gb": "NOT_VERIFIED_no_exposed_NVIDIA_device_and_CPU_only_PyTorch",
+    "robot_commands_sent": 0,
+    "webots_steps": 0,
+    "evaluation_started": false,
+    "further_policy_calls_after_failure": 0,
+    "kinematic_execution": "NOT_RUN",
+    "dataset_modified": false,
+    "export_modified": false
+  },
+  "actual_safety_veto": {
+    "accepted": false,
+    "reason": "gripper opening is outside configured limits",
+    "maximum_gripper_target_m": 0.045476075261831284,
+    "invalid_actions": 35,
+    "chunk_actions": 50,
+    "configured_limit_m": 0.045,
+    "excess_m": 0.00047607526183128523,
+    "first_invalid_index": 1,
+    "robot_commands_sent": 0
+  },
+  "hardware": {
+    "platform": "Linux-7.2.9-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "nvidia_smi": null,
+    "nvidia_device_nodes": [],
+    "nvidia_pci_devices": [],
+    "assessment": "CUDA inference and peak VRAM cannot be measured here; CPU inference completed in 14.0863 seconds/chunk. No precision/model changes attempted.",
+    "system_probe_python": "3.14.8",
+    "inference_python": "3.11.18",
+    "inference_executable": "/home/tj330/programs/VLA-Project/.venv-vla/bin/python"
+  },
+  "architecture": {
+    "policy": "SmolVLAPolicy",
+    "vlm": "SmolVLMForConditionalGeneration",
+    "configured_vlm_layers": 16,
+    "chunk_size": 50,
+    "n_action_steps": 50,
+    "flow_steps": 10,
+    "state_dim": 8,
+    "action_dim": 7,
+    "internal_padded_dims": 32,
+    "input_rgb_shape": [
+      480,
+      640,
+      3
+    ],
+    "resized_padded_rgb": [
+      512,
+      512
+    ],
+    "language_tokens": 48,
+    "saved_tensors": 500,
+    "serialized_elements": 450046176,
+    "serialized_F32_elements": 148811856,
+    "serialized_BF16_elements": 301234320
+  },
+  "source_hashes": {
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/checkpoint_export.py": "bbb6c72e8032a202331fcae1917227bb18ab300ed325dfad3335976b9ceef3b9",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/model_service.py": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/action_adapter.py": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/schema.py": "71283d4427264798ab6865931ebbe11b87f1daf76eb79b3c8ce37bf3508e5206",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/safety_monitor.py": "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a",
+    "/home/tj330/programs/VLA-Project/runs/week2-progress-v1/validate-import.py": "13fb97b77544bdd96f6b00aa8929832065754124d7ff83691cf0c4bf6d61fc2d",
+    "/home/tj330/programs/VLA-Project-analytic/tools/recovery/local_import_gate.py": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e",
+    "runs/local-model-validation-v1/audit-readonly.py": "7fce774fd0f6f96041d7f0d1d6d5d02a059fb682f3b96ecabd08b5733a4ff42b"
+  },
+  "dependency_versions_file": "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/installed-versions.txt",
+  "original_production_and_recovery_evidence_preserved": true,
+  "evaluation_authorized_or_started": false,
+  "training_started": false,
+  "frozen_config_modified": false,
+  "notes": [
+    "Original normalized inference intermediate was not recorded; processor audit verifies exact approved state normalization and zero-error denormalization round-trip of the real recorded physical chunk.",
+    "Strict local loader uses strict=True and reads the local exported weights; no missing-key suppression, scripted fallback or dummy policy used.",
+    "35/50 chunk actions exceed frozen gripper limit. This is an observed one-observation compatibility blocker, not a measured task success rate.",
+    "RTX3050 memory feasibility remains unverified; no CUDA runtime/device is exposed on this host."
+  ],
+  "reproducible_command": {
+    "cwd": "/home/tj330/programs/VLA-Project-analytic",
+    "argv": [
+      "/home/tj330/programs/VLA-Project/.venv-vla/bin/python",
+      "tools/recovery/local_import_gate.py",
+      "--project",
+      "/home/tj330/programs/VLA-Project",
+      "--export",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000",
+      "--out",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/reproduction-new-output"
+    ],
+    "env": {
+      "PYTHONPATH": "/home/tj330/programs/VLA-Project/src",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1"
+    },
+    "note": "Reference reproduction command only; NOT rerun after the bounds failure. Choose an unused output path. The original measured invocation did not set the offline flags; it loaded weights/assets locally."
+  },
+  "post_validation_export_hashes": "PASS_ALL_21_MEMBERS_UNCHANGED",
+  "validation_artifact_hashes": {
+    "actual-safety-veto.json": "468d2932ce202f68588227c2f90e529f3c2c4646294f5c4c8e9b15c6456aee43",
+    "audit-readonly.py": "7fce774fd0f6f96041d7f0d1d6d5d02a059fb682f3b96ecabd08b5733a4ff42b",
+    "existing-import/import-validation.json": "4f7b6172cdc7d450e5bf6ce7d489a6fe086c83fbbcaf408503a2bdb8c1c56d22",
+    "existing-import/physical-action-chunk.npy": "ad048c0b963747f7eec2b4f89a285ecd10530724efec630151efc9ac494b5e0c",
+    "existing-import.log": "f2ddbaf5ed9912aeb32e971ab51ae1f731686a479993d9f921411f40c34ad867",
+    "hardware.json": "a36514f8a3f7b6b4b4484915a0c04b473ce1ec1d73f02dd8f876ec39bd8de7ad",
+    "installed-versions.txt": "325fcd3afb6b593d24900e0895a37d143aefa43c529f93de81710894d316ee2e",
+    "integrity.json": "dec88e340f6808f7d87e421352c007da23ad02a11fab59ed1d5a925eb33848c2",
+    "processor-action-audit.json": "b24c1b310cec549a0468fc24236674802002328db4e9d26647d49a7df93bde9c",
+    "processor-action-audit.log": "145f2102e13721c1f21afe99984a3cad00fbd9643860b78e7e34adbbf438fb83",
+    "reproduce-command.json": "c6ba19ed8e4e73595deba83bd911be3ce937bbda4e0d70a84259c25729181d5f",
+    "source-hashes.json": "4b45c4f03dd63f86c337f113d4df36e3149928cdb8e302a20199a04742739ec1",
+    "source-drive.receipt.json": "bd98f110b808d80d39733e3e883bb09b150c4434c21808f751ec89f7ece824b8"
+  }
+}

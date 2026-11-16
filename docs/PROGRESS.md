@@ -1359,3 +1359,5 @@ uv run python -m vlarobot.cli run-episodes --determinism-check 3
   pass; `uv run ty check src tests` pass (0); `uv run pytest -m "not webots"` **180 passed**
   (386 warnings, ikpy deprecations). **Live/Webots commands, telemetry-bearing 12-pose sweep,
   determinism re-run, offline re-eval of completed telemetry report, M1-06a/M1-07/M1 gates: UNVERIFIED.**
+
+Local recovered step20000 model validation: actual strict CPU import and TRAIN observation inference PASS (14.086s,50x7 float32). Physical adapter compatibility FAIL:35/50 gripper targets exceed0.045m (max0.0454760753). Stopped; no evaluation, further policy calls, clipping, TEST access or parameter changes. See LOCAL_MODEL_VALIDATION_STEP20000.md.

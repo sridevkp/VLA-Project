@@ -185,3 +185,5 @@ HTTPS and a private local access-token file refreshed by the existing Colab kern
 The helper creates a new second-owned My Drive folder; no original evidence is
 updated or deleted. Actual API persistence and CUDA restoration are owner-session
 stop gates, not locally verified claims. Training remains commented out.
+
+Recovered step20000 local inference validation and exact reproduction environment: see [LOCAL_MODEL_VALIDATION_STEP20000.md](LOCAL_MODEL_VALIDATION_STEP20000.md). CPU model loading/inference passed, but gripper-bound violations block evaluation. Do not rerun training or silently clamp outputs.

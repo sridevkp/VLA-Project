@@ -187,3 +187,5 @@ updated or deleted. Actual API persistence and CUDA restoration are owner-sessio
 stop gates, not locally verified claims. Training remains commented out.
 
 Recovered step20000 local inference validation and exact reproduction environment: see [LOCAL_MODEL_VALIDATION_STEP20000.md](LOCAL_MODEL_VALIDATION_STEP20000.md). CPU model loading/inference passed, but gripper-bound violations block evaluation. Do not rerun training or silently clamp outputs.
+
+A-D1 numerical harness and executed commands are documented in [AD1_NUMERICAL_REPORT.md](AD1_NUMERICAL_REPORT.md). Its exact two-solve authorization is exhausted; no rerun or output replacement is authorized.

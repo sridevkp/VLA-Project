@@ -33,6 +33,8 @@ def main() -> None:
     parser.add_argument("--export", type=Path)
     parser.add_argument("--execute-recovery", action="store_true")
     parser.add_argument("--durability-config", type=Path)
+    parser.add_argument("--processor-dir", type=Path)
+    parser.add_argument("--session-context", type=Path)
     args = parser.parse_args()
     sys.path.insert(0, str(args.project.resolve() / "src"))
     from vlarobot.vla import training
@@ -56,6 +58,22 @@ def main() -> None:
     require_canonical_path(args.recovery)
     if args.export is not None:
         require_canonical_path(args.export)
+    if (args.processor_dir is None) != (args.session_context is None):
+        raise ValueError("migration requires both processor directory and account session context")
+    migration = None
+    if args.processor_dir is not None:
+        from account_migration import verify_processor
+
+        assets = verify_processor(args.processor_dir)
+        context = json.loads(args.session_context.read_text(encoding="utf-8"))
+        if context.get("authenticated_account_email_match") is not True:
+            raise ValueError("new account authentication context was not verified")
+        migration = {
+            "processor_directory": str(args.processor_dir.resolve()),
+            "processor_files_sha256": assets,
+            "session_context": context,
+            "session_context_sha256": sha256(args.session_context),
+        }
     if args.mode == "audit":
         results = {}
         for number in (17000, 18000, 19000, 20000):
@@ -122,6 +140,7 @@ def main() -> None:
             "original_log_sha256": sha256(args.original / "optimizer-steps.jsonl"),
             "dataloader_cursor_restored": False,
             "helper_hashes": {p.name: sha256(p) for p in Path(__file__).parent.glob("*.py")},
+            "account_migration": migration,
         }
         (args.recovery / "recovery-provenance.json").write_text(
             json.dumps(provenance, indent=2) + "\n", encoding="utf-8"
@@ -129,6 +148,8 @@ def main() -> None:
         print(json.dumps(provenance, indent=2))
         return
     provenance = json.loads((args.recovery / "recovery-provenance.json").read_text())
+    if provenance.get("account_migration") != migration:
+        raise ValueError("account session/processor relocation differs from recovery preparation")
     if provenance["source_complete_sha256"] != sha256(source / "COMPLETE.json"):
         raise ValueError("original recovery evidence changed")
     for name, digest in provenance["approved_source_hashes"].items():
@@ -161,6 +182,7 @@ def main() -> None:
             args.recovery,
             args.dataset,
             stop_after_restore=args.mode == "restore-check",
+            processor=args.processor_dir,
         )
         if args.mode == "train":
             from durable_sink import install_sink

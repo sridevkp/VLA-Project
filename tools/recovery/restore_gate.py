@@ -39,7 +39,12 @@ def json_form(value: Any) -> Any:
 
 
 def install_restore_gate(
-    original: Path, recovery: Path, dataset: Path, *, stop_after_restore: bool
+    original: Path,
+    recovery: Path,
+    dataset: Path,
+    *,
+    stop_after_restore: bool,
+    processor: Path | None = None,
 ) -> None:
     import torch
     from lerobot.configs.train import TrainPipelineConfig
@@ -56,6 +61,7 @@ def install_restore_gate(
     original_load = module.load_training_state
     original_save = module.save_checkpoint
     original_update = module.update_policy
+    original_processors = module.make_pre_post_processors
     captured: dict[str, Any] = {"passed": False}
 
     def validate(config: Any) -> None:
@@ -75,6 +81,17 @@ def install_restore_gate(
         }.items():
             if getattr(config, name) != expected:
                 raise ValueError(f"frozen runtime setting changed: {name}")
+        if processor is not None:
+            from account_migration import relocate_policy
+
+            relocate_policy(config.policy, processor)
+
+    def processors(*args: Any, **kwargs: Any) -> Any:
+        if processor is not None:
+            from account_migration import processor_overrides
+
+            kwargs = processor_overrides(kwargs, processor)
+        return original_processors(*args, **kwargs)
 
     def make(*args: Any, **kwargs: Any) -> Any:
         policy = original_make(*args, **kwargs)
@@ -129,6 +146,7 @@ def install_restore_gate(
             "original_directory_write_protection": True,
             "optimizer_updates_at_restore_gate": 0,
             "dataloader_cursor_restored": False,
+            "relocated_processor_directory": str(processor) if processor else None,
         }
         captured["passed"] = True
         filename = "restore-check.json" if stop_after_restore else "training-restore-check.json"
@@ -154,3 +172,4 @@ def install_restore_gate(
     module.load_training_state = load
     module.update_policy = update
     module.save_checkpoint = save
+    module.make_pre_post_processors = processors

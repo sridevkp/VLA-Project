@@ -64,3 +64,10 @@ existing system OpenSSH client with strict host-key checking. The independent
 receiver is Linux. Colab's existing Google auth/Drive SDK is used only for optional
 read-only diagnostics in the notebook kernel; no training dependency pins change.
 Real SSH/Colab execution and Windows sender compatibility remain unverified here.
+
+Account migration v5 preserves the approved Python/uv/LeRobot/Torch requirements.
+It adds standard-library account binding and processor relocation helpers only.
+The11 metadata files are byte-for-byte copies pinned by the original portable
+export manifest. Actual installed config and pre/postprocessor loading passed on
+CPU with no model construction/inference or optimizer update; new-account CUDA,
+Google authentication, permissions and transport remain unverified locally.

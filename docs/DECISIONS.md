@@ -1,5 +1,27 @@
 # Architecture Decision Records
 
+## ADR-0043: Bind migrated account reads and relocate processor addresses in memory
+
+- Date: 2026-11-16. Implemented/tested locally; new-account authentication, transport,
+  T4 and CUDA restoration remain external stop gates. No training/evaluation runs.
+- Resolve the owner-selected shared-project entrypoint once, without assuming the
+  original shortcut ID. Verify the expected new API account, resolve API shortcut
+  target/owners and bind mounted payload bytes to unique downloadable API children
+  plus immutable approved SHA-256 pins. No programmatic compute/mount identity
+  attestation is claimed; those account selections require explicit operator UI checks.
+- Sharing does not move ownership/quota or prove the persistence issue fixed.
+  All Drive access remains read-only. Installation logs and new checkpoint writes
+  go to local storage; independent Linux receipts remain mandatory.
+- Stage only the Linux-verified017000. Snapshot the11 verified processor metadata
+  files and relocate only the policy/tokenizer filesystem addresses in memory.
+  Original checkpoint JSON/normalization tensors, source/data/model settings and
+  frozen seeds/steps/batch/cadence remain unchanged. Record account/asset provenance.
+- A new standalone migration notebook preserves the approved notebook. Training
+  command is comment-only; actual CUDA state restoration and a new session-bound
+  full-size SSH canary precede any future owner launch. No credentials or listener
+  are created automatically. No new Python training dependency is introduced.
+
+
 ## ADR-0042: Prepare private receiver without provisioning credentials or services
 
 - Date: 2026-11-16. Status: CPU readiness work completed; network/GPU gates blocked.

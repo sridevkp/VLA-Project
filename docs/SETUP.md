@@ -163,3 +163,8 @@ is preserved and packaged separately; no original recovery directory is removed.
 Current PASS/BLOCKED status, private receiver templates, owner key/host-key steps,
 interruption limits and prepared import/TRAIN commands are in
 DURABLE_READINESS_REPORT.md. No SSH listener or credential is provisioned by setup.
+
+For a second Google account, use notebooks/smolvla_account_migration.ipynb and the
+v5 copy-paste cells in DURABLE_RECOVERY_PLAN.md. Do not reuse the original account's
+shortcut ID, cached authentication or canary receipt. The v4 plan is archived in
+docs/history; the approved source/data ZIPs and original notebook remain unchanged.

@@ -1,5 +1,11 @@
 # Durable recovery readiness — 2026-11-16
 
+For the second-account migration, DURABLE_RECOVERY_PLAN.md now contains v5 cells
+and notebooks/smolvla_account_migration.ipynb. Cell numbers below refer to the
+historical v4 plan, retained under docs/history. Private receiver/key-provisioning
+instructions and measured local evidence remain applicable; revalidate the route
+and full-size canary from the new session. No prior authentication/receipt carries over.
+
 **Recommendation: NO-GO for GPU training and evaluation. GO for CPU preparation.**
 No training, learned-policy inference, physical evaluation, TEST access, key
 creation, SSH listener startup or public ingress change occurred in this task.

@@ -193,6 +193,77 @@ def test_expired_or_nonprivate_token_fails_before_any_network(tmp_path, drive):
         client.request("GET", drive.BASE + "about")
 
 
+@pytest.mark.parametrize(
+    "problem",
+    (None, "contents", "during_read", "rollback", "malformed", "id", "owner", "parent", "size"),
+)
+def test_canary_version_advance_requires_stable_full_content_revalidation(
+    tmp_path, drive, monkeypatch, problem
+):
+    client = fake_client(drive)
+    monkeypatch.setattr(drive, "DriveAPI", lambda cfg: client)
+    source = tmp_path / "canary.zip"
+    source.write_bytes(b"0" * 1_048_694)
+    config = {
+        **client.config,
+        "transport": "drive_api",
+        "canary_receipt": str(tmp_path / "receipt.json"),
+        "canary_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config), encoding="utf-8")
+    receipt = drive.send(source, path, "second-run-canary", Path(config["canary_receipt"]))
+    original = Path(config["canary_receipt"]).read_bytes()
+    assert receipt["version"] == "1"
+    assert receipt["remote_file_id"] != receipt["remote_receipt_file_id"]
+    # Creating the separate receipt does not issue an update to the canary.
+    assert client.metadata(receipt["remote_file_id"])["version"] == "1"
+    old_metadata = client.metadata
+    reads = 0
+
+    def metadata(file_id):
+        nonlocal reads
+        result = old_metadata(file_id)
+        if file_id != receipt["remote_file_id"]:
+            return result
+        reads += 1
+        result["version"] = "2"
+        if problem == "during_read" and reads > 1:
+            result["version"] = "3"
+        if problem == "rollback":
+            result["version"] = "0"
+        if problem == "malformed":
+            result["version"] = "unknown"
+        if problem == "id":
+            result["id"] = "different-file"
+        if problem == "owner":
+            result["owners"] = [{"permissionId": "first"}]
+        if problem == "parent":
+            result["parents"] = ["old-shared"]
+        if problem == "size":
+            result["size"] = "10"
+        # Prove the content test uses the full media read, not just metadata.
+        result.pop("sha256Checksum", None)
+        return result
+
+    if problem == "contents":
+        client.data[receipt["remote_file_id"]] = b"1" * source.stat().st_size
+    monkeypatch.setattr(client, "metadata", metadata)
+    audit = Path(config["canary_receipt"]).with_suffix(".revalidations.jsonl")
+    if problem:
+        with pytest.raises(drive.PersistenceError):
+            drive.validate_canary(path)
+        assert not audit.exists()
+    else:
+        downloads_before = client.downloads
+        assert drive.validate_canary(path) == config
+        assert client.downloads == downloads_before + 1 and reads == 2
+        record = json.loads(audit.read_text())
+        assert record["receipt_version"] == "1" and record["readback_version"] == "2"
+        assert record["stable_version_during_readback"]
+    assert Path(config["canary_receipt"]).read_bytes() == original
+
+
 def test_kernel_setup_creates_only_a_new_second_owned_root_folder(tmp_path, monkeypatch):
     import types
 
@@ -279,3 +350,60 @@ def test_kernel_setup_creates_only_a_new_second_owned_root_folder(tmp_path, monk
     token = Path(config["token_file"])
     assert token.stat().st_mode & 0o077 == 0
     assert "access_token" not in config_file.read_text()
+
+
+@pytest.mark.parametrize("problem", (None, "account", "integrity"))
+def test_reconnect_preserves_existing_canary_and_never_creates_remote_objects(
+    tmp_path, monkeypatch, problem
+):
+    import threading
+    from types import SimpleNamespace
+
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "tools/recovery"))
+    setup = importlib.import_module("drive_handoff_setup")
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text('{"version": "1"}')
+    config = tmp_path / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "canary_receipt": str(receipt),
+                "principal_permission_id": "second",
+                "token_file": str(tmp_path / "private-token.json"),
+                "folder_id": "existing-folder",
+            }
+        )
+    )
+    originals = (config.read_bytes(), receipt.read_bytes())
+    stop = threading.Event()
+    calls = []
+    monkeypatch.setattr(setup, "start_token_broker", lambda *a: calls.append("broker") or stop)
+    who = {"emailAddress": "second@example.invalid", "permissionId": "second"}
+    if problem == "account":
+        who["permissionId"] = "first"
+    service = SimpleNamespace(
+        about=lambda: SimpleNamespace(
+            get=lambda **kwargs: SimpleNamespace(execute=lambda: {"user": who})
+        )
+    )  # No files.create/update capability exists in this read-only fake.
+    monkeypatch.setattr(
+        setup, "DriveAPI", lambda cfg: SimpleNamespace(metadata=lambda ident: {"id": ident})
+    )
+
+    def validate(path):
+        calls.append("validate")
+        if problem == "integrity":
+            raise ValueError("content mismatch")
+
+    monkeypatch.setattr(setup, "validate_canary", validate)
+    args = (config, {"drive_api_principal_permission_id": "second"}, "second@example.invalid")
+    kwargs = {"credentials": SimpleNamespace(refresh=lambda request: None), "service": service}
+    if problem:
+        with pytest.raises(ValueError):
+            setup.resume_existing(*args, **kwargs)
+        assert stop.is_set() if problem == "integrity" else calls == []
+    else:
+        actual, folder, returned = setup.resume_existing(*args, **kwargs)
+        assert actual == config and folder["id"] == "existing-folder" and returned is stop
+        assert calls == ["broker", "validate"]
+    assert (config.read_bytes(), receipt.read_bytes()) == originals

@@ -73,6 +73,13 @@ CPU with no model construction/inference or optimizer update; new-account CUDA,
 Google authentication, permissions and transport remain unverified locally.
 # Recovery transport v6 (2026-11-16)
 
+v7 corrects historical canary-version comparison without altering checkpoint
+upload integrity. A numeric version advance requires fresh full SHA-256 read-back,
+unchanged identity/ownership/parent/size and stable current version across the read.
+The original receipt/config remain unchanged; advances produce a separate local
+audit record. Existing Colab authentication is reconnected without new remote files.
+No dependency, model, dataset or frozen experiment setting changed.
+
 Drive API resumable checkpoint handoff replaces unavailable SSH for the current
 second-account session. No model, optimizer, dataset, batch, seed, step target,
 save cadence, source bundle or ML dependency pin changes. Worker transport uses

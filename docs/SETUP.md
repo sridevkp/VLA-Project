@@ -170,6 +170,12 @@ shortcut ID, cached authentication or canary receipt. The v4 plan is archived in
 docs/history; the approved source/data ZIPs and original notebook remain unchanged.
 # Current-session Drive recovery handoff
 
+For an existing v6 canary rejected solely on historical version equality, use
+[v7 reconnect cells](DRIVE_CANARY_V7_CURRENT_SESSION.md). They reuse the existing
+folder/config/receipt, perform a stable full-content revalidation and restart the
+credential refresh thread stopped by failed setup. No repeated migration or
+training is needed. Do not manually rewrite receipt versions.
+
 After second-account migration Cells 1–4, use
 [the v6 replacement cells](DRIVE_HANDOFF_REPLACEMENT_CELLS.md) in the same kernel.
 Only the small helper patch is uploaded; source, dataset and installed environment

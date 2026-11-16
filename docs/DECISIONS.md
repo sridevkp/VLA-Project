@@ -1583,6 +1583,22 @@
 
 
 ADR-0037 — Isolated deterministic analytic rollout and five-arm mechanics (2026-11-15). Conditional attachment requires explicitly observed holding and never declares grasp from closing. Swept geometry requires coverage/speed certificates. Probabilities, report Eq. 3.8 components and validation-selected weights are explicit inputs, not guessed defaults. Approximate Jacobian planning IK is rejected on exact FK residual failure and does not replace execution IK. Registered replay and latency evidence are in WORLDMIND_DEVELOPMENT_CHECKPOINT.md; the 32-candidate latency target is not yet met. No contract, source training bundle, dataset, model, baseline or test split changed.
+ADR-0045 — Content-verified historical canary version advance (2026-11-16).
+User-supplied live observations show a matching canary SHA/size/ID/owner/parent
+at receipt version1 and current version2. Drive version includes server metadata
+changes and is not a content hash. The direct cause of the rejection is the old
+historical-version equality predicate; the precise remote change is unproven.
+Receipt upload uses a separate generated file ID and does not directly edit the
+canary. Accept a positive numeric nondecreasing historical version only after a
+fresh full API SHA-256 read, strict expected identity/ownership/parent/size and a
+stable current version across that read. Reject rollback, malformed/missing version,
+any content mismatch or mid-read metadata/version change. Preserve original
+config/receipt byte-for-byte; append independently verified advances to a local
+revalidation log. Checkpoint upload, COMPLETE validation and export checks remain
+unchanged. Reconnect the failed setup's token broker using existing second-account
+authentication; create no new remote folder/file. No new scopes/dependencies or
+changes to ADR-0029, dataset, training configuration or evaluation criteria.
+
 ADR-0044 — Second-account Drive API checkpoint handoff (2026-11-16).
 At the owner's request, v6 supports a new folder directly under the authenticated
 second account's My Drive root, replacing the unavailable private SSH route.

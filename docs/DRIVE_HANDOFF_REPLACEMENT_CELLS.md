@@ -1,5 +1,10 @@
 # Drive API checkpoint handoff — replacement cells after completed migration Cells 1–4
 
+**Existing canary version mismatch:** if 5B uploaded successfully but rejected
+receipt version1/current version2, apply [the two v7 correction cells](DRIVE_CANARY_V7_CURRENT_SESSION.md).
+Do not repeat 5A/5B or discard the existing folder/config/receipt. Then continue
+readiness Cells6/7 using the v7 helpers, with training still disabled.
+
 **Do not rerun completed setup.** Paste these cells into the CURRENT migration
 notebook after Cell 4. The companion replacement notebook is a copy source, not
 an independent fresh-runtime workflow. Existing source/data/venv and verified

@@ -2,6 +2,9 @@
 
 **Current session after completed Cells 1–4:** use
 [Drive API replacement cells (v6)](DRIVE_HANDOFF_REPLACEMENT_CELLS.md).
+If v6 canary upload succeeded but validation failed on receipt-version1 versus
+remote-version2, use [the two current-session v7 correction cells](DRIVE_CANARY_V7_CURRENT_SESSION.md)
+instead of repeating setup or creating another canary.
 They replace the SSH handoff and old Cells 5–8 with a new second-account-owned
 Drive folder and synchronous API integrity verification. The v5 procedure below
 is preserved as historical evidence; its private SSH route is not required by v6.

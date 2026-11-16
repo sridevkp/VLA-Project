@@ -15,6 +15,44 @@ from typing import Any
 from drive_handoff import DriveAPI, send, validate_canary
 
 
+def start_token_broker(credentials: Any, refresh_request: Any, token_file: Path) -> threading.Event:
+    """Refresh access tokens locally; never place secrets in recovery evidence."""
+    stop = threading.Event()
+
+    def write_token(refresh: bool) -> None:
+        if refresh:
+            credentials.refresh(refresh_request)
+        expiry = credentials.expiry
+        if expiry is not None:
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=datetime.UTC)
+            expires_at = expiry.timestamp()
+        else:
+            expires_at = time.time() + 90
+        temporary = token_file.with_suffix(".next")
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump({"access_token": credentials.token, "expires_at": expires_at}, output)
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(token_file)
+
+    def refresh_loop() -> None:
+        while not stop.wait(60):
+            try:
+                write_token(True)
+            except Exception:
+                print(
+                    "DRIVE_TOKEN_REFRESH_FAILED: keep session alive; persistence may stop",
+                    flush=True,
+                )
+                return
+
+    write_token(False)
+    threading.Thread(target=refresh_loop, daemon=True).start()
+    return stop
+
+
 def setup(
     context: dict[str, Any],
     expected_email: str,
@@ -74,39 +112,7 @@ def setup(
         or folder["id"] == context["target_folder"]["id"]
     ):
         raise ValueError("new destination is not a second-account-owned My Drive folder")
-    stop = threading.Event()
-
-    def write_token(refresh: bool) -> None:
-        if refresh:
-            credentials.refresh(refresh_request)
-        expiry = credentials.expiry
-        if expiry is not None:
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=datetime.UTC)
-            expires_at = expiry.timestamp()
-        else:
-            expires_at = time.time() + 90
-        temporary = token_file.with_suffix(".next")
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as output:
-            json.dump({"access_token": credentials.token, "expires_at": expires_at}, output)
-            output.flush()
-            os.fsync(output.fileno())
-        temporary.replace(token_file)
-
-    def refresh_loop() -> None:
-        while not stop.wait(60):
-            try:
-                write_token(True)
-            except Exception:
-                print(
-                    "DRIVE_TOKEN_REFRESH_FAILED: keep session alive; persistence may stop",
-                    flush=True,
-                )
-                return
-
-    write_token(False)
-    threading.Thread(target=refresh_loop, daemon=True).start()
+    stop = start_token_broker(credentials, refresh_request, token_file)
     canary = work / (run_id + "-canary.zip")
     with zipfile.ZipFile(canary, "x", compression=zipfile.ZIP_STORED) as archive:
         archive.writestr("canary.bin", b"0" * 1024 * 1024)
@@ -132,4 +138,58 @@ def setup(
         raise
     print("SECOND_ACCOUNT_API_FOLDER_AND_READBACK_VERIFIED", flush=True)
     print("Destination: https://drive.google.com/drive/folders/" + folder["id"], flush=True)
+    return config_file, folder, stop
+
+
+def resume_existing(
+    config_file: Path,
+    context: dict[str, Any],
+    expected_email: str,
+    *,
+    credentials: Any = None,
+    service: Any = None,
+    refresh_request: Any = None,
+) -> tuple[Path, dict[str, Any], threading.Event]:
+    """Reconnect a failed canary setup without new uploads or changing evidence."""
+    config_bytes = config_file.read_bytes()
+    config = json.loads(config_bytes)
+    receipt_file = Path(config["canary_receipt"])
+    receipt_bytes = receipt_file.read_bytes()
+    if credentials is None:
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        credentials, _ = google.auth.default(
+            scopes=[
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/drive.readonly",
+            ]
+        )
+        refresh_request = Request()
+    credentials.refresh(refresh_request)
+    if service is None:
+        from googleapiclient.discovery import build
+
+        service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    who = service.about().get(fields="user(emailAddress,permissionId)").execute()["user"]
+    if (
+        who["emailAddress"].casefold() != expected_email.casefold()
+        or who["permissionId"] != context["drive_api_principal_permission_id"]
+        or who["permissionId"] != config["principal_permission_id"]
+    ):
+        raise ValueError("wrong account; existing canary not revalidated")
+    token = Path(config["token_file"])
+    if token.is_symlink() or token.resolve().is_relative_to(Path("/content/drive")):
+        raise ValueError("token broker requires the original private Colab-local path")
+    stop = start_token_broker(credentials, refresh_request, token)
+    try:
+        validate_canary(config_file)
+        client = DriveAPI(config)
+        folder = client.metadata(config["folder_id"])
+        if config_file.read_bytes() != config_bytes or receipt_file.read_bytes() != receipt_bytes:
+            raise ValueError("original canary evidence changed during reconnect")
+    except Exception:
+        stop.set()
+        raise
+    print("EXISTING_DRIVE_CANARY_VERIFIED_NO_NEW_UPLOADS", flush=True)
     return config_file, folder, stop

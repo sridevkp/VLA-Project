@@ -347,12 +347,56 @@ def validate_canary(config_file: Path) -> dict:
     client.destination()
     remote = client.metadata(receipt["remote_file_id"])
     client.check_owner(remote)
+    previous_version = str(receipt.get("version", ""))
+    current_version = str(remote.get("version", ""))
     if (
-        int(remote.get("size", -1)) != receipt["bytes"]
-        or remote.get("version") != receipt.get("version")
+        remote.get("id") != receipt["remote_file_id"]
+        or int(remote.get("size", -1)) != receipt["bytes"]
         or config["folder_id"] not in remote.get("parents", [])
+        or not previous_version.isascii()
+        or not previous_version.isdecimal()
+        or not current_version.isascii()
+        or not current_version.isdecimal()
+        or int(previous_version) < 1
+        or int(current_version) < int(previous_version)
+        or remote.get("sha256Checksum", receipt["sha256"]) != receipt["sha256"]
     ):
         raise PersistenceError("API canary no longer matches the verified object")
     if client.media_hash(remote["id"], receipt["bytes"]) != receipt["sha256"]:
         raise PersistenceError("API canary fresh read-back failed")
+    after = client.metadata(receipt["remote_file_id"])
+    client.check_owner(after)
+    if (
+        after.get("id") != receipt["remote_file_id"]
+        or after.get("version") != remote.get("version")
+        or after.get("size") != remote.get("size")
+        or set(after.get("parents", [])) != set(remote.get("parents", []))
+        or after.get("sha256Checksum", receipt["sha256"]) != receipt["sha256"]
+    ):
+        raise PersistenceError("API canary changed during fresh read-back")
+    if current_version != previous_version:
+        # Drive version tracks metadata/server changes too. Never rewrite the
+        # upload receipt; record content-verified revalidation separately.
+        event = {
+            "remote_file_id": remote["id"],
+            "folder_id": config["folder_id"],
+            "principal_permission_id": config["principal_permission_id"],
+            "receipt_version": previous_version,
+            "readback_version": current_version,
+            "bytes": receipt["bytes"],
+            "sha256": receipt["sha256"],
+            "api_readback_sha256_verified": True,
+            "stable_version_during_readback": True,
+            "receipt_sha256": sha256(Path(config["canary_receipt"])),
+            "transfer_config_sha256": sha256(config_file),
+            "verified_at_unix": time.time(),
+        }
+        audit = Path(config["canary_receipt"]).with_suffix(".revalidations.jsonl")
+        if audit.is_symlink():
+            raise PersistenceError("symlinked canary revalidation log")
+        with audit.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        print("DRIVE_CANARY_CONTENT_REVALIDATED " + json.dumps(event), flush=True)
     return config

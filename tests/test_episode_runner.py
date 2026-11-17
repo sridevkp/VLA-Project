@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+import vlarobot.execution.episode_runner as episode_runner
+from vlarobot.backends.webots.runtime_attestation import WebotsRuntimeAttestation
 from vlarobot.execution.episode_runner import (
     EpisodeOutcome,
     build_webots_command,
@@ -311,3 +313,33 @@ def test_determinism_report_handles_missing_trace_without_crash(tmp_path: Path) 
     assert isinstance(comparisons, list) and comparisons
     assert comparisons[0]["trace_comparison_available"] is False
     assert comparisons[0]["digest_match"] is False
+
+
+def test_required_attestation_unavailable_fails_before_popen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(episode_runner, "resolve_webots", lambda webots=None: "/fake/webots")
+    monkeypatch.setattr(episode_runner, "_reserve_free_port", lambda: 5555)
+    unavailable = WebotsRuntimeAttestation(
+        executable_path="/fake/webots",
+        executable_sha256=None,
+        reported_version=None,
+        version_probe_error="probe unavailable",
+    )
+    monkeypatch.setattr(
+        episode_runner,
+        "attest_webots_executable",
+        lambda *args, **kwargs: unavailable,
+    )
+
+    def forbidden_popen(*args: object, **kwargs: object) -> None:
+        raise AssertionError("no Webots process may start without version evidence")
+
+    monkeypatch.setattr(episode_runner, "_popen", forbidden_popen)
+
+    with pytest.raises(RuntimeError, match="launch-time Webots runtime attestation unavailable"):
+        with episode_runner.launch_webots_session(
+            trace_dir=tmp_path,
+            runtime_attestation_required=True,
+        ):
+            raise AssertionError("the session must not be yielded")

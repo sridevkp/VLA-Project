@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from vlarobot.backends.webots.runtime_attestation import (
+    controller_runtime_version,
+    normalize_webots_version,
+)
 from vlarobot.core.types import GroundTruth, Observation
 
 
@@ -41,15 +45,24 @@ def _webots_identity(backend: Any) -> dict[str, object]:
         and int(robot_id) == int(def_node_id)
     )
 
-    runtime_version = webots_version(io)
+    controller_version, version_source = controller_runtime_version()
+    if controller_version is None:
+        api_version = webots_version(io)
+        controller_version = normalize_webots_version(api_version)
+        if controller_version is not None:
+            version_source = "Webots controller API getVersion"
+
     return {
         "simulator": "webots",
         "robot_def": robot_def,
         "robot_def_cross_checked": def_cross_checked,
         "robot_name": _string_or_none(_call(robot, "getName")),
         "robot_type": _string_or_none(_call(robot, "getTypeName")),
-        "webots_version": runtime_version,
-        "webots_version_available": runtime_version is not None,
+        "webots_version": controller_version,
+        "webots_version_available": controller_version is not None,
+        "webots_version_source": version_source,
+        "controller_webots_version": controller_version,
+        "controller_webots_version_source": version_source,
         "physics_step_count": int(getattr(backend, "_physics_step_count", 0)),
         "first_command_step_count": getattr(backend, "_first_command_step_count", None),
     }

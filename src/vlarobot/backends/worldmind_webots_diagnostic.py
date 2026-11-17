@@ -117,7 +117,10 @@ def _ping_payload(client: ReadOnlyBackendClient) -> dict[str, Any]:
 
 
 def _capture(
-    client: ReadOnlyBackendClient, config: WebotsDiagnosticConfig, endpoint: str
+    client: ReadOnlyBackendClient,
+    config: WebotsDiagnosticConfig,
+    endpoint: str,
+    launch_attestation: Mapping[str, object] | None = None,
 ) -> DiagnosticSnapshot:
     ping = _ping_payload(client)
     ping["endpoint"] = endpoint
@@ -145,6 +148,7 @@ def _capture(
         age_s=age_s,
         dependency_availability=dependency_availability(config),
         call_counts=client.call_counts(),
+        launch_attestation=dict(launch_attestation or {}),
     )
 
 
@@ -170,8 +174,14 @@ def collect_diagnostic_snapshot(
             headless=headless,
             startup_timeout_s=startup_timeout_s,
             extra_env={_WORLD_HASH_ENV: config.world_sha256},
+            runtime_attestation_required=True,
         ) as session:
-            return _capture(ReadOnlyBackendClient(session.client), config, session.endpoint)
+            return _capture(
+                ReadOnlyBackendClient(session.client),
+                config,
+                session.endpoint,
+                session.runtime_attestation,
+            )
 
     client = ZmqBackendClient(config.endpoint)
     read_only = ReadOnlyBackendClient(client)

@@ -49,6 +49,8 @@ from vlarobot.eval.worldmind_webots_diagnostic import (
 
 _FORBIDDEN_CALLS = ("apply", "step", "reset", "export_kinematics")
 _UNSET = object()
+_EXECUTABLE = "/opt/webots/webots"
+_EXECUTABLE_SHA = "a" * 64
 _AVAILABILITY = {
     "pose_solver": True,
     "safety_monitor": True,
@@ -129,6 +131,27 @@ def _write_raw(path: Path, raw: dict[str, object]) -> None:
     path.write_text(yaml.safe_dump(raw, sort_keys=True), encoding="utf-8")
 
 
+def _launch_attestation(config: WebotsDiagnosticConfig, **overrides: object) -> dict[str, object]:
+    attestation: dict[str, object] = {
+        "executable_path": _EXECUTABLE,
+        "executable_sha256": _EXECUTABLE_SHA,
+        "reported_version": config.webots_version,
+        "launch_command_executable": _EXECUTABLE,
+        "version_probe_command": [_EXECUTABLE, "--version"],
+        "version_probe_returncode": 0,
+        "version_probe_error": None,
+        "process_pid": 4242,
+        "process_executable_path": _EXECUTABLE,
+        "process_identity_source": "linux_proc_exe",
+        "process_identity_verified": True,
+        "verified_executable_version_pair": True,
+        "evidence_source": "launch_time_executable_version_probe",
+        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+    }
+    attestation.update(overrides)
+    return attestation
+
+
 def _pose() -> Pose3D:
     return Pose3D(Vec3(0.1, -0.2, 0.3), (0.0, 0.0, 0.0, 1.0))
 
@@ -173,10 +196,16 @@ def _snapshot(
     robot_def: object = _UNSET,
     robot_def_cross_checked: object = True,
     runtime_version: object = _UNSET,
+    attestation: object = _UNSET,
 ) -> DiagnosticSnapshot:
     observed_world_hash = config.world_sha256 if world_hash is _UNSET else world_hash
     observed_version = config.webots_version if runtime_version is _UNSET else runtime_version
     observed_def = config.robot_identity if robot_def is _UNSET else robot_def
+    observed_attestation = (
+        _launch_attestation(config)
+        if attestation is _UNSET
+        else ({} if attestation is None else dict(attestation))
+    )
     return DiagnosticSnapshot(
         ping={
             "status": "ok",
@@ -199,12 +228,18 @@ def _snapshot(
             "robot_type": "Tiago",
             "webots_version": observed_version,
             "webots_version_available": observed_version is not None,
+            "webots_version_source": ("WEBOTS_VERSION" if observed_version is not None else None),
+            "controller_webots_version": observed_version,
+            "controller_webots_version_source": (
+                "WEBOTS_VERSION" if observed_version is not None else None
+            ),
             "first_command_step_count": first_command,
         },
         captured_at_utc="2026-11-17T00:00:00+00:00",
         age_s=age_s,
         dependency_availability=dict(availability or _AVAILABILITY),
         call_counts=dict(call_counts or {name: 0 for name in _FORBIDDEN_CALLS}),
+        launch_attestation=observed_attestation,
     )
 
 
@@ -496,6 +531,7 @@ def test_capture_parses_realistic_ping_envelope_and_rejects_missing_payload(tmp_
         ReadOnlyBackendClient(FakeLowLevel(envelope)),
         config,
         "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
     )
     payload = envelope["payload"]
     assert isinstance(payload, dict)
@@ -529,8 +565,21 @@ def test_attestation_blockers_distinguish_missing_from_mismatch(tmp_path):
             "robot DEF identity was not cross-checked",
             None,
         ),
-        ({"runtime_version": None}, "runtime Webots version is unavailable", "mismatch"),
-        ({"runtime_version": "R2024b"}, "runtime Webots version mismatch:", "unavailable"),
+        (
+            {"attestation": _launch_attestation(config, reported_version=None)},
+            "launch executable reported Webots version is unavailable",
+            "launch executable Webots version mismatch",
+        ),
+        (
+            {"attestation": _launch_attestation(config, reported_version="R2024b")},
+            "launch executable Webots version mismatch:",
+            "launch executable reported Webots version is unavailable",
+        ),
+        (
+            {"runtime_version": "R2024b"},
+            "controller-reported Webots version mismatch:",
+            "launch executable Webots version mismatch",
+        ),
     ]
     for kwargs, expected, forbidden in cases:
         report, _, _ = finalize_webots_diagnostic(config, preflight, _snapshot(config, **kwargs))
@@ -550,8 +599,10 @@ def test_attestation_blockers_distinguish_missing_from_mismatch(tmp_path):
     ],
 )
 def test_read_only_identity_uses_def_not_node_name(
-    tmp_path, def_name, node_name, runtime_version, expected_def, expected_version
+    tmp_path, monkeypatch, def_name, node_name, runtime_version, expected_def, expected_version
 ):
+    monkeypatch.delenv("WEBOTS_VERSION", raising=False)
+
     class FakeNode:
         def getDef(self):
             return def_name
@@ -618,18 +669,93 @@ def test_read_only_identity_uses_def_not_node_name(
     assert identity["robot_def_cross_checked"] is True
     assert identity["webots_version"] == expected_version
     assert identity["webots_version_available"] is True
+    assert identity["webots_version_source"] == "Webots controller API getVersion"
+    assert identity["controller_webots_version"] == expected_version
+    assert identity["controller_webots_version_source"] == "Webots controller API getVersion"
     assert backend.calls == ["observation", "ground_truth"]
 
+    monkeypatch.setenv("WEBOTS_VERSION", "Webots R2024b")
+    env_identity = read_only_state.capture_read_only_state(backend)["identity"]
+    assert env_identity["controller_webots_version"] == "R2024b"
+    assert env_identity["controller_webots_version_source"] == "WEBOTS_VERSION"
+    assert env_identity["webots_version_source"] == "WEBOTS_VERSION"
 
-def test_runtime_webots_version_unavailable_is_not_substituted(tmp_path):
+
+def test_valid_launch_attestation_marks_runtime_version_verified(tmp_path):
     path, _ = _write_config(tmp_path)
     config = load_webots_diagnostic_config(path)
     report, _, _ = finalize_webots_diagnostic(
         config,
         preflight_webots_diagnostic(config),
-        _snapshot(config, runtime_version=None),
+        _snapshot(config),
     )
-    assert any("runtime Webots version is unavailable" in item for item in report["blockers"])
+    assert report["outcome"] == "PASS"
+    assert report["runtime_webots_version_verified"] is True
+    assert report["runtime_webots_version_source"] == "launch_executable"
+    assert report["runtime_webots_version_observed"] == config.webots_version
+    assert report["launch_webots_attestation"]["verified_executable_version_pair"] is True
+    assert report["motion_allowed"] is False
+    assert "unverified-arm-sweep" in report["motion_blockers"]
+
+
+def test_launch_attestation_evidence_cases_fail_closed(tmp_path):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    preflight = preflight_webots_diagnostic(config)
+    cases = [
+        (None, "launch-time Webots version evidence is unavailable"),
+        ({}, "launch-time Webots version evidence is unavailable"),
+        (
+            _launch_attestation(config, reported_version=None),
+            "launch executable reported Webots version is unavailable",
+        ),
+        (
+            _launch_attestation(config, executable_path="/opt/webots/other-webots"),
+            "launch executable path mismatch:",
+        ),
+        (
+            _launch_attestation(config, reported_version="R2024b"),
+            "launch executable Webots version mismatch:",
+        ),
+        (
+            _launch_attestation(
+                config,
+                process_identity_verified=False,
+                process_executable_path="/opt/webots/other-webots",
+            ),
+            "launched Webots process executable does not match the attested executable",
+        ),
+    ]
+    for observed_attestation, expected in cases:
+        report, _, _ = finalize_webots_diagnostic(
+            config, preflight, _snapshot(config, attestation=observed_attestation)
+        )
+        assert any(expected in item for item in report["blockers"]), (expected, report["blockers"])
+        assert report["outcome"] == "FAILED"
+        assert report["motion_allowed"] is False
+        assert report["runtime_webots_version_verified"] is False
+
+
+def test_missing_launch_version_is_not_substituted_from_config(tmp_path):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    report, _, _ = finalize_webots_diagnostic(
+        config,
+        preflight_webots_diagnostic(config),
+        _snapshot(
+            config,
+            runtime_version=None,
+            attestation=_launch_attestation(config, reported_version=None),
+        ),
+    )
+    assert config.webots_version == "R2025a"
+    assert any(
+        "launch executable reported Webots version is unavailable" in item
+        for item in report["blockers"]
+    )
+    assert report["launch_webots_attestation"]["reported_version"] is None
     assert report["runtime_webots_version_observed"] is None
     assert report["runtime_webots_version_available"] is not True
+    assert report["runtime_webots_version_verified"] is False
+    assert report["runtime_webots_version_source"] is None
     assert report["simulator_version"] is None

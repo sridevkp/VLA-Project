@@ -11,7 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, cast
 
@@ -138,6 +138,7 @@ class DiagnosticSnapshot:
     age_s: float
     dependency_availability: Mapping[str, bool]
     call_counts: Mapping[str, int]
+    launch_attestation: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -387,6 +388,46 @@ def _observed_text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _launch_version_attestation(
+    config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot
+) -> tuple[str | None, str | None]:
+    """Validate executable-bound version evidence; return (blocker, observed version)."""
+    attestation = snapshot.launch_attestation
+    if not attestation:
+        return "launch-time Webots version evidence is unavailable", None
+
+    reported = _observed_text(attestation.get("reported_version"))
+    if reported is None:
+        return "launch executable reported Webots version is unavailable", None
+
+    executable = _observed_text(attestation.get("executable_path"))
+    command_executable = _observed_text(attestation.get("launch_command_executable"))
+    digest = _observed_text(attestation.get("executable_sha256"))
+    if executable is None or command_executable is None or digest is None:
+        return "launch executable identity evidence is incomplete", reported
+    if Path(executable) != Path(command_executable):
+        return (
+            f"launch executable path mismatch: probed={executable} spawned={command_executable}",
+            reported,
+        )
+    if attestation.get("verified_executable_version_pair") is not True:
+        return "launch executable/version pair is not verified", reported
+
+    pid = attestation.get("process_pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return "launched Webots process identity is missing", reported
+    if attestation.get("process_identity_verified") is not True:
+        return "launched Webots process executable does not match the attested executable", reported
+
+    if reported != config.webots_version:
+        return (
+            f"launch executable Webots version mismatch: "
+            f"observed={reported} expected={config.webots_version}",
+            reported,
+        )
+    return None, reported
+
+
 def _snapshot_blockers(config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot) -> list[str]:
     blockers: list[str] = []
     session = snapshot.ping.get("session_id")
@@ -417,14 +458,22 @@ def _snapshot_blockers(config: WebotsDiagnosticConfig, snapshot: DiagnosticSnaps
         if snapshot.identity.get("robot_def_cross_checked") is not True:
             blockers.append("robot DEF identity was not cross-checked against the node")
 
-    runtime_version = _observed_text(snapshot.identity.get("webots_version"))
-    if runtime_version is None:
-        blockers.append("runtime Webots version is unavailable")
-    elif runtime_version != config.webots_version:
-        blockers.append(
-            "runtime Webots version mismatch: "
-            f"observed={runtime_version} expected={config.webots_version}"
-        )
+    launch_blocker, launch_version = _launch_version_attestation(config, snapshot)
+    if launch_blocker is not None:
+        blockers.append(launch_blocker)
+
+    controller_version = _observed_text(snapshot.identity.get("webots_version"))
+    if controller_version is not None:
+        if controller_version != config.webots_version:
+            blockers.append(
+                "controller-reported Webots version mismatch: "
+                f"observed={controller_version} expected={config.webots_version}"
+            )
+        if launch_version is not None and controller_version != launch_version:
+            blockers.append(
+                "controller-reported Webots version disagrees with launch executable evidence: "
+                f"controller={controller_version} executable={launch_version}"
+            )
 
     if snapshot.identity.get("first_command_step_count") is not None:
         blockers.append("an actuator command was issued in this backend session")
@@ -451,6 +500,9 @@ def finalize_webots_diagnostic(
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     """Return exclusive, non-scored diagnostic, state and provenance artifacts."""
     observation_blockers = _observation_blockers(config, snapshot)
+    launch_blocker, launch_version = _launch_version_attestation(config, snapshot)
+    controller_version = _observed_text(snapshot.identity.get("webots_version"))
+    runtime_version = launch_version or controller_version
     blockers = [*preflight.blockers, *_snapshot_blockers(config, snapshot)]
     ready = not blockers
     report: dict[str, object] = {
@@ -474,9 +526,18 @@ def finalize_webots_diagnostic(
         "simulator_session_id": snapshot.ping.get("session_id"),
         "running_world_sha256_observed": snapshot.ping.get("world_sha256"),
         "simulator_identity": dict(snapshot.identity),
-        "simulator_version": snapshot.identity.get("webots_version"),
-        "runtime_webots_version_observed": snapshot.identity.get("webots_version"),
-        "runtime_webots_version_available": snapshot.identity.get("webots_version_available"),
+        "simulator_version": runtime_version,
+        "runtime_webots_version_observed": runtime_version,
+        "runtime_webots_version_available": runtime_version is not None,
+        "runtime_webots_version_verified": launch_blocker is None and launch_version is not None,
+        "runtime_webots_version_source": (
+            "launch_executable"
+            if launch_version is not None
+            else ("controller" if controller_version is not None else None)
+        ),
+        "controller_webots_version_observed": controller_version,
+        "controller_webots_version_available": controller_version is not None,
+        "launch_webots_attestation": dict(snapshot.launch_attestation),
         "robot_def_observed": snapshot.identity.get("robot_def"),
         "robot_def_cross_checked": snapshot.identity.get("robot_def_cross_checked"),
         "robot_name_observed": snapshot.identity.get("robot_name"),

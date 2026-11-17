@@ -1903,3 +1903,49 @@ hashes remain byte-identical. Webots and the diagnostic were **not** rerun.
   frozen-helper hash mismatch. No Webots execution, real IK, inference, training, actuation,
   scored evaluation, TEST/TRAIN access, threshold/seed/scenario change or push/merge/PR update
   occurred. `unverified-arm-sweep` remains a hard motion veto.
+
+## ADR-0052 — Launch-time Webots runtime version attestation (2026-11-18)
+
+**Status:** Accepted. **Scope:** inert implementation, tests and local verification only. The first
+authorized diagnostic remains preserved and FAILED; Webots and the diagnostic were **not** rerun.
+
+- **Supported evidence sources:** the R2025a Webots documentation defines `--version` as “Display
+  version information and exit”; the installed binary contains that flag. Webots also supplies
+  `WEBOTS_VERSION` to controllers, as shown by the installed `lib/controller/matlab/launcher.m`.
+  The installed Python controller API has no runtime version getter (`Supervisor.getVersion()` does
+  not exist), so a missing controller-reported version is not substituted from a nonexistent API.
+  Neither the configured `R2025a` string nor `resources/version.txt` is ever copied into observed
+  evidence.
+- **Launch-time probe:** `runtime_attestation.py` resolves the executable, hashes that exact path
+  with SHA-256, and queries it with `[resolved_executable, "--version"]` using an argument list,
+  no shell, a 20 s timeout, and captured stdout/stderr. A canonical `R20XXa` token is extracted only
+  from the probe output. The command, return code, probe error, hash, path and UTC capture time are
+  recorded as provenance. The configured expected value is compared only after observation; a
+  mismatch remains a hard blocker.
+- **Process binding:** after `Popen`, the attestation binds the spawned PID and OS-reported
+  executable path (`/proc/<pid>/exe` on Linux; `QueryFullProcessImageNameW` on Windows where
+  available, otherwise `Popen` PID plus command provenance). Linux launcher scripts are recognised
+  by their shebang interpreter, so `webots` → `bash` → `bin/webots-bin` is recorded honestly rather
+  than mislabelled as a direct binary match. An OS-level mismatch or missing PID fails closed.
+- **Controller cross-check:** `WEBOTS_VERSION` is parsed in the controller and reported separately
+  as `controller_webots_version` with its provenance. With verified executable evidence, a missing
+  controller version is not a hard blocker; any controller version that mismatches configuration
+  or disagrees with the executable evidence is a hard blocker. The report distinguishes launch
+  evidence unavailable, executable-reported version unavailable, incomplete identity, executable
+  path mismatch, process mismatch, executable version mismatch and controller mismatch.
+- **Blast radius:** the opt-in flag is set only by the read-only Webots diagnostic. Existing launch
+  paths keep their previous behaviour when it is absent. Session, world-hash and robot-DEF checks,
+  read-only call blocking, `motion_allowed=false`, and the `unverified-arm-sweep` veto are
+  unchanged. A verified version closes only the runtime-version evidence blocker; it does not
+  authorize IK, actuation, calibration, scored evaluation or TEST/TRAIN access.
+- **Trust limitation:** on this Linux host the resolved `webots` path is a shell wrapper that
+  delegates to `bin/webots-bin`. The probe/hash are tied to the wrapper path and the spawned PID is
+  tied to that command and its interpreter; they are **not** a cryptographic hash of the delegate
+  binary. Windows process introspection and execution remain unverified in this environment. The
+  first read-only rerun is ready for separate owner authorization but was not performed here.
+- **Verification:** Ruff, format check, `ty check src`, `compileall`, 50 focused inert tests, the
+  frozen-evidence checker and all four preserved diagnostic SHA-256 values pass/verify. The full
+  non-Webots suite is `1 failed, 602 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch. No Webots execution, real IK, inference, training, actuation,
+  scored evaluation, TEST/TRAIN access, push, merge or PR update occurred.

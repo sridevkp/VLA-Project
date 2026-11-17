@@ -18,12 +18,17 @@ import subprocess
 import time
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from time import perf_counter
 from typing import IO
 
 from vlarobot.backends.webots.config import SETTINGS, SIM_KINEMATICS_PATH
+from vlarobot.backends.webots.runtime_attestation import (
+    WebotsRuntimeAttestation,
+    attach_process_identity,
+    attest_webots_executable,
+)
 from vlarobot.backends.webots.sim_kinematics import (
     load_snapshot,
     resolve_snapshot_path,
@@ -645,6 +650,7 @@ class WebotsSession:
     log_path: Path
     pid_path: Path
     startup_s: float
+    runtime_attestation: Mapping[str, object] = field(default_factory=dict)
 
 
 @contextmanager
@@ -659,13 +665,17 @@ def launch_webots_session(
     shutdown_timeout_s: float = SHUTDOWN_TIMEOUT_S,
     grace_s: float = 10.0,
     extra_env: Mapping[str, str] | None = None,
+    runtime_attestation_required: bool = False,
 ) -> Generator[WebotsSession, None, None]:
     """Launch one Webots process that can serve many episodes (soft reset per episode).
 
     Yields a connected client once the lockstep server answers ``ping()``. On exit the client
     asks the simulator to quit, Webots gets ``grace_s`` to exit on its own, then the whole
     process tree is terminated (polite, then forced). Process hygiene matches
-    :func:`run_episodes`; the log and pid file land in ``trace_dir``.
+    :func:`run_episodes`; the log and pid file land in ``trace_dir``. When
+    ``runtime_attestation_required`` is set, the same resolved executable is hashed and queried
+    with ``--version`` before launch and the spawned PID is bound to that evidence; unavailable
+    evidence fails before any simulator process is created.
     """
     trace_dir = Path(trace_dir)
     trace_dir.mkdir(parents=True, exist_ok=True)
@@ -680,9 +690,24 @@ def launch_webots_session(
         if extra_env:
             env.update(extra_env)
         env["VLAROBOT_ZMQ_PORT"] = str(port)
+        attestation = WebotsRuntimeAttestation()
+        if runtime_attestation_required:
+            attestation = attest_webots_executable(resolved, env)
+            if not attestation.version_output_available or attestation.executable_sha256 is None:
+                raise RuntimeError(
+                    "launch-time Webots runtime attestation unavailable: "
+                    f"reported={attestation.reported_version!r}, "
+                    f"error={attestation.version_probe_error!r}"
+                )
         process = _popen(command, env, log_file)
         _write_pid_file(pid_path, process.pid)
         try:
+            if runtime_attestation_required:
+                attestation = attach_process_identity(attestation, process)
+                if not attestation.process_identity_verified:
+                    raise RuntimeError(
+                        "launched Webots process identity does not match the attested executable"
+                    )
             startup_started = perf_counter()
             client = wait_for_simulator(endpoint, process, startup_timeout_s)
             startup_s = perf_counter() - startup_started
@@ -695,6 +720,9 @@ def launch_webots_session(
                     log_path=log_path,
                     pid_path=pid_path,
                     startup_s=startup_s,
+                    runtime_attestation=(
+                        attestation.to_mapping() if runtime_attestation_required else {}
+                    ),
                 )
             finally:
                 _stop_client(client)

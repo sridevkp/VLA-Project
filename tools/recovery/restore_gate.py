@@ -51,6 +51,7 @@ def install_restore_gate(
     from lerobot.datasets.utils import flatten_dict
     from lerobot.scripts import lerobot_train as module
     from lerobot.utils.random_utils import serialize_rng_state
+
     from vlarobot.vla.training import CHECKPOINT_FILES
 
     require_isolated(original, recovery)

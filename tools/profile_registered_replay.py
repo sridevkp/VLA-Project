@@ -26,14 +26,12 @@ def main() -> None:
         raise FileExistsError("preserve measured replay evidence")
     sys.path.insert(0, str(project / "src"))
     os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = "calibration/urdf-base-train-v1.yaml"
-    from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
-    from vlarobot.vla.settings import load_vla_settings
-
     import vlarobot
     import vlarobot.execution
     from vlarobot.backends.webots.backend import _rotation_to_quaternion
     from vlarobot.backends.webots.config import ARM_JOINTS, SETTINGS
     from vlarobot.backends.webots.kinematics import Kinematics
+    from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
     from vlarobot.core.types import (
         ActionChunk,
         EEDelta,
@@ -45,6 +43,7 @@ def main() -> None:
         Vec3,
         WorldState,
     )
+    from vlarobot.vla.settings import load_vla_settings
 
     # Composition only: frozen registered FK comes from main, new pure dynamics from this branch.
     vlarobot.__path__.insert(0, str(isolated / "src/vlarobot"))

@@ -259,11 +259,9 @@ def run(project: Path, evidence: Path, out: Path) -> None:
     sys.path.insert(0, str(project / "src"))
     from ikpy.chain import Chain
     from scipy.spatial.transform import Rotation
-    from vlarobot.backends.webots.pose_solver import quaternion_matrix
-    from vlarobot.execution.vla_campaign import make_vla_adapter
-    from vlarobot.vla.action_adapter import pose_delta
 
     from vlarobot.backends.webots.config import ARM_JOINTS, SETTINGS
+    from vlarobot.backends.webots.pose_solver import quaternion_matrix
     from vlarobot.core.types import (
         EEPoseTarget,
         GripperCmd,
@@ -273,6 +271,8 @@ def run(project: Path, evidence: Path, out: Path) -> None:
         RobotState,
         Vec3,
     )
+    from vlarobot.execution.vla_campaign import make_vla_adapter
+    from vlarobot.vla.action_adapter import pose_delta
 
     adapter = make_vla_adapter(bp["files_sha256"][bp["registration_file"]])
     solver = adapter.solver

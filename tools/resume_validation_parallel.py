@@ -31,8 +31,6 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = "calibration/urdf-base-train-v1.yaml"
     sys.path.insert(0, str(project / "src"))
-    from vlarobot.execution.demo_collection import write_json
-
     from vlarobot.backends.fake import FakeBackend
     from vlarobot.eval.runner import (
         EvalRunConfig,
@@ -40,6 +38,7 @@ def main() -> None:
         build_episode_plan,
         run_evaluation,
     )
+    from vlarobot.execution.demo_collection import write_json
     from vlarobot.execution.episode_runner import launch_webots_session
     from vlarobot.execution.scripted_baseline import ScriptedBaselinePolicy
 

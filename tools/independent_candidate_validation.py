@@ -75,8 +75,6 @@ def main() -> None:
         raise RuntimeError("driver changed while waiting; preserve this version and restart")
     os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = "calibration/urdf-base-train-v1.yaml"
     sys.path.insert(0, str(project / "src"))
-    from vlarobot.execution.vla_campaign import make_vla_adapter
-
     import vlarobot
     from vlarobot.backends.webots.backend import _rotation_to_quaternion
     from vlarobot.backends.webots.config import ARM_JOINTS, FINGER_SPEED
@@ -95,6 +93,7 @@ def main() -> None:
     from vlarobot.eval.scenarios import generate_scenes
     from vlarobot.execution.episode_runner import launch_webots_session
     from vlarobot.execution.scripted_can import ScriptedCanPolicy
+    from vlarobot.execution.vla_campaign import make_vla_adapter
 
     vlarobot.__path__.insert(0, str(isolated / "src/vlarobot"))
     from vlarobot.world_model.evaluation import prediction_errors

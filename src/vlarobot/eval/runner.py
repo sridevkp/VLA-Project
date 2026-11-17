@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from vlarobot.core.types import ScenarioSpec
 from vlarobot.eval.metrics import (
@@ -419,7 +419,7 @@ def _build_summary(
         if not row["success"]
     )
     proxy_hits = sum(1 for row in rows if row["proxy_hit"])
-    contact_episodes = sum(1 for row in rows if int(row["contact_steps"] or 0) > 0)
+    contact_episodes = sum(1 for row in rows if int(cast(int, row["contact_steps"]) or 0) > 0)
     fk_measured = sum(1 for row in rows if row["fk_min_clearance_m"] is not None)
     return {
         "schema_version": 1,
@@ -452,7 +452,7 @@ def _build_summary(
             "episodes_with_hit": proxy_hits,
             "episodes": len(rows),
             "episodes_with_actual_contact": contact_episodes,
-            "contact_steps_total": sum(int(row["contact_steps"] or 0) for row in rows),
+            "contact_steps_total": sum(int(cast(int, row["contact_steps"]) or 0) for row in rows),
         },
         "continuous": {
             "final_target_distance_m": _continuous_stats(
@@ -461,7 +461,7 @@ def _build_summary(
             "can_height_error_m": _continuous_stats([row["can_height_error_m"] for row in rows]),
             "can_tilt_deg": _continuous_stats([row["can_tilt_deg"] for row in rows]),
         },
-        "rejections_total": sum(int(row["rejections"] or 0) for row in rows),
+        "rejections_total": sum(int(cast(int, row["rejections"]) or 0) for row in rows),
         "fk_clearance": {
             "measured_episodes": fk_measured,
             "note": (
@@ -474,7 +474,8 @@ def _build_summary(
 
 def _continuous_stats(values: Sequence[object]) -> dict[str, Any]:
     """Mean/sample-std over finite values; ``n=0`` instead of inventing a number."""
-    finite = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    floats = [float(cast(float, value)) for value in values if value is not None]
+    finite = [value for value in floats if math.isfinite(value)]
     if not finite:
         return {"n": 0, "mean": None, "std": None}
     mean, std = mean_std(finite)

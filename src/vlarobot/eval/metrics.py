@@ -28,7 +28,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -448,7 +448,7 @@ class EpisodeMetrics:
 
 
 def _optional_float(value: object) -> float | None:
-    return None if value is None else float(value)
+    return None if value is None else float(cast(float, value))
 
 
 def _optional_str(value: object) -> str | None:

@@ -158,7 +158,8 @@ def snapshot(supervisor: Any) -> dict[str, Any]:
 
 
 def main() -> None:
-    from controller import Supervisor
+    # Only importable inside the Webots runtime; the SDK is never present in CI.
+    from controller import Supervisor  # ty: ignore[import-not-found]
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)

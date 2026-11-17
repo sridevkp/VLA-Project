@@ -61,10 +61,14 @@ def snapshot_from(
         joint_vel={k: float(v) for k, v in sorted(robot.joint_vel.items())},
         gripper_opening=float(robot.gripper_opening),
         base_pose=(float(robot.base_pose.x), float(robot.base_pose.y), float(robot.base_pose.yaw)),
-        base_pose_world_pos=tuple(float(v) for v in robot.base_pose_world.position.as_array()),
-        base_pose_world_quat=tuple(float(v) for v in robot.base_pose_world.orientation),
-        ee_pos=tuple(float(v) for v in robot.ee_pose.position.as_array()),
-        ee_quat=tuple(float(v) for v in robot.ee_pose.orientation),
+        base_pose_world_pos=cast(
+            Position, tuple(float(v) for v in robot.base_pose_world.position.as_array())
+        ),
+        base_pose_world_quat=cast(
+            Quaternion, tuple(float(v) for v in robot.base_pose_world.orientation)
+        ),
+        ee_pos=cast(Position, tuple(float(v) for v in robot.ee_pose.position.as_array())),
+        ee_quat=cast(Quaternion, tuple(float(v) for v in robot.ee_pose.orientation)),
         object_poses=objects,
     )
 
@@ -141,11 +145,9 @@ def compare_snapshots(a: ResetSnapshot, b: ResetSnapshot) -> ComparisonResult:
             continue
         rec(
             f"obj.{name}.pos",
-            max(
-                abs(x - y) for x, y in zip(cast(Position, posa), cast(Position, posb), strict=True)
-            ),
+            max(abs(x - y) for x, y in zip(posa, posb, strict=True)),
         )
-        rec(f"obj.{name}.quat", _quat_angle_diff(cast(Quaternion, quata), cast(Quaternion, quatb)))
+        rec(f"obj.{name}.quat", _quat_angle_diff(quata, quatb))
 
     tolerances = {
         "joint_pos": joint_tol,

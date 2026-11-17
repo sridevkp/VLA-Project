@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -147,8 +148,8 @@ class FakeBackend:
             xyz = entry.get("xyz")
             if not def_name or xyz is None:
                 continue
-            values = tuple(float(value) for value in xyz)
-            yaw_offset = float(entry.get("yaw_offset", 0.0))
+            values = tuple(float(value) for value in cast("Sequence[float]", xyz))
+            yaw_offset = float(cast(float, entry.get("yaw_offset", 0.0)))
             object_poses[def_name] = Pose3D(Vec3(*values), _yaw_to_quat(yaw_offset))
         return GroundTruth(object_poses=object_poses)
 

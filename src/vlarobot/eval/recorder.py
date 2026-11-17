@@ -25,10 +25,10 @@ recorded through :meth:`EpisodeRecorder.record_predicted` and stay empty until M
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -188,7 +188,7 @@ class EpisodeRecorder:
         if contact_nodes:
             labels = [
                 item.get("node_name", "") if isinstance(item, dict) else str(item)
-                for item in contact_nodes
+                for item in cast(Iterable[object], contact_nodes)
             ]
             episode["contacts_file"].write(
                 json.dumps({"t": float(observation.t), "nodes": labels}) + "\n"

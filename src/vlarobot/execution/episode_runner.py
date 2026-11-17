@@ -16,7 +16,7 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -658,7 +658,7 @@ def launch_webots_session(
     startup_timeout_s: float = 180.0,
     shutdown_timeout_s: float = SHUTDOWN_TIMEOUT_S,
     grace_s: float = 10.0,
-) -> Iterator[WebotsSession]:
+) -> Generator[WebotsSession, None, None]:
     """Launch one Webots process that can serve many episodes (soft reset per episode).
 
     Yields a connected client once the lockstep server answers ``ping()``. On exit the client

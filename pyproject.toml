@@ -50,6 +50,7 @@ where = ["src"]
 [tool.setuptools.data-files]
 "configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml", "configs/scenarios.yaml", "configs/vla.yaml", "configs/world_model.yaml", "configs/training.yaml", "configs/worldmind_production.yaml"]
 "configs/calibration" = ["configs/calibration/urdf-base-train-v1.yaml"]
+"configs/report" = ["configs/report/definitions.candidate.json"]
 
 [tool.setuptools.package-data]
 "vlarobot.backends.webots" = ["*.urdf"]

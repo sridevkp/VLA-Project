@@ -263,8 +263,11 @@ def _provenance(config: WorldMindConfig, plan: Sequence[Any]) -> dict[str, str]:
         "definitions_sha256": _sha256(config.report.definitions),
         "calibration_evidence_id": config.calibration.evidence_id,
         "calibration_id": config.calibration.calibration_id,
-        "calibration_source": config.calibration.source,
-        "calibration_evidence_sha256": _sha256(config.calibration.evidence_path),
+        "calibration_candidate_sha256": config.calibration.candidate_sha256,
+        "calibration_evidence_sha256": config.calibration.evidence_sha256,
+        "calibration_selected_candidate_id": config.calibration.selected_candidate_id,
+        "calibration_parameters": json.dumps(dict(config.calibration.parameters), sort_keys=True),
+        "calibration_provenance": json.dumps(dict(config.calibration.provenance), sort_keys=True),
         "backend": config.backend.kind,
         "backend_declaration": config.backend.declaration,
         "state_source": config.backend.state_source,
@@ -290,6 +293,25 @@ def _provenance(config: WorldMindConfig, plan: Sequence[Any]) -> dict[str, str]:
         "prediction_pairing_scope": (
             "executed candidate only; one receding-horizon tick observed per decision, "
             "paired with allow_truncated=True and never scored over the unexecuted horizon"
+        ),
+        "oracle_boundary": (
+            "privileged get_ground_truth supplies only the target pose; robot fields come from "
+            "the declared backend observation; no perception-derived performance is claimed"
+        ),
+        "observed_robot_state_fields": (
+            "base_pose_world, joint_pos, joint_vel, ee_pose and gripper_opening from observation"
+        ),
+        "perception_equivalent": "false",
+        "collision_proxy_channel": (
+            "measured displacement/tilt proxy; a proxy hit is not a verified contact or a full-arm "
+            "swept-volume certificate"
+        ),
+        "collision_contact_channel": (
+            "backend-recorded contact nodes/steps only; never synthesized from the prediction"
+        ),
+        "arm_sweep_certificate_channel": (
+            "production surrogate registers no full-arm sweep certificate; unverified-arm-sweep "
+            "must remain a hard rejection until an owner-reviewed certificate is bound"
         ),
     }
 
@@ -334,6 +356,11 @@ def _outcome(
     outcome["failure_reason"] = None if success else (failure_reason or "frozen criteria failed")
     outcome["rejections"] = int(rejections)
     outcome["worldmind_control_steps"] = int(steps)
+    outcome["collision_evidence_channels"] = {
+        "proxy": "recorded displacement/tilt proxy; labelled separately from contact",
+        "contact": "backend-recorded contacts only; not inferred from the surrogate",
+        "arm_sweep": "no production certificate; production predictions reject unverified sweeps",
+    }
     return outcome
 
 
@@ -429,9 +456,9 @@ class WorldMindEpisodePolicy:
             def predict(predict_state: WorldState, chunk: Any) -> Trajectory:
                 return capture.predict(predict_state, chunk)
 
-            primary = self._waypoints(self.config.adapter.waypoints_binding)
+            primary = self._waypoints(self.config.adapter.waypoints_binding, state, task)
             alternate = (
-                self._waypoints(self.config.adapter.alternate_waypoints_binding)
+                self._waypoints(self.config.adapter.alternate_waypoints_binding, state, task)
                 if self.config.adapter.alternate_waypoints_binding
                 else None
             )
@@ -483,6 +510,15 @@ class WorldMindEpisodePolicy:
                     "gate_call_policy": GATE_CALL_POLICY,
                     "surrogate_binding": self.config.surrogate.binding,
                     "calibration_id": self.config.calibration.calibration_id,
+                    "state_source": self.config.backend.state_source,
+                    "oracle_boundary": (
+                        "target pose from privileged oracle; robot fields from observation"
+                    ),
+                    "perception_equivalent": "false",
+                    "collision_channels": (
+                        "proxy=recorded displacement/tilt; contact=backend contacts only; "
+                        "sweep=no certified full-arm check"
+                    ),
                 }
                 ranking_provenance = {
                     "selected_index": "none" if selection.index is None else str(selection.index),
@@ -702,10 +738,19 @@ class WorldMindEpisodePolicy:
             source="scripted",
         )
 
-    def _waypoints(self, binding: str | None) -> Sequence[ScriptedWaypoint]:
+    def _waypoints(
+        self, binding: str | None, state: WorldState, task: TaskSpec
+    ) -> Sequence[ScriptedWaypoint]:
         if binding is None:
             raise ValueError("no reviewed waypoint set bound")
-        return self.bindings.waypoint_sets[binding]
+        factory = self.bindings.waypoint_factories.get(binding)
+        if factory is not None:
+            waypoints = factory(self.config, state, task)
+        else:
+            waypoints = self.bindings.waypoint_sets[binding]
+        if not isinstance(waypoints, Sequence) or not waypoints:
+            raise ValueError(f"waypoint binding {binding} produced no stations")
+        return waypoints
 
     @staticmethod
     def _selected_trajectory(capture: _TrajectoryCapture, index: int) -> Trajectory:

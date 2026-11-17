@@ -36,7 +36,8 @@ bounds:
 
 report:
   pdf: "<AUTHORITATIVE REPORT PDF>"
-  definitions: "<OWNER-REVIEWED DEFINITIONS JSON>"
+  definitions: "<OWNER-APPROVED DEFINITIONS JSON>"
+  candidate_definitions: "report/definitions.candidate.json"
   sha256: "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
 
 components:
@@ -65,7 +66,9 @@ assessment:
 
 calibration:
   evidence_id: "<VALIDATION CALIBRATION EVIDENCE ID>"
-  evidence_path: "<VALIDATION CALIBRATION EVIDENCE JSON>"
+  evidence_path: "<APPROVED VALIDATION CALIBRATION EVIDENCE JSON>"
+  candidate_path: "<APPROVED VALIDATION CALIBRATION CANDIDATE JSON>"
+  evaluator_binding: "registered_calibration_evaluator_v1"
 
 surrogate:
   binding: "<REVIEWED SURROGATE FACTORY BINDING>"

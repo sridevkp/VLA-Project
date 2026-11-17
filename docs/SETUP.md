@@ -204,14 +204,18 @@ From the project root, the intended owner-reviewed invocation is a single cross-
 uv run python -m vlarobot.cli eval-worldmind --config configs/worldmind_production.yaml --out runs/worldmind/validation-s0-<NEW-ID> --backend webots --state-source oracle
 ```
 
-The shipped config is intentionally `status: blocked` and the CLI registers no reviewed bindings,
-so this command currently exits with `eval-worldmind preflight failed`. That is the required
-fail-closed behavior, not a setup error to bypass. Do not point it at TEST or TRAIN: only
-`--split validation` is accepted. Use a fresh `--out` path for every run; prior evidence is never
-overwritten. A successful run requires owner-reviewed report definitions, calibration evidence,
-component/check/factory bindings, weights, ranking direction and constraints to be registered
-first, plus an already running sim server for `--backend webots`. The command never launches
-Webots itself.
+The shipped config is intentionally `status: blocked`, so this command currently exits with
+`eval-worldmind preflight failed` (code 1) and creates no output directory. That is the required
+fail-closed behavior, not a setup error to bypass. The CLI registers the concrete existing
+components through `production_worldmind_bindings()` and checks them in a structured preflight
+(`eval/worldmind_preflight.py`); scientific bindings (Eq. 3.8 components/weights, ranking direction,
+risk thresholds and the calibration evaluator) are deliberately absent and remain fail-closed.
+Do not point it at TEST or TRAIN: only `--split validation` is accepted. Use a fresh `--out` path
+for every run; prior evidence is never overwritten. A successful run requires owner-approved
+report definitions and VALIDATION calibration candidate/evidence, the scientific component/check/
+factory bindings, weights, ranking direction and constraints to be registered, a certified full-arm
+sweep check, plus an already running sim server for `--backend webots`. The command never launches
+Webots itself. Oracle-assisted results are labelled and are never presented as perception results.
 
 Inert FakeBackend verification without Webots:
 

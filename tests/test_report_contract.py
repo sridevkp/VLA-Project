@@ -5,7 +5,12 @@ import json
 
 import pytest
 
-from vlarobot.eval.report_contract import ReportDefinitions, evaluate_components, table51_values
+from vlarobot.eval.report_contract import (
+    TABLE51_NAMES,
+    ReportDefinitions,
+    evaluate_components,
+    table51_values,
+)
 
 
 def test_missing_definitions_fail_explicitly():
@@ -23,8 +28,8 @@ def test_fixture_definition_hash_and_exact_names_are_required(tmp_path):
         "report_sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
         "components": {n: "synthetic fixture only" for n in ("Jg", "Jl", "Jr", "Ju")},
         "table51": {
-            f"fixture_{i}": {"definition": "synthetic fixture only", "unit": "fixture"}
-            for i in range(8)
+            name: {"definition": "synthetic fixture only", "unit": "fixture"}
+            for name in TABLE51_NAMES
         },
     }
     definitions.write_text(json.dumps(data), encoding="utf-8")

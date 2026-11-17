@@ -102,3 +102,10 @@ existing Python 3.11 standard library, NumPy, PyYAML, Typer, the in-repo FakeBac
 analytic surrogate. `configs/worldmind_production.yaml` is added to packaged data files. The
 `eval-worldmind` command is fail-closed with the blocked template and empty binding registry;
 no Webots-measured, scored VALIDATION, Windows, real-IK or inference result is claimed.
+
+Concrete registration, calibration gates and structured preflight (ADR-0048) add no dependency or
+version pin. Existing IKPy/NumPy geometry and safety objects are bound lazily behind
+`backends/worldmind_bindings.py`; `configs/report/definitions.candidate.json` is added to packaged
+data files. `eval-worldmind` now registers `production_worldmind_bindings()` and fails closed via
+`eval/worldmind_preflight.py` until owner-approved report/calibration values and scientific bindings
+exist. No Webots-measured, scored VALIDATION, Windows, real-IK or inference result is claimed.

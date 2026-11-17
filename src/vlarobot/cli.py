@@ -528,24 +528,39 @@ def eval_worldmind(
     ] = "validation",
 ) -> None:
     """Run the production WorldMind composition with fail-closed VALIDATION preflight."""
-    from vlarobot.eval.worldmind_config import (
-        empty_worldmind_bindings,
-        plan_worldmind_validation,
-    )
+    from vlarobot.eval.worldmind_preflight import run_worldmind_preflight
     from vlarobot.execution.worldmind_pipeline import run_worldmind_evaluation
 
     try:
-        resolved, plan = plan_worldmind_validation(
-            config,
-            out,
-            split=split,
-            backend=backend,
-            state_source=state_source,
-            bindings=empty_worldmind_bindings(),
+        from vlarobot.backends.worldmind_bindings import (
+            production_worldmind_bindings,
+            runtime_preflight_probe,
         )
-    except (ValueError, FileNotFoundError, FileExistsError) as error:
-        typer.echo(f"eval-worldmind preflight failed: {type(error).__name__}: {error}", err=True)
+
+        bindings = production_worldmind_bindings()
+    except Exception as error:  # noqa: BLE001 - registration must fail closed with one CLI error
+        typer.echo(
+            f"eval-worldmind preflight failed: binding registration: "
+            f"{type(error).__name__}: {error}",
+            err=True,
+        )
         raise typer.Exit(code=1) from error
+
+    preflight = run_worldmind_preflight(
+        config,
+        out,
+        split=split,
+        backend=backend,
+        state_source=state_source,
+        bindings=bindings,
+        runtime_probe=runtime_preflight_probe,
+    )
+    if not preflight.ready or preflight.config is None:
+        typer.echo("eval-worldmind preflight failed:", err=True)
+        for blocker in preflight.blockers or ("config: no validated configuration",):
+            typer.echo(f"  - {blocker}", err=True)
+        raise typer.Exit(code=1)
+    resolved, plan = preflight.config, preflight.plan
 
     if backend == "fake":
         from vlarobot.backends.fake import FakeBackend
@@ -560,7 +575,7 @@ def eval_worldmind(
             client,
             resolved,
             out,
-            empty_worldmind_bindings(),
+            bindings,
         )
     except Exception as error:  # noqa: BLE001 - surface one CLI failure after evidence finalize
         typer.echo(f"eval-worldmind failed: {type(error).__name__}: {error}", err=True)

@@ -11,6 +11,17 @@ from pathlib import Path
 from typing import Any
 
 COMPONENTS = ("Jg", "Jl", "Jr", "Ju")
+TABLE51_NAMES = (
+    "Task success rate",
+    "Prediction error",
+    "Collision rate",
+    "Path length",
+    "Execution time",
+    "Planning latency",
+    "Risk rejection rate",
+    "Reliability",
+)
+APPROVED_DEFINITION_STATUS = "approved"
 
 
 @dataclass(frozen=True)
@@ -20,6 +31,7 @@ class ReportDefinitions:
     report_sha256: str
     component_definitions: Mapping[str, str]
     table51_definitions: Mapping[str, dict[str, str]]
+    review_status: str
 
     @classmethod
     def load(cls, definitions: Path, report_pdf: Path) -> ReportDefinitions:
@@ -27,20 +39,38 @@ class ReportDefinitions:
         digest = hashlib.sha256(report_pdf.read_bytes()).hexdigest()
         if data.get("report_sha256") != digest:
             raise ValueError("definitions differ from authoritative report bytes")
+        status = data.get("review_status", APPROVED_DEFINITION_STATUS)
+        if status != APPROVED_DEFINITION_STATUS:
+            raise ValueError("definitions candidate is not owner-approved for scored execution")
         components = data.get("components", {})
         metrics = data.get("table51", {})
         if set(components) != set(COMPONENTS) or any(
             not isinstance(v, str) or not v.strip() for v in components.values()
         ):
             raise ValueError("exact four authoritative J component definitions required")
-        if len(metrics) != 8 or any(
+        if set(metrics) != set(TABLE51_NAMES) or any(
             not isinstance(v, dict)
             or set(v) != {"definition", "unit"}
             or not all(isinstance(s, str) and s.strip() for s in v.values())
             for v in metrics.values()
         ):
             raise ValueError("all eight verbatim Table 5.1 names, definitions and units required")
-        return cls(digest, components, metrics)
+        return cls(digest, components, metrics, status)
+
+
+def load_definitions_candidate(definitions: Path, report_pdf: Path) -> dict[str, Any]:
+    """Load a reviewable candidate without authorizing it for scored execution."""
+    data = json.loads(definitions.read_text(encoding="utf-8"))
+    digest = hashlib.sha256(report_pdf.read_bytes()).hexdigest()
+    if data.get("report_sha256") != digest:
+        raise ValueError("definitions candidate differs from authoritative report bytes")
+    if data.get("review_status") != "candidate":
+        raise ValueError("definitions candidate must explicitly remain review_status=candidate")
+    if set(data.get("components", {})) != set(COMPONENTS):
+        raise ValueError("definitions candidate must name exactly Jg, Jl, Jr and Ju")
+    if set(data.get("table51", {})) != set(TABLE51_NAMES):
+        raise ValueError("definitions candidate must use the exact eight Table 5.1 names")
+    return data
 
 
 def evaluate_components(

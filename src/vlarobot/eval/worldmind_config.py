@@ -12,7 +12,6 @@ access the TEST split.
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -21,8 +20,16 @@ from typing import Any, Literal, Protocol, cast
 
 import yaml
 
-from vlarobot.eval.report_contract import COMPONENTS, ReportDefinitions
+from vlarobot.eval.report_contract import (
+    COMPONENTS,
+    ReportDefinitions,
+    load_definitions_candidate,
+)
 from vlarobot.eval.runner import EvalEpisode, build_episode_plan
+from vlarobot.eval.worldmind_calibration import (
+    CalibrationCandidate,
+    load_calibration_candidate,
+)
 
 WORLD_MIND_SCHEMA_VERSION: Literal[1] = 1
 AUTHORITATIVE_REPORT_SHA256 = "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
@@ -65,7 +72,7 @@ TOP_LEVEL_KEYS = frozenset(
     }
 )
 CALIBRATION_KEYS = frozenset(
-    {"schema_version", "evidence_id", "split", "approved", "calibration_id", "source"}
+    {"evidence_id", "evidence_path", "candidate_path", "evaluator_binding"}
 )
 
 
@@ -108,6 +115,7 @@ class BoundsSpec:
 class ReportSpec:
     pdf: Path
     definitions: Path
+    candidate_definitions: Path
     sha256: str
 
 
@@ -127,10 +135,23 @@ class AssessmentSpec:
 
 @dataclass(frozen=True)
 class CalibrationSpec:
+    """Approved VALIDATION-only candidate identity and selected parameters.
+
+    The evaluator is an explicit binding in the Python registry; no score or objective is
+    inferred from configuration text.
+    """
+
     evidence_id: str
     evidence_path: Path
     calibration_id: str
-    source: str
+    candidate_path: Path
+    candidate_sha256: str
+    evidence_sha256: str
+    parameters: Mapping[str, Any]
+    selected_candidate_id: str
+    provenance: Mapping[str, Any]
+    evaluator_binding: str
+    candidate: CalibrationCandidate
 
 
 @dataclass(frozen=True)
@@ -218,6 +239,8 @@ class WorldMindBindings:
     verification: Mapping[str, Any] = field(default_factory=dict)
     pose_solvers: Mapping[str, Any] = field(default_factory=dict)
     waypoint_sets: Mapping[str, Sequence[Any]] = field(default_factory=dict)
+    waypoint_factories: Mapping[str, Any] = field(default_factory=dict)
+    calibration_evaluators: Mapping[str, Any] = field(default_factory=dict)
     inputs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
@@ -412,7 +435,11 @@ def load_worldmind_config(path: Path) -> WorldMindConfig:
     )
 
     report_raw = _mapping(root["report"], "report")
-    _keys(report_raw, frozenset({"pdf", "definitions", "sha256"}), "report")
+    _keys(
+        report_raw,
+        frozenset({"pdf", "definitions", "candidate_definitions", "sha256"}),
+        "report",
+    )
     sha256 = _text(report_raw["sha256"], "report.sha256").lower()
     if sha256 != AUTHORITATIVE_REPORT_SHA256:
         raise ValueError("report SHA-256 does not match the authoritative Phase I report")
@@ -420,10 +447,19 @@ def load_worldmind_config(path: Path) -> WorldMindConfig:
     definitions_path = _existing_path(
         report_raw["definitions"], "report.definitions", source.parent
     )
+    candidate_definitions = _existing_path(
+        report_raw["candidate_definitions"], "report.candidate_definitions", source.parent
+    )
+    load_definitions_candidate(candidate_definitions, pdf)
     report_definitions = ReportDefinitions.load(definitions_path, pdf)
     if report_definitions.report_sha256 != AUTHORITATIVE_REPORT_SHA256:
         raise ValueError("definitions do not bind the authoritative report bytes")
-    report = ReportSpec(pdf=pdf, definitions=definitions_path, sha256=sha256)
+    report = ReportSpec(
+        pdf=pdf,
+        definitions=definitions_path,
+        candidate_definitions=candidate_definitions,
+        sha256=sha256,
+    )
 
     components_raw = _mapping(root["components"], "components")
     if set(components_raw) != set(COMPONENTS):
@@ -474,26 +510,41 @@ def load_worldmind_config(path: Path) -> WorldMindConfig:
     )
 
     calibration_raw = _mapping(root["calibration"], "calibration")
-    _keys(calibration_raw, frozenset({"evidence_id", "evidence_path"}), "calibration")
+    _keys(calibration_raw, CALIBRATION_KEYS, "calibration")
     evidence_id = _binding(calibration_raw["evidence_id"], "calibration.evidence_id")
     evidence_path = _existing_path(
         calibration_raw["evidence_path"], "calibration.evidence_path", source.parent
     )
-    evidence = _mapping(
-        json.loads(evidence_path.read_text(encoding="utf-8")), "calibration evidence"
+    candidate_path = _existing_path(
+        calibration_raw["candidate_path"], "calibration.candidate_path", source.parent
     )
-    _keys(evidence, CALIBRATION_KEYS, "calibration evidence")
-    if evidence["schema_version"] != WORLD_MIND_SCHEMA_VERSION:
-        raise ValueError("unsupported calibration evidence schema_version")
-    if evidence["split"] != FROZEN_SPLIT or evidence["approved"] is not True:
-        raise ValueError("calibration evidence must be approved on VALIDATION only")
-    if evidence["evidence_id"] != evidence_id:
+    evaluator_binding = _binding(
+        calibration_raw["evaluator_binding"], "calibration.evaluator_binding"
+    )
+    candidate = load_calibration_candidate(candidate_path)
+    if candidate.evidence.evidence_id != evidence_id:
         raise ValueError("calibration evidence ID binding mismatch")
+    if candidate.evidence.path != evidence_path:
+        raise ValueError("calibration evidence path binding mismatch")
+    source_text = candidate.provenance.get("source")
+    if not isinstance(source_text, str) or not source_text.strip():
+        raise ValueError("calibration candidate provenance requires an explicit source")
+    if tuple(candidate.parameters["weights"][name] for name in COMPONENTS) != weights:
+        raise ValueError("calibration parameters differ from the Eq. 3.8 assessment weights")
+    if candidate.parameters["maximize"] != assessment.maximize:
+        raise ValueError("calibration parameters differ from the assessment ranking direction")
     calibration = CalibrationSpec(
         evidence_id=evidence_id,
         evidence_path=evidence_path,
-        calibration_id=_binding(evidence["calibration_id"], "calibration.calibration_id"),
-        source=_binding(evidence["source"], "calibration.source"),
+        calibration_id=candidate.calibration_id,
+        candidate_path=candidate_path,
+        candidate_sha256=candidate.sha256,
+        evidence_sha256=candidate.evidence.sha256,
+        parameters=candidate.parameters,
+        selected_candidate_id=str(candidate.selection["candidate_id"]),
+        provenance=candidate.provenance,
+        evaluator_binding=evaluator_binding,
+        candidate=candidate,
     )
 
     surrogate_raw = _mapping(root["surrogate"], "surrogate")
@@ -660,6 +711,11 @@ def validate_worldmind_bindings(
             missing.append(f"hard_checks.{name}")
         elif not callable(obj):
             invalid.append(f"hard_checks.{name}")
+    evaluator = bindings.calibration_evaluators.get(config.calibration.evaluator_binding)
+    if evaluator is None:
+        missing.append(f"calibration_evaluators.{config.calibration.evaluator_binding}")
+    elif not callable(evaluator):
+        invalid.append(f"calibration_evaluators.{config.calibration.evaluator_binding}")
     factories = (
         ("surrogates", config.surrogate.binding),
         ("safety", config.safety.binding),
@@ -683,9 +739,12 @@ def validate_worldmind_bindings(
         if binding is None:
             continue
         waypoints = bindings.waypoint_sets.get(binding)
-        if waypoints is None:
-            missing.append(f"waypoint_sets.{binding}")
-        elif not isinstance(waypoints, Sequence) or not waypoints:
+        factory = bindings.waypoint_factories.get(binding)
+        if waypoints is None and factory is None:
+            missing.append(f"waypoints.{binding}")
+        elif factory is not None and not callable(factory):
+            invalid.append(f"waypoint_factories.{binding}")
+        elif waypoints is not None and (not isinstance(waypoints, Sequence) or not waypoints):
             invalid.append(f"waypoint_sets.{binding}")
     for group in ("surrogate", "safety"):
         declared = getattr(config, group).inputs

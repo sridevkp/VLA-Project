@@ -35,7 +35,17 @@ from vlarobot.core.types import (
     WorldState,
 )
 from vlarobot.eval import worldmind_config
+from vlarobot.eval.report_contract import (
+    TABLE51_NAMES,
+    ReportDefinitions,
+    load_definitions_candidate,
+)
 from vlarobot.eval.runner import EvalEpisode, build_episode_plan
+from vlarobot.eval.worldmind_bindings import CALIBRATION_EVALUATOR_BINDING
+from vlarobot.eval.worldmind_calibration import (
+    load_calibration_candidate,
+    load_calibration_evidence,
+)
 from vlarobot.eval.worldmind_config import (
     WorldMindBindings,
     WorldMindConfig,
@@ -44,6 +54,7 @@ from vlarobot.eval.worldmind_config import (
     validate_worldmind_bindings,
 )
 from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter
+from vlarobot.eval.worldmind_preflight import run_worldmind_preflight
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_chunk_adapter import (
     JointJitter,
@@ -57,16 +68,6 @@ from vlarobot.world_model.rollout import AnalyticSurrogate
 
 ARM_JOINTS = tuple(f"arm_{index}_joint" for index in range(1, 8))
 IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
-TABLE51_NAMES = (
-    "task_success_rate",
-    "prediction_error",
-    "collision_rate",
-    "path_length",
-    "execution_time",
-    "planning_latency",
-    "risk_rejection_rate",
-    "reliability",
-)
 
 
 @dataclass
@@ -178,33 +179,76 @@ def _write_fixture_files(root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[P
     report_sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
     monkeypatch.setattr(worldmind_config, "AUTHORITATIVE_REPORT_SHA256", report_sha)
 
+    definition_payload = {
+        "report_sha256": report_sha,
+        "components": {name: f"synthetic {name} definition" for name in ("Jg", "Jl", "Jr", "Ju")},
+        "table51": {
+            name: {"definition": f"synthetic {name} definition", "unit": "fixture"}
+            for name in TABLE51_NAMES
+        },
+    }
     definitions = root / "definitions.json"
     definitions.write_text(
         json.dumps(
+            {"review_status": "approved", **definition_payload},
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    candidate_definitions = root / "definitions.candidate.json"
+    candidate_definitions.write_text(
+        json.dumps(
+            {"review_status": "candidate", **definition_payload},
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = root / "calibration-evidence.json"
+    evidence.write_text(
+        json.dumps(
             {
-                "report_sha256": report_sha,
-                "components": {
-                    name: f"synthetic {name} definition" for name in ("Jg", "Jl", "Jr", "Ju")
-                },
-                "table51": {
-                    name: {"definition": f"synthetic {name} definition", "unit": "fixture"}
-                    for name in TABLE51_NAMES
-                },
+                "schema_version": 1,
+                "evidence_id": "synthetic-validation-evidence-v1",
+                "split": "validation",
+                "approved": True,
+                "episode_ids": [f"validation-i{index:02d}-s{index % 3}" for index in range(18)],
+                "source_hashes": {"synthetic": "fixture-only"},
+                "measurement_class": "synthetic-inert-fixture",
             },
             sort_keys=True,
         ),
         encoding="utf-8",
     )
-    calibration = root / "calibration.json"
-    calibration.write_text(
+    parameters = {
+        "weights": {"Jg": 1.0, "Jl": 0.0, "Jr": 0.0, "Ju": 0.0},
+        "maximize": True,
+    }
+    candidate = root / "calibration-candidate.json"
+    candidate.write_text(
         json.dumps(
             {
                 "schema_version": 1,
-                "evidence_id": "synthetic-calibration-v1",
+                "calibration_id": "synthetic-calibration-v1",
                 "split": "validation",
                 "approved": True,
-                "calibration_id": "synthetic-calibration-v1",
-                "source": "synthetic inert fixture; not approved VALIDATION evidence",
+                "evidence_id": "synthetic-validation-evidence-v1",
+                "evidence_path": "calibration-evidence.json",
+                "evidence_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+                "approval_record": "synthetic inert fixture; not an owner approval",
+                "component_bindings": {
+                    name: f"synthetic-{name.lower()}" for name in ("Jg", "Jl", "Jr", "Ju")
+                },
+                "weights_source": "synthetic fixture; owner decision still required",
+                "parameters": parameters,
+                "candidates": [{"candidate_id": "synthetic-v1", "parameters": parameters}],
+                "selection": {
+                    "candidate_id": "synthetic-v1",
+                    "rationale": "synthetic single-candidate fixture",
+                },
+                "provenance": {
+                    "source": "synthetic inert fixture; not approved VALIDATION evidence"
+                },
             },
             sort_keys=True,
         ),
@@ -261,6 +305,7 @@ def _make_fixture(
         "report": {
             "pdf": str(pdf),
             "definitions": str(root / "definitions.json"),
+            "candidate_definitions": str(root / "definitions.candidate.json"),
             "sha256": report_sha,
         },
         "components": {
@@ -273,8 +318,10 @@ def _make_fixture(
             "hard_checks": ["synthetic_hard"],
         },
         "calibration": {
-            "evidence_id": "synthetic-calibration-v1",
-            "evidence_path": str(root / "calibration.json"),
+            "evidence_id": "synthetic-validation-evidence-v1",
+            "evidence_path": str(root / "calibration-evidence.json"),
+            "candidate_path": str(root / "calibration-candidate.json"),
+            "evaluator_binding": CALIBRATION_EVALUATOR_BINDING,
         },
         "surrogate": {
             "binding": "surrogate_factory",
@@ -374,6 +421,10 @@ def _make_fixture(
             home_tolerance_rad=loaded.verification.home_tolerance_rad,
         )
 
+    def calibration_evaluator(parameters: Any, evidence: Any) -> float:
+        del evidence
+        return float(parameters["weights"]["Jg"])
+
     solver.position_error_m = 0.0
     solver.orientation_error_rad = 0.0
     bindings = WorldMindBindings(
@@ -383,6 +434,7 @@ def _make_fixture(
         safety={"safety_factory": safety_factory},
         verification={"placement_verifier": verification_factory},
         pose_solvers={"static_solver": solver},
+        calibration_evaluators={CALIBRATION_EVALUATOR_BINDING: calibration_evaluator},
         waypoint_sets={
             "primary_waypoints": [
                 ScriptedWaypoint("primary", 49, pose=primary_pose),
@@ -411,6 +463,20 @@ def _one_episode_plan() -> tuple[EvalEpisode, ...]:
             seed=0,
         ),
     )
+
+
+def _inert_runtime_probe(config: WorldMindConfig, bindings: WorldMindBindings) -> dict[str, str]:
+    """Supply explicit backend-free probe values for the structured preflight contract."""
+    del config, bindings
+    return {
+        "robot_config_sha256": "a" * 64,
+        "safety_config_sha256": "b" * 64,
+        "urdf_sha256": "c" * 64,
+        "corrected_registration_sha256": "d" * 64,
+        "pose_solver": "LazyPoseSolver",
+        "safety_limits": "joints=7",
+        "waypoint_factory": "corrected_scripted_waypoints",
+    }
 
 
 def _run_one(
@@ -563,6 +629,12 @@ def test_full_composition_records_k32_nplus1_gate_execution_pairing_and_recordin
     assert provenance["state_source"] == "oracle"
     assert provenance["horizon_steps"] == "50"
     assert provenance["prediction_pairing_scope"].find("allow_truncated=True") >= 0
+    assert provenance["perception_equivalent"] == "false"
+    assert "privileged get_ground_truth" in provenance["oracle_boundary"]
+    assert "displacement/tilt proxy" in provenance["collision_proxy_channel"]
+    assert "backend-recorded" in provenance["collision_contact_channel"]
+    assert decision["provenance"]["perception_equivalent"] == "false"
+    assert "proxy=recorded displacement/tilt" in decision["provenance"]["collision_channels"]
     assert backend.events.count("apply") == 1
     assert backend.events.count("step") == 1
     assert fixture.shared.events[fixture.shared.events.index("backend.apply") - 1] == "validate"
@@ -677,7 +749,7 @@ def test_blocked_template_and_missing_reviewed_inputs_fail_closed(tmp_path, monk
         load_worldmind_config(missing_definitions)
 
     bad = yaml.safe_load(fixture.config_path.read_text(encoding="utf-8"))
-    bad["calibration"]["evidence_path"] = str(fixture.root / "missing-calibration.json")
+    bad["calibration"]["candidate_path"] = str(fixture.root / "missing-calibration.json")
     missing_calibration = fixture.root / "missing-calibration.yaml"
     missing_calibration.write_text(yaml.safe_dump(bad, sort_keys=False), encoding="utf-8")
     with pytest.raises(FileNotFoundError, match="calibration"):
@@ -765,3 +837,129 @@ def test_cli_exposes_new_command_preserves_existing_commands_and_fails_closed(
     assert "preflight failed" in result.stderr
     assert "unregistered WorldMind bindings" in result.stderr
     assert not (tmp_path / "cli-fail").exists()
+
+
+def test_concrete_registration_exists_but_scientific_bindings_remain_absent(tmp_path, monkeypatch):
+    from vlarobot.backends.worldmind_bindings import (
+        ANALYTIC_SURROGATE_BINDING,
+        CORRECTED_POSE_SOLVER_BINDING,
+        CORRECTED_REGISTRATION_SHA256,
+        CORRECTED_WAYPOINTS_BINDING,
+        FINITE_CHUNK_CHECK,
+        PLACEMENT_VERIFIER_BINDING,
+        RUNTIME_SAFETY_BINDING,
+        corrected_registration_path,
+        production_worldmind_bindings,
+    )
+
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    registry = production_worldmind_bindings()
+    assert set(registry.surrogates) == {ANALYTIC_SURROGATE_BINDING}
+    assert set(registry.safety) == {RUNTIME_SAFETY_BINDING}
+    assert set(registry.verification) == {PLACEMENT_VERIFIER_BINDING}
+    assert set(registry.hard_checks) == {FINITE_CHUNK_CHECK}
+    assert set(registry.pose_solvers) == {CORRECTED_POSE_SOLVER_BINDING}
+    assert set(registry.waypoint_factories) == {CORRECTED_WAYPOINTS_BINDING}
+    assert registry.components == {}
+    assert registry.calibration_evaluators == {}
+    assert (
+        hashlib.sha256(corrected_registration_path().read_bytes()).hexdigest()
+        == CORRECTED_REGISTRATION_SHA256
+    )
+    with pytest.raises(ValueError, match="unregistered WorldMind bindings"):
+        validate_worldmind_bindings(fixture.config, registry)
+
+
+def test_definition_candidates_are_reviewable_but_not_scorable(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    candidate_path = fixture.root / "definitions.candidate.json"
+    candidate = load_definitions_candidate(candidate_path, fixture.root / "synthetic-report.bin")
+    assert candidate["review_status"] == "candidate"
+    assert set(candidate["table51"]) == set(TABLE51_NAMES)
+    with pytest.raises(ValueError, match="not owner-approved"):
+        ReportDefinitions.load(candidate_path, fixture.root / "synthetic-report.bin")
+
+
+def test_calibration_approval_hash_and_test_path_gates_fail_closed(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    candidate_path = fixture.root / "calibration-candidate.json"
+    candidate = load_calibration_candidate(candidate_path)
+    evidence = load_calibration_evidence(fixture.root / "calibration-evidence.json")
+    assert candidate.evidence.evidence_id == evidence.evidence_id
+    assert len(evidence.episode_ids) == 18
+
+    raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+    raw["approved"] = False
+    unapproved = fixture.root / "calibration-unapproved.json"
+    unapproved.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="approved"):
+        load_calibration_candidate(unapproved)
+
+    raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+    raw["evidence_sha256"] = "0" * 64
+    stale = fixture.root / "calibration-stale.json"
+    stale.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="frozen VALIDATION evidence was modified"):
+        load_calibration_candidate(stale)
+
+    sealed = tmp_path / "test" / "calibration-candidate.json"
+    sealed.parent.mkdir()
+    sealed.write_text(candidate_path.read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(ValueError, match="sealed TEST or TRAIN"):
+        load_calibration_candidate(sealed)
+
+
+def test_structured_preflight_passes_only_with_every_gate(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    out = tmp_path / "preflight-ready"
+    result = run_worldmind_preflight(
+        fixture.config_path,
+        out,
+        split="validation",
+        backend="fake",
+        state_source="oracle",
+        bindings=fixture.bindings,
+        runtime_probe=_inert_runtime_probe,
+    )
+    assert result.ready is True
+    assert result.blockers == ()
+    assert result.calibration is not None
+    assert result.calibration.selected_candidate_id == "synthetic-v1"
+    assert len(result.plan) == 18
+
+    no_evaluator = replace(fixture.bindings, calibration_evaluators={})
+    blocked = run_worldmind_preflight(
+        fixture.config_path,
+        tmp_path / "preflight-no-evaluator",
+        split="validation",
+        backend="fake",
+        state_source="oracle",
+        bindings=no_evaluator,
+        runtime_probe=_inert_runtime_probe,
+    )
+    assert blocked.ready is False
+    assert any("no registered evaluator" in item for item in blocked.blockers)
+
+    sealed = run_worldmind_preflight(
+        fixture.config_path,
+        tmp_path / "preflight-test",
+        split="test",
+        backend="fake",
+        state_source="oracle",
+        bindings=fixture.bindings,
+        runtime_probe=_inert_runtime_probe,
+    )
+    assert sealed.ready is False
+    assert any("TEST/TRAIN access is sealed" in item for item in sealed.blockers)
+
+    incomplete = run_worldmind_preflight(
+        fixture.config_path,
+        out.parent,
+        split="validation",
+        backend="fake",
+        state_source="oracle",
+        bindings=fixture.bindings,
+        runtime_probe=None,
+    )
+    assert incomplete.ready is False
+    assert any("no backend runtime probe" in item for item in incomplete.blockers)

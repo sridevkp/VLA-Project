@@ -1730,3 +1730,52 @@ addendum.
   archived evidence and scored summaries. Deadline 2026-12-12 and TEST window 2026-12-05..12-07
   are unchanged. No dependency added; `configs/worldmind_production.yaml` is added to packaged
   data files. No push, merge, PR #2 or `main` change.
+
+## ADR-0048 — Concrete WorldMind registration, calibration gates and structured preflight (2026-11-17)
+
+**Status:** Accepted. **Scope:** implementation and inert FakeBackend verification only; the pilot
+remains blocked and was not run.
+
+- **Context:** ADR-0047 left `eval-worldmind` bound to `empty_worldmind_bindings()`, so no concrete
+  component could ever resolve and no calibration/report/preflight machinery existed. This phase
+  binds the existing implementation pieces and adds review/approval gates without inventing any
+  scientific value or running the pilot.
+- **Concrete registration:** `backends/worldmind_bindings.py` registers the existing
+  `AnalyticSurrogate`, live `SafetyMonitor`, `PlacementVerifier`, corrected `BoundedPoseSolver`
+  (hash-pinned URDF registration `dfc542e1…5ea0`), corrected scripted waypoint factory and a
+  finite-chunk hard check. All geometry is built lazily behind the backend boundary; constructing
+  the registry does not launch Webots, solve IK, infer, train, actuate or access TEST. The surrogate
+  intentionally registers `check_transition=None`, so with no certified full TIAGo swept-arm
+  geometry `unverified-arm-sweep` remains a hard rejection. `eval/worldmind_bindings.py` holds only
+  pure binding identities, so config/validation stay importable without any simulator. Eq. 3.8
+  components, weights, ranking direction, risk thresholds and calibration evaluators remain
+  **unregistered** and therefore fail closed.
+- **Calibration:** `eval/worldmind_calibration.py` accepts only an owner-approved VALIDATION
+  candidate whose evidence is 18 frozen VALIDATION episodes, hash-locked, on permitted parameters
+  (`weights`, `maximize`) only. TEST/TRAIN paths are rejected by string and path check. Selection is
+  the deterministic, declared `registered_evaluator_max_score_then_candidate_id`; the evaluator is
+  an explicit registered binding, never inferred. No score, weight or objective is invented.
+- **Report candidate:** `configs/report/definitions.candidate.json` records the exact J component
+  symbols and the exact eight Table 5.1 names, with unresolved units and owner decisions listed
+  explicitly. `report_contract.py` enforces `review_status` so the candidate is reviewable but not
+  scorable; `ReportDefinitions.load()` still requires `review_status=approved`.
+- **Preflight:** `eval/worldmind_preflight.py` collects every gate (split, state source, fresh
+  output, config status, backend declaration, report candidate, bindings, calibration, frozen
+  VALIDATION plan, backend boundary probe, calibration evidence) and returns a structured result;
+  `ready` is true only when all pass. A missing probe or evaluator blocks. `eval-worldmind` now
+  constructs `production_worldmind_bindings()` and uses this preflight; the shipped blocked config
+  exits `eval-worldmind preflight failed` with code 1 and no output directory.
+- **Oracle boundary:** provenance now labels that the privileged oracle supplies only the target
+  pose while robot fields come from the declared observation, sets `perception_equivalent=false`,
+  and separates collision proxy (displacement/tilt), backend-recorded contacts, and the absent
+  full-arm sweep certificate. Oracle-assisted results are never equated with perception performance.
+- **Verification:** 18 inert FakeBackend tests pass; Ruff, format check, `ty check src` and
+  `compileall` pass; frozen evidence checker ends with `test_split_accessed: false`. The exact
+  fail-closed CLI command above was run against the shipped config and captured. No Webots, real
+  IK, inference, training, actuation, scored campaign or TEST/TRAIN access occurred. Frozen facts
+  from ADR-0047 are unchanged. No push, merge, PR #2 or `main` change.
+- **Remaining owner decisions (pilot blockers):** authoritative report PDF and approved
+  definitions; approved VALIDATION calibration artifact/evaluator; four Eq. 3.8 weights, ranking
+  direction and component formulas/units (and any non-safety `Jr` threshold only with an exact
+  authoritative definition); a certified full-arm swept-volume check; reviewer sign-off on the
+  scripted waypoint cadence/orientations; and authorization for the controlled scored pilot.

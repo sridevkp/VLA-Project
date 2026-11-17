@@ -46,9 +46,13 @@ from vlarobot.eval.settings import EvalSettings, load_eval_settings
 PIPELINE_ALIASES: dict[str, str] = {
     "baseline": "baseline",
     "scripted": "baseline",
+    "scripted_baseline": "baseline",
     "vla_only": "vla_only",
+    "vla_risk_veto": "vla_risk_veto",
+    "vla_world_model": "vla_world_model",
+    "full_system": "full_system",
 }
-IMPLEMENTED_PIPELINES = ("baseline", "vla_only")
+IMPLEMENTED_PIPELINES = tuple(sorted(set(PIPELINE_ALIASES.values())))
 _EPISODE_STEM = "episode-{index:02d}"
 
 

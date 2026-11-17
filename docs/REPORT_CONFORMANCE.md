@@ -22,7 +22,7 @@ Labels: **MEASURED** (recorded evidence exists), **INFERRED**, **UNVERIFIED**,
 | Report metric | Measurement (report wording) | Implementation | Evidence / status |
 |---|---|---|---|
 | Task success rate | Successful trials / total trials | `eval/metrics.py` success aggregation + Wilson interval | MEASURED: scripted TRAIN 23/24; scripted VALIDATION 15/18; VLA-only TRAIN 0/24 (gate FAILED) |
-| Prediction error | RMSE, MAE or task-appropriate metric | `world_model/evaluation.py::prediction_errors` (quantity-separated, no probabilities) | MEASURED read-only replay (TCP RMSE 4.62–6.69 mm @1/50 ticks; carried-CAN 14.25–20.84 mm @50 ticks); scored-arm values PENDING week 3/4 |
+| Prediction error | RMSE, MAE or task-appropriate metric | `world_model/evaluation.py::prediction_errors` (quantity-separated, no probabilities) | MEASURED read-only replay (TCP RMSE 4.48–6.69 mm overall across families @1/50 ticks; clear-family subset 4.62/6.69 mm; carried-CAN 14.25–20.84 mm @50 ticks); scored-arm values PENDING week 3/4 |
 | Collision rate | Trials with collisions / total trials | Displacement (>5 mm)/tilt (>5°) **PROXY** + separate FK clearance (ADR-0029), `eval/runner.py` summary `collision_proxy` | MEASURED on completed campaigns (proxy, labelled as such) |
 | Path length | Sum of distances along the executed trajectory | **NOT implemented as an explicit metric**; derivable from recorded `episode-XX.steps.npz` EE/base streams | MISSING for week 4 — must be computed from existing recordings, no new runs needed |
 | Execution time | Recorded simulation or wall-clock duration, clearly identified | `eval/runner.py` records `wall_s` per episode + `total_wall_s` (currently kept out of the metric report) | PARTIAL — surface into report metrics for week 4 |

@@ -32,7 +32,7 @@
 | `src/vlarobot/eval/baseline_audit.py` | primary-untracked | EVAL-DIAGNOSTIC (baseline audit) | `2a81f78234d7134b…` | byte-identical | colab-v3:MATCH |
 | `src/vlarobot/eval/demo_audit.py` | primary-untracked | TRAINING (demo admission audit) | `995ae65eb8910fa2…` | byte-identical | colab-v3:MATCH |
 | `src/vlarobot/eval/grasp_diagnostics.py` | primary-untracked | EVAL-DIAGNOSTIC | `0f341fc5de86803c…` | byte-identical | colab-v3:MATCH |
-| `src/vlarobot/eval/runner.py` | primary-modified-tracked | EVAL RUNNER (reconciled, see modifications) | `a70c1b4017827067…` | MODIFIED-IN-STAGING | colab-v3:POST-V3-EDIT |
+| `src/vlarobot/eval/runner.py` | primary-modified-tracked | EVAL RUNNER (reconciled, see modifications) | `d3e6a5b89f884a61…` (copy-time primary) | byte-identical at copy time; intentionally modified in staging | colab-v3:POST-V3-EDIT |
 | `src/vlarobot/eval/vla_metrics.py` | primary-untracked | EVAL-DIAGNOSTIC (VLA metrics) | `df0e527947584274…` | byte-identical | colab-v3:MATCH |
 | `src/vlarobot/execution/colab_bundle.py` | primary-untracked | TRAINING (Colab handoff) | `ba5d7cc9910db38a…` | byte-identical | colab-v3:MATCH |
 | `src/vlarobot/execution/collection_health.py` | primary-untracked | TRAINING ops | `6c6fdaa20761cd19…` | byte-identical | colab-v3:MATCH |
@@ -86,6 +86,20 @@
 | `tools/t4_preflight.py` | primary-untracked | TRAINING diagnostic tool | `0a53b07326e04dc9…` | byte-identical | - |
 
 ## Intentional modifications on staging copies
+
+### `src/vlarobot/eval/runner.py` hash generations
+
+The recovery manifest records the SHA-256 of the source bytes as copied from the primary
+worktree (`d3e6a5b89f884a61ec38e6072d9f7349645bea144ed0fcb22cc9f598c25930a5`); at that point
+the file was byte-identical to primary. It was then intentionally modified in staging:
+
+| Stage | SHA-256 | Meaning |
+|---|---|---|
+| Copy-time primary source | `d3e6a5b89f884a61ec38e6072d9f7349645bea144ed0fcb22cc9f598c25930a5` | Original bytes copied from the primary worktree; byte-identical at recovery time. |
+| Intermediate (after alias restoration) | `a70c1b4017827067dedf3db014ef6927fb38fe6d3aa011630b1749bb6b4ea7a9` | Five-arm reconciliation only (`e3eb668`). |
+| Final post-integration HEAD | `eb4e16531d620fc042eac112dbac17f61e2bd8ef8d3ed70babe2c7088924ba41` | After the non-behavioural `ty` fixes in `351303a`; the published candidate. |
+
+Neither the frozen baseline provenance nor closed A-D2 behaviour is affected by these edits.
 
 | Path | Modification | Reason |
 |---|---|---|

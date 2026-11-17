@@ -1871,3 +1871,35 @@ command recorded in the final task specification.
   compileall and the frozen-evidence checker pass locally. No Webots process, real IK solve,
   inference, training, actuation, scored evaluation, TEST/TRAIN access or pilot execution was
   performed. Windows execution remains unverified. No dependency or version pin changed.
+
+## ADR-0051 — Repair no-actuation diagnostic attestation (2026-11-18)
+
+**Status:** Accepted. **Scope:** inert implementation, regression tests and local verification only.
+The first authorized Webots diagnostic failed closed at `7b5b71b`; its four evidence files and
+hashes remain byte-identical. Webots and the diagnostic were **not** rerun.
+
+- **Envelope parsing:** `ZmqBackendClient.ping()` returns the full reply envelope, while the
+  SimServer emits `session_id` and `world_sha256` under `payload`. The adapter now extracts only
+  that documented payload; absent payload/non-mapping replies fail closed. No expected value is
+  copied into an observed field and the wire protocol is unchanged.
+- **Robot identity:** `TIAGO_ROBOT` is the world DEF identifier, not a node `name` field. The
+  read-only helper reads `getDef()`, cross-checks it with Supervisor `getFromDef()` and node
+  `getId()`, and keeps DEF, node name and robot type as distinct reported fields. A missing or
+  uncross-checked DEF and a DEF/name mismatch both fail closed.
+- **Runtime version:** the installed controller API exposes no runtime `getVersion()` source;
+  `webots_version(io)` therefore yields `None`. The configured `R2025a` string and the local
+  `resources/version.txt` are not substituted for runtime evidence. No additive server field is
+  introduced because no independently observed simulator version exists to emit; a missing
+  version remains a hard blocker until an owner-approved runtime source is defined.
+- **Attestation distinctions:** the report separates missing/incomplete session identity,
+  missing world hash, actual world-hash mismatch, missing/uncross-checked robot DEF, actual robot
+  identity mismatch, missing runtime version and actual version mismatch. Observation validity is
+  computed from observation/staleness checks alone so attestation failures are not mislabelled as
+  bad state; the overall outcome still fails closed on either class.
+- **Verification:** Ruff, format check, `ty check src`, `compileall`, 35 focused inert tests, the
+  frozen-evidence checker and all four preserved SHA-256 values pass/verify. The full non-Webots
+  suite is `1 failed, 583 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch. No Webots execution, real IK, inference, training, actuation,
+  scored evaluation, TEST/TRAIN access, threshold/seed/scenario change or push/merge/PR update
+  occurred. `unverified-arm-sweep` remains a hard motion veto.

@@ -18,12 +18,13 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+import vlarobot.backends.read_only_state as read_only_state
 import vlarobot.backends.worldmind_webots_diagnostic as adapter
 import vlarobot.eval.runner as runner_module
 import vlarobot.eval.worldmind_calibration as calibration_module
 import vlarobot.eval.worldmind_preflight as preflight_module
 import vlarobot.execution.worldmind_pipeline as pipeline_module
-from vlarobot.backends.worldmind_webots_diagnostic import ReadOnlyBackendClient
+from vlarobot.backends.worldmind_webots_diagnostic import ReadOnlyBackendClient, _capture
 from vlarobot.backends.zmq.server import SimServer
 from vlarobot.cli import app
 from vlarobot.core.types import (
@@ -47,6 +48,7 @@ from vlarobot.eval.worldmind_webots_diagnostic import (
 )
 
 _FORBIDDEN_CALLS = ("apply", "step", "reset", "export_kinematics")
+_UNSET = object()
 _AVAILABILITY = {
     "pose_solver": True,
     "safety_monitor": True,
@@ -131,14 +133,7 @@ def _pose() -> Pose3D:
     return Pose3D(Vec3(0.1, -0.2, 0.3), (0.0, 0.0, 0.0, 1.0))
 
 
-def _snapshot(
-    config: WebotsDiagnosticConfig,
-    *,
-    age_s: float = 0.05,
-    first_command: int | None = None,
-    call_counts: dict[str, int] | None = None,
-    availability: dict[str, bool] | None = None,
-) -> DiagnosticSnapshot:
+def _observation() -> Observation:
     camera = CameraInfo(
         K=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
         T_base_cam=(
@@ -157,25 +152,53 @@ def _snapshot(
         ee_pose=_pose(),
         gripper_opening=0.1,
     )
-    observation = Observation(
+    return Observation(
         t=1.0,
         rgb=np.zeros((4, 4, 3), dtype=np.uint8),
         depth=None,
         cam_info=camera,
         robot=robot,
     )
+
+
+def _snapshot(
+    config: WebotsDiagnosticConfig,
+    *,
+    age_s: float = 0.05,
+    first_command: int | None = None,
+    call_counts: dict[str, int] | None = None,
+    availability: dict[str, bool] | None = None,
+    session_id: object = _UNSET,
+    world_hash: object = _UNSET,
+    robot_def: object = _UNSET,
+    robot_def_cross_checked: object = True,
+    runtime_version: object = _UNSET,
+) -> DiagnosticSnapshot:
+    observed_world_hash = config.world_sha256 if world_hash is _UNSET else world_hash
+    observed_version = config.webots_version if runtime_version is _UNSET else runtime_version
+    observed_def = config.robot_identity if robot_def is _UNSET else robot_def
     return DiagnosticSnapshot(
         ping={
-            "session_id": {"pid": 42, "start_time": 1.0, "nonce": "nonce-42"},
-            "world_sha256": config.world_sha256,
+            "status": "ok",
+            "session_id": (
+                {"pid": 42, "start_time": 1.0, "nonce": "nonce-42"}
+                if session_id is _UNSET
+                else session_id
+            ),
+            "world_sha256": observed_world_hash,
+            "kinematics_telemetry_enabled": False,
             "endpoint": "tcp://127.0.0.1:5555",
         },
-        observation=observation,
+        observation=_observation(),
         ground_truth=GroundTruth(object_poses={"CAN": _pose()}),
         identity={
             "simulator": "webots",
-            "robot_name": config.robot_identity,
-            "webots_version": config.webots_version,
+            "robot_def": observed_def,
+            "robot_def_cross_checked": robot_def_cross_checked,
+            "robot_name": "tiago-node-name",
+            "robot_type": "Tiago",
+            "webots_version": observed_version,
+            "webots_version_available": observed_version is not None,
             "first_command_step_count": first_command,
         },
         captured_at_utc="2026-11-17T00:00:00+00:00",
@@ -183,6 +206,19 @@ def _snapshot(
         dependency_availability=dict(availability or _AVAILABILITY),
         call_counts=dict(call_counts or {name: 0 for name in _FORBIDDEN_CALLS}),
     )
+
+
+def _ping_envelope(ping: dict[str, object]) -> dict[str, object]:
+    """Wrap a flattened snapshot ping back into the documented ZMQ reply envelope."""
+    payload = {key: value for key, value in ping.items() if key not in {"endpoint", "launch_mode"}}
+    return {
+        "protocol_version": 3,
+        "type": "ping",
+        "seq": 1,
+        "sim_time": 0.0,
+        "error": None,
+        "payload": payload,
+    }
 
 
 def test_config_loader_rejects_scoring_test_train_and_placeholders(tmp_path):
@@ -431,3 +467,169 @@ def test_output_directory_is_exclusive_and_never_overwritten(tmp_path, monkeypat
     assert "prior evidence directory" in result.stderr
     assert prior.read_text(encoding="utf-8") == '{"outcome": "PRIOR"}'
     assert sorted(path.name for path in out.iterdir()) == ["diagnostic.json"]
+
+
+def test_capture_parses_realistic_ping_envelope_and_rejects_missing_payload(tmp_path):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+
+    class FakeLowLevel:
+        def __init__(self, envelope: dict[str, object]):
+            self.envelope = envelope
+
+        def ping(self):
+            return copy.deepcopy(self.envelope)
+
+        def inspect(self):
+            return {
+                "observation": snapshot.observation,
+                "ground_truth": snapshot.ground_truth,
+                "identity": dict(snapshot.identity),
+            }
+
+        def close(self):
+            return None
+
+    envelope = _ping_envelope(snapshot.ping)
+    captured = _capture(
+        ReadOnlyBackendClient(FakeLowLevel(envelope)),
+        config,
+        "tcp://127.0.0.1:5555",
+    )
+    payload = envelope["payload"]
+    assert isinstance(payload, dict)
+    assert captured.ping["session_id"] == payload["session_id"]
+    assert captured.ping["world_sha256"] == config.world_sha256
+    assert "payload" not in captured.ping
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "PASS"
+
+    with pytest.raises(ValueError, match="omitted payload"):
+        _capture(
+            ReadOnlyBackendClient(FakeLowLevel({"status": "ok"})),
+            config,
+            "tcp://127.0.0.1:5555",
+        )
+
+
+def test_attestation_blockers_distinguish_missing_from_mismatch(tmp_path):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    preflight = preflight_webots_diagnostic(config)
+    cases = [
+        ({"session_id": None}, "simulator session identity is missing", None),
+        ({"session_id": {"pid": 1}}, "simulator session identity is incomplete", None),
+        ({"world_hash": None}, "running Webots world hash is missing", "mismatch"),
+        ({"world_hash": "0" * 64}, "running Webots world hash mismatch:", "is missing"),
+        ({"robot_def": None}, "robot DEF identity is missing", "mismatch"),
+        ({"robot_def": "OTHER_ROBOT"}, "robot identity mismatch:", "is missing"),
+        (
+            {"robot_def_cross_checked": False},
+            "robot DEF identity was not cross-checked",
+            None,
+        ),
+        ({"runtime_version": None}, "runtime Webots version is unavailable", "mismatch"),
+        ({"runtime_version": "R2024b"}, "runtime Webots version mismatch:", "unavailable"),
+    ]
+    for kwargs, expected, forbidden in cases:
+        report, _, _ = finalize_webots_diagnostic(config, preflight, _snapshot(config, **kwargs))
+        blockers = report["blockers"]
+        assert any(expected in item for item in blockers), (kwargs, blockers)
+        if forbidden is not None:
+            assert not any(forbidden in item for item in blockers), (kwargs, blockers)
+        assert report["outcome"] == "FAILED"
+        assert report["motion_allowed"] is False
+
+
+@pytest.mark.parametrize(
+    ("def_name", "node_name", "runtime_version", "expected_def", "expected_version"),
+    [
+        ("TIAGO_ROBOT", "tiago-node-name", "R2025a", "TIAGO_ROBOT", "R2025a"),
+        ("OTHER_ROBOT", "TIAGO_ROBOT", "R2025a", "OTHER_ROBOT", "R2025a"),
+    ],
+)
+def test_read_only_identity_uses_def_not_node_name(
+    tmp_path, def_name, node_name, runtime_version, expected_def, expected_version
+):
+    class FakeNode:
+        def getDef(self):
+            return def_name
+
+        def getName(self):
+            return node_name
+
+        def getTypeName(self):
+            return "Tiago"
+
+        def getId(self):
+            return 77
+
+    node = FakeNode()
+
+    class FakeSupervisor:
+        def getFromDef(self, name):
+            return node if name == node.getDef() else None
+
+        def getVersion(self):
+            return runtime_version
+
+        def getSelf(self):
+            return node
+
+    class FakeIO:
+        robot = FakeSupervisor()
+        me = node
+
+    class FakeBackend:
+        io = FakeIO()
+        _physics_step_count = 0
+        _first_command_step_count = None
+        _stopped = False
+
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def _observation(self):
+            self.calls.append("observation")
+            return _observation()
+
+        def get_ground_truth(self):
+            self.calls.append("ground_truth")
+            return GroundTruth(object_poses={"CAN": _pose()})
+
+        def apply(self, action):
+            raise AssertionError("apply must not be called")
+
+        def step(self, n_steps=1):
+            raise AssertionError("step must not be called")
+
+        def reset(self, scenario, seed):
+            raise AssertionError("reset must not be called")
+
+        def export_kinematics(self, action="poll"):
+            raise AssertionError("export_kinematics must not be called")
+
+    backend = FakeBackend()
+    identity = read_only_state.capture_read_only_state(backend)["identity"]
+    assert identity["robot_def"] == expected_def
+    assert identity["robot_name"] == node_name
+    assert identity["robot_type"] == "Tiago"
+    assert identity["robot_def_cross_checked"] is True
+    assert identity["webots_version"] == expected_version
+    assert identity["webots_version_available"] is True
+    assert backend.calls == ["observation", "ground_truth"]
+
+
+def test_runtime_webots_version_unavailable_is_not_substituted(tmp_path):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    report, _, _ = finalize_webots_diagnostic(
+        config,
+        preflight_webots_diagnostic(config),
+        _snapshot(config, runtime_version=None),
+    )
+    assert any("runtime Webots version is unavailable" in item for item in report["blockers"])
+    assert report["runtime_webots_version_observed"] is None
+    assert report["runtime_webots_version_available"] is not True
+    assert report["simulator_version"] is None

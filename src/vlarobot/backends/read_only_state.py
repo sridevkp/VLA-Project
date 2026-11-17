@@ -12,6 +12,15 @@ from typing import Any
 from vlarobot.core.types import GroundTruth, Observation
 
 
+def _call(target: Any, name: str, *args: object) -> Any:
+    getter = getattr(target, name, None)
+    return getter(*args) if callable(getter) else None
+
+
+def _string_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def _webots_identity(backend: Any) -> dict[str, object]:
     io = getattr(backend, "io", None)
     robot = getattr(io, "me", None)
@@ -19,11 +28,28 @@ def _webots_identity(backend: Any) -> dict[str, object]:
         raise RuntimeError("backend does not expose a Webots robot identity")
     from vlarobot.backends.webots.supervisor_kinematics import webots_version
 
+    robot_def = _string_or_none(_call(robot, "getDef"))
+    supervisor = getattr(io, "robot", None)
+    def_node = _call(supervisor, "getFromDef", robot_def) if robot_def else None
+    robot_id = _call(robot, "getId")
+    def_node_id = _call(def_node, "getId") if def_node is not None else None
+    def_cross_checked = bool(
+        robot_def is not None
+        and def_node is not None
+        and robot_id is not None
+        and def_node_id is not None
+        and int(robot_id) == int(def_node_id)
+    )
+
+    runtime_version = webots_version(io)
     return {
         "simulator": "webots",
-        "robot_name": str(getattr(robot, "getName", lambda: "")()),
-        "robot_type": str(getattr(robot, "getTypeName", lambda: "")()),
-        "webots_version": webots_version(io),
+        "robot_def": robot_def,
+        "robot_def_cross_checked": def_cross_checked,
+        "robot_name": _string_or_none(_call(robot, "getName")),
+        "robot_type": _string_or_none(_call(robot, "getTypeName")),
+        "webots_version": runtime_version,
+        "webots_version_available": runtime_version is not None,
         "physics_step_count": int(getattr(backend, "_physics_step_count", 0)),
         "first_command_step_count": getattr(backend, "_first_command_step_count", None),
     }

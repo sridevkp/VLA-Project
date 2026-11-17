@@ -383,19 +383,49 @@ def _observation_blockers(
     return blockers
 
 
+def _observed_text(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 def _snapshot_blockers(config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot) -> list[str]:
     blockers: list[str] = []
     session = snapshot.ping.get("session_id")
-    if not isinstance(session, Mapping) or not {"pid", "start_time", "nonce"}.issubset(session):
+    if session is None:
         blockers.append("simulator session identity is missing")
-    if snapshot.ping.get("world_sha256") != config.world_sha256:
-        blockers.append("running Webots world SHA-256 does not match the reviewed config")
+    elif not isinstance(session, Mapping) or not {"pid", "start_time", "nonce"}.issubset(session):
+        blockers.append("simulator session identity is incomplete")
+
+    observed_world_hash = _observed_text(snapshot.ping.get("world_sha256"))
+    if observed_world_hash is None:
+        blockers.append("running Webots world hash is missing")
+    elif observed_world_hash.lower() != config.world_sha256:
+        blockers.append(
+            "running Webots world hash mismatch: "
+            f"observed={observed_world_hash} expected={config.world_sha256}"
+        )
+
     if snapshot.identity.get("simulator") != "webots":
         blockers.append("backend identity is not Webots")
-    if snapshot.identity.get("robot_name") != config.robot_identity:
-        blockers.append("robot identity differs from the reviewed declaration")
-    if snapshot.identity.get("webots_version") != config.webots_version:
-        blockers.append("Webots version differs from the reviewed declaration")
+    robot_def = _observed_text(snapshot.identity.get("robot_def"))
+    if robot_def is None:
+        blockers.append("robot DEF identity is missing")
+    else:
+        if robot_def != config.robot_identity:
+            blockers.append(
+                f"robot identity mismatch: observed={robot_def} expected={config.robot_identity}"
+            )
+        if snapshot.identity.get("robot_def_cross_checked") is not True:
+            blockers.append("robot DEF identity was not cross-checked against the node")
+
+    runtime_version = _observed_text(snapshot.identity.get("webots_version"))
+    if runtime_version is None:
+        blockers.append("runtime Webots version is unavailable")
+    elif runtime_version != config.webots_version:
+        blockers.append(
+            "runtime Webots version mismatch: "
+            f"observed={runtime_version} expected={config.webots_version}"
+        )
+
     if snapshot.identity.get("first_command_step_count") is not None:
         blockers.append("an actuator command was issued in this backend session")
     if not all(snapshot.dependency_availability.values()):
@@ -420,6 +450,7 @@ def finalize_webots_diagnostic(
     config: WebotsDiagnosticConfig, preflight: ConfigPreflight, snapshot: DiagnosticSnapshot
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     """Return exclusive, non-scored diagnostic, state and provenance artifacts."""
+    observation_blockers = _observation_blockers(config, snapshot)
     blockers = [*preflight.blockers, *_snapshot_blockers(config, snapshot)]
     ready = not blockers
     report: dict[str, object] = {
@@ -441,13 +472,21 @@ def finalize_webots_diagnostic(
         "launch_mode": config.mode,
         "endpoint": snapshot.ping.get("endpoint"),
         "simulator_session_id": snapshot.ping.get("session_id"),
+        "running_world_sha256_observed": snapshot.ping.get("world_sha256"),
         "simulator_identity": dict(snapshot.identity),
         "simulator_version": snapshot.identity.get("webots_version"),
+        "runtime_webots_version_observed": snapshot.identity.get("webots_version"),
+        "runtime_webots_version_available": snapshot.identity.get("webots_version_available"),
+        "robot_def_observed": snapshot.identity.get("robot_def"),
+        "robot_def_cross_checked": snapshot.identity.get("robot_def_cross_checked"),
+        "robot_name_observed": snapshot.identity.get("robot_name"),
+        "robot_type_observed": snapshot.identity.get("robot_type"),
         "robot_identity_declared": config.robot_identity,
         "observation_timestamp_s": snapshot.observation.t,
         "observation_age_s": snapshot.age_s,
         "observation_freshness_limit_s": config.observation_freshness_max_s,
-        "observation_valid": ready and not preflight.blockers,
+        "observation_valid": not observation_blockers,
+        "observation_blockers": observation_blockers,
         "geometry_hashes": dict(preflight.hashes),
         "required_arm_links": list(config.required_arm_links),
         "swept_arm_certificate": (

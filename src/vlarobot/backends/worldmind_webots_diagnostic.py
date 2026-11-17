@@ -105,10 +105,21 @@ def dependency_availability(config: WebotsDiagnosticConfig) -> dict[str, bool]:
     }
 
 
+def _ping_payload(client: ReadOnlyBackendClient) -> dict[str, Any]:
+    """Return only the documented ping payload; never synthesize attestation fields."""
+    envelope = client.ping()
+    if not isinstance(envelope, Mapping):
+        raise ValueError("ping reply envelope is not a mapping")
+    payload = envelope.get("payload")
+    if not isinstance(payload, Mapping):
+        raise ValueError("ping reply omitted payload")
+    return dict(payload)
+
+
 def _capture(
     client: ReadOnlyBackendClient, config: WebotsDiagnosticConfig, endpoint: str
 ) -> DiagnosticSnapshot:
-    ping = dict(client.ping())
+    ping = _ping_payload(client)
     ping["endpoint"] = endpoint
     ping["launch_mode"] = config.mode
     started = perf_counter()

@@ -259,3 +259,32 @@ in `core/types.py`, `core/interfaces.py` or `core/wire.py` changed. No productio
 `definitions.json` created. No TEST-split access. Full status mapping is in
 `docs/REPORT_CONFORMANCE.md`; the execution protocol is in
 `docs/WEEK3_RISKGATE_VALIDATION_PLAN.md`.
+
+## 10. Additive production composition inert nodes (reviewed)
+
+File: `tests/test_worldmind_production.py` (14). All use synthetic config/report/calibration
+fixtures, injected reviewed-style bindings and `FakeBackend`; no Webots, real IK, neural
+inference, training, actuation, scored campaign or TEST split. The production constant
+`AUTHORITATIVE_REPORT_SHA256` is monkeypatched only inside these tests to a synthetic fixture
+report hash; the shipped production constant is unchanged.
+
+```text
+tests/test_worldmind_production.py::test_scripted_adapter_is_seeded_bounded_and_scripted_only
+tests/test_worldmind_production.py::test_jitter_never_clips_or_silently_accepts_out_of_bound_draws
+tests/test_worldmind_production.py::test_full_composition_records_k32_nplus1_gate_execution_pairing_and_recording
+tests/test_worldmind_production.py::test_generation_is_reproducible_from_explicit_seed
+tests/test_worldmind_production.py::test_hard_veto_takes_precedence_and_prevents_apply
+tests/test_worldmind_production.py::test_no_safe_set_uses_bounded_recovery_ladder
+tests/test_worldmind_production.py::test_live_safety_veto_precedes_backend_apply
+tests/test_worldmind_production.py::test_verification_failure_switches_to_alternate_candidate_family
+tests/test_worldmind_production.py::test_selected_prediction_pairing_uses_the_correct_decision_trajectory
+tests/test_worldmind_production.py::test_sidecars_are_created_exclusively_and_never_overwritten
+tests/test_worldmind_production.py::test_blocked_template_and_missing_reviewed_inputs_fail_closed
+tests/test_worldmind_production.py::test_unregistered_bindings_fail_closed
+tests/test_worldmind_production.py::test_plan_preflight_rejects_test_training_wrong_state_and_existing_output
+tests/test_worldmind_production.py::test_cli_exposes_new_command_preserves_existing_commands_and_fails_closed
+```
+
+Result in this worktree: `14 passed`. These nodes are additive to the §8 18-node decision
+observability selection and the 38-node safe-CI selection; none of the three selections was
+expanded to untested or simulator-dependent files.

@@ -96,3 +96,9 @@ NumPy/Typer offline audit only; no new dependencies, model/processor/configurati
 runtime controller changes. Actual pinned-input audit and60 CPU fixtures are documented
 in `AD2_CPU_INFRASTRUCTURE_REPORT.md`. Live snapshot behavior and physical safety remain
 unverified; no approved numerical reset protocol or live execution entry point is shipped.
+
+Production WorldMind composition (ADR-0047) adds no dependency or version pin. It uses the
+existing Python 3.11 standard library, NumPy, PyYAML, Typer, the in-repo FakeBackend and the
+analytic surrogate. `configs/worldmind_production.yaml` is added to packaged data files. The
+`eval-worldmind` command is fail-closed with the blocked template and empty binding registry;
+no Webots-measured, scored VALIDATION, Windows, real-IK or inference result is claimed.

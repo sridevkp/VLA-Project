@@ -1682,3 +1682,51 @@ addendum.
 - **Status consequences:** risk rejection rate and scored prediction error remain `Missing /
   BLOCKED` (definition and aggregation are INERT-UNIT-TESTED only). Nominal-kernel latency remains
   scope-limited; full-system/scored per-decision latency is UNVERIFIED.
+
+## ADR-0047 — Production WorldMind composition, fail-closed config and inert evidence (2026-11-17)
+
+**Status:** Accepted. **Scope:** implementation and inert FakeBackend verification only.
+
+- **Context:** ADR-0046 added decision observability but recorded that no production end-to-end
+  WorldMind call graph existed. The full chain was exercised only by tools/tests. This phase adds
+  that single production composition without changing the frozen baseline, planner math, gate,
+  safety monitor, recorder schema, or any public interface in `core/`.
+- **Decision:** compose the existing `SeededCandidateGenerator` (K=32), owner-registered
+  `AnalyticSurrogate` (H=50, dt=0.032 s), `ComparisonPlanner`/`RiskGate`, `execute_first` plus the
+  live `SafetyMonitor`, `PlacementVerifier`, bounded `RecoveryState` and frozen `run_evaluation`
+  in `execution/worldmind_pipeline.py`. Add a separate `execution/scripted_chunk_adapter.py` that
+  emits reviewed, seeded, H-step `ActionChunk`s and is explicitly **not** the frozen
+  `ScriptedCanPolicy`. It cannot discover geometry, perform a new grasp, simulate contact or
+  recover from bad IK; unreviewed poses, residual breaches and out-of-bound jitter fail closed.
+  Jitter uses rejection sampling and is never clipped or silently accepted.
+- **Safety and latency:** `SafetyMonitor.validate()` still precedes every `backend.apply()`;
+  execution is one control tick per decision. H=50 predictions are paired only with truthfully
+  observed states through `allow_truncated=True`; the unexecuted horizon is never claimed as
+  observed or scored. `ComparisonPlanner.select()` retains the exact N+1 gate contract: K=32
+  produces 33 `RiskGate.select()` calls per decision. Sidecars record this count and the
+  whole-selection latency window; hard checks and gate ranking remain fused inside the planner
+  and are never reported as separately measured phases.
+- **Fail-closed configuration:** `configs/worldmind_production.yaml` is a `status: blocked`
+  template. `eval/worldmind_config.py` requires the authoritative report SHA-256, exactly four
+  `{Jg,Jl,Jr,Ju}` definitions and exactly eight Table 5.1 `{definition, unit}` entries, approved
+  VALIDATION calibration evidence, frozen seeds/splits/K/H/tick, a declared backend/state source,
+  and explicit registered Python bindings for every component, check and factory. The CLI
+  `eval-worldmind` uses `empty_worldmind_bindings()` and therefore cannot run until reviewed
+  bindings are registered in code. It permits VALIDATION only; TEST and TRAIN stay sealed.
+- **Evidence:** `eval/worldmind_evidence.py` writes additive non-overwriting sidecars
+  (`decisions.jsonl`, `prediction_pairing.jsonl`, `errors.jsonl`, `risk_rejection.json`,
+  `phase_latency.json`, `verification_recovery.json`, `provenance.json`) under a fresh output
+  directory. Records include real draw/decision seeds, candidate IDs, gate-visible hard checks and
+  J components, dispositions/vetoes, the selected index/score/rationale, pre-apply verdict,
+  backend apply/step evidence, verification and recovery transitions, paired prediction identity
+  and error metrics, and measured phase durations. Missing values stay absent with reasons;
+  absent authoritative definitions, calibration or bindings are never invented.
+- **Verification:** 14 new inert FakeBackend tests cover composition, seeded determinism,
+  veto precedence, no-safe recovery, live pre-apply veto, verification recovery, selected-trajectory
+  pairing, exclusive sidecars, config failure modes and CLI compatibility. No Webots, real IK,
+  neural inference, training, actuation, scored evaluation or TEST access was executed.
+- **Frozen facts unchanged:** scripted TRAIN 23/24, scripted VALIDATION 15/18, VLA-only TRAIN
+  0/24 FAILED, scripted-primary, A-D2 CLOSED/NO-GO, K=32/H=50, all seeds/splits/gates/thresholds,
+  archived evidence and scored summaries. Deadline 2026-12-12 and TEST window 2026-12-05..12-07
+  are unchanged. No dependency added; `configs/worldmind_production.yaml` is added to packaged
+  data files. No push, merge, PR #2 or `main` change.

@@ -194,3 +194,30 @@ A-D2 offline infrastructure fixtures (no simulator/model/IK):
 `uv run pytest -q tests/test_ad2_infrastructure.py` from the project root.
 Read [AD2_CPU_INFRASTRUCTURE_REPORT.md](AD2_CPU_INFRASTRUCTURE_REPORT.md) for the hash-pinned
 read-only source audit command. No A-D2 physical launch command is provided or authorized.
+
+## Production WorldMind command (currently fail-closed)
+
+The production command is additive to `eval` and `eval-vla`; it does not replace either command.
+From the project root, the intended owner-reviewed invocation is a single cross-platform command:
+
+```text
+uv run python -m vlarobot.cli eval-worldmind --config configs/worldmind_production.yaml --out runs/worldmind/validation-s0-<NEW-ID> --backend webots --state-source oracle
+```
+
+The shipped config is intentionally `status: blocked` and the CLI registers no reviewed bindings,
+so this command currently exits with `eval-worldmind preflight failed`. That is the required
+fail-closed behavior, not a setup error to bypass. Do not point it at TEST or TRAIN: only
+`--split validation` is accepted. Use a fresh `--out` path for every run; prior evidence is never
+overwritten. A successful run requires owner-reviewed report definitions, calibration evidence,
+component/check/factory bindings, weights, ranking direction and constraints to be registered
+first, plus an already running sim server for `--backend webots`. The command never launches
+Webots itself.
+
+Inert FakeBackend verification without Webots:
+
+```text
+uv run python -m pytest -q tests/test_worldmind_production.py
+```
+
+This uses synthetic fixtures only and does not authorize or produce a scored VALIDATION result.
+See `WEEK3_DECISION_OBSERVABILITY.md` §10 for the reviewed inert node list.

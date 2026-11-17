@@ -73,3 +73,10 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# The Colab training notebook is frozen/approved (docs/COLAB_EXECUTION.md, 2026-11-15):
+# its cell 3 imports after the Drive-path assignments by design, so E402 is accepted
+# here instead of editing the notebook. Other notebook cells stay fully checked.
+"notebooks/smolvla_finetune_colab.ipynb" = ["E402"]
+

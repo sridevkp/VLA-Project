@@ -1,0 +1,21 @@
+{
+  "version": 0,
+  "files": {
+    "src/vlarobot/backends/webots/backend.py": [
+      {
+        "rule": "invalid-argument-type",
+        "startColumn": 22,
+        "endColumn": 50,
+        "lineCount": 1
+      }
+    ],
+    "src/vlarobot/diagnostics/ad2/admission.py": [
+      {
+        "rule": "invalid-argument-type",
+        "startColumn": 57,
+        "endColumn": 62,
+        "lineCount": 1
+      }
+    ]
+  }
+}

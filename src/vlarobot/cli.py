@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Annotated, Literal, overload
+from typing import Annotated, Any, Literal, overload
 
 import numpy as np
 import typer
@@ -504,6 +504,76 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
         f"(rule: {gate['rule']}, baseline_rate={gate['baseline_rate']:.3f})"
     )
     typer.echo(f"  out={out_dir} episodes_csv={report.episodes_csv.name} wall_s={wall_s:.1f}")
+
+
+@app.command("eval-worldmind")
+def eval_worldmind(
+    config: Annotated[
+        Path,
+        typer.Option(help="Owner-reviewed, ready WorldMind production config (VALIDATION only)."),
+    ],
+    out: Annotated[
+        Path,
+        typer.Option(help="New versioned output directory; prior evidence is never overwritten."),
+    ],
+    backend: Annotated[
+        Literal["fake", "webots"],
+        typer.Option(help="Declared backend: 'fake' (inert) or 'webots' (existing sim server)."),
+    ] = "webots",
+    state_source: Annotated[
+        str, typer.Option(help="Declared state source; only 'oracle' is permitted.")
+    ] = "oracle",
+    split: Annotated[
+        str, typer.Option(help="Only 'validation' is permitted; TEST and TRAIN are sealed.")
+    ] = "validation",
+) -> None:
+    """Run the production WorldMind composition with fail-closed VALIDATION preflight."""
+    from vlarobot.eval.worldmind_config import (
+        empty_worldmind_bindings,
+        plan_worldmind_validation,
+    )
+    from vlarobot.execution.worldmind_pipeline import run_worldmind_evaluation
+
+    try:
+        resolved, plan = plan_worldmind_validation(
+            config,
+            out,
+            split=split,
+            backend=backend,
+            state_source=state_source,
+            bindings=empty_worldmind_bindings(),
+        )
+    except (ValueError, FileNotFoundError, FileExistsError) as error:
+        typer.echo(f"eval-worldmind preflight failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    if backend == "fake":
+        from vlarobot.backends.fake import FakeBackend
+
+        client: Any = FakeBackend()
+    else:
+        # Connect to an already running sim server; this command never launches Webots.
+        client = ZmqBackendClient(DEFAULT_ENDPOINT)
+    try:
+        report, sidecars = run_worldmind_evaluation(
+            plan,
+            client,
+            resolved,
+            out,
+            empty_worldmind_bindings(),
+        )
+    except Exception as error:  # noqa: BLE001 - surface one CLI failure after evidence finalize
+        typer.echo(f"eval-worldmind failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    finally:
+        close = getattr(client, "close", None)
+        if close is not None:
+            close()
+    typer.echo(
+        f"eval-worldmind split={split} backend={backend} state_source={state_source} "
+        f"episodes={report.summary['n_episodes']} seeds={report.summary['seeds']}"
+    )
+    typer.echo(f"  out={out} sidecars={sidecars['decisions'].parent}")
 
 
 @app.command("derive-demo-actions")

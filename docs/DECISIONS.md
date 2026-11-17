@@ -1617,3 +1617,13 @@ full-size throughput; the final portable export must be independently downloaded
 to Linux promptly. Original artifacts, approved configuration, dataset, splits,
 evaluation criteria and ADR-0029 are unchanged. No training/evaluation authorized
 or executed by preparation. Interrupted 18/19-to-20 lineage remains a separate gate.
+
+### Owner-authorized A-D2 CPU infrastructure (implementation note)
+
+The isolated `vlarobot.diagnostics.ad2` package verifies immutable A-D1 inputs and
+compares explicitly supplied reset criteria. Its coordinator accepts inert CPU fixture
+records only; there is no live adapter, launcher or physical diagnostic command. No
+exploratory tolerance is enabled. Static collision-source enumeration is not swept-volume
+certification. Live A-D2 remains NO-GO. See `AD2_CPU_INFRASTRUCTURE_REPORT.md` for fixture
+and hash evidence and remaining approval boundaries. No change to ADR-0029, public core
+interfaces, frozen0/24 result, FAILED gate or scripted-primary decision.

@@ -90,3 +90,9 @@ locally; mocked REST tests do not certify the production session.
 Measured recovered step20000 local runtime: Python3.11.18, torch2.7.1+cpu, torchvision0.22.1+cpu, LeRobot0.4.3, transformers4.57.1, safetensors0.8.0, numpy2.2.6. Actual CPU inference passed; no exposed NVIDIA device or CUDA build, so RTX3050 4GB fit is unverified. Physical gripper outputs fail frozen bounds; see LOCAL_MODEL_VALIDATION_STEP20000.md. No dependency changes were made.
 
 A-D1 used the frozen brain interpreter: Python3.11.18, IKPy4.4.4, NumPy2.4.6, SciPy1.17.1, SymPy1.14.0, matching the approved source lock. The ML environment (IKPy4.5.0) only extracted the native row and performed no IK. No dependency change; package/source hashes in the A-D1 evidence.
+
+A-D2 isolated CPU infrastructure: standard-library diagnostic package and existing
+NumPy/Typer offline audit only; no new dependencies, model/processor/configuration or
+runtime controller changes. Actual pinned-input audit and60 CPU fixtures are documented
+in `AD2_CPU_INFRASTRUCTURE_REPORT.md`. Live snapshot behavior and physical safety remain
+unverified; no approved numerical reset protocol or live execution entry point is shipped.

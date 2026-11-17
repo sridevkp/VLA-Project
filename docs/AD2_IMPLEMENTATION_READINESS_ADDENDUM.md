@@ -1,5 +1,8 @@
 # A-D2 implementation-design addendum — no physical authorization
 
+Subsequent owner-authorized offline implementation and tests are recorded in
+[AD2_CPU_INFRASTRUCTURE_REPORT.md](AD2_CPU_INFRASTRUCTURE_REPORT.md). Physical restrictions remain.
+
 This supplements [the readiness design](AD2_READINESS_DESIGN.md) at `34294c9`.
 **Only design and CPU-only validation planning are approved.** No harness or fixture test
 has been implemented; no Webots, model server, inference, IK, actuator command or scored

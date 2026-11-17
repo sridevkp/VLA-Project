@@ -1,0 +1,3513 @@
+{
+  "kind": "AD2-static-coverage-v1",
+  "collision_safety_certified": false,
+  "live_execution_authorized": false,
+  "overall_coverage": "partial",
+  "urdf_static_enumeration": "complete",
+  "sources": {
+    "urdf": {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf",
+      "sha256": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b",
+      "bytes": 35253
+    },
+    "world": {
+      "path": "/home/tj330/programs/VLA-Project/worlds/factory.wbt",
+      "sha256": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706",
+      "bytes": 10591
+    },
+    "assets": {
+      "AiboErs7": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/152744d748493c6e96aa5fc540a894488f8e23e3",
+        "sha256": "9af0ce633503d234e149e2ba6bf6ae4783298a55d02b347727793b59b48414ef",
+        "bytes": 367697,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          1457,
+          1741,
+          1837,
+          1862,
+          1874,
+          2009,
+          2040,
+          2459,
+          2465,
+          2516,
+          2536,
+          2974,
+          2978,
+          3008,
+          3028,
+          3454,
+          3458,
+          3464,
+          3476,
+          3908,
+          3912,
+          3918,
+          3930,
+          3944
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 433,
+            "text": "maxVelocity 3.0107"
+          },
+          {
+            "line": 434,
+            "text": "minPosition -1.3963"
+          },
+          {
+            "line": 435,
+            "text": "maxPosition 0.0524"
+          },
+          {
+            "line": 436,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 499,
+            "text": "maxVelocity 3.0107"
+          },
+          {
+            "line": 500,
+            "text": "minPosition -1.6232"
+          },
+          {
+            "line": 501,
+            "text": "maxPosition 1.6232"
+          },
+          {
+            "line": 502,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 514,
+            "text": "maxVelocity 3.0107"
+          },
+          {
+            "line": 515,
+            "text": "minPosition -0.349"
+          },
+          {
+            "line": 516,
+            "text": "maxPosition 0.8727"
+          },
+          {
+            "line": 517,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 1191,
+            "text": "maxVelocity 1000"
+          },
+          {
+            "line": 1192,
+            "text": "maxPosition 0.2618"
+          },
+          {
+            "line": 1193,
+            "text": "maxTorque 1000"
+          },
+          {
+            "line": 1475,
+            "text": "maxVelocity 1000"
+          },
+          {
+            "line": 1476,
+            "text": "maxPosition 0.2618"
+          },
+          {
+            "line": 1477,
+            "text": "maxTorque 1000"
+          },
+          {
+            "line": 1756,
+            "text": "maxVelocity 1"
+          },
+          {
+            "line": 1757,
+            "text": "minPosition -1.0472"
+          },
+          {
+            "line": 1758,
+            "text": "maxTorque 1"
+          },
+          {
+            "line": 1893,
+            "text": "maxVelocity 4.4724"
+          },
+          {
+            "line": 1894,
+            "text": "maxPosition 1.1345"
+          },
+          {
+            "line": 1895,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 1931,
+            "text": "maxVelocity 4.4724"
+          },
+          {
+            "line": 1932,
+            "text": "minPosition -1.0472"
+          },
+          {
+            "line": 1933,
+            "text": "maxPosition 1.0472"
+          },
+          {
+            "line": 1934,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2053,
+            "text": "maxVelocity 2.8143"
+          },
+          {
+            "line": 2054,
+            "text": "minPosition -2.0944"
+          },
+          {
+            "line": 2055,
+            "text": "maxPosition 2.3562"
+          },
+          {
+            "line": 2056,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2110,
+            "text": "maxVelocity 2.498"
+          },
+          {
+            "line": 2111,
+            "text": "minPosition -0.2618"
+          },
+          {
+            "line": 2112,
+            "text": "maxPosition 1.6232"
+          },
+          {
+            "line": 2113,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2181,
+            "text": "maxVelocity 2.8361"
+          },
+          {
+            "line": 2182,
+            "text": "minPosition -0.5236"
+          },
+          {
+            "line": 2183,
+            "text": "maxPosition 2.2166"
+          },
+          {
+            "line": 2184,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2556,
+            "text": "maxVelocity 2.8143"
+          },
+          {
+            "line": 2557,
+            "text": "minPosition -2.3562"
+          },
+          {
+            "line": 2558,
+            "text": "maxPosition 2.0944"
+          },
+          {
+            "line": 2559,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2613,
+            "text": "maxVelocity 2.498"
+          },
+          {
+            "line": 2614,
+            "text": "minPosition -0.2618"
+          },
+          {
+            "line": 2615,
+            "text": "maxPosition 1.6232"
+          },
+          {
+            "line": 2616,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 2684,
+            "text": "maxVelocity 2.8361"
+          },
+          {
+            "line": 2685,
+            "text": "minPosition -0.5236"
+          },
+          {
+            "line": 2686,
+            "text": "maxPosition 2.2166"
+          },
+          {
+            "line": 2687,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3048,
+            "text": "maxVelocity 2.8143"
+          },
+          {
+            "line": 3049,
+            "text": "minPosition -2.0944"
+          },
+          {
+            "line": 3050,
+            "text": "maxPosition 2.3562"
+          },
+          {
+            "line": 3051,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3105,
+            "text": "maxVelocity 2.498"
+          },
+          {
+            "line": 3106,
+            "text": "minPosition -0.5236"
+          },
+          {
+            "line": 3107,
+            "text": "maxPosition 1.6232"
+          },
+          {
+            "line": 3108,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3176,
+            "text": "maxVelocity 2.8361"
+          },
+          {
+            "line": 3177,
+            "text": "minPosition -0.5236"
+          },
+          {
+            "line": 3178,
+            "text": "maxPosition 2.2166"
+          },
+          {
+            "line": 3179,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3490,
+            "text": "maxVelocity 2.8143"
+          },
+          {
+            "line": 3491,
+            "text": "minPosition -2.3562"
+          },
+          {
+            "line": 3492,
+            "text": "maxPosition 2.0944"
+          },
+          {
+            "line": 3493,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3547,
+            "text": "maxVelocity 2.498"
+          },
+          {
+            "line": 3548,
+            "text": "minPosition -0.2618"
+          },
+          {
+            "line": 3549,
+            "text": "maxPosition 1.6232"
+          },
+          {
+            "line": 3550,
+            "text": "maxTorque 5.4542"
+          },
+          {
+            "line": 3618,
+            "text": "maxVelocity 2.8361"
+          },
+          {
+            "line": 3619,
+            "text": "minPosition -0.5236"
+          },
+          {
+            "line": 3620,
+            "text": "maxPosition 2.2166"
+          },
+          {
+            "line": 3621,
+            "text": "maxTorque 5.4542"
+          }
+        ],
+        "controller_literal_candidates": [
+          "ers7"
+        ],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Apple": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/2f0d8c83b9a96de62bec39736ba4428ee137b76b",
+        "sha256": "86535a2243d9ee303e57292c134d4fdf4e24f1ee9fd34d536c4da208781e3c2e",
+        "bytes": 11609,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          60
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Astra": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/130883eb5d1c79974e4758080de47341ddb3ca62",
+        "sha256": "6c1c63203faffa2f3cbf15c61dda201ee037bdef00496ea3673cbe95bb4a12dc",
+        "bytes": 2158,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          51
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Cabinet": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/67c63d93c97943860fa42a811044a49a1ff2cc48",
+        "sha256": "7dabbc1e32eb8c4cf67ffa543ae6bd547f816988d51a510b2daaf8c40bb46e23",
+        "bytes": 11217,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [
+          144,
+          150,
+          156,
+          162,
+          168,
+          227
+        ],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Can": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/ebc4fec86194c7b018ccf11280fe53754560196c",
+        "sha256": "d7dfa3fa8665520f4d00bc9044233b95b57218db6c7789d21dd1a194a1fe7593",
+        "bytes": 39238,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          51
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "CardboardBox": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/cad0c51da3ac12b0036d58a136b087de3f341c90",
+        "sha256": "697c1aa1c48ad64bb3d4f5625cc211da13f4400ed58a099e2cbf18ca1873c971",
+        "bytes": 8199,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          163,
+          167
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Darwin-op": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/a99d110eaf5206228a99089d3163941b182bc8e6",
+        "sha256": "311e499f1e3db55baf3bef001cd7972d09864105c44afe11a46c8a23c88b3b75",
+        "bytes": 213181,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          411,
+          434,
+          760,
+          781,
+          802,
+          836,
+          857,
+          879,
+          1201,
+          1222,
+          1243,
+          1277,
+          1298,
+          1320,
+          1510,
+          1531,
+          1565,
+          1756,
+          1777,
+          1811,
+          1875
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 224,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 225,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 226,
+            "text": "minPosition -1.81"
+          },
+          {
+            "line": 227,
+            "text": "maxPosition 1.81"
+          },
+          {
+            "line": 228,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 272,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 273,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 274,
+            "text": "minPosition -0.36"
+          },
+          {
+            "line": 275,
+            "text": "maxPosition 0.94"
+          },
+          {
+            "line": 276,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 465,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 466,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 467,
+            "text": "minPosition -0.69"
+          },
+          {
+            "line": 468,
+            "text": "maxPosition 2.5"
+          },
+          {
+            "line": 469,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 511,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 512,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 513,
+            "text": "minPosition -1"
+          },
+          {
+            "line": 514,
+            "text": "maxPosition 0.93"
+          },
+          {
+            "line": 515,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 559,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 560,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 561,
+            "text": "minPosition -0.5"
+          },
+          {
+            "line": 562,
+            "text": "maxPosition 1.68"
+          },
+          {
+            "line": 563,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 617,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 618,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 619,
+            "text": "minPosition -2.25"
+          },
+          {
+            "line": 620,
+            "text": "maxPosition 0.03"
+          },
+          {
+            "line": 621,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 663,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 664,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 665,
+            "text": "minPosition -1.39"
+          },
+          {
+            "line": 666,
+            "text": "maxPosition 1.22"
+          },
+          {
+            "line": 667,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 709,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 710,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 711,
+            "text": "minPosition -1.02"
+          },
+          {
+            "line": 712,
+            "text": "maxPosition 0.6"
+          },
+          {
+            "line": 713,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 910,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 911,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 912,
+            "text": "minPosition -2.42"
+          },
+          {
+            "line": 913,
+            "text": "maxPosition 0.66"
+          },
+          {
+            "line": 914,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 956,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 957,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 958,
+            "text": "minPosition -1.01"
+          },
+          {
+            "line": 959,
+            "text": "maxPosition 1.01"
+          },
+          {
+            "line": 960,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1000,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1001,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1002,
+            "text": "minPosition -1.77"
+          },
+          {
+            "line": 1003,
+            "text": "maxPosition 0.45"
+          },
+          {
+            "line": 1004,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1058,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1059,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1060,
+            "text": "minPosition -0.02"
+          },
+          {
+            "line": 1061,
+            "text": "maxPosition 2.25"
+          },
+          {
+            "line": 1062,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1104,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1105,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1106,
+            "text": "minPosition -1.24"
+          },
+          {
+            "line": 1107,
+            "text": "maxPosition 1.38"
+          },
+          {
+            "line": 1108,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1150,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1151,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1152,
+            "text": "minPosition -0.68"
+          },
+          {
+            "line": 1153,
+            "text": "maxPosition 1.04"
+          },
+          {
+            "line": 1154,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1351,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1352,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1353,
+            "text": "minPosition -3.14"
+          },
+          {
+            "line": 1354,
+            "text": "maxPosition 2.85"
+          },
+          {
+            "line": 1355,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1397,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1398,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1399,
+            "text": "minPosition -2.25"
+          },
+          {
+            "line": 1400,
+            "text": "maxPosition 0.77"
+          },
+          {
+            "line": 1401,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1457,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1458,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1459,
+            "text": "minPosition -1.18"
+          },
+          {
+            "line": 1460,
+            "text": "maxPosition 1.63"
+          },
+          {
+            "line": 1461,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1597,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1598,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1599,
+            "text": "minPosition -3.14"
+          },
+          {
+            "line": 1600,
+            "text": "maxPosition 3.14"
+          },
+          {
+            "line": 1601,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1643,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1644,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1645,
+            "text": "minPosition -0.68"
+          },
+          {
+            "line": 1646,
+            "text": "maxPosition 2.3"
+          },
+          {
+            "line": 1647,
+            "text": "maxTorque 2.5"
+          },
+          {
+            "line": 1703,
+            "text": "acceleration 55"
+          },
+          {
+            "line": 1704,
+            "text": "maxVelocity 12.26"
+          },
+          {
+            "line": 1705,
+            "text": "minPosition -1.65"
+          },
+          {
+            "line": 1706,
+            "text": "maxPosition 1.16"
+          },
+          {
+            "line": 1707,
+            "text": "maxTorque 2.5"
+          }
+        ],
+        "controller_literal_candidates": [
+          "motion_player"
+        ],
+        "self_collision_source_lines": [
+          {
+            "line": 29,
+            "text": "field SFBool     selfCollision   FALSE                      # Is `Robot.selfCollision`."
+          },
+          {
+            "line": 1934,
+            "text": "selfCollision IS selfCollision"
+          }
+        ],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Door": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/a4ad765ccc3d4a2ddec9625c08a730da15342404",
+        "sha256": "d2f02a8e56cce08746a223128a5f64a2f2ef3794120cf19ade7d38e1ff82600f",
+        "bytes": 8921,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          96,
+          171
+        ],
+        "nested_solidbox_lines": [
+          101,
+          108,
+          115
+        ],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "EmergencyExitSign": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/16923ccbb33223f09f2239f54442d3b0f0c4922c",
+        "sha256": "b02638bfeef556334da5e850f3f15dedef8feca3518c4d09701e7a944fec99ae",
+        "bytes": 1629,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          50
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Floor": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/feffb186a796e658c63a6dcd961d4449201341a9",
+        "sha256": "e5dc2b8dc43a13747299861d90fa000a2d2dcccdcc7f4cea4d6f6c5642a99fc9",
+        "bytes": 3087,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          76
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "GlossyPaint": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/57c67fc0d565c0fdd1fbafc84d29b996d81791b2",
+        "sha256": "ffe28363cb674d9d3d10861e8df9304e78c25154b146a5902c46b7b7b7aa7b38",
+        "bytes": 1320,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Hammer": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/958884028af0a829f51d8c32d3fa51aea0448c6d",
+        "sha256": "9672241772c97d74a21244ddaec36ad5f01677fc708d469b8938d8786698b736",
+        "bytes": 60143,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          1519
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "HokuyoUrg04lxug01": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/f96bfb5a4b3b357f3fe6e337d4030c6df328e6b5",
+        "sha256": "08ca8596e21a360165829923591e3dd0e084abf75e793d75c229a8f0f4d5e5df",
+        "bytes": 57779,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          90
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "LJoint": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/74cbf2d16e3edbd1b286552f305c12b336543a42",
+        "sha256": "722d24386065adf09090d3a85d3edcc13a855b637ef2d11c9999ab0453ad0d82",
+        "bytes": 30103,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          331
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "LargeValve": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/489eaa6637d0641e54d26bfd5577b9399165661e",
+        "sha256": "e84271b263091f9f085a25a45021607fed0c6b0a87e5ebb3da52892c6fbba3bf",
+        "bytes": 79077,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          99,
+          324
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 55,
+            "text": "maxVelocity 10000"
+          },
+          {
+            "line": 56,
+            "text": "maxTorque 10000"
+          }
+        ],
+        "controller_literal_candidates": [
+          "valve_turner"
+        ],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "LeverValve": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/135f7103fda1dcc5d2eefea2a9405fa22a9f3145",
+        "sha256": "45b6df4e9c1415b7e8749a528e4aeb8f88073bb1cba8a0b5385d3e583fa208cb",
+        "bytes": 41769,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          269,
+          330
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "OilBarrel": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/a3cd90ee4ab313be51f343de283e77bc9f5a2848",
+        "sha256": "5479a019876e6aa1fe56c25ac38b698cec9abc364594982fd44fbf822f1b4643",
+        "bytes": 3741,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          130
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "PaintBucket": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/e2299dc69670a78881e1183b4e9a3a32f24b785f",
+        "sha256": "30567b3594fdc9d37b3a5a830aaed174fb370ab4615f479c6fbb944d1774e74c",
+        "bytes": 128069,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          1081,
+          1320,
+          1415
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "PipeSection": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/b696c6ad5e54921e54ce37963a859805f27e6252",
+        "sha256": "c54a024364046169e67790688e68b70446f5f6576ed83dc7e6c946d0415ae71a",
+        "bytes": 1656,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          37
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Screwdriver": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/29a1d84d0980afb44cd930bebc1e4292d4ff566e",
+        "sha256": "75145f54d0e3b7ad108aa127033355fc84371406d9817f55fb1f22a94cc0c80a",
+        "bytes": 26293,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          331
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "SmallValve": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/27c8c3a2ebc32907a36d12de846841d31b865d8b",
+        "sha256": "d77b058dcf819ffd7a56c740f85c712a31f19e5f266c5c21a6ab2b985249f403",
+        "bytes": 31546,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          193,
+          211
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 53,
+            "text": "maxTorque 100000"
+          },
+          {
+            "line": 54,
+            "text": "maxVelocity 100000"
+          }
+        ],
+        "controller_literal_candidates": [
+          "valve_turner"
+        ],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "SolidBox": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/ec5fa83c628c635dd2d99c087f06635046e3ff20",
+        "sha256": "f9e18612ce325bc7abfd2d94cbd1c391a244f54ce5a2789a97fd1f901dc0dfba",
+        "bytes": 6995,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          137
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "StraightStairsRail": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/8908ec39a34c80903cae563a85a787548e89e34d",
+        "sha256": "3aa0e913834f8d5fa2a8ddf755bf6ca3c56ea16237a48ef91d853043b2ce4c35",
+        "bytes": 6390,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          92,
+          111,
+          120,
+          137,
+          157
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Table": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/398b0d8cac814e7bacf01f96e74881d24933038a",
+        "sha256": "d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb",
+        "bytes": 4414,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [
+          59,
+          67,
+          74,
+          81,
+          88
+        ],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "TexturedBackground": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/6e051cd7de5c25794dded92fc3d6f41390c27546",
+        "sha256": "ca0a23da938b24a6e363c7baf4184087292af115986a3c072f5cd792825320e4",
+        "bytes": 4337,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "ThreadMetalPlate": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/078682785828d8d007475c693bde07098e68a4c7",
+        "sha256": "a09393c7d6eefa5f033fe478dcb2b416c3f49274c42ec07ce725f643a5522512",
+        "bytes": 1861,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Tiago": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/486538c7f379a4d6f74ccaf33dbf14d6dae1486b",
+        "sha256": "5306bc3b6517b8196aa00f8f523852a2386a1303d47d66946ad45083d08d8065",
+        "bytes": 2851,
+        "coverage": "partial",
+        "bounding_object_lines": [],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [
+          "tiago"
+        ],
+        "self_collision_source_lines": [
+          {
+            "line": 26,
+            "text": "field  SFBool      selfCollision    FALSE                                                             # Enables/disables the detection of collisions within the robot."
+          },
+          {
+            "line": 41,
+            "text": "selfCollision IS selfCollision"
+          }
+        ],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "TiagoBase": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/10bd68a813851848a53bf53ea5ddfaa058e1dd71",
+        "sha256": "75415c02c46265c811632f33c5f9e0999efc40965ef9b3fd5cb7fc23e06faa7b",
+        "bytes": 22977,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          144,
+          284,
+          380,
+          433,
+          460,
+          513,
+          540,
+          593,
+          620,
+          673,
+          700,
+          716
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 218,
+            "text": "acceleration 5.0762"
+          },
+          {
+            "line": 219,
+            "text": "maxVelocity 10.1523"
+          },
+          {
+            "line": 220,
+            "text": "maxTorque 10"
+          },
+          {
+            "line": 309,
+            "text": "acceleration 5.0762"
+          },
+          {
+            "line": 310,
+            "text": "maxVelocity 10.1523"
+          },
+          {
+            "line": 311,
+            "text": "maxTorque 10"
+          }
+        ],
+        "controller_literal_candidates": [
+          "tiago_base"
+        ],
+        "self_collision_source_lines": [
+          {
+            "line": 24,
+            "text": "field  SFBool      selfCollision    FALSE   # Enables/disables the detection of collisions within the robot."
+          },
+          {
+            "line": 39,
+            "text": "selfCollision IS selfCollision"
+          }
+        ],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "TiagoBody": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/1d8ea125e64eb491b6a7e7781f9ff6d8940f5eee",
+        "sha256": "adeede86539f936c9627741d3597f2b40a0f43907370ebcfd5cc4fae29bd8974",
+        "bytes": 617569,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          363,
+          422,
+          452,
+          498
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 126,
+            "text": "maxVelocity 0.07"
+          },
+          {
+            "line": 127,
+            "text": "maxPosition 0.35"
+          },
+          {
+            "line": 128,
+            "text": "maxForce 2000"
+          },
+          {
+            "line": 236,
+            "text": "maxVelocity 3"
+          },
+          {
+            "line": 237,
+            "text": "minPosition -1.24"
+          },
+          {
+            "line": 238,
+            "text": "maxPosition 1.24"
+          },
+          {
+            "line": 239,
+            "text": "maxTorque 5.197"
+          },
+          {
+            "line": 287,
+            "text": "maxVelocity 3"
+          },
+          {
+            "line": 288,
+            "text": "minPosition -0.98"
+          },
+          {
+            "line": 289,
+            "text": "maxPosition 0.79"
+          },
+          {
+            "line": 290,
+            "text": "maxTorque 2.77"
+          }
+        ],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "TiagoFrontArm": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/e944e0827c8df64945f22d66be2275b3c46658cd",
+        "sha256": "4d606ab949b324a3d13f702b6f642786cab602f2f99a0faba4217a4cf0dcdb10",
+        "bytes": 28774,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          359,
+          375,
+          393,
+          411,
+          453,
+          485,
+          518,
+          550,
+          598
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 50,
+            "text": "maxVelocity 1.95"
+          },
+          {
+            "line": 51,
+            "text": "minPosition 0.07"
+          },
+          {
+            "line": 52,
+            "text": "maxPosition 2.68"
+          },
+          {
+            "line": 53,
+            "text": "maxTorque 43"
+          },
+          {
+            "line": 105,
+            "text": "maxVelocity 1.95"
+          },
+          {
+            "line": 106,
+            "text": "minPosition -1.5"
+          },
+          {
+            "line": 107,
+            "text": "maxPosition 1.02"
+          },
+          {
+            "line": 108,
+            "text": "maxTorque 43"
+          },
+          {
+            "line": 136,
+            "text": "maxVelocity 2.35"
+          },
+          {
+            "line": 137,
+            "text": "minPosition -3.46"
+          },
+          {
+            "line": 138,
+            "text": "maxPosition 1.5"
+          },
+          {
+            "line": 139,
+            "text": "maxTorque 26"
+          },
+          {
+            "line": 183,
+            "text": "maxVelocity 2.35"
+          },
+          {
+            "line": 184,
+            "text": "minPosition -0.32"
+          },
+          {
+            "line": 185,
+            "text": "maxPosition 2.29"
+          },
+          {
+            "line": 186,
+            "text": "maxTorque 26"
+          },
+          {
+            "line": 230,
+            "text": "maxVelocity 1.95"
+          },
+          {
+            "line": 231,
+            "text": "minPosition -2.07"
+          },
+          {
+            "line": 232,
+            "text": "maxPosition 2.07"
+          },
+          {
+            "line": 233,
+            "text": "maxTorque 3"
+          },
+          {
+            "line": 265,
+            "text": "maxVelocity 1.76"
+          },
+          {
+            "line": 266,
+            "text": "minPosition -1.39"
+          },
+          {
+            "line": 267,
+            "text": "maxPosition 1.39"
+          },
+          {
+            "line": 268,
+            "text": "maxTorque 6.6"
+          },
+          {
+            "line": 299,
+            "text": "maxVelocity 1.76"
+          },
+          {
+            "line": 300,
+            "text": "minPosition -2.07"
+          },
+          {
+            "line": 301,
+            "text": "maxPosition 2.07"
+          },
+          {
+            "line": 302,
+            "text": "maxTorque 6.6"
+          }
+        ],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "TiagoGripper": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/4e7a9e23c276e883e79a4ffdba3dad10f06fcf10",
+        "sha256": "2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9",
+        "bytes": 228268,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          435,
+          549,
+          588
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [
+          {
+            "line": 370,
+            "text": "maxVelocity 0.05"
+          },
+          {
+            "line": 371,
+            "text": "maxPosition 0.045"
+          },
+          {
+            "line": 372,
+            "text": "maxForce 16"
+          },
+          {
+            "line": 480,
+            "text": "maxVelocity 0.05"
+          },
+          {
+            "line": 481,
+            "text": "maxPosition 0.045"
+          },
+          {
+            "line": 482,
+            "text": "maxForce 16"
+          }
+        ],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "WoodenBox": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/3927f998b2f3949c385c910994dd21842b157041",
+        "sha256": "418d0209031249a47a5b12f359d8a8e4078d9f021762fdce846f2d07f8b6687c",
+        "bytes": 3343,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          98
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "WoodenPallet": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/fea7ea2bf8b033ca3ce4b53ef692a39226fa5634",
+        "sha256": "5d529c650f3afbce8c15233482081769c1f972a1a8c1d54299d670a5e584bcd0",
+        "bytes": 5241,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          19,
+          128,
+          129
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": true,
+        "reason": "Source enumeration does not resolve composed geometry"
+      },
+      "Wrench": {
+        "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/39177966312707e7823e597b09c8700cfbe767e4",
+        "sha256": "b20d966a89cee211a55dec53cafb8d755832ac919a85353fc77b39926f0fa50e",
+        "bytes": 96960,
+        "coverage": "partial",
+        "bounding_object_lines": [
+          982
+        ],
+        "nested_solidbox_lines": [],
+        "motor_limit_source_lines": [],
+        "controller_literal_candidates": [],
+        "self_collision_source_lines": [],
+        "template_expansion_required": false,
+        "reason": "Source enumeration does not resolve composed geometry"
+      }
+    }
+  },
+  "robot_links": [
+    {
+      "name": "base_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.06",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.265",
+                "length": "0.276"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.201 0.1062 0.28",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.007",
+                "length": "0.173"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.201 -0.1062 0.28",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.007",
+                "length": "0.173"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_back_left_1_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "-0.003 0 -0.022",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.036 0.032 0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_back_left_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.025",
+                "length": "0.015"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_back_right_1_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "-0.003 0 -0.022",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.036 0.032 0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_back_right_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.025",
+                "length": "0.015"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_front_left_1_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "-0.003 0 -0.022",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.036 0.032 0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_front_left_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.025",
+                "length": "0.015"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_front_right_1_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "-0.003 0 -0.022",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.036 0.032 0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "caster_front_right_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.025",
+                "length": "0.015"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "wheel_left_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.0002",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0985",
+                "length": "0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "wheel_right_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 -0.0002",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0985",
+                "length": "0.04"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "base_sonar_01_link",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "base_sonar_02_link",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "base_sonar_03_link",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "base_cover_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.043",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.272",
+                "length": "0.086"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "base_footprint",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "gyro",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "inertial unit",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "accelerometer",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "Hokuyo URG-04LX-UG01",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 -0.018",
+            "rpy": "1.570741 0.000118 -1.570741"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.05 0.07 0.05"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "Torso",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.275",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.18 0.2 0.55"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.085 0 0.02",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.4 0.254 0.04"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.001 0 0.05",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.233 0.26 0.12"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "torso_lift_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.164 0 -0.032",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.15 0.138 0.074"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.1389 0 -0.0432",
+            "rpy": "0 -0.43 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.12 0.134 0.097"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.016 0 -0.05",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.291 0.333 0.11"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.003 0 -0.283",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.228 0.263 0.358"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "head_1_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.01 0 0.097",
+            "rpy": "-1.5708 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.082",
+                "length": "0.09"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.005 0 0.005",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.103 0.088 0.103"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "head_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "-0.009 0.0466 0",
+            "rpy": "0 0 -0.7"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.092 0.132 0.26"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.008 -0.019 0",
+            "rpy": "0 0 -1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.03",
+                "length": "0.132"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.054 0.06 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.111 0.13 0.16"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.053 0.056 -0.068",
+            "rpy": "3.141593 -1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0667",
+                "length": "0.111"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.053 0.056 0.068",
+            "rpy": "3.141593 -1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0667",
+                "length": "0.111"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "Astra",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.006 0 0.034",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.04 0.165 0.029"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.009 0 0.007",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.061 0.06 0.014"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "Astra depth",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "Astra rgb",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "TIAGo front arm",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.026 0.14 -0.232",
+            "rpy": "0 0 1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.042 0.094 0.094"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0256 0.1868 -0.2661",
+            "rpy": "0.261799 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.016"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.026 0.19 -0.221",
+            "rpy": "0 0 -1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.075"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "TIAGo front arm_3",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.0001 -0.000001 0.002",
+            "rpy": "0 0 1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0522",
+                "length": "0.052"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0331 0.000999 0.001",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.08 0.1044 0.048"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0721 0.028999 -0.023",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.035 0.09 0.081"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.1251 0.052999 -0.042",
+            "rpy": "1.5708 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.069"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_2_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.056 0 -0.0005",
+            "rpy": "3.141593 -1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.052",
+                "length": "0.048"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0 0 0.0295",
+            "rpy": "0 0 -1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.057"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_3_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 -0.1037",
+            "rpy": "0 0 -1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.23"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.0169 0.03 -0.2187",
+            "rpy": "1.5708 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.056",
+                "length": "0.056"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_4_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0.001 -0.002",
+            "rpy": "0 0 1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.054",
+                "length": "0.056"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.093 0.019 0.027",
+            "rpy": "3.141593 1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.052",
+                "length": "0.191"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_5_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.04",
+            "rpy": "0 0 1.57"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.063",
+                "length": "0.062"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0 0 0.099",
+            "rpy": "0 0 1.57"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.057",
+                "length": "0.06"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0 0 0.156",
+            "rpy": "0 0 1.57"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.053",
+                "length": "0.06"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_6_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.0409 0 0",
+            "rpy": "3.141593 1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0226",
+                "length": "0.013"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "arm_7_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.055",
+            "rpy": "0 0 1.5708"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0225",
+                "length": "0.0157"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "wrist_ft_tool_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0.055",
+            "rpy": "0 1.57 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0253",
+                "length": "0.011"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "front",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0 0 0",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "cylinder",
+              "parameters": {
+                "radius": "0.0227",
+                "length": "0.028"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.029 -0.01834 -0.046",
+            "rpy": "0 0 0.59"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.04 0.0217 0.105"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.029 0.01834 -0.046",
+            "rpy": "0 0 0.59"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.04 0.0217 0.105"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0172 0.0109 -0.046",
+            "rpy": "3.141593 -1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.106 0.056 0.071"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.0172 -0.0109 -0.046",
+            "rpy": "3.141593 -1.570793 3.141593"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.106 0.056 0.071"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "gripper_right_finger_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.004 0 -0.1741",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.0076 0.05091 0.08982"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0049 0.0153 -0.1208",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.0055 0.0295 0.018"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.0085 0.0156 -0.1048",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.03213 0.02959 0.01487"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "gripper_left_finger_link",
+      "collisions": [
+        {
+          "origin": {
+            "xyz": "0.004 0 -0.1741",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.0076 0.05091 0.08982"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "0.0049 0.0153 -0.1208",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.0055 0.0295 0.018"
+              }
+            }
+          ]
+        },
+        {
+          "origin": {
+            "xyz": "-0.0085 0.0156 -0.1048",
+            "rpy": "0 0 0"
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "parameters": {
+                "size": "0.03213 0.02959 0.01487"
+              }
+            }
+          ]
+        }
+      ],
+      "coverage": "partial",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(19)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(18)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(17)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(16)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(15)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(14)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(13)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(12)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(11)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(10)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(9)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(8)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(7)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(6)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(5)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(4)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(3)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(2)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw(1)",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    },
+    {
+      "name": "cap screw",
+      "collisions": [],
+      "coverage": "unsupported",
+      "reason": "URDF source only; live transforms/containment unverified"
+    }
+  ],
+  "adjacency_not_approved_exclusions": [
+    {
+      "name": "CASTER_WHEEL_BACK_LEFT_JOINT",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "caster_back_left_1_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "SMALL_WHEEL_JOINT",
+      "type": "continuous",
+      "parent": "caster_back_left_1_link",
+      "child": "caster_back_left_2_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "CASTER_WHEEL_BACK_RIGHT_JOINT",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "caster_back_right_1_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "SMALL_WHEEL_JOINT_0",
+      "type": "continuous",
+      "parent": "caster_back_right_1_link",
+      "child": "caster_back_right_2_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "CASTER_WHEEL_FRONT_LEFT_JOINT",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "caster_front_left_1_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "SMALL_WHEEL_JOINT_1",
+      "type": "continuous",
+      "parent": "caster_front_left_1_link",
+      "child": "caster_front_left_2_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "CASTER_WHEEL_FRONT_RIGHT_JOINT",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "caster_front_right_1_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "SMALL_WHEEL_JOINT_2",
+      "type": "continuous",
+      "parent": "caster_front_right_1_link",
+      "child": "caster_front_right_2_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "wheel_left_joint",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "wheel_left_link",
+      "limits": {
+        "effort": "10",
+        "velocity": "10.1523"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "wheel_right_joint",
+      "type": "continuous",
+      "parent": "base_link",
+      "child": "wheel_right_link",
+      "limits": {
+        "effort": "10",
+        "velocity": "10.1523"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_base_sonar_01_link_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "base_sonar_01_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_base_sonar_02_link_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "base_sonar_02_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_base_sonar_03_link_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "base_sonar_03_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_base_cover_link_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "base_cover_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_base_footprint_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "base_footprint",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_gyro_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "gyro",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_inertial unit_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "inertial unit",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_accelerometer_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "accelerometer",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_Hokuyo URG-04LX-UG01_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "Hokuyo URG-04LX-UG01",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "base_link_Torso_joint",
+      "type": "fixed",
+      "parent": "base_link",
+      "child": "Torso",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "torso_lift_joint",
+      "type": "prismatic",
+      "parent": "Torso",
+      "child": "torso_lift_link",
+      "limits": {
+        "effort": "2000",
+        "lower": "0",
+        "upper": "0.35",
+        "velocity": "0.07"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "head_1_joint",
+      "type": "revolute",
+      "parent": "torso_lift_link",
+      "child": "head_1_link",
+      "limits": {
+        "effort": "5.197",
+        "lower": "-1.24",
+        "upper": "1.24",
+        "velocity": "3"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "head_2_joint",
+      "type": "revolute",
+      "parent": "head_1_link",
+      "child": "head_2_link",
+      "limits": {
+        "effort": "2.77",
+        "lower": "-0.98",
+        "upper": "0.79",
+        "velocity": "3"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "head_2_link_Astra_joint",
+      "type": "fixed",
+      "parent": "head_2_link",
+      "child": "Astra",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "Astra_Astra depth_joint",
+      "type": "fixed",
+      "parent": "Astra",
+      "child": "Astra depth",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "Astra_Astra rgb_joint",
+      "type": "fixed",
+      "parent": "Astra",
+      "child": "Astra rgb",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "torso_lift_link_TIAGo front arm_joint",
+      "type": "fixed",
+      "parent": "torso_lift_link",
+      "child": "TIAGo front arm",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_1_joint",
+      "type": "revolute",
+      "parent": "TIAGo front arm",
+      "child": "TIAGo front arm_3",
+      "limits": {
+        "effort": "43",
+        "lower": "0.07",
+        "upper": "2.68",
+        "velocity": "1.95"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_2_joint",
+      "type": "revolute",
+      "parent": "TIAGo front arm_3",
+      "child": "arm_2_link",
+      "limits": {
+        "effort": "43",
+        "lower": "-1.5",
+        "upper": "1.02",
+        "velocity": "1.95"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_3_joint",
+      "type": "revolute",
+      "parent": "arm_2_link",
+      "child": "arm_3_link",
+      "limits": {
+        "effort": "26",
+        "lower": "-3.46",
+        "upper": "1.5",
+        "velocity": "2.35"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_4_joint",
+      "type": "revolute",
+      "parent": "arm_3_link",
+      "child": "arm_4_link",
+      "limits": {
+        "effort": "26",
+        "lower": "-0.32",
+        "upper": "2.29",
+        "velocity": "2.35"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_5_joint",
+      "type": "revolute",
+      "parent": "arm_4_link",
+      "child": "arm_5_link",
+      "limits": {
+        "effort": "3",
+        "lower": "-2.07",
+        "upper": "2.07",
+        "velocity": "1.95"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_6_joint",
+      "type": "revolute",
+      "parent": "arm_5_link",
+      "child": "arm_6_link",
+      "limits": {
+        "effort": "6.6",
+        "lower": "-1.39",
+        "upper": "1.39",
+        "velocity": "1.76"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_7_joint",
+      "type": "revolute",
+      "parent": "arm_6_link",
+      "child": "arm_7_link",
+      "limits": {
+        "effort": "6.6",
+        "lower": "-2.07",
+        "upper": "2.07",
+        "velocity": "1.76"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "arm_7_link_wrist_ft_tool_link_joint",
+      "type": "fixed",
+      "parent": "arm_7_link",
+      "child": "wrist_ft_tool_link",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "wrist_ft_tool_link_front_joint",
+      "type": "fixed",
+      "parent": "wrist_ft_tool_link",
+      "child": "front",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "gripper_right_finger_joint",
+      "type": "prismatic",
+      "parent": "front",
+      "child": "gripper_right_finger_link",
+      "limits": {
+        "effort": "16",
+        "lower": "0",
+        "upper": "0.045",
+        "velocity": "0.05"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "gripper_left_finger_joint",
+      "type": "prismatic",
+      "parent": "front",
+      "child": "gripper_left_finger_link",
+      "limits": {
+        "effort": "16",
+        "lower": "0",
+        "upper": "0.045",
+        "velocity": "0.05"
+      },
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(19)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(19)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(18)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(18)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(17)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(17)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(16)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(16)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(15)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(15)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(14)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(14)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(13)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(13)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(12)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(12)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(11)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(11)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(10)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(10)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(9)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(9)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(8)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(8)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(7)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(7)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(6)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(6)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(5)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(5)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(4)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(4)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(3)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(3)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(2)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(2)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw(1)_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw(1)",
+      "limits": null,
+      "exclusion_approved": false
+    },
+    {
+      "name": "front_cap screw_joint",
+      "type": "fixed",
+      "parent": "front",
+      "child": "cap screw",
+      "limits": null,
+      "exclusion_approved": false
+    }
+  ],
+  "missing_assets": [],
+  "world_controller_literals": [
+    "tiago_controller",
+    "<generic>",
+    "<generic>"
+  ],
+  "world_definitions": [
+    [
+      "TIAGO_ROBOT",
+      "Tiago"
+    ],
+    [
+      "HAM",
+      "Hammer"
+    ],
+    [
+      "CAN",
+      "Can"
+    ],
+    [
+      "APP",
+      "Apple"
+    ]
+  ],
+  "required_scene_geometry": {
+    "arm_wrist_gripper_body": "partial: source primitives; all-link frames unresolved",
+    "table_top_and_four_nested_feet": "partial: five SolidBox instances; no expanded proof",
+    "CAN_APP_HAM": "partial: source dimensions; snapshot transforms required",
+    "floor_support": "unsupported: Plane and allowed-support contact semantics unproven",
+    "self_collision": "unsupported: disabled by default; adjacency is not an exclusion",
+    "moving_objects_controllers": "partial: world/PROTO controllers require motion bounds",
+    "swept_volumes": "unsupported: no certified conservative motion/geometry envelope"
+  },
+  "stop_reasons": [
+    "No swept-volume proof",
+    "No all-link frame/containment proof",
+    "No approved margin or self/support contact exclusions",
+    "Nested world geometry and other controller motion require closure"
+  ],
+  "missing_world_proto_sources": [],
+  "scene": {
+    "name": "train-clear-i00-s100",
+    "objects": [
+      {
+        "def": "HAM",
+        "xyz": [
+          -0.21590638799377604,
+          -4.27964701004344,
+          0.754298
+        ],
+        "yaw_offset": 0.0
+      },
+      {
+        "def": "APP",
+        "xyz": [
+          -0.12636177585058317,
+          -4.3482049904082,
+          0.83
+        ],
+        "yaw_offset": 0.0
+      }
+    ],
+    "metadata": {
+      "family": "clear",
+      "split": "train",
+      "seed": 100,
+      "index": 0,
+      "obstacle_mode": "parked"
+    },
+    "can_xy_yaw_offset": [
+      0.034299079752517316,
+      0.023802498531035356,
+      -1.326611377611357
+    ]
+  },
+  "recorded_frame0_objects": {
+    "APP": {
+      "world_xyz_m": [
+        -0.12636177585058317,
+        -4.3482049904082,
+        0.83
+      ],
+      "world_quaternion_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "velocity": null
+    },
+    "CAN": {
+      "world_xyz_m": [
+        -0.7655823732277313,
+        -4.366173390788633,
+        0.811059875895476
+      ],
+      "world_quaternion_xyzw": [
+        -0.0001817796186646179,
+        -0.000415072335657484,
+        -0.6157242399475926,
+        0.7879615821929936
+      ],
+      "velocity": null
+    },
+    "HAM": {
+      "world_xyz_m": [
+        -0.215906387993776,
+        -4.27964701004344,
+        0.754298
+      ],
+      "world_quaternion_xyzw": [
+        -0.0043374682407171464,
+        0.002852474470906409,
+        -0.8658185773591554,
+        0.5003311312105436
+      ],
+      "velocity": null
+    }
+  },
+  "scene_source_hashes": {
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz": "dd56d7c9d5a05a5e8d4633f22311c259def08088bfed456cc32ec8ae053126e7"
+  }
+}

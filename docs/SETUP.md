@@ -189,3 +189,8 @@ stop gates, not locally verified claims. Training remains commented out.
 Recovered step20000 local inference validation and exact reproduction environment: see [LOCAL_MODEL_VALIDATION_STEP20000.md](LOCAL_MODEL_VALIDATION_STEP20000.md). CPU model loading/inference passed, but gripper-bound violations block evaluation. Do not rerun training or silently clamp outputs.
 
 A-D1 numerical harness and executed commands are documented in [AD1_NUMERICAL_REPORT.md](AD1_NUMERICAL_REPORT.md). Its exact two-solve authorization is exhausted; no rerun or output replacement is authorized.
+
+A-D2 offline infrastructure fixtures (no simulator/model/IK):
+`uv run pytest -q tests/test_ad2_infrastructure.py` from the project root.
+Read [AD2_CPU_INFRASTRUCTURE_REPORT.md](AD2_CPU_INFRASTRUCTURE_REPORT.md) for the hash-pinned
+read-only source audit command. No A-D2 physical launch command is provided or authorized.

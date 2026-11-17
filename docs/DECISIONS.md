@@ -1645,3 +1645,40 @@ The below-1-second milestone is not claimed as met. No candidate count, horizon,
 threshold, veto, seed, split, frozen gate, or experiment design was changed. No physical,
 inferred, training, IK, Webots, actuation, or scored evaluation was executed for this
 addendum.
+
+## ADR-0046 — Additive risk-gate decision observability and validation preflight (2026-11-17)
+
+**Status:** Accepted. **Scope:** bounded, sidecar-only, inert.
+
+- **Context:** the post-recovery Week 3 phase requires typed decision evidence and exact
+  validation readiness without reopening frozen results. Execution-path inspection found no
+  production end-to-end WorldMind composition (`cli.brain()` only steps a backend;
+  `cli.eval()` only runs the scripted baseline); the full chain exists only in tests/tools.
+  Archived scored evidence cannot retroactively supply executed-candidate↔prediction IDs,
+  typed hard-check codes, per-candidate J components, pre-apply veto detail, decision IDs, or
+  phase-separated timing without behavior-sensitive planner/recorder changes.
+- **Decision:** add three pure modules — `eval/decision_evidence.py` (typed, fail-closed
+  schemas), `eval/decision_metrics.py` (pure aggregation, pairing, latency summary), and
+  `eval/decision_adapters.py` (optional delegate-only probes that call the original once and
+  return the original object) — plus a synthetic fixture, 18 inert tests, a read-only frozen
+  hash checker (`tools/verify_week3_frozen_evidence.py`), and documentation. All missing values
+  stay `None` with an explicit reason; no value is invented. Risk rejection rate is
+  `hard_vetoed / (hard_vetoed + safe_unselected + selected)`, invalid/unevaluable excluded and
+  reported separately, zero denominator → `None`. Prediction pairing requires executed-candidate
+  ID identity, explicit `base` frame, aligned timestamps and explicit recovery/abort boundaries.
+  Latency is opt-in whole-phase `perf_counter_ns()` with independent, non-additive p50/p95.
+- **Telemetry is sidecar-only.** Do not wrap `RiskGate.select()` (called N+1 times by
+  `ComparisonPlanner.select`); wrap injected `predict`/`assess`, whole `execute_first`, verifier
+  calls and delegate-only monitor/backend probes. Nothing is wired into a production path.
+- **No guessed bindings.** The Eq. 3.8 component meanings and eight Table 5.1 names/units are a
+  proposed mapping for owner review in `docs/WEEK3_DECISION_OBSERVABILITY.md` §6. No production
+  `definitions.json` is created; scoring stays BLOCKED until a reviewed binding matching report
+  SHA-256 `23d5ff15…1522b` is supplied.
+- **Frozen facts unchanged:** scripted TRAIN 23/24, scripted VALIDATION 15/18, VLA-only TRAIN
+  0/24 FAILED, scripted-primary, A-D2 CLOSED/NO-GO, K=32/H=50, seeds/splits/gates, archived
+  evidence and scored summaries. No public `core/` interface changed. Deadline 2026-12-12;
+  TEST window 2026-12-05..12-07 untouched. No Webots, real IK, inference, training, actuation,
+  scored evaluation, TEST access, push, merge, PR #2 or `main` change in this phase.
+- **Status consequences:** risk rejection rate and scored prediction error remain `Missing /
+  BLOCKED` (definition and aggregation are INERT-UNIT-TESTED only). Nominal-kernel latency remains
+  scope-limited; full-system/scored per-decision latency is UNVERIFIED.

@@ -40,7 +40,7 @@ only), **UNVERIFIED**, **PENDING-AUTHORIZATION**, **fake-only**, **nominal-kerne
 | Path length | Sum of distances along the executed trajectory | `eval/derived_metrics.py::end_effector_path_length_m`: sum of consecutive Euclidean distances of base-frame `ee_xyz` in metres | Implemented but not physically validated — inert tests only. No frozen episode, summary, CSV, or provenance file was modified; no historical value is invented here |
 | Execution time | Recorded simulation or wall-clock duration, clearly identified | `eval/runner.py` records `wall_s` per episode + `total_wall_s`; `eval/derived_metrics.py::simulation_duration_s` derives `t[-1] - t[0]` from recorded simulation time | Implemented but not physically validated for the derived metric — `wall_s` is `MEASURED` run bookkeeping, not a Table 5.1 substitution; the derivation is inert-tested and keeps simulation duration separate from wall clock |
 | Planning latency | Time to generate and evaluate candidates | Hash-pinned `docs/evidence/planning-optimization-final.json`; no new profiler run | Implemented but not physically validated — `nominal-kernel-only`: K=32, H=50, optimized p50 `0.4677 s`, p95 `0.4803 s`, pre-optimization p50 `2.0996 s`. Full-system and scored per-decision latency are `UNVERIFIED` |
-| Risk rejection rate | Rejected candidates / evaluated candidates | `episode-XX.actions.jsonl` accepted/reason; summary `rejections_total`; adapter vetoes in frozen VLA campaign (21) | `Missing` for the true Table 5.1 rate — available counters are action/adapter veto tallies, not candidate-level rejected/evaluated counts. Candidate instrumentation and runs are `Blocked` on authorization |
+| Risk rejection rate | Rejected candidates / evaluated candidates | Operationalized as `hard_vetoed / (hard_vetoed + safe_unselected + selected)` by `eval/decision_metrics.py::risk_rejection_rate`; invalid/unevaluable excluded and reported separately; zero denominator → `None`. Existing `episode-XX.actions.jsonl` accepted/reason, summary `rejections_total` and VLA adapter vetoes (21) are action/adapter tallies, **not** this rate | `Missing` for the true Table 5.1 rate — the definition and pure aggregation are `INERT-UNIT-TESTED`, but the candidate-level sidecar counts and an authorized run are `Blocked` on instrumentation approval and authorization |
 | Reliability | Successful runs and documented failure categories | `failure_states` + `raw_failure_states` + `evaluation_failure_category` in summaries; failure-category derivation | Implemented and verified — `MEASURED` for arms 1–2 (SAFETY 21 / PLACEMENT 3 in frozen VLA campaign) |
 
 ### Planning-latency evidence scope
@@ -54,6 +54,19 @@ The uncertified full-arm sweep remains vetoed. This is scope-limited profiling e
 it does **not** establish the full-system below-1-second milestone or any scored
 per-decision latency result. See `docs/WEEK3_RISKGATE_VALIDATION_PLAN.md` for the
 phase-separated measurement protocol.
+
+### Additive decision-observability evidence (inert)
+
+`src/vlarobot/eval/decision_evidence.py`, `decision_metrics.py` and `decision_adapters.py` add
+typed sidecar schemas, pure aggregation and optional delegate-only probes for risk-gate
+decisions. They are **INERT-UNIT-TESTED** (18 reviewed nodes), write no frozen artifact, and are
+not wired into any production path. Providing a real candidate-level risk rejection rate or a
+scored-arm prediction error still requires instrumentation approval plus an authorized run, so
+those two Table 5.1 cells remain `Missing` / `Blocked`. The Eq. 3.8 component and eight
+Table 5.1 definitions/units are a **proposed mapping for owner review** in
+`docs/WEEK3_DECISION_OBSERVABILITY.md` §6; no production `definitions.json` is created and no
+component meaning is guessed. Status inventory and the exact preflight are in that document
+§§7–9 and in `tools/verify_week3_frozen_evidence.py`.
 
 ### Supplemental trajectory definitions
 

@@ -13,7 +13,10 @@ Controlling sources:
 - ADR-0029 in `docs/DECISIONS.md` (four-week campaign, frozen sizes, five arms, gate,
   Week 3 and Week 4 boundaries);
 - ADR-0031 recorder contract and subsequent append-only decisions;
-- `docs/REPORT_CONFORMANCE.md` for current status classification.
+- `docs/REPORT_CONFORMANCE.md` for current status classification;
+- `docs/WEEK3_DECISION_OBSERVABILITY.md` for the additive typed evidence schema, the risk
+  rejection-rate definition, the prediction-pairing and latency contracts, the proposed
+  Table 5.1 mapping, and the exact read-only validation preflight.
 
 ADR-0029 deadline remains **2026-12-12**. Week 4 TEST access is not permitted before the
 authorized window **2026-12-05..12-07**. A-D2 remains CLOSED / NO-GO and is not part of
@@ -178,8 +181,9 @@ Failure to reobserve, a missing alternate family, or missing feedback fails clos
 | K=32/H=50 nominal analytic-kernel profile | NOMINAL-KERNEL-PROFILED: p50 `0.4677 s`, p95 `0.4803 s`, pre-optimization p50 `2.0996 s`; not full-system latency |
 | Physical behavior of arms 3–5 with scripted-primary proposer | UNVERIFIED PHYSICAL; no Week 3 campaign |
 | Full-system and scored per-decision latency | UNVERIFIED; not claimed below 1 s |
-| True risk rejection rate from candidate-level counts | MISSING; BLOCKED on instrumentation plus authorized run |
-| Scored-arm prediction-error trajectories | MISSING; BLOCKED on recorder instrumentation plus authorized run |
+| True risk rejection rate from candidate-level counts | Definition and pure aggregation INERT-UNIT-TESTED (`decision_metrics.py`); measurement MISSING, BLOCKED on instrumentation plus authorized run |
+| Scored-arm prediction-error trajectories | Pairing contract INERT-UNIT-TESTED (`pair_executed_prediction`); measurement MISSING, BLOCKED on recorder instrumentation plus authorized run |
+| Additive decision-evidence schema and delegate-only probes | INERT-UNIT-TESTED only (`decision_evidence.py`, `decision_adapters.py`); not wired into production, no frozen artifact changed |
 | Week 4 frozen TEST campaign and statistics | BLOCKED / PENDING-AUTHORIZATION until 2026-12-05 |
 | M1-06a 5+5 repetition waiver | EXPLICITLY WAIVED by approved decision; never reported as MEASURED |
 
@@ -206,6 +210,16 @@ splits, report bindings, campaign artifacts, and recorder provenance. Week 4 add
 Supplemental path length is `Σ‖ee_xyz[i] − ee_xyz[i−1]‖₂` in base-frame metres; simulation
 duration is `t[-1] − t[0]` with finite strictly increasing timestamps. Wall-clock time is
 non-deterministic run bookkeeping and is never substituted for either.
+
+The per-decision record above is realized by the additive typed schema in
+`src/vlarobot/eval/decision_evidence.py` (`DecisionEvidence`, `CandidateEvidence`,
+`CostComponents`, `PhaseTimings`, `PredictionPairingEvidence`, `ExecutionEvidence`,
+`VerificationEvidence`). The risk rejection-rate denominator, prediction-pairing boundaries
+and phase-separated latency summary are implemented in `src/vlarobot/eval/decision_metrics.py`.
+The optional delegate-only probes in `src/vlarobot/eval/decision_adapters.py` are inert and
+must not be wired into production without the §12 approval. Exact contracts, node IDs and the
+read-only preflight commands are in `docs/WEEK3_DECISION_OBSERVABILITY.md` §§2–8; the frozen
+hash preflight is `tools/verify_week3_frozen_evidence.py`.
 
 ## 11. Phase-separated latency protocol
 

@@ -1949,3 +1949,27 @@ authorized diagnostic remains preserved and FAILED; Webots and the diagnostic we
   `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
   frozen-helper hash mismatch. No Webots execution, real IK, inference, training, actuation,
   scored evaluation, TEST/TRAIN access, push, merge or PR update occurred.
+
+## ADR-0053 — Bare Webots command fallback to WEBOTS_HOME (2026-11-18)
+
+**Status:** Accepted. **Scope:** resolver-only repair plus inert tests; no diagnostic rerun is
+performed by this decision.
+
+- **Root cause:** an explicit string such as the pinned diagnostic's `"webots"` was looked up only
+  through `PATH` and the working directory. A valid `WEBOTS_HOME` launcher was never considered, so
+  resolution failed before any process, probe or attestation could run.
+- **Resolution:** path-like explicit values are validated directly. Bare commands resolve through
+  `PATH` first, then `WEBOTS_HOME` and the working directory, with the platform executable name
+  added on Windows. Missing, non-executable and directory candidates fail closed, and multiple
+  executable filesystem candidates are rejected as ambiguous. The no-argument resolver keeps its
+  original `WEBOTS_HOME`-before-`PATH` precedence for existing callers.
+- **Attestation identity:** one resolved executable value is supplied to both the version probe and
+  the launch command. The inert launch test asserts that the probe argument, the `Popen` command and
+  the recorded attestation path are identical. No safety threshold, world, robot config, pinned
+  diagnostic config or frozen evidence was changed.
+- **Verification:** Ruff check and format check, `ty check src`, `compileall`, 39 focused inert
+  tests and the frozen-evidence checker pass. The full non-Webots suite is
+  `1 failed, 607 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch. No Webots process, actuation, motion, scored evaluation,
+  TEST/TRAIN access, push, merge or PR update occurred.

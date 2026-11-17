@@ -154,27 +154,105 @@ def webots_environment(webots: str, base: Mapping[str, str] | None = None) -> di
     return env
 
 
-def resolve_webots(webots: str | None = None) -> str:
-    """Locate the Webots executable: explicit argument, ``WEBOTS_HOME``, then ``PATH``."""
-    if webots:
-        found = shutil.which(webots)
-        if found is not None:
-            return found
-        candidate = Path(webots).expanduser().resolve()
-        if candidate.is_file():
-            return str(candidate)
-        raise FileNotFoundError(f"Webots executable {webots!r} was not found.")
+def _webots_platform_name(name: str) -> str:
+    return f"{name}.exe" if os.name == "nt" and not name.lower().endswith(".exe") else name
+
+
+def _is_executable_file(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def _default_webots_candidate() -> Path:
+    return Path(_webots_platform_name("webots"))
+
+
+def _bare_webots_candidates(requested: str) -> list[Path]:
+    """Filesystem candidates for a bare command, in ``WEBOTS_HOME`` then CWD order."""
+    names = [requested]
+    platform_name = _webots_platform_name(requested)
+    if platform_name not in names:
+        names.append(platform_name)
+    roots: list[Path] = []
     home = os.environ.get("WEBOTS_HOME")
-    if home:
-        executable = Path(home) / ("webots.exe" if os.name == "nt" else "webots")
-        if executable.is_file():
-            return str(executable)
+    if home and str(home).strip():
+        roots.append(Path(home).expanduser())
+    roots.append(Path.cwd())
+    candidates: list[Path] = []
+    for root in roots:
+        for name in names:
+            candidate = (root / name).resolve()
+            if candidate not in candidates:
+                candidates.append(candidate)
+    return candidates
+
+
+def _resolve_default_webots() -> str:
+    """Preserve the original no-argument precedence: ``WEBOTS_HOME`` before ``PATH``."""
+    home = os.environ.get("WEBOTS_HOME")
+    if home and str(home).strip():
+        candidate = (Path(home).expanduser() / _default_webots_candidate()).resolve()
+        if _is_executable_file(candidate):
+            return str(candidate)
+        if candidate.exists() or candidate.is_dir():
+            raise PermissionError(f"Webots executable is not executable: {candidate}")
     found = shutil.which("webots")
     if found is not None:
-        return found
+        resolved = Path(found).expanduser().resolve()
+        if _is_executable_file(resolved):
+            return str(resolved)
+        raise PermissionError(f"Webots executable is not executable: {resolved}")
     raise FileNotFoundError(
         "Webots was not found. Install it, or pass --webots or set WEBOTS_HOME."
     )
+
+
+def _resolve_explicit_webots(requested: str) -> str:
+    """Resolve an explicit path, PATH command, or bare command with a WEBOTS_HOME fallback."""
+    separators = {"/", os.sep}
+    if os.altsep:
+        separators.add(os.altsep)
+    if any(separator in requested for separator in separators):
+        candidate = Path(requested).expanduser().resolve()
+        if candidate.is_dir():
+            raise ValueError(f"Webots executable path is a directory: {candidate}")
+        if not candidate.exists():
+            raise FileNotFoundError(f"Webots executable {requested!r} was not found.")
+        if not _is_executable_file(candidate):
+            raise PermissionError(f"Webots executable is not executable: {candidate}")
+        return str(candidate)
+
+    found = shutil.which(requested)
+    if found is not None:
+        resolved = Path(found).expanduser().resolve()
+        if _is_executable_file(resolved):
+            return str(resolved)
+        raise PermissionError(f"Webots executable is not executable: {resolved}")
+
+    candidates = _bare_webots_candidates(requested)
+    executable = [candidate for candidate in candidates if _is_executable_file(candidate)]
+    if len(executable) > 1:
+        choices = ", ".join(str(candidate) for candidate in executable)
+        raise ValueError(f"ambiguous Webots executable candidates: {choices}")
+    if executable:
+        return str(executable[0])
+    existing = [candidate for candidate in candidates if candidate.exists() or candidate.is_dir()]
+    if existing:
+        choices = ", ".join(str(candidate) for candidate in existing)
+        raise PermissionError(f"Webots executable is not executable: {choices}")
+    raise FileNotFoundError(f"Webots executable {requested!r} was not found.")
+
+
+def resolve_webots(webots: str | None = None) -> str:
+    """Locate the Webots executable as one absolute path.
+
+    Explicit path-like values are checked directly; bare commands resolve through ``PATH`` first,
+    then through ``WEBOTS_HOME`` and the working directory. Multiple executable filesystem
+    candidates for the same bare name are ambiguous and fail closed. With no argument, the
+    original ``WEBOTS_HOME``-before-``PATH`` precedence is preserved.
+    """
+    if not webots:
+        return _resolve_default_webots()
+    return _resolve_explicit_webots(webots)
 
 
 def format_summary_table(outcomes: list[EpisodeOutcome]) -> str:

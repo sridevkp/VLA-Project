@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -81,29 +82,160 @@ def test_webots_environment_preserves_existing_webots_home() -> None:
     assert env["WEBOTS_HOME"] == "/custom"
 
 
+def _write_executable(path: Path) -> Path:
+    path.write_bytes(b"#!/bin/sh\n")
+    path.chmod(0o755)
+    return path
+
+
 def test_resolve_webots_accepts_an_explicit_executable_path(tmp_path: Path) -> None:
-    binary = tmp_path / "webots-custom"
-    binary.write_bytes(b"#!/bin/sh\n")
-    binary.chmod(0o755)
+    binary = _write_executable(tmp_path / "webots-custom")
     assert resolve_webots(str(binary)) == str(binary)
+
+
+def test_resolve_webots_uses_path_for_bare_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    binary = _write_executable(tmp_path / "webots")
+    monkeypatch.delenv("WEBOTS_HOME", raising=False)
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(episode_runner.shutil, "which", lambda command: str(binary))
+
+    assert resolve_webots("webots") == str(binary.resolve())
+
+
+def test_resolve_webots_bare_command_falls_back_to_webots_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "webots-home"
+    home.mkdir()
+    binary = _write_executable(home / "webots")
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setenv("WEBOTS_HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(episode_runner.shutil, "which", lambda command: None)
+
+    assert resolve_webots("webots") == str(binary.resolve())
 
 
 def test_resolve_webots_uses_webots_home_first(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "webots-home"
     home.mkdir()
-    binary = home / "webots"
-    binary.write_bytes(b"#!/bin/sh\n")
-    binary.chmod(0o755)
+    binary = _write_executable(home / "webots")
     monkeypatch.setenv("WEBOTS_HOME", str(home))
     monkeypatch.delenv("VLAROBOT_TEST_PATH", raising=False)
     assert resolve_webots(None) == str(binary)
 
 
-def test_resolve_webots_raises_when_missing() -> None:
+def test_resolve_webots_rejects_invalid_explicit_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    directory = tmp_path / "webots-directory"
+    directory.mkdir()
+    non_executable = tmp_path / "webots-not-executable"
+    non_executable.write_bytes(b"not executable\n")
+
+    with pytest.raises(FileNotFoundError):
+        resolve_webots(str(tmp_path / "definitely-not-here"))
+    with pytest.raises(ValueError, match="is a directory"):
+        resolve_webots(str(directory))
+    monkeypatch.setattr(episode_runner, "_is_executable_file", lambda path: False)
+    with pytest.raises(PermissionError, match="not executable"):
+        resolve_webots(str(non_executable))
+
+
+def test_resolve_webots_rejects_ambiguous_bare_candidates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "webots-home"
+    home.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    _write_executable(home / "webots")
+    _write_executable(work / "webots")
+    monkeypatch.setenv("WEBOTS_HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(episode_runner.shutil, "which", lambda command: None)
+
+    with pytest.raises(ValueError, match="ambiguous Webots executable candidates"):
+        resolve_webots("webots")
+
+
+def test_resolve_webots_raises_when_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.delenv("WEBOTS_HOME", raising=False)
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(episode_runner.shutil, "which", lambda command: None)
+
     with pytest.raises(FileNotFoundError):
         resolve_webots(str(WORLD / "definitely-not-here"))
     with pytest.raises(FileNotFoundError, match="Webots was not found"):
         resolve_webots(None)
+    with pytest.raises(FileNotFoundError, match="was not found"):
+        resolve_webots("webots")
+
+
+def test_launch_attestation_uses_identical_probe_and_launch_executable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    resolved = str((tmp_path / "webots-launcher").resolve())
+    attestation = WebotsRuntimeAttestation(
+        executable_path=resolved,
+        executable_sha256="a" * 64,
+        reported_version="R2025a",
+        launch_command_executable=resolved,
+        version_probe_command=(resolved, "--version"),
+        version_probe_returncode=0,
+        evidence_source="launch_time_executable_version_probe",
+    )
+    probe_calls: list[str] = []
+    popen_calls: list[list[str]] = []
+    attached_processes: list[object] = []
+    process = SimpleNamespace(pid=4242, poll=lambda: 0, returncode=0)
+
+    monkeypatch.setattr(episode_runner, "resolve_webots", lambda webots=None: resolved)
+    monkeypatch.setattr(episode_runner, "_reserve_free_port", lambda: 5555)
+    monkeypatch.setattr(episode_runner, "wait_for_simulator", lambda *args: object())
+    monkeypatch.setattr(episode_runner, "_stop_client", lambda client: None)
+
+    def fake_attest(executable: str, env: object, **kwargs: object) -> WebotsRuntimeAttestation:
+        probe_calls.append(executable)
+        return attestation
+
+    def fake_popen(command: list[str], env: object, log_file: object) -> object:
+        popen_calls.append(list(command))
+        return process
+
+    def fake_attach(
+        current: WebotsRuntimeAttestation, attached: object
+    ) -> WebotsRuntimeAttestation:
+        attached_processes.append(attached)
+        return replace(current, process_pid=4242, process_identity_verified=True)
+
+    monkeypatch.setattr(episode_runner, "attest_webots_executable", fake_attest)
+    monkeypatch.setattr(episode_runner, "_popen", fake_popen)
+    monkeypatch.setattr(episode_runner, "attach_process_identity", fake_attach)
+
+    with episode_runner.launch_webots_session(
+        webots="webots",
+        world=WORLD,
+        trace_dir=tmp_path,
+        runtime_attestation_required=True,
+        grace_s=0.0,
+    ) as session:
+        assert session.runtime_attestation["executable_path"] == resolved
+        assert session.runtime_attestation["launch_command_executable"] == resolved
+        assert session.runtime_attestation["version_probe_command"][0] == resolved
+
+    assert probe_calls == [resolved]
+    assert popen_calls[0][0] == resolved
+    assert attached_processes == [process]
 
 
 def test_format_summary_table_renders_rows_and_summary(tmp_path: Path) -> None:

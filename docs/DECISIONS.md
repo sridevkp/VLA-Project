@@ -1627,3 +1627,21 @@ exploratory tolerance is enabled. Static collision-source enumeration is not swe
 certification. Live A-D2 remains NO-GO. See `AD2_CPU_INFRASTRUCTURE_REPORT.md` for fixture
 and hash evidence and remaining approval boundaries. No change to ADR-0029, public core
 interfaces, frozen0/24 result, FAILED gate or scripted-primary decision.
+
+## Week 3 planning-latency evidence correction addendum (2026-11-17) — append-only
+
+This addendum corrects the stale latency interpretation in ADR-0037 without rewriting that
+ADR or changing ADR-0029. The authoritative recorded evidence is
+`docs/evidence/planning-optimization-final.json`, an identical-input profile of the nominal
+analytic kernel at K=32 candidates, H=50 prediction steps, and 1,600 control steps per
+batch. It reports optimized p50 `0.4677 s`, optimized p95 `0.4803 s`, cold batch `0.4746 s`,
+and pre-optimization p50 `2.0996 s`, with zero state difference, identical vetoes, unchanged
+safety/trust thresholds, no model inference, no TEST access, and the uncertified full-arm
+sweep still vetoed.
+
+This evidence is explicitly **nominal-kernel-only**. Full-system latency, VLA-proposer
+latency, full-arm-sweep latency, and scored per-decision latency remain **UNVERIFIED**.
+The below-1-second milestone is not claimed as met. No candidate count, horizon, safety
+threshold, veto, seed, split, frozen gate, or experiment design was changed. No physical,
+inferred, training, IK, Webots, actuation, or scored evaluation was executed for this
+addendum.

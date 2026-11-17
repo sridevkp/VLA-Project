@@ -1,5 +1,10 @@
 # Project progress
 
+> 2026-11-17 isolated Week 3 update: supplemental deterministic trajectory-metric helpers,
+> the RiskGate validation plan, and evidence-scope corrections are recorded in
+> `docs/REPORT_CONFORMANCE.md` and `docs/WEEK3_RISKGATE_VALIDATION_PLAN.md`. No Week 3
+> evaluation was run; frozen campaign facts and A-D2 remain unchanged.
+
 Current milestone: **M1 — Port controller behind interfaces**
 
 Last updated: **2026-11-08**. M0 is committed. M1-01 through M1-05 are implemented. The approved

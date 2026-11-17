@@ -17,6 +17,13 @@ Status labels:
   only be filled from a hash-pinned artifact under `runs/` (or its `docs/evidence/`
   mirror) once the corresponding authorized run has happened.
 
+Conformance overlay (from `docs/REPORT_CONFORMANCE.md`): use one primary status per
+figure — **Implemented and verified**, **Implemented but not physically validated**,
+**Missing**, **Blocked**, or **Explicitly waived by approved decision** — plus an evidence
+qualifier. In particular, inert unit tests and the K=32/H=50 nominal-kernel latency profile
+are not scored per-decision traces. Figures 4.6 and 4.7 therefore remain
+`PENDING-EVIDENCE` for campaign-backed candidate/risk visualization.
+
 No figure in this tree may be regenerated with invented data. Every replacement image or
 plot must be derived from a recorded artifact whose hash is pinned, and the derivation
 noted next to the figure.

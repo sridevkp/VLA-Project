@@ -52,13 +52,29 @@ Raw source hashes, quantities, MAE, orientation RMSE and counts are in `docs/evi
 
 ## Planning latency
 
-Two local registered probes show 32×50 FK/tracking steps at p50 0.57–0.83 s; serial full-pose
-IK projects to 21–38 s for 1,600 solves. This is a cost projection, not measured full planning.
-The bounded Jacobian path with full state copying completes 32×50 small-delta trajectories
-at p50 3.895 s / p95 4.162 s (zero incomplete among 128 probes), excluding inference and
-full-arm geometry. It is still too slow for the intended 1–5 Hz planner and does NOT satisfy
-the <1 s/32-candidate milestone. Next justified optimization is batching FK/state propagation;
-K, horizon, safety thresholds and experiment design have not been reduced to mask latency.
+Earlier local probes showed 32×50 FK/tracking steps at p50 0.57–0.83 s, a serial full-pose
+IK projection of 21–38 s for 1,600 solves, and a bounded Jacobian path with full state
+copying at p50 3.895 s / p95 4.162 s. Those figures were cost projections or preliminary
+probes, not a valid full-system latency result.
+
+**Week 3 evidence correction (2026-11-17).** The authoritative recorded profile is now
+`docs/evidence/planning-optimization-final.json` (hash-pinned, identical inputs):
+K=32, H=50 (1,600 control steps), optimized nominal analytic-kernel p50 `0.4677 s`,
+p95 `0.4803 s`, cold batch `0.4746 s`, and pre-optimization p50 `2.0996 s`. The evidence
+records `max_absolute_state_difference = 0.0`, identical vetoes, prepared-FK difference
+`0.0`, unchanged safety/trust thresholds, `includes_model_inference = false`,
+`test_accessed = false`, and `uncertified_full_arm_sweep_remains_vetoed = true`.
+
+The profiled inclusive contributors were, before optimization, IK `2.011 s`, state deep copy
+`1.271 s`, FK `0.908 s`, and Jacobian `0.154 s`; after optimization, IK `0.646 s`, FK
+`0.195 s`, and world/robot copy `0.016 s`/`0.013 s`. These inclusive profiler entries
+overlap and are not additive.
+
+This is **nominal-kernel-only** evidence. Full-system latency, VLA-proposer latency,
+full-arm sweep latency, and scored per-decision latency remain **UNVERIFIED**; the
+below-1-second milestone is not claimed as met. No K, horizon, safety threshold, veto,
+or experiment design was reduced to mask latency. The phase-separated measurement
+protocol is in `docs/WEEK3_RISKGATE_VALIDATION_PLAN.md`.
 
 ## Verification and remaining evidence
 

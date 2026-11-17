@@ -1,7 +1,11 @@
 # MATH.md — report equations mapped to implementation (DRAFT)
 
-Status labels follow ADR-0029: **MEASURED** (recorded evidence exists), **INFERRED**
-(structural correspondence argued from code), **UNVERIFIED** (no evidence yet).
+Primary status classes: **Implemented and verified** (code plus hash-pinned recorded
+evidence or inert verification), **Implemented but not physically validated** (code/inert
+tests only), **Missing**, **Blocked**, and **Explicitly waived by approved decision**.
+ADR-0029 evidence qualifiers remain: **MEASURED** (recorded evidence exists), **INFERRED**
+(structural correspondence argued from code), **UNVERIFIED** (no evidence yet), and
+**PENDING-AUTHORIZATION**.
 
 The controlling source is the confirmed submitted Phase I report
 ("WorldMind: World Model-Based Robot Simulation", SHA-256
@@ -32,6 +36,26 @@ The controlling source is the confirmed submitted Phase I report
 `configs/world_model.yaml` is packaged but has **no code consumer yet**; it is the intended
 home for the Eq 3.8 weights once they are chosen on VALIDATION only (ADR-0029 week 3).
 No weights are invented or claimed in this draft.
+
+## Supplemental trajectory definitions (not report equations)
+
+These deterministic derivations supplement, but do not replace or redefine, Table 5.1.
+They are implemented in `src/vlarobot/eval/derived_metrics.py` and add no public metric
+field to `summary.json` or any other frozen artifact.
+
+- End-effector path length in the robot base frame:
+  `L_EE = Σ_{i=1}^{n−1} ||p_ee[i] − p_ee[i−1]||₂`, where `p_ee` is the recorded `ee_xyz`
+  stream in metres. `ee_xyz` is written from `RobotState.ee_pose.position`; the NPZ stores
+  no frame or unit metadata, so callers must explicitly confirm `frame="base"` and
+  `units="m"`. Empty input is rejected as undefined; one sample gives `0.0`; non-finite
+  coordinates are rejected.
+- Simulation duration: `T_sim = t[n−1] − t[0]` in seconds, requiring finite, strictly
+  increasing timestamps. Empty input is rejected as undefined; one sample gives `0.0`.
+  `T_sim` is not wall-clock execution time and the two are never interchanged.
+
+`Jg`, `Jl`, `Jr`, `Ju`, `wg`, `wl`, `wr`, and `wu` above remain the report's equation.
+No new component formula, weight, threshold, probability, or experimental result is
+introduced by these supplemental definitions.
 
 ## Discrepancy: equations 3.9–3.12, 4.1, 5.1
 

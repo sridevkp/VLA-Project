@@ -1,0 +1,2620 @@
+{
+  "schema_version": 1,
+  "source_commit": "9aeb6778038cfcb7e86c6e5569d4f13913268d53",
+  "method": "static source and import inspection; tests not executed for classification",
+  "tests": [
+    {
+      "nodeid": "tests/test_account_migration.py::test_new_shortcut_targets_original_owner_and_wrong_auth_stops",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_account_migration.py::test_mount_api_and_immutable_sha_must_all_match",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_account_migration.py::test_verified_processor_relocation_changes_only_runtime_path",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_account_migration.py::test_ambiguous_or_restricted_shared_files_stop_before_staging",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_account_migration_notebook.py::test_notebook_cells_match_document_and_training_is_comment_only",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad1_numerical.py::test_task_null_split_reconstructs_and_is_invariant_to_nonsingular_row_units",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad1_numerical.py::test_rank_zero_is_reported_without_division_or_invented_rank",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad1_numerical.py::test_registered_geometric_jacobian_revolute_fixture",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad1_numerical.py::test_new_evidence_never_overwrites_and_sha_rejects_symlink",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_explicit_criteria_and_reference_pairwise",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_missing_protocol_or_criteria_fail_closed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_live_missing_nonfinite_not_zero",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_omission_requires_named_version_and_live_observation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_quaternion_sign_invariance_and_bad_norm",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_configuration_schema_and_units_are_exact",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_snapshot_is_deeply_immutable_and_has_no_callbacks",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_three_ordered_isolated_fixture_ticks",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_ambiguous_ack_is_not_retried",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_rejection_never_steps_or_replaces",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_tick_and_time_mismatch_stop",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_reset_mismatch_before_any_dispatch",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_conflict_no_fourth_or_live_adapter",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_identity_reuse_preserves_partial_and_cleans",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_unowned_conflicting_process_not_cleaned",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_infrastructure_failure_preserved",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_pinned_loader_immutable_and_c_exact",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_sealed_source_tampering_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_semantic_checks_independent_of_resealed_file",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_path_escape_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_real_safety_monitor_rejects_synthetic_joint_command_without_backend",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_geometry_inventory_finds_nested_table_and_never_certifies",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_infrastructure_import_surface_has_no_live_or_solver_dependency",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_bad_receipt_identity_stops_without_retry",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_after_nonfinite_state_is_a_failure",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_summary_write_failure_retains_acknowledged_ledger",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_duplicate_json_and_symlink_components_rejected_without_creating_links",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_units_and_numeric_bounds_individually_validated",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_exact_a_b_identity_checked_even_when_both_case_copies_agree",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_original_provenance_cannot_omit_inputs",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_unaccounted_preparation_tick_stops_before_dispatch",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_protocol_cannot_hold_mutable_criteria",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_ad2_infrastructure.py::test_verified_json_checks_the_bytes_it_actually_parses",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_analytic_sweep_catches_thin_obstacle_between_safe_endpoints",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_segment_box_clearance_matches_dense_numerical_reference",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_world_snapshots_do_not_alias_and_correction_reports_real_errors",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_risk_veto_missing_nan_and_failures_precede_arbitrary_utility",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_no_safe_recovery_and_verification_retry_are_bounded",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_clearance_rejects_invalid_geometry",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_analytic_risk.py::test_world_correction_rejects_ambiguous_object_identities",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_candidate_audit.py::test_diagnostic_feedback_error_and_success_exclusion",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_cli_repeat_check.py::test_identical_fingerprints_pass",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_cli_repeat_check.py::test_sub_tolerance_measurement_noise_passes_but_is_reported",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_cli_repeat_check.py::test_measured_change_above_tolerance_fails",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_cli_repeat_check.py::test_commanded_motor_change_fails_even_with_loose_tolerance",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_cli_repeat_check.py::test_base_velocity_is_transient_and_does_not_fail",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_observation_round_trip_preserves_dataclasses_and_array_data",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_action_round_trip_preserves_nested_tuple_types",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_protocol_version_mismatch_is_rejected_on_encode_and_decode",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_boolean_protocol_version_and_integer_mapping_keys_are_rejected",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_wire_rejects_malformed_envelopes",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_core_wire.py::test_wire_rejects_object_arrays",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_resumable_upload_server_checksum_or_actual_api_readback",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_mismatches_and_incomplete_uploads_never_issue_success",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_canary_forces_readback_even_with_server_sha",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_timed_out_chunk_probes_server_before_continuing",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_remote_receipt_and_fresh_canary_readback_are_required",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_expired_or_nonprivate_token_fails_before_any_network",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_canary_version_advance_requires_stable_full_content_revalidation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_kernel_setup_creates_only_a_new_second_owned_root_folder",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff.py::test_reconnect_preserves_existing_canary_and_never_creates_remote_objects",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff_notebook.py::test_current_session_cells_are_identical_and_training_is_disabled",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff_notebook.py::test_packaged_helpers_and_notebook_sha_match_delivery",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_receiver_flushes_readbacks_and_preserves_duplicate_evidence",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_failed_receive_keeps_partial_but_never_issues_receipt",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_receiver_rejects_traversal",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_real_process_handoff_and_missing_receipt_veto",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_canary_is_bound_to_endpoint_config_and_hash",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_sender_pins_ssh_host_key_verification",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_archive_is_verified_and_never_overwritten",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_final_hook_prioritizes_portable_model_and_retries_without_updates",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_all_transfer_failures_stop_callback_preserving_local_state",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_durable_recovery.py::test_drive_diagnostics_is_read_only_and_handles_denied_quota",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_env.py::test_configure_webots_environment_sets_home_and_api_paths",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_env.py::test_configure_webots_environment_preserves_existing_pythonpath",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_env.py::test_configure_webots_environment_requires_webots_home",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_build_webots_command_keeps_rendering_by_default",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_build_webots_command_headless_adds_no_rendering",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_webots_environment_sets_missing_webots_home",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_webots_environment_preserves_existing_webots_home",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_resolve_webots_accepts_an_explicit_executable_path",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_resolve_webots_uses_webots_home_first",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_resolve_webots_raises_when_missing",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_format_summary_table_renders_rows_and_summary",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_outcome_to_dict_serializes_paths",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_normalized_outcome_drops_index_paths_and_timings",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_normalized_trace_rows_strips_volatile_keys",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_trace_digest_is_none_for_missing_file_and_stable_for_content",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_trace_numeric_comparison_reports_max_deltas",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_determinism_report_matches_identical_repeats",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_determinism_report_flags_mismatched_outcomes",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_format_determinism_report_lists_each_pair",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner.py::test_determinism_report_handles_missing_trace_without_crash",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner_failures.py::test_run_episodes_fresh_world_records_runner_exception",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_episode_runner_failures.py::test_run_episodes_fresh_world_records_failed_result",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_wilson_interval_known_values_and_validation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_mean_std_and_continuous_error_metrics",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_brier_is_for_probabilities_and_stays_separate_from_rmse",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_mcnemar_exact_known_values",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_tilt_angle_deg_known_values",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_collision_proxy_flags_displacement_and_tilt_separately",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_min_fk_clearance_is_a_standalone_measurement",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_paired_comparison_preserves_episode_pairs_and_clusters_by_scene",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_summarize_success_uses_wilson_not_a_bare_rate",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_scene_id_strips_the_seed_suffix",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_compute_episode_metrics_keeps_proxy_contacts_and_fk_separate",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_compute_episode_metrics_requires_a_recorded_outcome",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_metrics.py::test_metrics_to_row_and_writers_roundtrip",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_roundtrip_writes_all_streams",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_captures_ground_truth_rows_and_pads_missing_with_nan",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_captures_frames_at_the_configured_rate",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_record_frames_flag_suppresses_the_frames_dir",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_is_deterministic_across_identical_runs",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recording_backend_is_policy_transparent",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_captures_actual_contact_nodes_separately",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_recorder.py::test_recorder_fails_loud_when_misused",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_runner.py::test_canonical_pipeline_and_fail_closed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_runner.py::test_build_episode_plan_seed_major_and_limits",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_runner.py::test_eval_runner_is_reproducible_on_fake_backend",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_runner.py::test_eval_cli_rejects_unknown_pipeline_and_test_split",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_runner.py::test_eval_cli_fake_smoke_writes_report",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_settings.py::test_repo_eval_yaml_is_the_frozen_campaign",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_settings.py::test_week2_gate_uses_literal_min_interpretation",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_settings.py::test_loader_rejects_drifted_sizes",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_eval_settings.py::test_loader_rejects_comparator_change",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_reset_is_deterministic_for_same_seed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_steps_and_returns_independent_observations",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_rejects_unsafe_actions_before_state_changes",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_can_world_xyz_matches_scenario_config",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_applies_safe_commands",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_rejects_invalid_step_and_stopped_operations",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_fake_backend.py::test_fake_backend_export_kinematics_is_chunked_and_separate_from_reset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_geometry_inventory.py::test_named_solids_and_def_use_are_not_silently_certified",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_geometry_inventory.py::test_urdf_fixed_joints_remain_data_not_automatic_self_collision_exclusions",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_geometry_probe.py::test_probe_serializes_numeric_geometry_without_motor_actions",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_geometry_probe.py::test_probe_does_not_call_empty_traversal_complete",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_open_loop_fails_with_50mm_wrong_tool_axis_fk_bias",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_servo_converges_with_50mm_wrong_tool_axis_fk_bias",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_descend_refuses_when_probe_offset_is_none",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_descend_stops_at_probe_lid_height",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_close_guard_passes_when_aligned",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_close_guard_realigns_when_misaligned",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_close_guard_fails_when_residual_exceeds_tol",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_gt_pad_servo.py::test_gt_pad_close_guard_fails_when_pad_midpoint_unavailable",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematic_surrogate.py::test_joint_step_is_velocity_bounded_causal_and_nonmutating",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_feasible_pose_plan_is_deterministic_bounded_and_grouped",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_submove_bound_and_plan_and_budget",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_pose_limits_falls_back_without_snapshot",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_sample_is_safe_requires_complete_arm_poses_and_checks_table",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_sample_is_safe_allows_unreadable_fingers_but_not_unreadable_arm",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_drive_pose_collects_a_settled_safe_sample",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_drive_pose_reports_rejections_and_unsettled_poses",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_kinematics_validation.py::test_drive_pose_aborts_a_pose_that_fails_the_table_pre_check",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_local_import_gate.py::test_frozen_contract_and_wrong_camera_fail_closed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_move_linear_original_equivalence.py::test_off_path_bounded_reference_matches_waypoints_seeds_solutions_1e9",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_move_linear_original_equivalence.py::test_off_path_literal_original_matches_waypoints_and_tip_criterion",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_move_linear_original_equivalence.py::test_off_path_seed0_is_within_final_settle_tolerance_of_measurement",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_move_linear_original_equivalence.py::test_reference_move_linear_solver_arguments_per_mode",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_package.py::test_package_imports",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_planning_optimization.py::test_frozen_values_share_only_immutable_state_and_diagnostics_are_copied",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_planning_optimization.py::test_quaternion_optimization_matches_reference_and_norm_acceptance",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_planning_optimization.py::test_prepared_fk_rejects_fixed_joint_changes_and_retains_exact_dot_order",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_planning_optimization.py::test_all_five_arm_behaviors_are_distinct_with_same_live_safety_contract",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_prepare_original_comparison.py::test_fixture_v2_prepares_clean_1b2e4da_archive",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_receiver_dispatch.py::test_exact_operations_allowed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_receiver_dispatch.py::test_shell_subsystems_and_path_changes_denied",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_reject_three_stale_complete_markers_and_select_17000",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_all_manifest_files_hashed_including_nonstandard_entries",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_export_missing_model_fails_even_when_manifest_omits_it",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_export_wrapper_readback_rejects_post_copy_losses",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_original_directory_and_overlapping_recovery_are_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_separate_recovery_directory_is_allowed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_real_colab_project_shortcut_layout_resolved_once",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_checkpoint_file_symlinks_rejected_even_with_same_hash",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_descendant_directory_symlinks_never_followed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_checkpoint_root_symlink_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_manifest_traversal_absolute_and_empty_paths_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_shortcut_must_match_confirmed_target_and_cannot_redirect_pinned_paths",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_isolation_uses_canonical_paths_for_alias_overlap",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_recovery_guards.py::test_resolved_path_escape_is_rejected_even_after_component_checks",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_report_contract.py::test_missing_definitions_fail_explicitly",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_report_contract.py::test_fixture_definition_hash_and_exact_names_are_required",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_diagnostics.py::test_reset_behavior_comparison_uses_one_millimeter_and_milliradian_tolerance",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_diagnostics.py::test_reset_image_metrics_return_perfect_similarity_for_identical_rgb",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_diagnostics.py::test_reset_image_metrics_detect_changed_pixels",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_yaml_backed_settings_preserve_original_controller_defaults",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_missing_and_unknown_yaml_keys",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_unknown_reset_mode",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_accept_reload_as_a_deferred_lifecycle_option",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_non_boolean_pregrasp_realign",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_non_boolean_closed_loop_waypoints",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_non_positive_tool_geometry",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_non_positive_close_align_tol",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_reject_unknown_hold_base",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_robot_config.py::test_robot_settings_require_fail_tier_above_warn_tier",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_observed_attachment_lift_release_gravity_and_nonalias",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_close_command_never_fabricates_grasp_and_unknown_sweep_fails_closed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_ik_joint_veto_stops_before_unsafe_state_and_calibration_is_required",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_base_frame_rotation_and_quantity_separated_errors",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_frozen_arm_switches_have_intended_ablation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_bounded_reobserve_then_scripted_alternate_and_abort",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_sample_seeds_are_explicit_repeatable_and_commands_not_perturbed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_execution_veto_precedes_backend_apply_for_every_source",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_five_arm_plans_share_pairs_and_test_guard_precedes_generation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_arm_swept_volume_certificate_and_unknown_coverage",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_common_recorder_all_five_arms_are_explicitly_simulated",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_linearized_ik_exact_residual_guard_and_reset_independence",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_recorded_conditional_attachment_uses_flat_initial_oracle_not_future_states",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_rollout_comparison.py::test_candidate_generator_protocol_and_observed_placement_retry",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_joint_position_velocity_and_unknown_joint_are_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_end_effector_pose_and_delta_are_checked",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_base_and_gripper_commands_reject_malformed_values",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_malformed_runtime_action_values_are_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_invalid_safety_limit_configuration_is_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_corrected_pick_place_waypoints_fit_original_envelope",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_old_base_frame_target_is_rejected_for_each_profile",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_safety_profiles_keep_strict_box_inside_original_envelope",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_safety_monitor.py::test_workspace_rejection_is_logged",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_mini_grid10_is_nine_grid_cells_plus_one_yaw_scene",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_scenario_spec_wire_roundtrip_preserves_offset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_compose_can_reset_pose_shifts_translation_and_keeps_rotation_without_yaw",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_compose_can_reset_pose_applies_yaw_about_world_z",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_compose_can_reset_pose_handles_pi_rotation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_fake_backend_stores_scenario_on_reset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_scenario_for_index_cycles_configured_set_and_defaults_otherwise",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_policy_passes_scenario_to_backend_reset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_run_episodes_cli_rejects_unknown_scenario",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_generate_scenes_counts_families_and_test_split_guard",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_generate_scenes_is_deterministic_per_split_and_seed",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_generate_scenes_family_geometry_respects_pre_registered_ranges",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_cluttered_obstacles_never_land_on_the_place_target",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_scenario_library_is_pre_registered_and_matches_factory_world",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_scenario_library_loader_rejects_unknown_keys",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scenarios.py::test_generated_scenario_objects_survive_the_wire_roundtrip",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_policy_opens_gripper_at_init_before_descend",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_policy_fails_init_when_gripper_cannot_open",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_pregrasp_realign_corrects_tilt_induced_offset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_pregrasp_realign_is_skipped_without_base_tilt",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_pregrasp_realign_flag_is_recorded_and_can_be_disabled",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_close_guard_redescends_once_when_can_is_nudged",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_close_guard_fails_when_can_stays_dragged",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_success_criteria_are_reported_separately",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_can_success_criteria_require_every_criterion",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_scripted_can_policy_allows_transit_ik_with_specific_tolerance",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_watched_pregrasp_stop_leaves_later_states_unexecuted",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_trace_records_supervisor_arm_links_and_table_clearance",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_full_ik_vector_uses_configured_torso_height",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_kinematics_seed_reproduces_random_restart_sequence",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_fixture_seed_zero_matches_original_restart_stream_and_torso",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_unpaced_rate_limited_joint_waypoints_eventually_hit_velocity_rejection",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_paced_policy_settles_prefix_and_seeds_descend_from_pregrasp",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_joint_stall_watchdog_fails_the_active_state",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_base_invariant_fails_above_the_hard_limit_with_contact_context",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_base_drift_between_tiers_warns_once_per_state_without_failing",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_base_drift_below_the_warning_tier_is_silent",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_base_drift_rate_limit_fails_a_fast_shove",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_repeat_episodes_have_identical_reset_fingerprints_and_torso",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_trace_records_reset_fingerprint_and_controller_reset_state",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_opt_in_timings_record_ik_transport_and_trace_components",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_timings_are_disabled_by_default",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_failed_boundary_uses_last_observation_not_reset_observation",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_kinematics_prefers_nearest_feasible_joint_solution",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_joint_interpolation_respects_configured_maximum_step",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_safe_via_is_selected_by_fk_and_both_joint_segments_clear_table",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_ik_tolerance_is_relaxed_only_for_non_grasp_states",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_world_to_base_matches_frames_transform",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_approved_world_target_and_linear_path_ik_diagnostics",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_trust_region_keeps_scripted_cartesian_waypoints_continuous",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_trust_region_rejects_reachable_target_that_requires_branch_jump",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_closed_loop_descend_tracks_rocking_base",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_gt_telemetry_records_fingers_and_flags_tool_offset_error",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_gt_telemetry_below_tolerance_has_no_calibration_proposal",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_scripted_can_policy.py::test_gt_telemetry_fires_at_all_three_full_flow_boundaries",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_loader_round_trip_is_exact_at_the_export_posture",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_fk_at_perturbed_absolute_angles_matches_hand_built_chain",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_base_tilt_invariance_of_the_recovered_chain",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_tilted_fk_output_is_identical_in_the_robot_frame",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_loader_rejects_missing_axis",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_loader_rejects_torso_reference_mismatch",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_loader_rejects_probe_residual_beyond_cap",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_loader_flags_tool_fallback_when_fingers_incomplete",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_validate_torso_flags_drift",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_json_round_trip_and_chain_shape",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_wrong_ancestor_parent_is_rejected",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_sim_kinematics_loader.py::test_failed_finalize_removes_temp_and_leaves_preexisting_snapshot_unloadable",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_snapshot_captures_all_joints_and_endpoints",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_snapshot_derives_axes_from_the_probe",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_probe_moves_within_tolerance_and_restores",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_probe_disabled_reports_unreadable_without_motion",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_readable_axis_is_cross_checked_only",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_capture_snapshot_feeds_the_loader",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_telemetry_method_on_bare_backend_maps_joint_order",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_supervisor_kinematics.py::test_missing_joint_node_is_reported_unreadable",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_ignores_joint_value_and_interpolation_differences",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_boundary_ee_targets",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_achieved_boundary_ee_positions",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_cartesian_targets",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_exact_state_sequence",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_allows_brain_trace_to_continue_after_compared_prefix",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_reports_matching_pregrasp_realign_flags",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_rejects_mixed_pregrasp_realign_flags",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_allows_missing_pregrasp_realign_flag",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_enforces_existing_tilt_limit",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_requires_tilt_diagnostics",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_joint_diagnostics_reports_steps_margin_and_wrist_excursion",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_joint_diagnostics_prefers_explicit_command_target_over_measured_alias",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_init_torso_and_head_posture",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_base_drift_by_state_reports_planar_and_yaw_drift",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_base_drift_by_state_reports_base_tilt",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_base_drift_by_state_reads_fixture_orientation_matrices",
+      "classification": "SAFE",
+      "evidence": [
+        "explicit safe-CI allowlist; inspected test and transitive imports/fixtures; no prohibited execution path"
+      ]
+    },
+    {
+      "nodeid": "tests/test_validation_audit.py::test_incomplete_validation_never_produces_final_rate",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_validation_audit.py::test_measured_can_pose_and_joint_return_must_agree_with_declared_outcome",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_baseline_uses_nearest_limit_for_out_of_range_joint_field",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_contact_tracking_reports_external_node_and_world_contact_points",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_twice_reacquires_can_and_restores_identical_episode_state",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_applies_scenario_can_xy_yaw_offset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_uses_the_pose_derived_child_solid",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_returns_none_and_warns_once_for_missing_endpoint",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_returns_none_and_caches_a_non_pose_position_failure",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_returns_none_for_unknown_joint",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_orientation_returns_three_rows_from_the_child_solid",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_orientation_returns_none_and_warns_once_for_missing_endpoint",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_orientation_caches_a_lookup_failure",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_joint_endpoint_orientation_rejects_non_finite_values",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_diagnostics_report_zero_error_for_a_stable_offset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_diagnostics_flag_a_five_centimetre_offset_change",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_diagnostics_mark_unavailable_points_as_none",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_ignores_a_constant_endpoint_offset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_rotates_the_reset_offset_with_the_wrist",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_fk_ground_truth_flags_an_offset_that_does_not_rotate_with_the_wrist",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_fingerprint_is_identical_for_two_same_seed_resets",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_hold_base_none_leaves_the_wheel_proto_hold_untouched",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_hold_base_wheels_zero_velocity_switches_to_velocity_control",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_post_reset_settle_persistent_jitter_is_recorded_not_fatal",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_post_reset_settle_below_thresholds_settles_normally",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_with_settle_gate_survives_persistent_jitter",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_places_scenario_objects_and_restores_them_on_default_reset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_backend_reset.py::test_reset_reports_unknown_object_def_and_malformed_entries",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_smoke.py::test_smoke_reads_camera_after_ten_steps",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_smoke.py::test_smoke_reports_missing_camera",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_webots_smoke.py::test_smoke_reports_early_simulation_stop",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_backend_client_and_server_round_trip",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_client_timings_are_off_by_default",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_client_timings_counters_are_accumulated_when_opted_in",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_ping_includes_session_identity_and_export_kinematics_chunks",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_client_lazy_pirate_recovers_after_socket_reset",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_zmq_backend.py::test_zmq_client_rejects_session_identity_mismatch",
+      "classification": "UNKNOWN",
+      "evidence": [
+        "excluded from ordinary CI pending complete safety review"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_cartesian_targets[DESCEND-offset0]",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_trace_compare.py::test_compare_checks_cartesian_targets[LIFT-offset1]",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_controller_entrypoint_source.py::test_controller_has_one_main_guard_and_one_dispatch",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_repro_safe.py::test_missing_joint_keys_are_explicit_mismatch",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_repro_safe.py::test_quaternion_sign_equivalence",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_repro_safe.py::test_snapshot_without_ground_truth_has_no_object_poses",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    },
+    {
+      "nodeid": "tests/test_reset_repro_safe.py::test_object_pose_shape_is_checked",
+      "classification": "SAFE",
+      "evidence": [
+        "new inert regression test; AST/fake-only path reviewed"
+      ]
+    }
+  ],
+  "safe_allowlist_nodeids": [
+    "tests/test_core_wire.py::test_observation_round_trip_preserves_dataclasses_and_array_data",
+    "tests/test_core_wire.py::test_action_round_trip_preserves_nested_tuple_types",
+    "tests/test_core_wire.py::test_protocol_version_mismatch_is_rejected_on_encode_and_decode",
+    "tests/test_core_wire.py::test_boolean_protocol_version_and_integer_mapping_keys_are_rejected",
+    "tests/test_core_wire.py::test_wire_rejects_malformed_envelopes",
+    "tests/test_core_wire.py::test_wire_rejects_object_arrays",
+    "tests/test_eval_settings.py::test_repo_eval_yaml_is_the_frozen_campaign",
+    "tests/test_eval_settings.py::test_week2_gate_uses_literal_min_interpretation",
+    "tests/test_eval_settings.py::test_loader_rejects_drifted_sizes",
+    "tests/test_eval_settings.py::test_loader_rejects_comparator_change",
+    "tests/test_report_contract.py::test_missing_definitions_fail_explicitly",
+    "tests/test_report_contract.py::test_fixture_definition_hash_and_exact_names_are_required",
+    "tests/test_geometry_inventory.py::test_named_solids_and_def_use_are_not_silently_certified",
+    "tests/test_geometry_inventory.py::test_urdf_fixed_joints_remain_data_not_automatic_self_collision_exclusions",
+    "tests/test_kinematic_surrogate.py::test_joint_step_is_velocity_bounded_causal_and_nonmutating",
+    "tests/test_trace_compare.py::test_compare_ignores_joint_value_and_interpolation_differences",
+    "tests/test_trace_compare.py::test_compare_checks_boundary_ee_targets",
+    "tests/test_trace_compare.py::test_compare_checks_achieved_boundary_ee_positions",
+    "tests/test_trace_compare.py::test_compare_checks_cartesian_targets[DESCEND-offset0]",
+    "tests/test_trace_compare.py::test_compare_checks_cartesian_targets[LIFT-offset1]",
+    "tests/test_trace_compare.py::test_compare_checks_exact_state_sequence",
+    "tests/test_trace_compare.py::test_compare_allows_brain_trace_to_continue_after_compared_prefix",
+    "tests/test_trace_compare.py::test_compare_reports_matching_pregrasp_realign_flags",
+    "tests/test_trace_compare.py::test_compare_rejects_mixed_pregrasp_realign_flags",
+    "tests/test_trace_compare.py::test_compare_allows_missing_pregrasp_realign_flag",
+    "tests/test_trace_compare.py::test_compare_enforces_existing_tilt_limit",
+    "tests/test_trace_compare.py::test_compare_requires_tilt_diagnostics",
+    "tests/test_trace_compare.py::test_joint_diagnostics_reports_steps_margin_and_wrist_excursion",
+    "tests/test_trace_compare.py::test_joint_diagnostics_prefers_explicit_command_target_over_measured_alias",
+    "tests/test_trace_compare.py::test_compare_checks_init_torso_and_head_posture",
+    "tests/test_trace_compare.py::test_base_drift_by_state_reports_planar_and_yaw_drift",
+    "tests/test_trace_compare.py::test_base_drift_by_state_reports_base_tilt",
+    "tests/test_trace_compare.py::test_base_drift_by_state_reads_fixture_orientation_matrices",
+    "tests/test_prepare_original_comparison.py::test_fixture_v2_prepares_clean_1b2e4da_archive",
+    "tests/test_controller_entrypoint_source.py::test_controller_has_one_main_guard_and_one_dispatch",
+    "tests/test_reset_repro_safe.py::test_missing_joint_keys_are_explicit_mismatch",
+    "tests/test_reset_repro_safe.py::test_quaternion_sign_equivalence",
+    "tests/test_reset_repro_safe.py::test_snapshot_without_ground_truth_has_no_object_poses",
+    "tests/test_reset_repro_safe.py::test_object_pose_shape_is_checked"
+  ],
+  "selection_command": [
+    "uv",
+    "run",
+    "pytest",
+    "--collect-only",
+    "-q",
+    "tests/test_core_wire.py",
+    "tests/test_eval_settings.py",
+    "tests/test_report_contract.py",
+    "tests/test_geometry_inventory.py",
+    "tests/test_kinematic_surrogate.py",
+    "tests/test_trace_compare.py",
+    "tests/test_prepare_original_comparison.py",
+    "tests/test_controller_entrypoint_source.py",
+    "tests/test_reset_repro_safe.py",
+    "-m",
+    "safe_ci"
+  ],
+  "actual_collection_count": 39,
+  "classification_counts": {
+    "SAFE": 39,
+    "UNSAFE": 0,
+    "UNKNOWN": 325
+  }
+}

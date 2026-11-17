@@ -6,6 +6,8 @@ import subprocess
 import tarfile
 from pathlib import Path
 
+import pytest
+
 prepare = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / "scripts" / "prepare_original_comparison.py")
 )["prepare"]
@@ -66,3 +68,6 @@ def test_fixture_v2_prepares_clean_1b2e4da_archive(tmp_path):
     )
 
     prepare(tmp_path)
+
+
+pytestmark = pytest.mark.safe_ci

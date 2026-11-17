@@ -19,3 +19,6 @@ def test_joint_step_is_velocity_bounded_causal_and_nonmutating():
     assert model.step(state, JointTarget({"arm": 1}), 0.032) == predicted
     with pytest.raises(ValueError):
         model.step(state, JointTarget({"unknown": 1}), 0.032)
+
+
+pytestmark = pytest.mark.safe_ci

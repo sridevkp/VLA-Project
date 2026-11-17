@@ -36,3 +36,6 @@ def test_urdf_fixed_joints_remain_data_not_automatic_self_collision_exclusions(t
     p.write_text('<robot><joint name="broken" type="fixed"/></robot>', encoding="utf-8")
     with pytest.raises(ValueError, match="incomplete link coverage"):
         urdf_inventory(p)
+
+
+pytestmark = pytest.mark.safe_ci

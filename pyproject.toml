@@ -55,10 +55,11 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m safe_ci"
 markers = [
     "webots: requires a local Webots installation and simulator",
     "gpu: requires a supported GPU and GPU-enabled dependencies",
+    "safe_ci: statically reviewed inert tests permitted in ordinary CI",
 ]
 
 [tool.ruff]

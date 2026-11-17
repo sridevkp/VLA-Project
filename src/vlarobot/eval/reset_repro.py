@@ -9,13 +9,15 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias, cast
 
 import numpy as np
 
 from vlarobot.core.types import GroundTruth, Observation, ScenarioSpec
 from vlarobot.eval.scenarios import generate_scenes
-from vlarobot.execution.episode_runner import DEFAULT_WORLD, launch_webots_session
+
+Position: TypeAlias = tuple[float, float, float]
+Quaternion: TypeAlias = tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -31,23 +33,25 @@ class ResetSnapshot:
     base_pose_world_quat: tuple[float, float, float, float]
     ee_pos: tuple[float, float, float]
     ee_quat: tuple[float, float, float, float]
-    object_poses: dict[
-        str, dict[str, tuple[float, float, float] | tuple[float, float, float, float]]
-    ]
+    object_poses: dict[str, dict[str, Position | Quaternion]]
 
 
 def snapshot_from(
     obs: Observation, gt: GroundTruth | None, scenario: ScenarioSpec, seed: int
 ) -> ResetSnapshot:
     robot = obs.robot
-    objects: dict[
-        str, dict[str, tuple[float, float, float] | tuple[float, float, float, float]]
-    ] = {}
+    if robot.base_pose_world is None:
+        raise ValueError("reset snapshot requires base_pose_world")
+    objects: dict[str, dict[str, Position | Quaternion]] = {}
     poses = gt.object_poses if gt is not None else {}
     for name, pose in sorted(poses.items()):
+        position_values = tuple(float(v) for v in pose.position.as_array())
+        quaternion_values = tuple(float(v) for v in pose.orientation)
+        if len(position_values) != 3 or len(quaternion_values) != 4:
+            raise ValueError(f"invalid object pose shape for {name!r}")
         objects[name] = {
-            "pos": tuple(float(v) for v in pose.position.as_array()),
-            "quat": tuple(float(v) for v in pose.orientation),
+            "pos": cast(Position, position_values),
+            "quat": cast(Quaternion, quaternion_values),
         }
     return ResetSnapshot(
         scenario_name=scenario.name,
@@ -100,10 +104,16 @@ def compare_snapshots(a: ResetSnapshot, b: ResetSnapshot) -> ComparisonResult:
     def rec(name: str, value: float) -> None:
         diffs[name] = max(diffs.get(name, 0.0), float(value))
 
-    for k in sorted(set(a.joint_pos) | set(b.joint_pos)):
-        rec("joint_pos", abs(a.joint_pos.get(k, 0.0) - b.joint_pos.get(k, 0.0)))
-    for k in sorted(set(a.joint_vel) | set(b.joint_vel)):
-        rec("joint_vel", abs(a.joint_vel.get(k, 0.0) - b.joint_vel.get(k, 0.0)))
+    for label, left, right in (
+        ("joint_pos", a.joint_pos, b.joint_pos),
+        ("joint_vel", a.joint_vel, b.joint_vel),
+    ):
+        missing = sorted(set(left) ^ set(right))
+        if missing:
+            rec(label, math.inf)
+            notes.append(f"{label} keys differ: {missing}")
+        for key in sorted(set(left) & set(right)):
+            rec(label, abs(left[key] - right[key]))
     rec("gripper", abs(a.gripper_opening - b.gripper_opening))
     rec("base_pose", max(abs(x - y) for x, y in zip(a.base_pose, b.base_pose, strict=True)))
     rec(
@@ -123,8 +133,19 @@ def compare_snapshots(a: ResetSnapshot, b: ResetSnapshot) -> ComparisonResult:
         pb = b.object_poses.get(name)
         if pa is None or pb is None:
             continue
-        rec(f"obj.{name}.pos", max(abs(x - y) for x, y in zip(pa["pos"], pb["pos"], strict=True)))  # type: ignore[arg-type]
-        rec(f"obj.{name}.quat", _quat_angle_diff(pa["quat"], pb["quat"]))  # type: ignore[arg-type]
+        posa, posb = pa["pos"], pb["pos"]
+        quata, quatb = pa["quat"], pb["quat"]
+        if len(posa) != 3 or len(posb) != 3 or len(quata) != 4 or len(quatb) != 4:
+            rec(f"obj.{name}.shape", math.inf)
+            notes.append(f"obj.{name} has invalid position/quaternion shape")
+            continue
+        rec(
+            f"obj.{name}.pos",
+            max(
+                abs(x - y) for x, y in zip(cast(Position, posa), cast(Position, posb), strict=True)
+            ),
+        )
+        rec(f"obj.{name}.quat", _quat_angle_diff(cast(Quaternion, quata), cast(Quaternion, quatb)))
 
     tolerances = {
         "joint_pos": joint_tol,
@@ -189,6 +210,8 @@ def run_reset_repro(
     scenes = generate_scenes(split, seed)
     target = scenes[0]
     other = scenes[1] if len(scenes) > 1 else scenarios_fallback(target)
+    from vlarobot.execution.episode_runner import DEFAULT_WORLD, launch_webots_session
+
     world_path = world or DEFAULT_WORLD
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -112,3 +112,6 @@ def test_wire_rejects_object_arrays() -> None:
 
     with pytest.raises(ProtocolError, match="dtype"):
         encode_message(message)
+
+
+pytestmark = pytest.mark.safe_ci

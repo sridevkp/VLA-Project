@@ -36,3 +36,6 @@ def test_fixture_definition_hash_and_exact_names_are_required(tmp_path):
     pdf.write_text("changed fixture", encoding="utf-8")
     with pytest.raises(ValueError, match="authoritative report bytes"):
         ReportDefinitions.load(definitions, pdf)
+
+
+pytestmark = pytest.mark.safe_ci

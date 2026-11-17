@@ -61,3 +61,6 @@ def test_loader_rejects_comparator_change(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="literal 'min'"):
         load_eval_settings(drifted)
+
+
+pytestmark = pytest.mark.safe_ci

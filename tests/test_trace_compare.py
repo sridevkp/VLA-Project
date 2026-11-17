@@ -400,3 +400,6 @@ def test_base_drift_by_state_reads_fixture_orientation_matrices(tmp_path):
     assert drift["LIFT"].max_distance_m == pytest.approx(0.01)
     assert drift["LIFT"].max_yaw_deg == pytest.approx(90.0)
     assert drift["LIFT"].rate_m_per_s == 0.0
+
+
+pytestmark = pytest.mark.safe_ci

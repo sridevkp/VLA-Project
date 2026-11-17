@@ -41,20 +41,33 @@ from vlarobot.eval.report_contract import (
     load_definitions_candidate,
 )
 from vlarobot.eval.runner import EvalEpisode, build_episode_plan
-from vlarobot.eval.worldmind_bindings import CALIBRATION_EVALUATOR_BINDING
+from vlarobot.eval.worldmind_bindings import (
+    CALIBRATION_EVALUATOR_BINDING,
+    UNVERIFIED_ARM_SWEEP_BINDING,
+    WORLD_MIND_BINDING_IDS,
+)
 from vlarobot.eval.worldmind_calibration import (
+    SELECTION_EVALUATION_CLASS,
+    build_calibration_evidence,
     load_calibration_candidate,
+    load_calibration_draft,
     load_calibration_evidence,
+    rank_calibration_candidates,
 )
 from vlarobot.eval.worldmind_config import (
     WorldMindBindings,
     WorldMindConfig,
     load_worldmind_config,
+    load_worldmind_diagnostic_config,
+    plan_worldmind_diagnostic,
     plan_worldmind_validation,
     validate_worldmind_bindings,
 )
 from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter
-from vlarobot.eval.worldmind_preflight import run_worldmind_preflight
+from vlarobot.eval.worldmind_preflight import (
+    run_worldmind_diagnostic_preflight,
+    run_worldmind_preflight,
+)
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_chunk_adapter import (
     JointJitter,
@@ -848,6 +861,7 @@ def test_concrete_registration_exists_but_scientific_bindings_remain_absent(tmp_
         FINITE_CHUNK_CHECK,
         PLACEMENT_VERIFIER_BINDING,
         RUNTIME_SAFETY_BINDING,
+        analytic_surrogate_factory,
         corrected_registration_path,
         production_worldmind_bindings,
     )
@@ -862,6 +876,9 @@ def test_concrete_registration_exists_but_scientific_bindings_remain_absent(tmp_
     assert set(registry.waypoint_factories) == {CORRECTED_WAYPOINTS_BINDING}
     assert registry.components == {}
     assert registry.calibration_evaluators == {}
+    assert UNVERIFIED_ARM_SWEEP_BINDING not in WORLD_MIND_BINDING_IDS.values()
+    assert not hasattr(registry, "arm_sweep_checks")
+    assert analytic_surrogate_factory(fixture.config, {}).check_transition is None
     assert (
         hashlib.sha256(corrected_registration_path().read_bytes()).hexdigest()
         == CORRECTED_REGISTRATION_SHA256
@@ -963,3 +980,160 @@ def test_structured_preflight_passes_only_with_every_gate(tmp_path, monkeypatch)
     )
     assert incomplete.ready is False
     assert any("no backend runtime probe" in item for item in incomplete.blockers)
+
+
+def _diagnostic_config_path(fixture: WorldMindFixture) -> Path:
+    """Derive a stage-1 config from the fixture; every hard gate is preserved."""
+    raw = yaml.safe_load(fixture.config_path.read_text(encoding="utf-8"))
+    raw.pop("components")
+    raw.pop("calibration")
+    raw["status"] = "diagnostic_uncalibrated"
+    raw["assessment"] = {
+        "required_constraints": raw["assessment"]["required_constraints"],
+        "hard_checks": raw["assessment"]["hard_checks"],
+    }
+    raw["diagnostic"] = {
+        "mode": "evidence_collection_only",
+        "scored_evaluation_allowed": False,
+        "calibration_stage": 1,
+        "evidence_collection_split": "validation",
+    }
+    path = fixture.root / "worldmind-diagnostic.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def test_uncalibrated_diagnostic_config_keeps_hard_gates_and_forbids_scoring(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    path = _diagnostic_config_path(fixture)
+    config = load_worldmind_diagnostic_config(path)
+    assert config.status == "diagnostic_uncalibrated"
+    assert config.diagnostic.scored_evaluation_allowed is False
+    assert config.assessment.hard_checks == ("synthetic_hard",)
+    assert config.pipeline.candidate_count == 32
+    assert config.pipeline.horizon_steps == 50
+    assert config.pipeline.control_dt_s == 0.032
+    assert config.backend.state_source == "oracle"
+    # A diagnostic config can never be loaded as the scored production config.
+    with pytest.raises(ValueError, match="missing|blocked"):
+        load_worldmind_config(path)
+
+    plan, episodes = plan_worldmind_diagnostic(
+        path,
+        tmp_path / "diagnostic-plan",
+        split="validation",
+        backend="fake",
+        state_source="oracle",
+        bindings=fixture.bindings,
+    )
+    assert plan.diagnostic.scored_evaluation_allowed is False
+    assert len(episodes) == 18
+    with pytest.raises(ValueError, match="TEST and TRAIN are sealed"):
+        plan_worldmind_diagnostic(
+            path,
+            tmp_path / "sealed",
+            split="test",
+            backend="fake",
+            state_source="oracle",
+            bindings=fixture.bindings,
+        )
+
+    bad = yaml.safe_load(path.read_text(encoding="utf-8"))
+    bad["diagnostic"]["scored_evaluation_allowed"] = True
+    bad_path = fixture.root / "bad-diagnostic.yaml"
+    bad_path.write_text(yaml.safe_dump(bad, sort_keys=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="never allow scored evaluation"):
+        load_worldmind_diagnostic_config(bad_path)
+
+
+def test_diagnostic_preflight_has_no_calibration_result_and_never_scores(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    path = _diagnostic_config_path(fixture)
+    result = run_worldmind_diagnostic_preflight(
+        path,
+        tmp_path / "diagnostic-preflight",
+        split="validation",
+        backend="fake",
+        state_source="oracle",
+        bindings=fixture.bindings,
+        runtime_probe=_inert_runtime_probe,  # type: ignore[arg-type]
+    )
+    assert result.ready is True
+    assert result.blockers == ()
+    assert result.scored_evaluation_allowed is False
+    assert len(result.plan) == 18
+    assert not hasattr(result, "calibration")
+
+
+def test_calibration_bootstrap_separates_collection_selection_and_approval(tmp_path, monkeypatch):
+    fixture = _make_fixture(tmp_path, monkeypatch)
+    root = fixture.root
+    evidence_path = root / "bootstrap-evidence.json"
+    evidence = build_calibration_evidence(
+        evidence_path,
+        evidence_id="bootstrap-validation-evidence",
+        episode_ids=[f"validation-i{index:02d}-s{index % 3}" for index in range(18)],
+        source_hashes={"frozen-validation-plan": "fixture-only"},
+        measurement_class="synthetic-inert-bootstrap",
+    )
+    assert evidence.evidence_id == "bootstrap-validation-evidence"
+    raw_evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert raw_evidence["approved"] is False
+    with pytest.raises(ValueError, match="approved"):
+        load_calibration_evidence(evidence_path)
+    with pytest.raises(FileExistsError):
+        build_calibration_evidence(
+            evidence_path,
+            evidence_id="duplicate",
+            episode_ids=[f"validation-i{index:02d}-s{index % 3}" for index in range(18)],
+            source_hashes={"frozen-validation-plan": "fixture-only"},
+            measurement_class="synthetic-inert-bootstrap",
+        )
+
+    # Owner approves evidence as a separate decision; only then can a draft be loaded.
+    approved_evidence = root / "bootstrap-evidence-approved.json"
+    approved_payload = dict(raw_evidence, approved=True)
+    approved_evidence.write_text(json.dumps(approved_payload, sort_keys=True), encoding="utf-8")
+    weights_a = {"weights": {"Jg": 1.0, "Jl": 0.0, "Jr": 0.0, "Ju": 0.0}, "maximize": True}
+    weights_b = {"weights": {"Jg": 0.0, "Jl": 1.0, "Jr": 0.0, "Ju": 0.0}, "maximize": True}
+    draft_path = root / "bootstrap-draft.json"
+    draft_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "review_status": "draft",
+                "split": "validation",
+                "calibration_id": "bootstrap-calibration",
+                "evidence_id": raw_evidence["evidence_id"],
+                "evidence_path": approved_evidence.name,
+                "evidence_sha256": hashlib.sha256(approved_evidence.read_bytes()).hexdigest(),
+                "component_bindings": {name: name.lower() for name in ("Jg", "Jl", "Jr", "Ju")},
+                "weights_source": "synthetic proposal; not an owner approval",
+                "candidates": [
+                    {"candidate_id": "a-g", "parameters": weights_a},
+                    {"candidate_id": "b-l", "parameters": weights_b},
+                ],
+                "provenance": {"source": "synthetic inert bootstrap"},
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    draft = load_calibration_draft(draft_path)
+    assert draft.selection_rule == "registered_evaluator_max_score_then_candidate_id"
+
+    evaluator = lambda parameters, evidence: float(parameters["weights"]["Jl"])  # noqa: E731
+    proposal = rank_calibration_candidates(draft, evaluator)
+    assert proposal.recommended_candidate_id == "b-l"
+    assert proposal.evaluation_class == SELECTION_EVALUATION_CLASS
+    assert proposal.provenance["independent_evaluation"] is False
+    assert proposal.recommended_parameters == weights_b
+    assert json.loads(draft_path.read_text(encoding="utf-8"))["review_status"] == "draft"
+
+    # An approved-form field cannot appear in the draft: approval is a separate owner artifact.
+    bad = json.loads(draft_path.read_text(encoding="utf-8"))
+    bad["selection"] = {"candidate_id": "b-l"}
+    bad_path = root / "bad-draft.json"
+    bad_path.write_text(json.dumps(bad, sort_keys=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected"):
+        load_calibration_draft(bad_path)

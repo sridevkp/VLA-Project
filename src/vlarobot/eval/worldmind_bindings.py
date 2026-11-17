@@ -20,6 +20,9 @@ PLACEMENT_VERIFIER_BINDING = "placement_verifier_v1"
 CORRECTED_POSE_SOLVER_BINDING = "corrected_bounded_pose_solver_v1"
 CORRECTED_WAYPOINTS_BINDING = "corrected_scripted_waypoints_v1"
 FINITE_CHUNK_CHECK = "finite_chunk_v1"
+# Deliberately NOT in WORLD_MIND_BINDING_IDS: no owner-reviewed full-arm certificate exists.
+# This identity exists only so an opt-in, unregistered probe can be named in diagnostics.
+UNVERIFIED_ARM_SWEEP_BINDING = "unverified_urdf_arm_sweep_v1"
 
 WORLD_MIND_BINDING_IDS: Mapping[str, str] = MappingProxyType(
     {

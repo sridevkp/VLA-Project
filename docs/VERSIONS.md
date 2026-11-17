@@ -109,3 +109,10 @@ version pin. Existing IKPy/NumPy geometry and safety objects are bound lazily be
 data files. `eval-worldmind` now registers `production_worldmind_bindings()` and fails closed via
 `eval/worldmind_preflight.py` until owner-approved report/calibration values and scientific bindings
 exist. No Webots-measured, scored VALIDATION, Windows, real-IK or inference result is claimed.
+
+Calibration bootstrap, Eq. 3.8 proposal, swept-arm gate and waypoint cadence (ADR-0049) add no
+dependency or version pin. The new `worldmind-diagnostic` and `worldmind-calibration-proposal`
+commands, diagnostic config and objective/sweep modules use the existing Python 3.11 standard
+library and NumPy only. Linux inert checks pass; Windows, Webots, real IK, inference, training,
+actuation, scored VALIDATION and pilot execution remain unverified. Existing version pins and
+frozen evidence are unchanged.

@@ -74,6 +74,20 @@ TOP_LEVEL_KEYS = frozenset(
 CALIBRATION_KEYS = frozenset(
     {"evidence_id", "evidence_path", "candidate_path", "evaluator_binding"}
 )
+# Stage 1 of the non-circular calibration workflow. It is NOT a scored configuration: the only
+# scientific omission is the not-yet-calibrated Eq. 3.8 weights/candidate; every hard constraint
+# (frozen plan, oracle state, safety veto, verification, full arm and tick) is unchanged.
+DIAGNOSTIC_STATUS = "diagnostic_uncalibrated"
+DIAGNOSTIC_KEYS = frozenset(
+    {
+        "mode",
+        "scored_evaluation_allowed",
+        "calibration_stage",
+        "evidence_collection_split",
+    }
+)
+DIAGNOSTIC_TOP_LEVEL_KEYS = (TOP_LEVEL_KEYS - {"components", "calibration"}) | {"diagnostic"}
+DIAGNOSTIC_ASSESSMENT_KEYS = frozenset({"required_constraints", "hard_checks"})
 
 
 class TrajectoryPredictor(Protocol):
@@ -242,6 +256,54 @@ class WorldMindBindings:
     waypoint_factories: Mapping[str, Any] = field(default_factory=dict)
     calibration_evaluators: Mapping[str, Any] = field(default_factory=dict)
     inputs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DiagnosticSpec:
+    """Explicit declaration that a config is uncalibrated and cannot produce scored evidence."""
+
+    mode: str
+    scored_evaluation_allowed: bool
+    calibration_stage: int
+    evidence_collection_split: str
+
+
+@dataclass(frozen=True)
+class DiagnosticAssessmentSpec:
+    """Hard constraints only; Eq. 3.8 weights and ranking direction are not yet calibrated."""
+
+    required_constraints: tuple[str, ...]
+    hard_checks: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WorldMindDiagnosticConfig:
+    """Stage-1 uncalibrated config: hard constraints intact, no Eq. 3.8 parameters.
+
+    This object is accepted only by the diagnostic preflight/evidence-scaffolding path. It cannot
+    be handed to the scored WorldMind pipeline, which requires a `ready` `WorldMindConfig`
+    carrying an approved, frozen calibration candidate.
+    """
+
+    schema_version: int
+    status: str
+    split: str
+    base_seed: int
+    seeds: tuple[int, ...]
+    episodes: int
+    backend: BackendSpec
+    task: TaskSpecConfig
+    pipeline: PipelineSpec
+    bounds: BoundsSpec
+    report: ReportSpec
+    report_definitions: ReportDefinitions
+    diagnostic: DiagnosticSpec
+    assessment: DiagnosticAssessmentSpec
+    surrogate: SurrogateSpec
+    safety: SafetySpec
+    verification: VerificationSpec
+    adapter: AdapterSpec
+    source_path: Path
 
 
 def empty_worldmind_bindings() -> WorldMindBindings:
@@ -693,6 +755,300 @@ def load_worldmind_config(path: Path) -> WorldMindConfig:
     )
 
 
+def _load_diagnostic_report(root: Mapping[str, Any], source: Path) -> tuple[ReportSpec, Any]:
+    """Reuse every report gate of the production path without weakening the report SHA."""
+    report_raw = _mapping(root["report"], "report")
+    _keys(
+        report_raw,
+        frozenset({"pdf", "definitions", "candidate_definitions", "sha256"}),
+        "report",
+    )
+    sha256 = _text(report_raw["sha256"], "report.sha256").lower()
+    if sha256 != AUTHORITATIVE_REPORT_SHA256:
+        raise ValueError("report SHA-256 does not match the authoritative Phase I report")
+    pdf = _existing_path(report_raw["pdf"], "report.pdf", source.parent)
+    definitions_path = _existing_path(
+        report_raw["definitions"], "report.definitions", source.parent
+    )
+    candidate_definitions = _existing_path(
+        report_raw["candidate_definitions"], "report.candidate_definitions", source.parent
+    )
+    load_definitions_candidate(candidate_definitions, pdf)
+    definitions = ReportDefinitions.load(definitions_path, pdf)
+    if definitions.report_sha256 != AUTHORITATIVE_REPORT_SHA256:
+        raise ValueError("definitions do not bind the authoritative report bytes")
+    return ReportSpec(pdf, definitions_path, candidate_definitions, sha256), definitions
+
+
+def load_worldmind_diagnostic_config(path: Path) -> WorldMindDiagnosticConfig:
+    """Load stage 1 of the calibration bootstrap: uncalibrated, hard-constrained, non-scored.
+
+    Unlike :func:`load_worldmind_config` this accepts only ``status: diagnostic_uncalibrated``
+    and has no Eq. 3.8 components, weights, calibration candidate or evaluator. Every other gate
+    — frozen split/seeds/18 episodes, K=32, H=50, tick, oracle state, full arm, report bytes and
+    reviewed definitions — is identical to the production path.
+    """
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"worldmind diagnostic config not found: {source}")
+    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
+    root = _mapping(raw, "worldmind diagnostic config")
+    _keys(root, DIAGNOSTIC_TOP_LEVEL_KEYS, "worldmind diagnostic config")
+    if root["schema_version"] != WORLD_MIND_SCHEMA_VERSION:
+        raise ValueError("unsupported worldmind config schema_version")
+    if root["status"] != DIAGNOSTIC_STATUS:
+        raise ValueError(f"diagnostic config status must be '{DIAGNOSTIC_STATUS}'")
+    if root["split"] != FROZEN_SPLIT:
+        raise ValueError("WorldMind diagnostics are VALIDATION-only")
+    if _int(root["base_seed"], "base_seed") != FROZEN_BASE_SEED:
+        raise ValueError(f"frozen base seed {FROZEN_BASE_SEED} required")
+    seeds = tuple(_int(value, "seeds") for value in _sequence(root["seeds"], "seeds"))
+    if seeds != FROZEN_SEEDS:
+        raise ValueError(f"frozen seed contract {FROZEN_SEEDS} required")
+    if _int(root["episodes"], "episodes") != FROZEN_EPISODE_COUNT:
+        raise ValueError(f"frozen VALIDATION episode count {FROZEN_EPISODE_COUNT} required")
+
+    backend_raw = _mapping(root["backend"], "backend")
+    _keys(backend_raw, frozenset({"kind", "declaration", "state_source"}), "backend")
+    kind = _text(backend_raw["kind"], "backend.kind")
+    if kind not in ("fake", "webots"):
+        raise ValueError("backend.kind must be 'fake' or 'webots'")
+    if _text(backend_raw["state_source"], "backend.state_source") != FROZEN_STATE_SOURCE:
+        raise ValueError("WorldMind diagnostics require declared oracle state source")
+    backend = BackendSpec(
+        kind=kind,  # type: ignore[arg-type]
+        declaration=_binding(backend_raw["declaration"], "backend.declaration"),
+        state_source=FROZEN_STATE_SOURCE,
+    )
+
+    task_raw = _mapping(root["task"], "task")
+    _keys(task_raw, frozenset({"instruction", "target", "destination"}), "task")
+    task = TaskSpecConfig(
+        instruction=_binding(task_raw["instruction"], "task.instruction"),
+        target=_binding(task_raw["target"], "task.target"),
+        destination=_binding(task_raw["destination"], "task.destination"),
+    )
+
+    pipeline_raw = _mapping(root["pipeline"], "pipeline")
+    _keys(
+        pipeline_raw,
+        frozenset(
+            {
+                "proposer",
+                "arm",
+                "candidate_count",
+                "horizon_steps",
+                "control_dt_s",
+                "decision_seed_base",
+            }
+        ),
+        "pipeline",
+    )
+    if _text(pipeline_raw["proposer"], "pipeline.proposer") != FROZEN_PROPOSER:
+        raise ValueError(f"only the reviewed {FROZEN_PROPOSER} is allowed")
+    if _text(pipeline_raw["arm"], "pipeline.arm") != FROZEN_ARM:
+        raise ValueError("WorldMind diagnostics require the full_system arm")
+    if _int(pipeline_raw["candidate_count"], "pipeline.candidate_count") != FROZEN_CANDIDATE_COUNT:
+        raise ValueError(f"frozen candidate count {FROZEN_CANDIDATE_COUNT} required")
+    if _int(pipeline_raw["horizon_steps"], "pipeline.horizon_steps") != FROZEN_HORIZON_STEPS:
+        raise ValueError(f"frozen horizon {FROZEN_HORIZON_STEPS} required")
+    dt = _float(pipeline_raw["control_dt_s"], "pipeline.control_dt_s", positive=True)
+    if abs(dt - FROZEN_CONTROL_DT_S) > 1e-12:
+        raise ValueError(f"frozen control tick {FROZEN_CONTROL_DT_S} required")
+    if _int(pipeline_raw["decision_seed_base"], "pipeline.decision_seed_base") != FROZEN_BASE_SEED:
+        raise ValueError(f"frozen decision seed base {FROZEN_BASE_SEED} required")
+    pipeline = PipelineSpec(
+        FROZEN_PROPOSER, FROZEN_ARM, FROZEN_CANDIDATE_COUNT, FROZEN_HORIZON_STEPS, dt, 0
+    )
+
+    bounds_raw = _mapping(root["bounds"], "bounds")
+    _keys(bounds_raw, frozenset({"max_decisions", "max_steps", "timings_enabled"}), "bounds")
+    bounds = BoundsSpec(
+        max_decisions=_int(bounds_raw["max_decisions"], "bounds.max_decisions", minimum=1),
+        max_steps=_int(bounds_raw["max_steps"], "bounds.max_steps", minimum=1),
+        timings_enabled=_bool(bounds_raw["timings_enabled"], "bounds.timings_enabled"),
+    )
+
+    report, definitions = _load_diagnostic_report(root, source)
+
+    assessment_raw = _mapping(root["assessment"], "assessment")
+    _keys(assessment_raw, DIAGNOSTIC_ASSESSMENT_KEYS, "assessment")
+    constraints = tuple(
+        _binding(value, "assessment.required_constraints")
+        for value in _sequence(assessment_raw["required_constraints"], "assessment.constraints")
+    )
+    hard_checks = tuple(
+        _binding(value, "assessment.hard_checks")
+        for value in _sequence(assessment_raw["hard_checks"], "assessment.hard_checks")
+    )
+    if not constraints or len(set(constraints)) != len(constraints):
+        raise ValueError("unique required hard constraints required")
+    if not hard_checks or len(set(hard_checks)) != len(hard_checks):
+        raise ValueError("unique hard-check bindings required")
+    if any(name not in hard_checks for name in constraints):
+        raise ValueError("every required constraint must name an explicit hard-check binding")
+    assessment = DiagnosticAssessmentSpec(constraints, hard_checks)
+
+    diagnostic_raw = _mapping(root["diagnostic"], "diagnostic")
+    _keys(diagnostic_raw, DIAGNOSTIC_KEYS, "diagnostic")
+    if diagnostic_raw["mode"] != "evidence_collection_only":
+        raise ValueError("diagnostic mode must be 'evidence_collection_only'")
+    if diagnostic_raw["scored_evaluation_allowed"] is not False:
+        raise ValueError("an uncalibrated diagnostic config can never allow scored evaluation")
+    if diagnostic_raw["calibration_stage"] != 1:
+        raise ValueError("diagnostic config belongs to calibration stage 1")
+    if diagnostic_raw["evidence_collection_split"] != FROZEN_SPLIT:
+        raise ValueError("diagnostic evidence collection is VALIDATION-only")
+    diagnostic = DiagnosticSpec(
+        mode="evidence_collection_only",
+        scored_evaluation_allowed=False,
+        calibration_stage=1,
+        evidence_collection_split=FROZEN_SPLIT,
+    )
+
+    surrogate_raw = _mapping(root["surrogate"], "surrogate")
+    _keys(surrogate_raw, frozenset({"binding", "inputs"}), "surrogate")
+    surrogate = SurrogateSpec(
+        binding=_binding(surrogate_raw["binding"], "surrogate.binding"),
+        inputs=_input_map(surrogate_raw["inputs"], "surrogate.inputs"),
+    )
+    safety_raw = _mapping(root["safety"], "safety")
+    _keys(safety_raw, frozenset({"binding", "config_path", "inputs"}), "safety")
+    safety = SafetySpec(
+        binding=_binding(safety_raw["binding"], "safety.binding"),
+        config_path=_existing_path(safety_raw["config_path"], "safety.config_path", source.parent),
+        inputs=_input_map(safety_raw["inputs"], "safety.inputs"),
+    )
+
+    verification_raw = _mapping(root["verification"], "verification")
+    _keys(
+        verification_raw,
+        frozenset(
+            {
+                "binding",
+                "destination_world",
+                "rest_center_world",
+                "object_dimensions_m",
+                "up_axis_base",
+                "distance_tolerance_m",
+                "height_tolerance_m",
+                "tilt_limit_rad",
+                "home_tolerance_rad",
+                "home_joints",
+            }
+        ),
+        "verification",
+    )
+    diagnostic_dimensions = cast(
+        tuple[float, float, float],
+        _tuple(verification_raw["object_dimensions_m"], "verification.object_dimensions_m", 3),
+    )
+    if any(value <= 0.0 for value in diagnostic_dimensions):
+        raise ValueError("verification.object_dimensions_m must all be positive")
+    verification = VerificationSpec(
+        binding=_binding(verification_raw["binding"], "verification.binding"),
+        destination_world=cast(
+            tuple[float, float, float],
+            _tuple(verification_raw["destination_world"], "verification.destination_world", 3),
+        ),
+        rest_center_world=cast(
+            tuple[float, float, float],
+            _tuple(verification_raw["rest_center_world"], "verification.rest_center_world", 3),
+        ),
+        object_dimensions_m=diagnostic_dimensions,
+        up_axis_base=cast(
+            tuple[float, float, float],
+            _tuple(verification_raw["up_axis_base"], "verification.up_axis_base", 3),
+        ),
+        distance_tolerance_m=_float(
+            verification_raw["distance_tolerance_m"],
+            "verification.distance_tolerance_m",
+            positive=True,
+        ),
+        height_tolerance_m=_float(
+            verification_raw["height_tolerance_m"],
+            "verification.height_tolerance_m",
+            positive=True,
+        ),
+        tilt_limit_rad=_float(
+            verification_raw["tilt_limit_rad"], "verification.tilt_limit_rad", positive=True
+        ),
+        home_tolerance_rad=_float(
+            verification_raw["home_tolerance_rad"], "verification.home_tolerance_rad", positive=True
+        ),
+        home_joints=_joint_map(verification_raw["home_joints"], "verification.home_joints"),
+    )
+
+    adapter_raw = _mapping(root["adapter"], "adapter")
+    _keys(
+        adapter_raw,
+        frozenset(
+            {
+                "waypoints_binding",
+                "alternate_waypoints_binding",
+                "pose_solver_binding",
+                "ik_position_tolerance_m",
+                "ik_orientation_tolerance_rad",
+                "jitter",
+            }
+        ),
+        "adapter",
+    )
+    jitter_raw = _mapping(adapter_raw["jitter"], "adapter.jitter")
+    _keys(
+        jitter_raw,
+        frozenset({"joint_std_rad", "joint_limit_rad", "max_attempts"}),
+        "adapter.jitter",
+    )
+    jitter = JitterSpec(
+        joint_std_rad=_float(jitter_raw["joint_std_rad"], "adapter.jitter.joint_std_rad"),
+        joint_limit_rad=_float(jitter_raw["joint_limit_rad"], "adapter.jitter.joint_limit_rad"),
+        max_attempts=_int(jitter_raw["max_attempts"], "adapter.jitter.max_attempts", minimum=1),
+    )
+    alternate = adapter_raw["alternate_waypoints_binding"]
+    if alternate is not None:
+        alternate = _binding(alternate, "adapter.alternate_waypoints_binding")
+    adapter = AdapterSpec(
+        waypoints_binding=_binding(adapter_raw["waypoints_binding"], "adapter.waypoints_binding"),
+        alternate_waypoints_binding=alternate,
+        pose_solver_binding=_binding(
+            adapter_raw["pose_solver_binding"], "adapter.pose_solver_binding"
+        ),
+        ik_position_tolerance_m=_float(
+            adapter_raw["ik_position_tolerance_m"],
+            "adapter.ik_position_tolerance_m",
+            positive=True,
+        ),
+        ik_orientation_tolerance_rad=_float(
+            adapter_raw["ik_orientation_tolerance_rad"],
+            "adapter.ik_orientation_tolerance_rad",
+            positive=True,
+        ),
+        jitter=jitter,
+    )
+    return WorldMindDiagnosticConfig(
+        schema_version=root["schema_version"],
+        status=root["status"],
+        split=root["split"],
+        base_seed=FROZEN_BASE_SEED,
+        seeds=seeds,
+        episodes=FROZEN_EPISODE_COUNT,
+        backend=backend,
+        task=task,
+        pipeline=pipeline,
+        bounds=bounds,
+        report=report,
+        report_definitions=definitions,
+        diagnostic=diagnostic,
+        assessment=assessment,
+        surrogate=surrogate,
+        safety=safety,
+        verification=verification,
+        adapter=adapter,
+        source_path=source,
+    )
+
+
 def validate_worldmind_bindings(
     config: WorldMindConfig, bindings: WorldMindBindings
 ) -> tuple[WorldMindConfig, WorldMindBindings]:
@@ -759,6 +1115,63 @@ def validate_worldmind_bindings(
     return config, bindings
 
 
+def validate_worldmind_diagnostic_bindings(
+    config: WorldMindDiagnosticConfig, bindings: WorldMindBindings
+) -> tuple[WorldMindDiagnosticConfig, WorldMindBindings]:
+    """Resolve every hard-constraint binding, skipping only not-yet-calibrated scientific ones.
+
+    Hard checks, surrogate, safety, verification, pose solver, waypoints and input bindings are
+    validated exactly as in production. The Eq. 3.8 component registry and calibration evaluator
+    are intentionally absent at stage 1 and must not be consulted by a diagnostic run.
+    """
+    missing: list[str] = []
+    invalid: list[str] = []
+    # Hard checks are safety-relevant: every configured veto stays mandatory in diagnostics.
+    for name in config.assessment.hard_checks:
+        obj = bindings.hard_checks.get(name)
+        if obj is None:
+            missing.append(f"hard_checks.{name}")
+        elif not callable(obj):
+            invalid.append(f"hard_checks.{name}")
+    for group, binding in (
+        ("surrogates", config.surrogate.binding),
+        ("safety", config.safety.binding),
+        ("verification", config.verification.binding),
+    ):
+        obj = getattr(bindings, group).get(binding)
+        if obj is None:
+            missing.append(f"{group}.{binding}")
+        elif not callable(obj):
+            invalid.append(f"{group}.{binding}")
+    solver = bindings.pose_solvers.get(config.adapter.pose_solver_binding)
+    if solver is None:
+        missing.append(f"pose_solvers.{config.adapter.pose_solver_binding}")
+    elif not callable(getattr(solver, "solve", None)):
+        invalid.append(f"pose_solvers.{config.adapter.pose_solver_binding}")
+    for binding in (config.adapter.waypoints_binding, config.adapter.alternate_waypoints_binding):
+        if binding is None:
+            continue
+        waypoints = bindings.waypoint_sets.get(binding)
+        factory = bindings.waypoint_factories.get(binding)
+        if waypoints is None and factory is None:
+            missing.append(f"waypoints.{binding}")
+        elif factory is not None and not callable(factory):
+            invalid.append(f"waypoint_factories.{binding}")
+        elif waypoints is not None and (not isinstance(waypoints, Sequence) or not waypoints):
+            invalid.append(f"waypoint_sets.{binding}")
+    for group in ("surrogate", "safety"):
+        declared = getattr(config, group).inputs
+        registered = bindings.inputs.get(group, {})
+        for name in declared:
+            if name not in registered:
+                missing.append(f"inputs.{group}.{name}")
+    if missing or invalid:
+        if missing:
+            raise ValueError("unregistered diagnostic bindings: " + ", ".join(sorted(missing)))
+        raise ValueError("invalid diagnostic bindings: " + ", ".join(sorted(invalid)))
+    return config, bindings
+
+
 def plan_worldmind_validation(
     config_path: Path,
     out_dir: Path,
@@ -787,5 +1200,42 @@ def plan_worldmind_validation(
         raise ValueError("frozen VALIDATION seed contract violated")
     pairs = [(entry.scene.name.rsplit("-s", 1)[0], entry.seed) for entry in plan]
     if len(set(pairs)) != FROZEN_EPISODE_COUNT:
+        raise ValueError("frozen VALIDATION (scene, seed) pairs are not unique")
+    return config, plan
+
+
+def plan_worldmind_diagnostic(
+    config_path: Path,
+    out_dir: Path,
+    *,
+    split: str,
+    backend: str,
+    state_source: str,
+    bindings: WorldMindBindings | None = None,
+) -> tuple[WorldMindDiagnosticConfig, tuple[EvalEpisode, ...]]:
+    """Stage-1/2 pure gate: uncalibrated config, frozen plan and every hard binding present.
+
+    This function deliberately cannot return a scored plan or a calibration result. It exists so
+    evidence collection can be configured before an approved candidate exists, closing the
+    bootstrap loop without weakening any hard constraint.
+    """
+    if split != FROZEN_SPLIT:
+        raise ValueError("TEST and TRAIN are sealed for this command; VALIDATION only")
+    if out_dir.exists():
+        raise FileExistsError(f"preserve prior evidence; output already exists: {out_dir}")
+    if state_source != FROZEN_STATE_SOURCE:
+        raise ValueError("WorldMind diagnostic state source must be declared as oracle")
+    config = load_worldmind_diagnostic_config(config_path)
+    validate_worldmind_diagnostic_bindings(config, bindings or empty_worldmind_bindings())
+    if config.backend.kind != backend:
+        raise ValueError("CLI backend declaration differs from validated diagnostic config")
+    if config.diagnostic.scored_evaluation_allowed:
+        raise ValueError("uncalibrated diagnostic config cannot allow scored evaluation")
+    plan = build_episode_plan(FROZEN_SPLIT, FROZEN_BASE_SEED, n=0, allow_test=False)
+    if len(plan) != FROZEN_EPISODE_COUNT:
+        raise ValueError("frozen VALIDATION plan does not contain 18 episodes")
+    if sorted({entry.seed for entry in plan}) != list(FROZEN_SEEDS):
+        raise ValueError("frozen VALIDATION seed contract violated")
+    if len({(entry.scene.name.rsplit("-s", 1)[0], entry.seed) for entry in plan}) != 18:
         raise ValueError("frozen VALIDATION (scene, seed) pairs are not unique")
     return config, plan

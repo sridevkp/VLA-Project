@@ -23,11 +23,14 @@ from vlarobot.eval.worldmind_config import (
     FROZEN_STATE_SOURCE,
     WorldMindBindings,
     WorldMindConfig,
+    WorldMindDiagnosticConfig,
     load_worldmind_config,
+    plan_worldmind_diagnostic,
     validate_worldmind_bindings,
 )
 
 RuntimeProbe = Callable[[WorldMindConfig, WorldMindBindings], Mapping[str, str]]
+DiagnosticRuntimeProbe = Callable[[WorldMindDiagnosticConfig, WorldMindBindings], Mapping[str, str]]
 
 
 @dataclass(frozen=True)
@@ -207,3 +210,90 @@ def run_worldmind_preflight(
     checks.append(_check("calibration_evidence", evidence_check))
     ready = all(check.passed for check in checks)
     return WorldMindPreflight(ready, tuple(checks), config, plan, calibration_result)
+
+
+@dataclass(frozen=True)
+class WorldMindDiagnosticPreflight:
+    """Stage-1 preflight: hard gates pass, but scoring is explicitly forbidden.
+
+    This is the only preflight that may be used before calibration evidence exists. It cannot
+    carry a `CalibrationResult` or a scored plan, so post-selection performance can never be
+    mislabelled as an independent evaluation of the uncalibrated system.
+    """
+
+    ready: bool
+    checks: tuple[PreflightCheck, ...]
+    config: WorldMindDiagnosticConfig | None
+    plan: tuple[EvalEpisode, ...]
+    scored_evaluation_allowed: bool = False
+
+    @property
+    def blockers(self) -> tuple[str, ...]:
+        return tuple(f"{check.name}: {check.detail}" for check in self.checks if not check.passed)
+
+
+def run_worldmind_diagnostic_preflight(
+    config_path: Path,
+    out_dir: Path,
+    *,
+    split: str,
+    backend: str,
+    state_source: str,
+    bindings: WorldMindBindings,
+    runtime_probe: DiagnosticRuntimeProbe | None = None,
+) -> WorldMindDiagnosticPreflight:
+    """Collect stage-1/2 gates; never score, approve parameters or access TEST/TRAIN."""
+    checks: list[PreflightCheck] = []
+    try:
+        config, plan = plan_worldmind_diagnostic(
+            config_path,
+            out_dir,
+            split=split,
+            backend=backend,
+            state_source=state_source,
+            bindings=bindings,
+        )
+    except Exception as error:  # noqa: BLE001 - report every gate failure without escaping
+        checks.append(
+            PreflightCheck("diagnostic_config", False, f"{type(error).__name__}: {error}")
+        )
+        return WorldMindDiagnosticPreflight(False, tuple(checks), None, ())
+    checks.append(
+        PreflightCheck(
+            "diagnostic_config",
+            True,
+            f"status={config.status} stage={config.diagnostic.calibration_stage} "
+            f"scored_evaluation_allowed={config.diagnostic.scored_evaluation_allowed}",
+        )
+    )
+    checks.append(PreflightCheck("frozen_plan", True, f"episodes={len(plan)} seeds={FROZEN_SEEDS}"))
+    checks.append(
+        PreflightCheck(
+            "evidence_scope",
+            True,
+            f"collection_split={config.diagnostic.evidence_collection_split} "
+            f"approval_status=not_required_at_stage_1",
+        )
+    )
+
+    def probe_check() -> str:
+        if runtime_probe is None:
+            raise ValueError("no backend runtime probe registered")
+        values = runtime_probe(config, bindings)
+        required = (
+            "robot_config_sha256",
+            "safety_config_sha256",
+            "urdf_sha256",
+            "corrected_registration_sha256",
+            "pose_solver",
+            "safety_limits",
+            "waypoint_factory",
+        )
+        missing = [name for name in required if not values.get(name)]
+        if missing:
+            raise ValueError(f"incomplete runtime probe: {missing}")
+        return ", ".join(f"{name}={values[name]}" for name in required)
+
+    checks.append(_check("runtime_geometry", probe_check))
+    ready = all(check.passed for check in checks)
+    return WorldMindDiagnosticPreflight(ready, tuple(checks), config, plan)

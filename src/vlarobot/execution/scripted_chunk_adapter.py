@@ -13,7 +13,7 @@ draws are discarded and redrawn; they are never clipped or silently accepted.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -37,22 +37,49 @@ class PoseSolver(Protocol):
 class ScriptedWaypoint:
     """One reviewed station in a scripted chunk.
 
-    Exactly one of ``pose`` and ``gripper_opening`` must be set. ``hold_steps`` is the explicit
-    number of control ticks for which that station is repeated.
+    Exactly one of ``pose``, ``gripper_opening`` and ``joints`` must be set. ``hold_steps`` is
+    the explicit number of control ticks for which that station is repeated. Per-station IK
+    tolerances mirror the reviewed baseline's state-specific tolerances; when absent, the
+    adapter-level tolerance is used. This station type does not implement settling, contact
+    detection, orientation-only IK or recovery; those remain physical-validation items.
     """
 
     label: str
     hold_steps: int
     pose: Pose3D | None = None
     gripper_opening: float | None = None
+    joints: Mapping[str, float] | None = None
+    position_tolerance_m: float | None = None
+    orientation_tolerance_rad: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str) or not self.label.strip():
             raise ValueError("waypoint label must be a non-empty string")
         if isinstance(self.hold_steps, bool) or self.hold_steps < 1:
             raise ValueError("waypoint hold_steps must be a positive integer")
-        if (self.pose is None) == (self.gripper_opening is None):
-            raise ValueError("exactly one of pose and gripper_opening is required")
+        if sum(item is not None for item in (self.pose, self.gripper_opening, self.joints)) != 1:
+            raise ValueError("exactly one of pose, gripper_opening and joints is required")
+        for name, value in (
+            ("position_tolerance_m", self.position_tolerance_m),
+            ("orientation_tolerance_rad", self.orientation_tolerance_rad),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not math.isfinite(float(value)) or float(value) <= 0:
+                raise ValueError(f"waypoint {name} must be finite and positive")
+            if self.pose is None:
+                raise ValueError(f"waypoint {name} is only valid for a pose station")
+        if self.joints is not None:
+            if not isinstance(self.joints, Mapping) or not self.joints:
+                raise ValueError("joint waypoint requires a nonempty joint mapping")
+            if any(
+                not isinstance(name, str)
+                or not name
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                for name, value in self.joints.items()
+            ):
+                raise ValueError("joint waypoint requires finite named joint targets")
 
 
 @dataclass(frozen=True)
@@ -129,9 +156,18 @@ class ScriptedChunkAdapter:
                         float(solution.position_error_m),
                         float(solution.orientation_error_rad),
                     )
+                    position_limit = (
+                        self.position_tolerance_m
+                        if waypoint.position_tolerance_m is None
+                        else float(waypoint.position_tolerance_m)
+                    )
+                    orientation_limit = (
+                        self.orientation_tolerance_rad
+                        if waypoint.orientation_tolerance_rad is None
+                        else float(waypoint.orientation_tolerance_rad)
+                    )
                     if not all(math.isfinite(value) for value in residuals) or (
-                        residuals[0] > self.position_tolerance_m
-                        or residuals[1] > self.orientation_tolerance_rad
+                        residuals[0] > position_limit or residuals[1] > orientation_limit
                     ):
                         raise ValueError("scripted pose residual outside reviewed tolerance")
                     joints = {
@@ -139,6 +175,13 @@ class ScriptedChunkAdapter:
                         for name, value in solution.joints.items()
                     }
                     action = JointTarget(joints)
+                elif waypoint.joints is not None:
+                    action = JointTarget(
+                        {
+                            str(name): float(value) + self._delta(rng)
+                            for name, value in waypoint.joints.items()
+                        }
+                    )
                 else:
                     opening = waypoint.gripper_opening
                     if opening is None or not math.isfinite(float(opening)):

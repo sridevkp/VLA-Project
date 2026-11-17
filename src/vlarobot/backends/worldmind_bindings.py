@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,9 @@ from vlarobot.backends.webots.config import (
     APPROACH_H,
     ARM_JOINTS,
     GRASP_Z,
+    IK_TOL,
+    IK_TOL_GRASP,
+    IK_TOL_TRANSIT,
     PLACE_CLEAR,
     SAFETY_PROFILE,
     SETTINGS,
@@ -53,11 +57,22 @@ from vlarobot.eval.worldmind_bindings import (
     PLACEMENT_VERIFIER_BINDING,
     RUNTIME_SAFETY_BINDING,
 )
-from vlarobot.eval.worldmind_config import WorldMindBindings, WorldMindConfig
+from vlarobot.eval.worldmind_config import (
+    WorldMindBindings,
+    WorldMindConfig,
+    WorldMindDiagnosticConfig,
+)
 from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_chunk_adapter import ScriptedWaypoint
 from vlarobot.planning.verification import PlacementVerifier
 from vlarobot.vla.action_adapter import PoseSolution
+from vlarobot.world_model.arm_geometry import Capsule
+from vlarobot.world_model.arm_sweep import (
+    ArmSweepContract,
+    IntermediateSweptArmCheck,
+    SweepGeometryError,
+    urdf_collision_capsules,
+)
 from vlarobot.world_model.kinematic import MemoizedForward, VelocityLimitedKinematics
 from vlarobot.world_model.rollout import AnalyticSurrogate, compose, rotate
 
@@ -69,15 +84,23 @@ SAFETY_INPUTS = ("monitor", "limits")
 VERIFICATION_INPUTS: tuple[str, ...] = ()
 
 _IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
-# A scripted station cadence, not a scientific threshold. It is explicit so every chunk is
-# reviewable and its hold steps sum to the frozen H=50 control horizon.
-_CORRECTED_STATIONS: tuple[tuple[str, int, str, float], ...] = (
-    ("PREGRASP", 12, "target", GRASP_Z + APPROACH_H),
-    ("GRASP_APPROACH", 8, "target", GRASP_Z),
-    ("LIFT", 10, "target", GRASP_Z + APPROACH_H),
-    ("TRANSIT", 10, "destination", GRASP_Z + APPROACH_H),
-    ("PLACE_DESCEND", 8, "destination", GRASP_Z + PLACE_CLEAR),
-    ("PLACE_RETREAT", 1, "destination", GRASP_Z + APPROACH_H),
+# Ordered to mirror the frozen baseline's station sequence: INIT(open) -> PREGRASP -> DESCEND
+# -> CLOSE -> LIFT -> TRANSIT -> PLACE_DESCEND -> RELEASE -> RETREAT -> HOME. These hold steps
+# are an explicit scripted cadence, NOT a scientific threshold or a claim of settle-equivalence;
+# the frozen baseline waits for measured joint settling and gripper stall. The sum is H=50.
+_CORRECTED_HOLD_STEPS: Mapping[str, int] = MappingProxyType(
+    {
+        "INIT": 2,
+        "PREGRASP": 10,
+        "DESCEND": 6,
+        "CLOSE": 3,
+        "LIFT": 8,
+        "TRANSIT": 8,
+        "PLACE_DESCEND": 6,
+        "RELEASE": 2,
+        "RETREAT": 2,
+        "HOME": 3,
+    }
 )
 
 
@@ -343,32 +366,51 @@ def corrected_scripted_waypoints(
         Pose3D(Vec3(*config.verification.destination_world), _IDENTITY_QUAT),
     )
     anchors = {"target": target.pose.position, "destination": destination_base.position}
-    waypoints: list[ScriptedWaypoint] = []
-    for label, hold_steps, anchor, z_offset in _CORRECTED_STATIONS:
+    closed, opened = (float(value) for value in SETTINGS.gripper_opening_limits)
+
+    def pose_station(
+        label: str, anchor: str, z_offset: float, position_tolerance_m: float
+    ) -> ScriptedWaypoint:
         position = anchors[anchor]
-        waypoints.append(
-            ScriptedWaypoint(
-                label,
-                hold_steps,
-                pose=Pose3D(
-                    Vec3(
-                        float(position.x),
-                        float(position.y),
-                        float(position.z + z_offset),
-                    ),
-                    _IDENTITY_QUAT,
+        return ScriptedWaypoint(
+            label,
+            _CORRECTED_HOLD_STEPS[label],
+            pose=Pose3D(
+                Vec3(
+                    float(position.x),
+                    float(position.y),
+                    float(position.z + z_offset),
                 ),
-            )
+                _IDENTITY_QUAT,
+            ),
+            position_tolerance_m=float(position_tolerance_m),
+            orientation_tolerance_rad=float(config.adapter.ik_orientation_tolerance_rad),
         )
-    waypoints.append(
-        ScriptedWaypoint("RELEASE", 1, gripper_opening=float(SETTINGS.gripper_opening_limits[1]))
-    )
+
+    waypoints: list[ScriptedWaypoint] = [
+        ScriptedWaypoint("INIT", _CORRECTED_HOLD_STEPS["INIT"], gripper_opening=opened),
+        pose_station("PREGRASP", "target", GRASP_Z + APPROACH_H, IK_TOL),
+        pose_station("DESCEND", "target", GRASP_Z, IK_TOL_GRASP),
+        ScriptedWaypoint("CLOSE", _CORRECTED_HOLD_STEPS["CLOSE"], gripper_opening=closed),
+        pose_station("LIFT", "target", GRASP_Z + APPROACH_H, IK_TOL_TRANSIT),
+        pose_station("TRANSIT", "destination", GRASP_Z + APPROACH_H, IK_TOL_TRANSIT),
+        pose_station("PLACE_DESCEND", "destination", GRASP_Z + PLACE_CLEAR, IK_TOL_GRASP),
+        ScriptedWaypoint("RELEASE", _CORRECTED_HOLD_STEPS["RELEASE"], gripper_opening=opened),
+        pose_station("RETREAT", "destination", GRASP_Z + APPROACH_H, IK_TOL_TRANSIT),
+        ScriptedWaypoint(
+            "HOME",
+            _CORRECTED_HOLD_STEPS["HOME"],
+            joints=dict(config.verification.home_joints),
+        ),
+    ]
     if sum(item.hold_steps for item in waypoints) != config.pipeline.horizon_steps:
         raise ValueError("corrected waypoint cadence does not sum to the frozen horizon")
     return tuple(waypoints)
 
 
-def runtime_preflight_probe(config: WorldMindConfig, bindings: WorldMindBindings) -> dict[str, str]:
+def runtime_preflight_probe(
+    config: WorldMindConfig | WorldMindDiagnosticConfig, bindings: WorldMindBindings
+) -> dict[str, str]:
     """Report inert backend-boundary facts; no Webots process or IK solve is started."""
 
     def digest(path: Path) -> str:
@@ -394,6 +436,116 @@ def runtime_preflight_probe(config: WorldMindConfig, bindings: WorldMindBindings
         "waypoint_factory": getattr(waypoint_factory, "__name__", type(waypoint_factory).__name__),
         "sweep_certificate": "absent",
     }
+
+
+# Structural coverage only. The IKPy frame key for each URDF link is explicit; any missing key
+# or transform fails closed. This is NOT a certified collision model (ADR-0049).
+UNVERIFIED_ARM_LINKS: tuple[str, ...] = (
+    "TIAGo front arm",
+    "TIAGo front arm_3",
+    "arm_2_link",
+    "arm_3_link",
+    "arm_4_link",
+    "arm_5_link",
+    "arm_6_link",
+    "arm_7_link",
+    "wrist_ft_tool_link",
+)
+UNVERIFIED_LINK_FRAMES: Mapping[str, str] = {
+    "TIAGo front arm": "torso_lift_link_TIAGo front arm_joint",
+    "TIAGo front arm_3": "arm_1_joint",
+    "arm_2_link": "arm_2_joint",
+    "arm_3_link": "arm_3_joint",
+    "arm_4_link": "arm_4_joint",
+    "arm_5_link": "arm_5_joint",
+    "arm_6_link": "arm_6_joint",
+    "arm_7_link": "arm_7_joint",
+    "wrist_ft_tool_link": "wrist_ft_tool_link_front_joint",
+}
+
+
+def _transformed_capsule(capsule: Capsule, matrix: Any) -> Capsule:
+    """Apply a rigid FK frame to a link-local capsule; reject invalid transforms."""
+    rotation = np.asarray(matrix, dtype=np.float64)
+    if rotation.shape != (4, 4) or not np.isfinite(rotation).all():
+        raise SweepGeometryError("invalid FK transform for arm collision geometry")
+    if not np.allclose(rotation[:3, :3] @ rotation[:3, :3].T, np.eye(3), atol=1e-6):
+        raise SweepGeometryError("non-rigid FK transform for arm collision geometry")
+    start = rotation[:3, :3] @ np.asarray(capsule.start) + rotation[:3, 3]
+    end = rotation[:3, :3] @ np.asarray(capsule.end) + rotation[:3, 3]
+    if not np.isfinite(np.r_[start, end]).all():
+        raise SweepGeometryError("nonfinite transformed arm capsule")
+    start_xyz = (float(start[0]), float(start[1]), float(start[2]))
+    end_xyz = (float(end[0]), float(end[1]), float(end[2]))
+    return Capsule(
+        capsule.name,
+        start_xyz,
+        end_xyz,
+        capsule.radius_m,
+        capsule.max_point_speed_m_s,
+    )
+
+
+def unverified_urdf_sweep_check(
+    *,
+    margin_m: float,
+    substeps: int,
+    max_point_speed_m_s: float,
+    required_objects: frozenset[str],
+    adjacent_pairs: frozenset[frozenset[str]],
+    permitted_contact_objects: frozenset[str] = frozenset(),
+) -> IntermediateSweptArmCheck:
+    """Build the opt-in, UNCERTIFIED URDF full-arm sweep; never call from scored production.
+
+    All physical margins, speed certificates and scene coverage must be supplied explicitly by an
+    owner review. The returned checker uses the corrected registration and every supported
+    collision primitive on each relevant arm link; it is intentionally absent from
+    ``production_worldmind_bindings()`` so the ``unverified-arm-sweep`` veto stays hard.
+    """
+    if set(UNVERIFIED_LINK_FRAMES) != set(UNVERIFIED_ARM_LINKS):
+        raise SweepGeometryError("arm link/frame coverage is incomplete")
+    kinematics = corrected_kinematics()
+    frames: dict[str, int] = {}
+    for link, joint in UNVERIFIED_LINK_FRAMES.items():
+        if joint not in kinematics.idx:
+            raise SweepGeometryError(f"missing IKPy frame for {link}")
+        frames[link] = kinematics.idx[joint]
+    primitives = urdf_collision_capsules(
+        URDF_PATH,
+        UNVERIFIED_ARM_LINKS,
+        max_point_speed_m_s=max_point_speed_m_s,
+    )
+    required_links = tuple(
+        sorted(
+            primitive.capsule.name
+            for link in UNVERIFIED_ARM_LINKS
+            for primitive in primitives[link]
+        )
+    )
+
+    def geometry(state: Any) -> tuple[Capsule, ...]:
+        transforms = kinematics.forward(_full_joint_vector(state.robot.joint_pos))
+        if len(transforms) <= max(frames.values()):
+            raise SweepGeometryError("FK returned incomplete link transforms")
+        result: list[Capsule] = []
+        for link in UNVERIFIED_ARM_LINKS:
+            matrix = transforms[frames[link]]
+            for primitive in primitives[link]:
+                result.append(_transformed_capsule(primitive.capsule, matrix))
+        return tuple(result)
+
+    return IntermediateSweptArmCheck(
+        geometry,
+        ArmSweepContract(
+            required_links=required_links,
+            required_objects=frozenset(required_objects),
+            adjacent_pairs=frozenset(adjacent_pairs),
+            dt_s=float(SETTINGS.time_step) / 1000.0,
+            margin_m=float(margin_m),
+            substeps=substeps,
+            permitted_contact_objects=frozenset(permitted_contact_objects),
+        ),
+    )
 
 
 def production_worldmind_bindings() -> WorldMindBindings:

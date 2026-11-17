@@ -456,12 +456,6 @@ class WorldMindEpisodePolicy:
             def predict(predict_state: WorldState, chunk: Any) -> Trajectory:
                 return capture.predict(predict_state, chunk)
 
-            primary = self._waypoints(self.config.adapter.waypoints_binding, state, task)
-            alternate = (
-                self._waypoints(self.config.adapter.alternate_waypoints_binding, state, task)
-                if self.config.adapter.alternate_waypoints_binding
-                else None
-            )
             no_safe = RecoveryState()
             use_alternate = False
             decision_index = 0
@@ -471,6 +465,15 @@ class WorldMindEpisodePolicy:
                 and steps < self.config.bounds.max_steps
             ):
                 assert observation is not None and state is not None
+                # Re-derive reviewed waypoints from the latest oracle state each decision. The
+                # frozen baseline re-reads its world-anchored targets per state; computing them
+                # once per episode would make later chunks stale after a move or recovery.
+                primary = self._waypoints(self.config.adapter.waypoints_binding, state, task)
+                alternate = (
+                    self._waypoints(self.config.adapter.alternate_waypoints_binding, state, task)
+                    if self.config.adapter.alternate_waypoints_binding
+                    else None
+                )
                 before_observation, before_state = observation, state
                 decision_id = f"{episode_id}-d{decision_index:02d}"
                 waypoints = alternate if use_alternate and alternate else primary

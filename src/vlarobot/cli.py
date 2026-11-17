@@ -591,6 +591,86 @@ def eval_worldmind(
     typer.echo(f"  out={out} sidecars={sidecars['decisions'].parent}")
 
 
+@app.command("worldmind-diagnostic")
+def worldmind_diagnostic(
+    config: Annotated[
+        Path,
+        typer.Option(help="Stage-1 uncalibrated VALIDATION diagnostic config."),
+    ],
+    out: Annotated[Path, typer.Option(help="New versioned output directory; never overwritten.")],
+    backend: Annotated[Literal["fake", "webots"], typer.Option()] = "webots",
+    state_source: Annotated[str, typer.Option()] = "oracle",
+    split: Annotated[str, typer.Option()] = "validation",
+) -> None:
+    """Preflight an uncalibrated diagnostic config. This command never scores or approves."""
+    from vlarobot.backends.worldmind_bindings import (
+        production_worldmind_bindings,
+        runtime_preflight_probe,
+    )
+    from vlarobot.eval.worldmind_preflight import run_worldmind_diagnostic_preflight
+
+    result = run_worldmind_diagnostic_preflight(
+        config,
+        out,
+        split=split,
+        backend=backend,
+        state_source=state_source,
+        bindings=production_worldmind_bindings(),
+        runtime_probe=runtime_preflight_probe,
+    )
+    for check in result.checks:
+        typer.echo(f"  [{'PASS' if check.passed else 'FAIL'}] {check.name}: {check.detail}")
+    if not result.ready:
+        typer.echo("worldmind-diagnostic preflight failed:", err=True)
+        for blocker in result.blockers:
+            typer.echo(f"  - {blocker}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(
+        "worldmind-diagnostic: uncalibrated; scored_evaluation_allowed=False; "
+        "no parameters selected or approved"
+    )
+
+
+@app.command("worldmind-calibration-proposal")
+def worldmind_calibration_proposal(
+    draft: Annotated[Path, typer.Option(help="Unapproved, reviewable calibration draft JSON.")],
+    evaluator: Annotated[str, typer.Option(help="Registered evaluator binding identity.")],
+) -> None:
+    """Print a deterministic VALIDATION selection statistic; never write or approve parameters."""
+    from vlarobot.eval.worldmind_calibration import (
+        load_calibration_draft,
+        rank_calibration_candidates,
+    )
+
+    try:
+        from vlarobot.backends.worldmind_bindings import production_worldmind_bindings
+
+        registered = production_worldmind_bindings().calibration_evaluators.get(evaluator)
+    except Exception as error:  # noqa: BLE001 - registration must fail closed with one error
+        typer.echo(f"worldmind-calibration-proposal failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    if not callable(registered):
+        typer.echo(
+            f"worldmind-calibration-proposal failed: no registered evaluator: {evaluator}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        proposal = rank_calibration_candidates(load_calibration_draft(draft), registered)
+    except Exception as error:  # noqa: BLE001 - surface one CLI failure
+        typer.echo(
+            f"worldmind-calibration-proposal failed: {type(error).__name__}: {error}", err=True
+        )
+        raise typer.Exit(code=1) from error
+    typer.echo(f"calibration_id={proposal.calibration_id} evidence_id={proposal.evidence_id}")
+    typer.echo(f"evaluation_class={proposal.evaluation_class}")
+    typer.echo(
+        f"recommended_candidate_id={proposal.recommended_candidate_id} "
+        f"scores={json.dumps(dict(sorted(proposal.scores.items())), sort_keys=True)}"
+    )
+    typer.echo("not an approval: owner must write an approved candidate artifact before scoring")
+
+
 @app.command("derive-demo-actions")
 def derive_demo_actions(
     steps: Annotated[Path, typer.Argument(help="Path to episode-XX.steps.npz")],

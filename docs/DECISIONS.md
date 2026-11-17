@@ -1779,3 +1779,58 @@ remains blocked and was not run.
   direction and component formulas/units (and any non-safety `Jr` threshold only with an exact
   authoritative definition); a certified full-arm swept-volume check; reviewer sign-off on the
   scripted waypoint cadence/orientations; and authorization for the controlled scored pilot.
+
+## ADR-0049 — Calibration bootstrap, Eq. 3.8 proposal, swept-arm gate and waypoint cadence (2026-11-17)
+
+**Status:** Accepted. **Scope:** inert implementation, review artifacts and local verification only;
+the controlled VALIDATION pilot remains **NO-GO** and was not run.
+
+- **Calibration bootstrap (four separated stages):** add a `diagnostic_uncalibrated` config path
+  (`configs/worldmind_diagnostic.yaml`) that keeps every hard check, frozen VALIDATION split,
+  seeds, 18 episodes, K=32, H=50, 0.032 s tick, oracle target source, report SHA and surrogate/
+  safety/verification/adapter gates, but contains no Eq. 3.8 weights, ranking direction,
+  calibration candidate or calibration evaluator. `build_calibration_evidence()` writes only
+  unapproved VALIDATION evidence in `evidence_collection_only` mode; `rank_calibration_candidates()`
+  returns an inert `CalibrationProposal` with no parameters, selection or approval record;
+  `worldmind-calibration-proposal` prints a deterministic selection statistic and never persists
+  it. Only after owner approval may a separate `ready` config freeze those parameters;
+  `evaluate_calibration()` labels its output `selection_statistic_not_independent_evaluation`,
+  `independent_evaluation: False`, `test_split_accessed: False`,
+  `frozen_evidence_modified: False`. No hard constraint was weakened, no calibration result was
+  invented, post-selection statistics are never presented as unbiased evaluation, and frozen
+  VALIDATION scenes/seeds are unchanged.
+- **Eq. 3.8 proposal:** `eval/worldmind_objectives.py` and
+  `configs/report/objectives.proposal.json` supply explicit engineering-choice formulas for `Jg`,
+  `Jl`, `Jr` and `Ju`, with dimensionless normalisation, units, required inputs, missing-data
+  failure, all-minimise ranking and hard-veto precedence. They are marked
+  `engineering_choice_not_report_quotation`, `authoritative: false` and
+  `scored_execution_enabled: false`. They are registered nowhere in production; the scientific
+  component/weight/evaluator registries remain empty and fail closed.
+- **Swept-arm gate:** `world_model/arm_sweep.py` adds a conservative interpolated full-arm check
+  that calls `SweptArmCheck` on explicit sub-intervals using capsule bounds derived from current
+  geometry. It fails closed on missing/incomplete geometry, invalid transforms, unsupported
+  shapes/contacts, moving scene objects or unsupported motion. The opt-in
+  `unverified_urdf_sweep_check` is deliberately outside `WORLD_MIND_BINDING_IDS`, the production
+  registry has no `arm_sweep_checks`, and `analytic_surrogate_factory()` still uses
+  `check_transition=None`; therefore `unverified-arm-sweep` remains a hard veto until an
+  owner-reviewed full-arm certificate exists.
+- **Waypoint cadence:** the production adapter now emits the frozen baseline station order
+  `INIT(open) -> PREGRASP -> DESCEND -> CLOSE -> LIFT -> TRANSIT -> PLACE_DESCEND -> RELEASE ->
+  RETREAT -> HOME`, with explicit gripper and joint stations, state-specific reviewed IK
+  tolerances and per-decision re-derivation from the latest oracle state. The hold steps sum to
+  H=50 but are only a scripted cadence proxy, not measured settle/contact equivalence.
+  `execution/scripted_can.py` was not modified. Remaining IK, orientation, gripper-stall and
+  recovery differences are documented in `docs/WORLDMIND_WAYPOINT_CADENCE_REVIEW.md` as physical
+  validation requirements.
+- **Verification:** Ruff, format check, `ty check src`, `compileall`, the frozen-evidence checker
+  and the 38 focused WorldMind tests pass. The full non-Webots suite is
+  `1 failed, 569 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  hash mismatch against frozen Drive evidence. Frozen evidence was not altered. The exact
+  first diagnostic command is recorded in `docs/WORLDMIND_PILOT_READINESS_REPORT.md`; with the
+  shipped blocked template it fails closed with code 1 and creates no output directory.
+- **Unverified and blocked:** no Webots execution, real IK solve, inference, training, actuation,
+  scored evaluation, TEST/TRAIN access, pilot execution, full-arm certificate or physical
+  waypoint validation occurred. No dependency, public `core/` interface, frozen result, split,
+  seed, threshold, threshold source or baseline controller behaviour changed. No push, merge or
+  PR update was performed.

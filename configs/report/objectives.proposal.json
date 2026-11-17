@@ -1,0 +1,69 @@
+{
+  "components": {
+    "Jg": {
+      "authoritative": false,
+      "formula": "sqrt((||p_ee - p_goal||_2 / s_p)^2 + (angle(q_ee, q_goal) / s_r)^2)",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty.",
+      "normalization": "s_p in m > 0; s_r in rad > 0; both owner-selected on VALIDATION",
+      "ranking_direction": "minimize",
+      "required_inputs": [
+        "ee pose in robot base frame",
+        "goal pose in robot base frame"
+      ],
+      "safety_precedence": "Safety is a hard veto (SafetyMonitor.validate + RiskGate + unverified-arm-sweep). A candidate rejected by a hard check is never ranked; no utility term may offset a veto.",
+      "status": "engineering_choice_not_report_quotation",
+      "units": "dimensionless (m and rad divided by declared scales)",
+      "weight_selection": "Weights (wg, wl, wr, wu) and ranking direction are selected by the owner on the frozen VALIDATION evidence through a registered evaluator and recorded in an approved calibration candidate. The selection statistic is not an independent evaluation of post-calibration performance."
+    },
+    "Jl": {
+      "authoritative": false,
+      "formula": "(sum_k ||p_{k+1} - p_k||_2 / s_l) + lambda_t * (N_steps * dt_s / s_t)",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. Wall-clock time is never substituted for control time.",
+      "normalization": "s_l in m > 0; s_t in s > 0; lambda_t dimensionless; owner-selected",
+      "ranking_direction": "minimize",
+      "required_inputs": [
+        "tool positions in robot base frame",
+        "control tick dt_s in s"
+      ],
+      "safety_precedence": "Safety is a hard veto (SafetyMonitor.validate + RiskGate + unverified-arm-sweep). A candidate rejected by a hard check is never ranked; no utility term may offset a veto.",
+      "status": "engineering_choice_not_report_quotation",
+      "units": "dimensionless (m and s divided by declared scales)",
+      "weight_selection": "Weights (wg, wl, wr, wu) and ranking direction are selected by the owner on the frozen VALIDATION evidence through a registered evaluator and recorded in an approved calibration candidate. The selection statistic is not an independent evaluation of post-calibration performance."
+    },
+    "Jr": {
+      "authoritative": false,
+      "formula": "mean_k clip((m - d_min,k) / m, 0, 1); d_min,k < 0 maps to 1",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. Unverified geometry yields MissingObjectiveInput, never zero risk.",
+      "normalization": "m in m > 0 is a declared clearance margin; d_min,k is certified swept-arm clearance",
+      "ranking_direction": "minimize",
+      "required_inputs": [
+        "certified full-arm minimum clearance per predicted step",
+        "clearance margin m"
+      ],
+      "safety_precedence": "Safety is a hard veto (SafetyMonitor.validate + RiskGate + unverified-arm-sweep). A candidate rejected by a hard check is never ranked; no utility term may offset a veto. Collision hard checks still veto independently of Jr.",
+      "status": "engineering_choice_not_report_quotation",
+      "units": "dimensionless ratio in [0, 1]",
+      "weight_selection": "Weights (wg, wl, wr, wu) and ranking direction are selected by the owner on the frozen VALIDATION evidence through a registered evaluator and recorded in an approved calibration candidate. The selection statistic is not an independent evaluation of post-calibration performance."
+    },
+    "Ju": {
+      "authoritative": false,
+      "formula": "mean_k (||e_p,k|| / s_p + e_theta,k / s_r)",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. Missing alignment is an error, not zero uncertainty.",
+      "normalization": "s_p in m > 0; s_r in rad > 0; owner-selected on VALIDATION",
+      "ranking_direction": "minimize",
+      "required_inputs": [
+        "aligned predicted and corrected WorldState trajectories",
+        "at least two paired steps"
+      ],
+      "safety_precedence": "Safety is a hard veto (SafetyMonitor.validate + RiskGate + unverified-arm-sweep). A candidate rejected by a hard check is never ranked; no utility term may offset a veto.",
+      "status": "engineering_choice_not_report_quotation",
+      "units": "dimensionless prediction-discrepancy proxy (NOT calibrated uncertainty)",
+      "weight_selection": "Weights (wg, wl, wr, wu) and ranking direction are selected by the owner on the frozen VALIDATION evidence through a registered evaluator and recorded in an approved calibration candidate. The selection statistic is not an independent evaluation of post-calibration performance."
+    }
+  },
+  "note": "Eq. 3.8 supplies verbal meanings only. All formulas, units, normalisations, ranking direction and weights below are engineering choices requiring owner approval; they are NOT report quotations.",
+  "report_sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b",
+  "review_status": "engineering_proposal_not_approved",
+  "scored_execution_enabled": false,
+  "selection_rule": "registered_evaluator_max_score_then_candidate_id"
+}

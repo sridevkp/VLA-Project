@@ -217,6 +217,22 @@ factory bindings, weights, ranking direction and constraints to be registered, a
 sweep check, plus an already running sim server for `--backend webots`. The command never launches
 Webots itself. Oracle-assisted results are labelled and are never presented as perception results.
 
+Stage-1 diagnostic and parametric-selection review commands are additive and inert. From the
+project root, the first diagnostic invocation is:
+
+```text
+uv run python -m vlarobot.cli worldmind-diagnostic --config configs/worldmind_diagnostic.yaml --out runs/worldmind/validation-s0-diagnostic --backend webots --state-source oracle
+```
+
+The shipped `configs/worldmind_diagnostic.yaml` is a blocked template, so this command currently
+fails closed with code 1 and creates no output directory. Fill only owner-reviewed values; never
+add Eq. 3.8 weights, ranking direction or a calibration result to this stage-1 config. Selection
+statistics can be reviewed without writing or approving parameters:
+
+```text
+uv run python -m vlarobot.cli worldmind-calibration-proposal --draft draft.json --evaluator <REGISTERED_EVALUATOR>
+```
+
 Inert FakeBackend verification without Webots:
 
 ```text

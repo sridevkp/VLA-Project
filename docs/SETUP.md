@@ -247,6 +247,21 @@ It never applies an action, steps, resets, exports kinematics, scores a campaign
 TEST/TRAIN evidence or permits motion. A diagnostic `PASS` does not certify the arm sweep; the
 `unverified-arm-sweep` veto remains hard. Use a fresh `--out` path for every authorized run.
 
+A bounded geometry-only diagnostic is available without Webots authorization. From the project
+root, use a fresh output path:
+
+```text
+uv run python -m vlarobot.cli worldmind-geometry-diagnostic --config configs/worldmind_geometry_diagnostic.yaml --out runs/worldmind/validation-s0-geometry-inert-<NEW-ID>
+```
+
+It reads only the pinned URDF, registration, robot config and world file. It does not launch a
+simulator, open a socket, solve IK, apply/step/reset a backend, score an episode or read
+TEST/TRAIN evidence. It writes `diagnostic.json`, `state.json` and `provenance.json`, and always
+reports `motion_allowed=false` and `motion_readiness="NOT_READY"`. A `PASS` reports that evidence
+was collected; unresolved external PROTOs, self-collision, floor/table/finger envelopes and the
+missing owner-reviewed full-arm certificate keep geometric motion readiness blocked. See
+`DECISIONS.md` ADR-0054 for the separate engineering and owner-safety gates.
+
 Inert FakeBackend verification without Webots:
 
 ```text

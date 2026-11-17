@@ -122,3 +122,12 @@ Python 3.11 standard library, NumPy, PyYAML, Typer, ZeroMQ/msgpack and the in-re
 The new protocol operation is `inspect` only; it does not change `core/wire.py`. Linux inert checks
 pass. No Webots process, real IK solve, inference, training, actuation, scored evaluation,
 TEST/TRAIN access or pilot execution was performed; Windows behavior remains unverified.
+
+Concrete full-arm sweep integration and local geometry diagnostic (ADR-0054) add no dependency or
+version pin. They reuse Python 3.11 standard library, NumPy, PyYAML, Typer, the existing IKPy/URDF
+registration and the in-repo Webots geometry inventory behind the backend boundary. New packaged
+config files are `worldmind_arm_sweep.yaml` and `worldmind_geometry_diagnostic.yaml`; no public
+`core/` interface or frozen pin changed. Linux inert checks and the local-only diagnostic pass;
+Windows, Webots execution, real IK, actuation, scored VALIDATION and pilot execution remain
+unverified. The `unverified-arm-sweep` hard veto is unchanged until an independent safety owner
+supplies a certificate.

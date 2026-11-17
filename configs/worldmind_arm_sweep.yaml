@@ -1,0 +1,53 @@
+# Review-gated full-arm swept-collision contract (ADR-0054).
+#
+# This is a BLOCKED TEMPLATE. It supplies no owner certificate, so
+# `analytic_surrogate_factory()` keeps `check_transition=None` and every prediction retains the
+# `unverified-arm-sweep` hard veto. Changing `certificate.approved` or any hash is not owner
+# approval; approval requires the referenced immutable record and reference-case files.
+schema_version: 1
+status: "blocked"
+
+geometry:
+  urdf: "../src/vlarobot/backends/webots/tiago.urdf"
+  registration: "calibration/urdf-base-train-v1.yaml"
+  robot_config: "robot.yaml"
+  world: "../worlds/factory.wbt"
+  urdf_sha256: "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b"
+  registration_sha256: "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+  robot_config_sha256: "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d"
+  world_sha256: "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+  required_arm_links:
+    - "TIAGo front arm"
+    - "TIAGo front arm_3"
+    - "arm_2_link"
+    - "arm_3_link"
+    - "arm_4_link"
+    - "arm_5_link"
+    - "arm_6_link"
+    - "arm_7_link"
+    - "wrist_ft_tool_link"
+
+contract:
+  # Engineering proposal only; no motion is approved by this template.
+  margin_m: 0.02
+  substeps: 8
+  dt_source: "robot.yaml:time_step_ms/1000"
+  speed_source: "urdf_joint_velocity_reach_bound_v1"
+  required_objects:
+    - "CAN"
+  # Capsule-name pairs such as "arm_3_link:0" are required if any pair is claimed adjacent.
+  # No adjacent or grasp-contact exception is approved in this template.
+  adjacent_pairs: []
+  permitted_contact_objects: []
+
+certificate:
+  id: null
+  sha256: null
+  approved: false
+  approver: null
+  approval_id: null
+  approval_record: null
+  approval_record_sha256: null
+  reviewed_cases: null
+  reviewed_cases_sha256: null
+  contract_sha256: null

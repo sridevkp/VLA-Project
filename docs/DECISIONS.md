@@ -1973,3 +1973,80 @@ performed by this decision.
   `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
   frozen-helper hash mismatch. No Webots process, actuation, motion, scored evaluation,
   TEST/TRAIN access, push, merge or PR update occurred.
+
+## ADR-0054 — Concrete full-arm sweep adapter, local geometry diagnostic and motion-readiness criteria (2026-11-18)
+
+**Status:** Accepted. **Scope:** review-gated integration, inert validation and local verification
+only. No Webots execution, IK solve, trajectory, actuation, motion authorization, scored campaign,
+TEST/TRAIN access, push, merge or PR #2 change is included.
+
+- **Pinned geometry coverage:** the adapter and diagnostic use the unmodified TIAGo URDF
+  (`1a6de992…`), corrected registration (`dfc542e1…`), `robot.yaml` (`1a9f0c2b…`) and factory world
+  (`35d87f36…`). All nine relevant arm links (`TIAGo front arm` through `wrist_ft_tool_link`) have
+  19 supported collision primitives (cylinder/box/sphere); unsupported URDF shapes are `[]`. Joint
+  limits and link reaches yield the conservative URDF point-speed bound
+  `28.49316700274912 m/s`; the frozen tick is `0.032 s`. The contract uses margin `0.02 m` and
+  eight interpolation substeps. External Webots PROTO definitions are **not** resolved locally.
+- **Concrete integration:** `backends/worldmind_bindings.py` now contains a strict
+  `ArmSweepConfig`/`ArmSweepCertificate` loader, full-arm FK capsule transforms, and an
+  `AnalyticSurrogate.check_transition` callback path built from `world_model/arm_sweep.py`. It
+  retains every sub-interval, full-arm, static-scene, finite-transform and fail-closed check; a
+  checker result of `True`/`False`/`None` still maps to clear / `arm-sweep-collision` /
+  `unverified-arm-sweep`. `production_worldmind_bindings()` supplies the blocked contract, so the
+  production factory still leaves `check_transition=None` and the hard veto remains. Supplying an
+  invalid or unapproved explicit `arm_sweep_config` raises; it never weakens the veto.
+- **Owner certificate is not self-issued:** a callback is returned only when the contract has
+  `status: owner_approved` and a certificate with matching ID/hash, approved flag, approver,
+  approval ID, immutable approval record (`role: independent_safety_owner`) and non-empty reviewed
+  reference-case file, all hash-pinned and agreeing with the computed contract and geometry
+  hashes. The loader rejects `blocked` contracts carrying a certificate and `owner_approved`
+  contracts without one; the callback builder independently rejects any status other than
+  `owner_approved`. Adjacent-link and permitted-contact exceptions must be explicit capsule/object
+  names; the shipped template approves none. No such certificate exists, so the path is implemented
+  but deliberately unused.
+- **Local-only geometry diagnostic:** `worldmind-geometry-diagnostic` reads only pinned files. It
+  launches no Webots process, opens no socket, solves no IK, applies/steps/resets no backend,
+  writes no score, and reads no TEST/TRAIN evidence. An inert guard canary counts and blocks
+  `apply`, `step`, `reset`, `export_kinematics`, `inspect` and `get_ground_truth`; the collector
+  itself has no live backend attached, so the zero counts are a structural check rather than a live
+  boundary enforcement claim. The authoritative inert run after the status-gate fix is:
+  `uv run python -m vlarobot.cli worldmind-geometry-diagnostic --config configs/worldmind_geometry_diagnostic.yaml --out runs/worldmind/validation-s0-geometry-inert-v3`
+  It wrote `diagnostic.json`, `state.json` and `provenance.json` with outcome `PASS`,
+  `motion_allowed=false` and `motion_readiness="NOT_READY"`. SHA-256 digests are
+  `9cdee7cf2dec62365218dcecbfdf753110a92296d30f38aee12abe5f213f2806`,
+  `bcf0c94679a2a35ee7ad253942f64ac0f2f81fb6868b9ddc392d7baba5beaa29` and
+  `65022dc0007b2d3e393574a9b8b913268154dba0e4bc67423668088b17049649`. The earlier
+  `validation-s0-geometry-inert` and `validation-s0-geometry-inert-v2` artifacts are unchanged
+  intermediates; their evidence bytes match v3.
+- **Motion-readiness criteria (engineering, necessary but never sufficient):** (1) every relevant
+  arm, robot self-collision pair, environment obstacle and carried/contact object has reviewed
+  collision geometry, with supported shapes and explicit exceptions; (2) pinned registration and
+  frame/unit transforms are finite, rigid and reviewed; (3) margin, interpolation substeps and
+  point-speed bound are positive, finite and derived from pinned sources; (4) deterministic
+  reference cases cover known collision, clearance, near-boundary, interpolation, self-collision,
+  TABLE/CAN, missing geometry, invalid transforms and unsupported contacts; (5) the concrete
+  callback is wired and a simulator-only read-only diagnostic has verified the same pinned files
+  without actuation. These gates are recorded separately in `engineering_gates`; a diagnostic
+  `PASS` only means the inert evidence was collected.
+- **Motion-readiness criteria (owner safety approval, independent and sufficient only with all
+  engineering gates):** an `independent_safety_owner` must record a certificate ID/hash, approval
+  ID, approver identity, scope limited to the reviewed simulator context, reviewed reference
+  cases, and the exact contract/geometry hashes. This project code may verify that record but may
+  not create, sign or self-approve it. Only then may the callback leave `None`; even then a separate
+  execution authorization, live `SafetyMonitor.validate()` veto and non-scored simulator stepping
+  remain mandatory. `motion_allowed=true` is never set by a geometry diagnostic.
+- **Current assessment:** **NOT_READY**. The nine required arm links and 19 capsules are covered
+  and transforms/margin/interpolation gates pass, but `complete_relevant_collision_geometry=false`
+  remains because 27 external PROTOs are unresolved, robot self-collision is unobserved, floor
+  `Plane` is outside the capsule/AABB checker, table nested solids are absent from the live export,
+  finger/gripper/carried-object envelopes are unapproved, and no reviewed reference cases or owner
+  certificate exist. The prior read-only Webots PASS is connectivity-only and is not motion or
+  collision-safety approval.
+- **Verification:** 13 deterministic cases in `tests/test_worldmind_full_arm_validation.py` pass;
+  Ruff check, format check, `ty check src`, `compileall`, frozen-evidence checker, all preserved
+  Webots diagnostic SHA-256 values and the 34 focused WorldMind/diagnostic tests pass. The full
+  non-Webots suite is `1 failed, 620 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch. Windows and live Webots execution remain unverified in this
+  environment. No dependency, public `core/` interface, frozen baseline, seed, split or threshold
+  changed.

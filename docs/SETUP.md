@@ -233,6 +233,20 @@ statistics can be reviewed without writing or approving parameters:
 uv run python -m vlarobot.cli worldmind-calibration-proposal --draft draft.json --evaluator <REGISTERED_EVALUATOR>
 ```
 
+A separate, execution-ready no-actuation Webots diagnostic is available but is **not authorized by
+this setup note**. It must not be run until the owner explicitly authorizes the exact command below.
+From the project root, that command is:
+
+```text
+uv run python -m vlarobot.cli worldmind-webots-diagnostic --config configs/worldmind_webots_diagnostic.yaml --out runs/worldmind/validation-s0-webots-readonly
+```
+
+It starts one Webots process in `mode: launch`, uses only the read-only `inspect` RPC, and creates a
+new exclusive output directory containing `diagnostic.json`, `state.json` and `provenance.json`.
+It never applies an action, steps, resets, exports kinematics, scores a campaign, accesses
+TEST/TRAIN evidence or permits motion. A diagnostic `PASS` does not certify the arm sweep; the
+`unverified-arm-sweep` veto remains hard. Use a fresh `--out` path for every authorized run.
+
 Inert FakeBackend verification without Webots:
 
 ```text

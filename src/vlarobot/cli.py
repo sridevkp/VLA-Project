@@ -631,6 +631,91 @@ def worldmind_diagnostic(
     )
 
 
+@app.command("worldmind-webots-diagnostic")
+def worldmind_webots_diagnostic(
+    config: Annotated[
+        Path,
+        typer.Option(help="Reviewed no-actuation Webots diagnostic config (VALIDATION only)."),
+    ],
+    out: Annotated[
+        Path,
+        typer.Option(
+            help="New exclusive output directory; prior diagnostic evidence is never overwritten."
+        ),
+    ],
+) -> None:
+    """Inspect a real Webots backend read-only. Never applies, steps, resets or scores."""
+    from vlarobot.backends.worldmind_webots_diagnostic import (
+        collect_diagnostic_snapshot,
+        dependency_availability,
+    )
+    from vlarobot.eval.worldmind_webots_diagnostic import (
+        ensure_fresh_output,
+        failed_webots_diagnostic,
+        finalize_webots_diagnostic,
+        load_webots_diagnostic_config,
+        preflight_webots_diagnostic,
+        write_diagnostic_evidence,
+    )
+
+    try:
+        resolved = load_webots_diagnostic_config(config)
+    except Exception as error:  # noqa: BLE001 - config failures must fail closed with one error
+        typer.echo(
+            f"worldmind-webots-diagnostic config failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    try:
+        ensure_fresh_output(out)
+        out.mkdir(parents=True, exist_ok=False)
+    except Exception as error:  # noqa: BLE001 - output exclusivity is a hard gate
+        typer.echo(
+            f"worldmind-webots-diagnostic output failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    preflight = preflight_webots_diagnostic(resolved)
+    if preflight.blockers:
+        report = failed_webots_diagnostic(resolved, preflight, "config_preflight_failed")
+        write_diagnostic_evidence(out, report)
+        typer.echo("worldmind-webots-diagnostic preflight failed:", err=True)
+        for blocker in preflight.blockers:
+            typer.echo(f"  - {blocker}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        snapshot = collect_diagnostic_snapshot(resolved, out)
+    except Exception as error:  # noqa: BLE001 - surface one failure and preserve a fail-closed report
+        try:
+            availability = dependency_availability(resolved)
+        except Exception:  # noqa: BLE001 - unavailable dependencies are recorded as empty
+            availability = {}
+        report = failed_webots_diagnostic(
+            resolved, preflight, f"{type(error).__name__}: {error}", availability
+        )
+        write_diagnostic_evidence(out, report)
+        typer.echo(f"worldmind-webots-diagnostic failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    report, state, provenance = finalize_webots_diagnostic(resolved, preflight, snapshot)
+    files = write_diagnostic_evidence(out, report, state, provenance)
+    outcome = str(report["outcome"])
+    typer.echo(
+        f"worldmind-webots-diagnostic outcome={outcome} mode=read_only_inspection "
+        f"apply=0 step=0 reset=0 scored_evaluation_allowed=False"
+    )
+    blockers = report.get("blockers", [])
+    if isinstance(blockers, (list, tuple)):
+        for blocker in blockers:
+            typer.echo(f"  - {blocker}", err=True)
+    typer.echo(f"  out={out} evidence={','.join(path.name for path in files)}")
+    if outcome != "PASS":
+        raise typer.Exit(code=1)
+
+
 @app.command("worldmind-calibration-proposal")
 def worldmind_calibration_proposal(
     draft: Annotated[Path, typer.Option(help="Unapproved, reviewable calibration draft JSON.")],

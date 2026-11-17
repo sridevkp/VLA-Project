@@ -116,3 +116,9 @@ commands, diagnostic config and objective/sweep modules use the existing Python 
 library and NumPy only. Linux inert checks pass; Windows, Webots, real IK, inference, training,
 actuation, scored VALIDATION and pilot execution remain unverified. Existing version pins and
 frozen evidence are unchanged.
+
+No-actuation Webots diagnostic (ADR-0050) adds no dependency or version pin. It reuses the existing
+Python 3.11 standard library, NumPy, PyYAML, Typer, ZeroMQ/msgpack and the in-repo Webots backend.
+The new protocol operation is `inspect` only; it does not change `core/wire.py`. Linux inert checks
+pass. No Webots process, real IK solve, inference, training, actuation, scored evaluation,
+TEST/TRAIN access or pilot execution was performed; Windows behavior remains unverified.

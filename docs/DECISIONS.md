@@ -1834,3 +1834,40 @@ the controlled VALIDATION pilot remains **NO-GO** and was not run.
   waypoint validation occurred. No dependency, public `core/` interface, frozen result, split,
   seed, threshold, threshold source or baseline controller behaviour changed. No push, merge or
   PR update was performed.
+
+## ADR-0050 — Dedicated no-actuation Webots diagnostic (2026-11-17)
+
+**Status:** Accepted. **Scope:** inert implementation and local verification only. The first
+Webots diagnostic was **not run**; it remains blocked on separate owner authorization of the exact
+command recorded in the final task specification.
+
+- **Read-only boundary:** a new backend-internal `capture_read_only_state()` helper and an
+  `inspect` ZMQ operation return simulator identity, robot identity, an observation and the oracle
+  ground-truth payload without calling `step`, `apply`, `reset` or the kinematics-export probe.
+  The frozen `backends/webots/backend.py` source was deliberately left byte-identical. `core/wire.py` and all
+  public `core/` interfaces are unchanged. The brain-side adapter wraps the client so `apply`,
+  `step`, `reset` and `export_kinematics` raise and increment attempt counters before reaching
+  the transport; the diagnostic calls only `ping()` and `inspect()`.
+- **Dedicated command and config:** `worldmind-webots-diagnostic` is separate from
+  `eval-worldmind`, `worldmind-diagnostic`, `eval` and all scored commands. It has no `--split` or
+  `--state-source` option; `configs/worldmind_webots_diagnostic.yaml` is VALIDATION-only and
+  `oracle`-only, names the declared backend/robot/world/Webots version, pins the world SHA-256,
+  and rejects scoring, TEST/TRAIN, calibration, component, weight and evaluator keys.
+  `launch` starts one Webots process with `VLAROBOT_WORLD_SHA256` exported to its controller;
+  `connect` requires the owner to start that server with the same value.
+- **Evidence:** each run creates one exclusive output directory and writes `diagnostic.json`,
+  `state.json` and `provenance.json` with `open("x")`; prior evidence is never modified. The
+  report records session identity, endpoint, robot/Webots identity, geometry and registration
+  hashes, oracle declaration, observation timestamp/age/validity, dependency availability, safety
+  readiness, forbidden-call counters, missing swept certificate, explicit no-actuation, and exact
+  PASS/FAILED outcome. Oracle state is explicitly labelled **not** perception-equivalent.
+- **Safety precedence:** full-arm sweep remains uncertified and `unverified-arm-sweep` stays a
+  hard motion veto. A missing certificate does not block read-only inspection, and a diagnostic
+  `PASS` never sets `motion_allowed=true`. Missing geometry, non-finite/stale state, identity or
+  world-hash mismatch, unavailable dependencies, any forbidden-call attempt and any observed
+  actuator-command marker fail closed. No safety threshold was changed, no end-effector-only
+  clearance was substituted and no FakeBackend evidence was treated as physical validation.
+- **Verification:** Ruff, format check, `ty check src`, focused WorldMind/inert diagnostic tests,
+  compileall and the frozen-evidence checker pass locally. No Webots process, real IK solve,
+  inference, training, actuation, scored evaluation, TEST/TRAIN access or pilot execution was
+  performed. Windows execution remains unverified. No dependency or version pin changed.

@@ -833,6 +833,15 @@ def test_cli_exposes_new_command_preserves_existing_commands_and_fails_closed(
     assert "eval-worldmind" in help_result.stdout
     assert "eval-vla" in help_result.stdout
     assert "eval " in help_result.stdout
+    assert "worldmind-diagnostic" in help_result.stdout
+    assert "worldmind-webots-diagnostic" in help_result.stdout
+
+    readonly_help = runner.invoke(app, ["worldmind-webots-diagnostic", "--help"])
+    assert readonly_help.exit_code == 0
+    assert "--config" in readonly_help.stdout
+    assert "--out" in readonly_help.stdout
+    assert "--split" not in readonly_help.stdout
+    assert "--state-source" not in readonly_help.stdout
 
     result = runner.invoke(
         app,

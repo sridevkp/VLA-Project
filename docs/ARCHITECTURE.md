@@ -155,7 +155,8 @@ class Verifier(Protocol):   def check(self, task, predicted, observed) -> Verify
 ### 3.4 Wire protocol (sim ↔ brain)
 
 - ZeroMQ `REQ/REP` (lockstep) with `msgpack`; images as raw bytes with shape/dtype header (or JPEG for dashboard streaming only).
-- Messages: `reset`, `step`, `apply`, `get_gt`, `shutdown`, `ping`; every reply carries `sim_time`, `seq`, and `error?`.
+- Messages: `reset`, `step`, `apply`, `get_gt`, `shutdown`, `ping`, and the read-only `inspect`
+  (ADR-0050; no state change, no actuation); every reply carries `sim_time`, `seq`, and `error?`.
 - Versioned: include `protocol_version`; mismatch ⇒ hard fail. Protocol version 3 carries the
   optional full 3D world-frame base pose and optional read-only backend `diagnostics` mapping in
   `RobotState` (torso sensor, base drift, wheel state, contact nodes, Supervisor arm-link world

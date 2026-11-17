@@ -154,6 +154,9 @@ class SimServer:
                     "session_id": self.session_id,
                     "kinematics_telemetry_enabled": telemetry_enabled,
                 }
+                world_hash = os.environ.get("VLAROBOT_WORLD_SHA256")
+                if world_hash:
+                    response_payload["world_sha256"] = world_hash
             elif operation == "reset":
                 scenario = payload.get("scenario", ScenarioSpec())
                 seed = payload.get("seed", 0)
@@ -179,6 +182,19 @@ class SimServer:
                 response_payload = {"result": result}
             elif operation == "get_gt":
                 response_payload = {"ground_truth": self.backend.get_ground_truth()}
+            elif operation == "inspect":
+                from vlarobot.backends.read_only_state import capture_read_only_state
+
+                snapshot = capture_read_only_state(self.backend)
+                if not isinstance(snapshot, dict) or not {
+                    "observation",
+                    "ground_truth",
+                    "identity",
+                }.issubset(snapshot):
+                    raise RuntimeError(
+                        "Backend read-only inspection returned an incomplete snapshot."
+                    )
+                response_payload = dict(snapshot)
             elif operation == "export_kinematics":
                 action = payload.get("action", "poll")
                 if not isinstance(action, str):

@@ -115,6 +115,18 @@ class ZmqBackendClient:
         response = self._request("get_gt", {})
         return self._expect(response, "ground_truth", GroundTruth)
 
+    def inspect(self) -> dict[str, Any]:
+        """Read a backend snapshot without applying actions or advancing simulation."""
+        response = self._request("inspect", {})
+        payload = response.get("payload", {})
+        if not isinstance(payload, dict) or not {
+            "observation",
+            "ground_truth",
+            "identity",
+        }.issubset(payload):
+            raise ValueError("inspect reply omitted observation, ground truth or identity")
+        return payload
+
     def ping(self) -> dict[str, Any]:
         return self._request("ping", {})
 

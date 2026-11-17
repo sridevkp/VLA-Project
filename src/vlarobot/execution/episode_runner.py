@@ -658,6 +658,7 @@ def launch_webots_session(
     startup_timeout_s: float = 180.0,
     shutdown_timeout_s: float = SHUTDOWN_TIMEOUT_S,
     grace_s: float = 10.0,
+    extra_env: Mapping[str, str] | None = None,
 ) -> Generator[WebotsSession, None, None]:
     """Launch one Webots process that can serve many episodes (soft reset per episode).
 
@@ -676,6 +677,8 @@ def launch_webots_session(
     with log_path.open("w", encoding="utf-8", newline="") as log_file:
         command = build_webots_command(resolved, world, headless=headless)
         env = webots_environment(resolved)
+        if extra_env:
+            env.update(extra_env)
         env["VLAROBOT_ZMQ_PORT"] = str(port)
         process = _popen(command, env, log_file)
         _write_pid_file(pid_path, process.pid)

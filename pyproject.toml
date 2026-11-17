@@ -48,18 +48,18 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.data-files]
-"configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml", "configs/scenarios.yaml"]
+"configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml", "configs/scenarios.yaml", "configs/vla.yaml", "configs/world_model.yaml", "configs/training.yaml"]
+"configs/calibration" = ["configs/calibration/urdf-base-train-v1.yaml"]
 
 [tool.setuptools.package-data]
 "vlarobot.backends.webots" = ["*.urdf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -m safe_ci"
+addopts = "-ra"
 markers = [
     "webots: requires a local Webots installation and simulator",
     "gpu: requires a supported GPU and GPU-enabled dependencies",
-    "safe_ci: statically reviewed inert tests permitted in ordinary CI",
 ]
 
 [tool.ruff]

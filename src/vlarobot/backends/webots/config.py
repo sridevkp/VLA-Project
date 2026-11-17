@@ -94,6 +94,7 @@ class RobotSettings:
     torso_joint: str
     head_joints: tuple[str, ...]
     tool_offset: tuple[float, float, float]
+    urdf_base_registration_file: str | None
     gripper_opening_limits: tuple[float, float]
     gripper_force_max: float
     safety_command_horizon: float
@@ -169,6 +170,9 @@ class RobotSettings:
             missing = sorted(expected - actual)
             extra = sorted(actual - expected)
             raise ValueError(f"Invalid robot settings keys; missing={missing}, extra={extra}")
+        registration = values.get("urdf_base_registration_file")
+        if registration is not None and (not isinstance(registration, str) or not registration):
+            raise ValueError("urdf_base_registration_file must be null or a nonempty path string.")
         if values.get("reset_mode") not in {"soft", "reload"}:
             raise ValueError("reset_mode must be either 'soft' or 'reload'.")
         if not isinstance(values.get("joint_stall_steps"), int) or values["joint_stall_steps"] <= 0:

@@ -12,7 +12,7 @@ from typing import Annotated, Literal, overload
 import numpy as np
 import typer
 
-from vlarobot.backends.webots.config import ARM_JOINTS, SIM_KINEMATICS_PATH, TORSO_JOINT
+from vlarobot.backends.webots.config import ARM_JOINTS, SIM_KINEMATICS_PATH, TIME_STEP, TORSO_JOINT
 from vlarobot.backends.webots.sim_kinematics import (
     EXPORT_POSTURE_FIT_TOL_M,
     build_chain,
@@ -62,6 +62,126 @@ from vlarobot.execution.trace_compare import compare_traces, joint_diagnostics
 RUN_EPISODES_DEFAULT_WORLD = Path("worlds/factory.wbt")
 
 app = typer.Typer(no_args_is_help=True)
+
+
+@app.command("eval-vla")
+def eval_vla(
+    export: Annotated[Path, typer.Option(help="Trained portable export with optimizer evidence.")],
+    out: Annotated[Path, typer.Option(help="New versioned VLA-only evaluation directory.")],
+    model_python: Annotated[Path, typer.Option(help="Isolated installed ML Python executable.")],
+    baseline: Path = Path("runs/eval/baseline-train-s0-fresh-v2-registered"),
+    webots: str | None = None,
+    resume: bool = False,
+) -> None:
+    """Run actual frozen TRAIN 8×3 VLA-only evaluation; never use compatibility fixtures."""
+    from vlarobot.execution.vla_campaign import run_vla_campaign
+
+    previous = os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE")
+    os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = "calibration/urdf-base-train-v1.yaml"
+    try:
+        result = run_vla_campaign(
+            export,
+            out,
+            baseline,
+            model_python=model_python,
+            webots=resolve_webots(webots),
+            resume=resume,
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("VLAROBOT_URDF_REGISTRATION_FILE", None)
+        else:
+            os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = previous
+    typer.echo(json.dumps(result, indent=2))
+
+
+@app.command("model-serve")
+def model_serve(
+    export: Annotated[Path, typer.Option(help="Portable local policy export.")],
+    endpoint: str = "tcp://127.0.0.1:5560",
+    device: str = "cpu",
+) -> None:
+    """Serve local SmolVLA inference in the isolated model process; never actuate a robot."""
+    from vlarobot.vla.model_service import PortableChunkModel, serve_model
+
+    serve_model(endpoint, PortableChunkModel(export, device=device))
+
+
+@app.command("train-vla")
+def train_vla(
+    dataset: Annotated[Path, typer.Option(help="Fully approved successful TRAIN dataset.")],
+    out: Annotated[Path, typer.Option(help="Persistent versioned training output.")],
+    steps: int = 20000,
+    batch_size: int = 8,
+    seed: int = 0,
+    save_freq: int = 1000,
+) -> None:
+    """Train approved data on authorized CUDA; record actual optimizer post-step evidence."""
+    from vlarobot.vla.training import launch_approved_training
+
+    launch_approved_training(
+        dataset, out, steps=steps, batch_size=batch_size, seed=seed, save_freq=save_freq
+    )
+
+
+@app.command("vla-smoke")
+def vla_smoke(
+    out: Annotated[Path, typer.Option(help="New installed-policy evidence directory.")],
+    recording: Annotated[
+        Path, typer.Option(help="Correctly decoded measured recording directory.")
+    ],
+    seed: int = 0,
+) -> None:
+    """Run actual installed pretrained SmolVLA inference with TIAGo features (no robot)."""
+    from vlarobot.vla.smoke import run_installed_forward
+
+    report = run_installed_forward(out, recording, seed=seed)
+    typer.echo(f"VLA installed forward: chunk={report['chunk_shape']} out={out}")
+
+
+@app.command("export-demos")
+def export_demos(
+    collection: Annotated[Path, typer.Option(help="Audited successful TRAIN collection.")],
+    out: Annotated[Path, typer.Option(help="New versioned native LeRobot dataset directory.")],
+    repo_id: Annotated[str, typer.Option(help="Local dataset identity, e.g. tiago/train-v1.")],
+) -> None:
+    """Re-audit and export successful measured episodes using installed LeRobot."""
+    from vlarobot.execution.dataset_validation import export_collection
+
+    report = export_collection(collection, out, repo_id=repo_id)
+    typer.echo(f"Exported {report['episodes']} successful episodes; training approval pending.")
+
+
+@app.command("vla-dataset-check")
+def vla_dataset_check(
+    dataset: Annotated[Path, typer.Option(help="Native successful TRAIN dataset.")],
+    smoke: Annotated[Path, typer.Option(help="Completed pinned installed-forward evidence.")],
+    seed: int = 0,
+) -> None:
+    """Exercise actual dataset statistics in an installed policy forward pass (no robot)."""
+    from vlarobot.execution.dataset_validation import validate_native_forward
+
+    report = validate_native_forward(dataset, smoke, seed=seed)
+    typer.echo(
+        f"Native forward verified: {report['chunk_shape']}; episodes={len(report['episodes'])}"
+    )
+
+
+@app.command("grasp-report")
+def grasp_report(
+    diag: Annotated[Path, typer.Option(help="Completed physical diagnostic JSONL.")],
+    trace: Annotated[Path, typer.Option(help="Policy state-boundary JSONL.")],
+    out: Annotated[Path, typer.Option(help="New JSON report path (must not exist).")],
+) -> None:
+    """Measure recorded pad/can geometry and lift (privileged diagnostic, read-only)."""
+    from vlarobot.eval.grasp_diagnostics import summarize_grasp
+
+    report = summarize_grasp(diag, trace)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("x", encoding="utf-8") as stream:
+        json.dump(report, stream, indent=2, allow_nan=False)
+        stream.write("\n")
+    typer.echo(f"PRIVILEGED DIAGNOSTIC: {report['sample_count']} samples; out={out}")
 
 
 @app.callback()
@@ -272,8 +392,8 @@ def eval(  # noqa: A001 - CLI command name is fixed by ADR-0029
 
     try:
         canonical = canonical_pipeline(pipeline)
-        if canonical != "baseline":
-            raise ValueError("explicit policy factory required; use the comparison runner")
+        if canonical == "vla_only":
+            raise ValueError("Use eval-vla with a trained export; baseline CLI cannot run VLA.")
     except ValueError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
@@ -467,7 +587,7 @@ def collect_demos(
     n: Annotated[int, typer.Option("--n", min=1, help="Number of demo episodes to collect.")] = 80,
     seed: Annotated[
         int, typer.Option(help="Base seed (iterated by seed blocks for coverage).")
-    ] = 0,
+    ] = 100,
     split: Annotated[
         Literal["train", "validation"],
         typer.Option(help="Scene split. The test split is fail-closed until week 4 (ADR-0029)."),
@@ -503,7 +623,17 @@ def collect_demos(
     frame_hz: Annotated[
         float,
         typer.Option("--frame-hz", min=0.0, help="Frame capture rate in sim Hz."),
-    ] = 10.0,
+    ] = 1000.0 / TIME_STEP,
+    baseline: Annotated[
+        Path,
+        typer.Option(help="Completed repaired baseline used to authorize physical collection."),
+    ] = Path("runs/eval/baseline-train-s0-fresh-v2-registered"),
+    registration_file: Annotated[
+        Path, typer.Option(help="Frozen static registration, relative to configs or absolute.")
+    ] = Path("calibration/urdf-base-train-v1.yaml"),
+    max_attempts: Annotated[
+        int, typer.Option(min=0, help="Attempt budget; 0 uses configs/vla.yaml.")
+    ] = 0,
     startup_timeout_s: Annotated[
         float,
         typer.Option(min=1.0, help="Seconds to wait for the Webots server."),
@@ -522,6 +652,8 @@ def collect_demos(
     from vlarobot.eval.settings import load_eval_settings
     from vlarobot.execution.scripted_baseline import scripted_policy_factory
 
+    if backend == "webots" and (split != "train" or headless or not frames):
+        raise typer.BadParameter("Successful demonstrations require TRAIN, rendering and RGB.")
     settings = load_eval_settings()
     try:
         plan = build_demo_plan(
@@ -549,30 +681,39 @@ def collect_demos(
             resume=resume,
         )
     else:
-        world_path = world or RUNNER_DEFAULT_WORLD
+        from vlarobot.execution.demo_collection import collect_verified_training
+
+        if abs(frame_hz - 1000.0 / TIME_STEP) > 1e-9:
+            raise typer.BadParameter("Measured demo admission requires full lockstep RGB cadence.")
+        previous_registration = os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE")
+        os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = str(registration_file)
         try:
-            with launch_webots_session(
-                webots=webots,
-                world=world_path,
-                trace_dir=out_dir,
-                trace_prefix=f"demos-{split}-s{seed}",
-                headless=headless,
+            state = collect_verified_training(
+                out_dir,
+                baseline,
+                webots=resolve_webots(webots),
+                world=world or RUNNER_DEFAULT_WORLD,
+                target=n,
+                seed=seed,
+                max_attempts=max_attempts or None,
                 startup_timeout_s=startup_timeout_s,
-            ) as session:
-                result = collect_demo_episodes(
-                    plan,
-                    session.client,
-                    out_dir,
-                    policy_factory=scripted_policy_factory,
-                    state_source=state_source,
-                    pipeline="scripted",
-                    record_frames=frames,
-                    frame_hz=frame_hz,
-                    resume=resume,
-                )
+                resume=resume,
+                instruction=instruction,
+            )
         except Exception as error:  # noqa: BLE001
             typer.echo(f"collect-demos failed: {type(error).__name__}: {error}", err=True)
             raise typer.Exit(code=1) from error
+        finally:
+            if previous_registration is None:
+                os.environ.pop("VLAROBOT_URDF_REGISTRATION_FILE", None)
+            else:
+                os.environ["VLAROBOT_URDF_REGISTRATION_FILE"] = previous_registration
+        typer.echo(
+            f"collect-demos status={state['status']} accepted={state['successful_episodes']}/{n} "
+            f"attempted={state['attempted']} quarantined={state['quarantined_attempts']} "
+            f"out={out_dir}"
+        )
+        return
 
     wall_s = time.perf_counter() - started
     typer.echo(

@@ -194,6 +194,12 @@ class FakeCamera:
     def getImageArray(self):
         return np.zeros((2, 3, 3), dtype=np.uint8).tolist()
 
+    def getWidth(self):
+        return 2
+
+    def getHeight(self):
+        return 3
+
     def getFov(self):
         return 1.0
 
@@ -320,7 +326,9 @@ def test_reset_twice_reacquires_can_and_restores_identical_episode_state():
 
     first = _observation_signature(first_observation)
     second = _observation_signature(second_observation)
-    # Match the existing final reset physics step; controller timing is unchanged.
+    # Reset commits the reasserted object poses with one final physics step after
+    # setting the episode origin. Preserve that measured behavior (32 ms), rather
+    # than changing reset timing while evaluating fresh-session reproducibility.
     assert first[0] == pytest.approx(backend.io.ts / 1000)
     assert second[0] == pytest.approx(first[0])
     np.testing.assert_array_equal(first[1], second[1])

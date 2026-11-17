@@ -50,7 +50,10 @@ class ScriptedBaselinePolicy:
 
     def execute(self, backend: Any, seed: int) -> Mapping[str, Any]:
         policy = ScriptedCanPolicy(scenario=self.scenario, trace_path=self.trace_path)
-        return outcome_payload(policy.execute(backend, seed))
+        payload = outcome_payload(policy.execute(backend, seed))
+        payload["geometry_registration_file"] = policy.kinematics.registration_file
+        payload["geometry_registration_sha256"] = policy.kinematics.registration_sha256
+        return payload
 
 
 def scripted_policy_factory(scenario: ScenarioSpec) -> ScriptedBaselinePolicy:

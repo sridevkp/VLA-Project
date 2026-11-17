@@ -1,0 +1,18 @@
+[project]
+name = "vlarobot-vla-compat"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+# Isolated from the frozen simulator's numerical environment. Licences: ADR-0035.
+[project.optional-dependencies]
+cpu-smoke = [
+    "lerobot[smolvla]==0.4.3",
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "transformers==4.57.1",
+    "torchcodec==0.3.0; sys_platform != 'win32'",
+]
+
+[tool.uv]
+package = false

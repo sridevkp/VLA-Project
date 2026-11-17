@@ -1,5 +1,7 @@
 """IKPy chain, bounded inverse kinematics, and tool-frame scoring."""
 
+import hashlib
+import os
 import warnings
 from copy import copy
 from typing import Literal, TypeAlias
@@ -14,6 +16,8 @@ from vlarobot.backends.webots.config import (
     KINEMATIC_MODEL,
     MAX_JOINT_STEP_RAD,
     MAX_TILT_DEG,
+    SETTINGS,
+    SETTINGS_PATH,
     SIM_KINEMATICS_PATH,
     TOOL_OFFSET,
     TORSO_HEIGHT,
@@ -26,6 +30,7 @@ from vlarobot.backends.webots.sim_kinematics import (
     load_snapshot,
     validate_torso,
 )
+from vlarobot.backends.webots.urdf_registration import register_chain
 
 warnings.filterwarnings("ignore", message=".*is of type 'fixed'.*")
 
@@ -44,6 +49,8 @@ class Kinematics:
         allow_unverified_tool: bool | None = None,
     ):
         self.model = model_override if model_override is not None else KINEMATIC_MODEL
+        self.registration_file: str | None = None
+        self.registration_sha256: str | None = None
         self._sim: SimKinematics | None = None
         if self.model == "sim":
             if not SIM_KINEMATICS_PATH.exists():
@@ -76,6 +83,14 @@ class Kinematics:
             self.chain = Chain.from_urdf_file(
                 str(URDF_PATH), base_elements=base_elements, last_link_vector=TOOL_OFFSET
             )
+            registration_file = os.environ.get(
+                "VLAROBOT_URDF_REGISTRATION_FILE", SETTINGS.urdf_base_registration_file
+            )
+            if registration_file is not None:
+                path = SETTINGS_PATH.parent / registration_file
+                self.chain = register_chain(self.chain, path)
+                self.registration_file = str(path.resolve())
+                self.registration_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
         # Same active-link semantics for both models: only the arm joints are
         # IK variables (the torso is baked/constant in this M1 chain).
         for i, link in enumerate(self.chain.links):

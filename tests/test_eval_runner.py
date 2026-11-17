@@ -25,7 +25,7 @@ def test_canonical_pipeline_and_fail_closed() -> None:
     assert canonical_pipeline("scripted") == "baseline"
     assert canonical_pipeline("vla_only") == "vla_only"
     with pytest.raises(ValueError, match="not implemented"):
-        canonical_pipeline("invented_arm")
+        canonical_pipeline("unimplemented-arm")
 
 
 def test_build_episode_plan_seed_major_and_limits() -> None:
@@ -86,7 +86,7 @@ def test_eval_cli_rejects_unknown_pipeline_and_test_split(tmp_path: Path) -> Non
     runner = CliRunner()
     unknown = runner.invoke(app, ["eval", "--pipeline", "vla_only", "--backend", "fake"])
     assert unknown.exit_code != 0
-    assert "explicit policy factory required" in unknown.output
+    assert "eval-vla" in unknown.output
 
     frozen_test = runner.invoke(
         app,

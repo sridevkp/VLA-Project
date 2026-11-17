@@ -39,6 +39,7 @@ from vlarobot.backends.webots.config import (
 )
 from vlarobot.backends.webots.frames import Frames, compose_can_reset_pose
 from vlarobot.backends.webots.gripper import Gripper
+from vlarobot.backends.webots.images import camera_array_to_rgb
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.robot_io import RobotIO
 from vlarobot.backends.webots.supervisor_kinematics import (
@@ -602,11 +603,7 @@ class WebotsBackend:
         )
         fov = float(getattr(self, "_camera_fov", getattr(self.camera, "getFov", lambda: 1.0)()))
         if OBSERVE_IMAGES:
-            image = np.asarray(self.camera.getImageArray(), dtype=np.uint8)
-            if image.ndim != 3 or image.shape[2] < 3:
-                raise RuntimeError(f"Webots camera returned an invalid image shape: {image.shape}.")
-            image = image[:, :, :3].transpose((1, 0, 2)).copy()
-            width, height = image.shape[1], image.shape[0]
+            image = camera_array_to_rgb(self.camera.getImageArray(), width, height)
             fov = float(getattr(self.camera, "getFov", lambda: fov)())
         else:
             # bench-steps: image reads can be disabled without changing observation shape.

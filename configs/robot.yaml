@@ -129,6 +129,9 @@ export_sim_kinematics: false
 # repo URDF chain (M1-06a equivalence baseline); 'sim' builds the chain from the
 # JSON written by `uv run python -m vlarobot.cli export-sim-kinematics`.
 kinematic_model: urdf
+# Static geometry calibration; null preserves fresh-v1 and legacy equivalence.
+# Set only for a separately recorded correction trial (ADR-0034).
+urdf_base_registration_file: null
 # Path of the simulator kinematics JSON, relative to configs/.
 sim_kinematics_filename: generated/sim_kinematics.json
 # Observe RGB camera images on reset/step (ADR-0020 addendum: bench-steps/diagnostics).

@@ -1,0 +1,250 @@
+{
+  "kind": "AD2-read-only-implementation-design-evidence-v2",
+  "candidate_report_not_authenticated_submitted_revision": true,
+  "asset_lookup": {
+    "TiagoBody": "/home/tj330/.cache/Cyberbotics/Webots/assets/1d8ea125e64eb491b6a7e7781f9ff6d8940f5eee",
+    "TiagoFrontArm": "/home/tj330/.cache/Cyberbotics/Webots/assets/e944e0827c8df64945f22d66be2275b3c46658cd",
+    "Apple": "/home/tj330/.cache/Cyberbotics/Webots/assets/2f0d8c83b9a96de62bec39736ba4428ee137b76b",
+    "Tiago": "/home/tj330/.cache/Cyberbotics/Webots/assets/486538c7f379a4d6f74ccaf33dbf14d6dae1486b",
+    "Table": "/home/tj330/.cache/Cyberbotics/Webots/assets/398b0d8cac814e7bacf01f96e74881d24933038a",
+    "TiagoGripper": "/home/tj330/.cache/Cyberbotics/Webots/assets/4e7a9e23c276e883e79a4ffdba3dad10f06fcf10",
+    "TiagoBase": "/home/tj330/.cache/Cyberbotics/Webots/assets/10bd68a813851848a53bf53ea5ddfaa058e1dd71",
+    "Can": "/home/tj330/.cache/Cyberbotics/Webots/assets/ebc4fec86194c7b018ccf11280fe53754560196c",
+    "Hammer": "/home/tj330/.cache/Cyberbotics/Webots/assets/958884028af0a829f51d8c32d3fa51aea0448c6d"
+  },
+  "files": [
+    {
+      "path": "/home/tj330/Downloads/Project_Report.pdf",
+      "bytes": 24118576,
+      "sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/1d8ea125e64eb491b6a7e7781f9ff6d8940f5eee",
+      "bytes": 617569,
+      "sha256": "adeede86539f936c9627741d3597f2b40a0f43907370ebcfd5cc4fae29bd8974"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/e944e0827c8df64945f22d66be2275b3c46658cd",
+      "bytes": 28774,
+      "sha256": "4d606ab949b324a3d13f702b6f642786cab602f2f99a0faba4217a4cf0dcdb10"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/2f0d8c83b9a96de62bec39736ba4428ee137b76b",
+      "bytes": 11609,
+      "sha256": "86535a2243d9ee303e57292c134d4fdf4e24f1ee9fd34d536c4da208781e3c2e"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/486538c7f379a4d6f74ccaf33dbf14d6dae1486b",
+      "bytes": 2851,
+      "sha256": "5306bc3b6517b8196aa00f8f523852a2386a1303d47d66946ad45083d08d8065"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/398b0d8cac814e7bacf01f96e74881d24933038a",
+      "bytes": 4414,
+      "sha256": "d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/4e7a9e23c276e883e79a4ffdba3dad10f06fcf10",
+      "bytes": 228268,
+      "sha256": "2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/10bd68a813851848a53bf53ea5ddfaa058e1dd71",
+      "bytes": 22977,
+      "sha256": "75415c02c46265c811632f33c5f9e0999efc40965ef9b3fd5cb7fc23e06faa7b"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/ebc4fec86194c7b018ccf11280fe53754560196c",
+      "bytes": 39238,
+      "sha256": "d7dfa3fa8665520f4d00bc9044233b95b57218db6c7789d21dd1a194a1fe7593"
+    },
+    {
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/958884028af0a829f51d8c32d3fa51aea0448c6d",
+      "bytes": 60143,
+      "sha256": "9672241772c97d74a21244ddaec36ad5f01677fc708d469b8938d8786698b736"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/repeat-fresh-01.jsonl",
+      "bytes": 70995,
+      "sha256": "186e52376bdf04056def1d11e87430cda515f613329e62b5693ac2ef7eb90ef0"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/repeat-fresh-02.jsonl",
+      "bytes": 70977,
+      "sha256": "04db603fa8fc50c091a6a2fb4953c8112f8f457a4a9397404e6cc999fb493b28"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/repeat-fresh-03.jsonl",
+      "bytes": 70977,
+      "sha256": "430702d9e95aa94d28b8ed3af3ca96b334a2b1c4f4754e9116c14f85aeae7c09"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode.log",
+      "bytes": 415473,
+      "sha256": "ec099bf7811f394f4fc9f80fbfeec64981dc9e74ea95567b0f8a7b602d7793ca"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json",
+      "bytes": 1851,
+      "sha256": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.physical.jsonl",
+      "bytes": 234138,
+      "sha256": "e8a4d0c2cc1df6798882acbddf32e273392b224a152c60b9f8758ecbb3a24696"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/policy.jsonl",
+      "bytes": 784281,
+      "sha256": "cea3ba43257b961d7f3a8133586e4f3e03c8f00abe84fd25746b7b3ffd4a637e"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz",
+      "bytes": 271773,
+      "sha256": "dd56d7c9d5a05a5e8d4633f22311c259def08088bfed456cc32ec8ae053126e7"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/collision-audit-v2/coverage-audit.json",
+      "bytes": 70200,
+      "sha256": "071b4941b2a148e9fc26d2251961271eb7540034a524fb9fe739f0517a3386ea"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/live-geometry-v3/live-bounding-objects.json",
+      "bytes": 132412,
+      "sha256": "37bb783962377fe4aba639cc278004242450d9ba5a6dfac8dc97cfee3d124996"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/live-geometry-v3/provenance.json",
+      "bytes": 243,
+      "sha256": "decd37849b30ffc1ec87ca6f44b6565c456b4591692968f9ef37c7e5b158a9a2"
+    },
+    {
+      "path": "/home/tj330/.local/opt/webots/resources/nodes/PositionSensor.wrl",
+      "bytes": 338,
+      "sha256": "aed8272441b3bae4c2ccac647b45804e32d397be1a3ce3fbabca3dd3a7472998"
+    },
+    {
+      "path": "/home/tj330/.local/opt/webots/resources/nodes/RotationalMotor.wrl",
+      "bytes": 1696,
+      "sha256": "0518fe10c5caf3a87dfb1adafafc70ec5f59a2ffb92c6ef00a2bee6e6d1fe2d1"
+    },
+    {
+      "path": "/home/tj330/.local/opt/webots/resources/nodes/LinearMotor.wrl",
+      "bytes": 1606,
+      "sha256": "8ddc8d021870a6329c768ea453c72a4c957a3ffa371c163d46fc024265df4660"
+    },
+    {
+      "path": "/home/tj330/.local/opt/webots/resources/nodes/WorldInfo.wrl",
+      "bytes": 3264,
+      "sha256": "d9c1f9bd11115ba0f509da4f98aed5a83f81b4548c1e4bc445c3d86302720ab2"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/worlds/factory.wbt",
+      "bytes": 10591,
+      "sha256": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/robot_io.py",
+      "bytes": 22839,
+      "sha256": "f48dcdfbfaba7db2706898aac3043fe63e6d188a231fb260b2897cf8c4e9abbd"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/backend.py",
+      "bytes": 50617,
+      "sha256": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/ui_bridge.py",
+      "bytes": 3658,
+      "sha256": "125807b6f528145214d69591bb4ce322b8626fa7329ccd181421778b727f5f78"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/gripper.py",
+      "bytes": 3179,
+      "sha256": "2cb92f76de19881ca9c89ec16ca84c39c6b8d9b9fe0515bc1429bbbb2f3a84f4"
+    }
+  ],
+  "old_repeat_context": {
+    "per_joint_range": {
+      "arm_1_joint": 9.380594959140787e-08,
+      "arm_2_joint": 2.8149263544931312e-08,
+      "arm_3_joint": 9.754277228564922e-08,
+      "arm_4_joint": 1.8079938222788036e-08,
+      "arm_5_joint": 2.794565909849798e-08,
+      "arm_6_joint": 8.611066303469377e-09,
+      "arm_7_joint": 9.17184320944275e-09,
+      "torso_lift_joint": 6.171677668920239e-09
+    },
+    "max_base_translation_pairwise_m": 0.00013222255140484985,
+    "max_base_angle_pairwise_rad": 0.0012512376487459078,
+    "can_translation_pairwise_m": 0.0,
+    "gripper_opening_range_m": 1.6218097330817454e-09,
+    "sample_count": 3,
+    "reference_relative_times_s": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "not_validated_ad2_tolerances": true
+  },
+  "new_ik_solves": 0,
+  "model_calls": 0,
+  "webots_starts": 0,
+  "actuator_commands": 0,
+  "fixture_tests_executed": false,
+  "historical_velocity_endpoint_check": {
+    "joint_names": [
+      "arm_1_joint",
+      "arm_2_joint",
+      "arm_3_joint",
+      "arm_4_joint",
+      "arm_5_joint",
+      "arm_6_joint",
+      "arm_7_joint",
+      "torso_lift_joint"
+    ],
+    "previous_fingerprint_position": [
+      0.07089103067645036,
+      -5.633052374065528e-05,
+      6.404218972084902e-05,
+      2.19039695493935e-05,
+      1.52685782001198e-05,
+      -4.981624255592888e-06,
+      4.652738704870604e-06,
+      0.34974461407881113
+    ],
+    "frame0_joint_position": [
+      0.07103975613359034,
+      -5.6330103023860545e-05,
+      -2.289653672216385e-05,
+      2.1903720995360823e-05,
+      -5.50120551103984e-06,
+      1.8481290345948952e-06,
+      -1.680523213603215e-06,
+      0.3497446130613471
+    ],
+    "interval_s": 0.03200000000000003,
+    "reconstructed_finite_difference_velocity": [
+      0.004647670535624401,
+      1.314739983548917e-08,
+      -0.0027168352013441496,
+      -7.767313521103626e-09,
+      -0.0006490557409737381,
+      0.00021342979031836802,
+      -0.0001979144349523067,
+      -3.17957517953493e-08
+    ],
+    "recorded_frame0_velocity": [
+      0.004647670535624401,
+      1.314739983548917e-08,
+      -0.0027168352013441496,
+      -7.767313521103626e-09,
+      -0.0006490557409737381,
+      0.00021342979031836802,
+      -0.0001979144349523067,
+      -3.17957517953493e-08
+    ],
+    "max_absolute_error": 0.0,
+    "interpretation": "Earlier fingerprint is a previous position endpoint, NOT a frame0 measurement; no instantaneous physical velocity reconstruction."
+  }
+}

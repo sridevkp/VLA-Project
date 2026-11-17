@@ -1,5 +1,8 @@
 # A-D2 readiness design — preparation only
 
+See the subsequent [implementation-design addendum](AD2_IMPLEMENTATION_READINESS_ADDENDUM.md)
+for additional historical evidence, unapproved numerical candidates and CPU fixture specifications.
+
 **Decision status: NO-GO for implementation or execution.** This document is a design,
 not an executable harness. No Webots/model server, inference, IK solve, actuator command,
 training or scored evaluation was run. Only existing TRAIN evidence and source were read.

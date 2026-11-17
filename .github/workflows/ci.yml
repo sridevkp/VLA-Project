@@ -30,13 +30,14 @@ jobs:
           uv run pytest --collect-only -q
           tests/test_core_wire.py tests/test_eval_settings.py tests/test_report_contract.py
           tests/test_geometry_inventory.py tests/test_kinematic_surrogate.py
-          tests/test_trace_compare.py tests/test_prepare_original_comparison.py
+          tests/test_trace_compare.py
           tests/test_controller_entrypoint_source.py tests/test_reset_repro_safe.py -m safe_ci
       - run: uv run python tools/verify_safe_ci_selection.py
+      - run: uv run pytest -q tests/test_prepare_original_comparison.py
       - run: >-
           uv run pytest -q
           tests/test_core_wire.py tests/test_eval_settings.py tests/test_report_contract.py
           tests/test_geometry_inventory.py tests/test_kinematic_surrogate.py
-          tests/test_trace_compare.py tests/test_prepare_original_comparison.py
+          tests/test_trace_compare.py
           tests/test_controller_entrypoint_source.py tests/test_reset_repro_safe.py
           -m safe_ci

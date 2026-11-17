@@ -2586,7 +2586,6 @@
     "tests/test_trace_compare.py::test_base_drift_by_state_reports_planar_and_yaw_drift",
     "tests/test_trace_compare.py::test_base_drift_by_state_reports_base_tilt",
     "tests/test_trace_compare.py::test_base_drift_by_state_reads_fixture_orientation_matrices",
-    "tests/test_prepare_original_comparison.py::test_fixture_v2_prepares_clean_1b2e4da_archive",
     "tests/test_controller_entrypoint_source.py::test_controller_has_one_main_guard_and_one_dispatch",
     "tests/test_reset_repro_safe.py::test_missing_joint_keys_are_explicit_mismatch",
     "tests/test_reset_repro_safe.py::test_quaternion_sign_equivalence",
@@ -2605,13 +2604,12 @@
     "tests/test_geometry_inventory.py",
     "tests/test_kinematic_surrogate.py",
     "tests/test_trace_compare.py",
-    "tests/test_prepare_original_comparison.py",
     "tests/test_controller_entrypoint_source.py",
     "tests/test_reset_repro_safe.py",
     "-m",
     "safe_ci"
   ],
-  "actual_collection_count": 39,
+  "actual_collection_count": 38,
   "classification_counts": {
     "SAFE": 39,
     "UNSAFE": 0,

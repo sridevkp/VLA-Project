@@ -6,7 +6,6 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-import pytest
 
 prepare = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / "scripts" / "prepare_original_comparison.py")

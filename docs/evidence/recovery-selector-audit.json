@@ -1,0 +1,13 @@
+{
+  "approved_source_matches_local": {
+    "src/vlarobot/vla/training.py": true,
+    "src/vlarobot/vla/checkpoint_export.py": true
+  },
+  "actual_selector_fixture_missing_model_18000": true,
+  "actual_selector_fixture_missing_model_optimizer_19000_20000": true,
+  "selected_step": 17000,
+  "authenticated_17000_all_files_verified": false,
+  "owner_model_optimizer_verified": true,
+  "original_checkpoint_modified": false,
+  "recovery_training_started": false
+}

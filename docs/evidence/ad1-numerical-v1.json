@@ -1,0 +1,1207 @@
+{
+  "status": "A-D1_COMPLETED_TWO_IK_CALLS",
+  "result": {
+    "identity": "A-D1-train-clear-i00-s100-frame0-v1",
+    "status": "completed",
+    "cases": {
+      "A": {
+        "accepted": true,
+        "joints": {
+          "arm_1_joint": 0.07103975613359034,
+          "arm_2_joint": -5.6330103023860545e-05,
+          "arm_3_joint": -2.289653672216385e-05,
+          "arm_4_joint": 2.1903720995360823e-05,
+          "arm_5_joint": -5.50120551103984e-06,
+          "arm_6_joint": 1.8481290345948952e-06,
+          "arm_7_joint": -1.680523213603215e-06
+        },
+        "ik_calls": 0,
+        "bounds": {
+          "arm_1_joint": {
+            "position_bounds": [
+              0.07,
+              2.68
+            ],
+            "trust_bounds": [
+              0.07,
+              0.22103975613359034
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_2_joint": {
+            "position_bounds": [
+              -1.5,
+              1.02
+            ],
+            "trust_bounds": [
+              -0.15005633010302385,
+              0.14994366989697613
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_3_joint": {
+            "position_bounds": [
+              -3.46,
+              1.5
+            ],
+            "trust_bounds": [
+              -0.15002289653672216,
+              0.14997710346327783
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_4_joint": {
+            "position_bounds": [
+              -0.32,
+              2.29
+            ],
+            "trust_bounds": [
+              -0.14997809627900463,
+              0.15002190372099536
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_5_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.15000550120551104,
+              0.14999449879448895
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_6_joint": {
+            "position_bounds": [
+              -1.39,
+              1.39
+            ],
+            "trust_bounds": [
+              -0.1499981518709654,
+              0.15000184812903458
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_7_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.1500016805232136,
+              0.14999831947678638
+            ],
+            "delta_from_q0_rad": 0.0
+          }
+        },
+        "fk_matrix": [
+          [
+            -0.0014344052177406954,
+            -0.9999530684188922,
+            -0.009581411238708658,
+            0.1325793562613417
+          ],
+          [
+            0.002031952611255427,
+            -0.009584315828227035,
+            0.9999520048775667,
+            -0.9902554368541618
+          ],
+          [
+            -0.9999969068203464,
+            0.001414867399700618,
+            0.0020456050411390876,
+            0.9622251279422418
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      "B": {
+        "accepted": true,
+        "ik_calls": 1,
+        "joints": {
+          "arm_1_joint": 0.07103975613359034,
+          "arm_2_joint": -5.6330103023860545e-05,
+          "arm_3_joint": -2.289653672216385e-05,
+          "arm_4_joint": 2.1903720995360823e-05,
+          "arm_5_joint": -5.50120551103984e-06,
+          "arm_6_joint": 1.8481290345948952e-06,
+          "arm_7_joint": -1.680523213603215e-06
+        },
+        "physical_input_action": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.045
+        ],
+        "target_matrix": [
+          [
+            -0.0014344052177308608,
+            -0.9999530684188864,
+            -0.009581411238713033,
+            0.1325793562613417
+          ],
+          [
+            0.002031952611263821,
+            -0.009584315828231382,
+            0.9999520048775793,
+            -0.9902554368541618
+          ],
+          [
+            -0.9999969068203446,
+            0.0014148673996906558,
+            0.00204560504114748,
+            0.9622251279422418
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "achieved_fk_matrix": [
+          [
+            -0.0014344052177406954,
+            -0.9999530684188922,
+            -0.009581411238708658,
+            0.1325793562613417
+          ],
+          [
+            0.002031952611255427,
+            -0.009584315828227035,
+            0.9999520048775667,
+            -0.9902554368541618
+          ],
+          [
+            -0.9999969068203464,
+            0.001414867399700618,
+            0.0020456050411390876,
+            0.9622251279422418
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "translation_error_vector_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "translation_residual_m": 0.0,
+        "orientation_error_vector_base_rad": [
+          -8.43268509182288e-15,
+          9.857089652075872e-15,
+          -4.312163638510871e-15
+        ],
+        "orientation_residual_rad": 6.989264130329237e-08,
+        "bounds": {
+          "arm_1_joint": {
+            "position_bounds": [
+              0.07,
+              2.68
+            ],
+            "trust_bounds": [
+              0.07,
+              0.22103975613359034
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_2_joint": {
+            "position_bounds": [
+              -1.5,
+              1.02
+            ],
+            "trust_bounds": [
+              -0.15005633010302385,
+              0.14994366989697613
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_3_joint": {
+            "position_bounds": [
+              -3.46,
+              1.5
+            ],
+            "trust_bounds": [
+              -0.15002289653672216,
+              0.14997710346327783
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_4_joint": {
+            "position_bounds": [
+              -0.32,
+              2.29
+            ],
+            "trust_bounds": [
+              -0.14997809627900463,
+              0.15002190372099536
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_5_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.15000550120551104,
+              0.14999449879448895
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_6_joint": {
+            "position_bounds": [
+              -1.39,
+              1.39
+            ],
+            "trust_bounds": [
+              -0.1499981518709654,
+              0.15000184812903458
+            ],
+            "delta_from_q0_rad": 0.0
+          },
+          "arm_7_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.1500016805232136,
+              0.14999831947678638
+            ],
+            "delta_from_q0_rad": 0.0
+          }
+        },
+        "fk_matrix": [
+          [
+            -0.0014344052177406954,
+            -0.9999530684188922,
+            -0.009581411238708658,
+            0.1325793562613417
+          ],
+          [
+            0.002031952611255427,
+            -0.009584315828227035,
+            0.9999520048775667,
+            -0.9902554368541618
+          ],
+          [
+            -0.9999969068203464,
+            0.001414867399700618,
+            0.0020456050411390876,
+            0.9622251279422418
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      "C": {
+        "accepted": true,
+        "ik_calls": 1,
+        "joints": {
+          "arm_1_joint": 0.07000000000000002,
+          "arm_2_joint": -0.0015776230243764139,
+          "arm_3_joint": -0.15002289653672213,
+          "arm_4_joint": -0.002329658044912425,
+          "arm_5_joint": -0.15000548310097536,
+          "arm_6_joint": 0.0061974754183294345,
+          "arm_7_joint": -0.0014491773677773425
+        },
+        "physical_input_action": [
+          -0.0004035973106510937,
+          -0.0005324767553247511,
+          5.675968714058399e-05,
+          -0.0007653954671695828,
+          0.0014333073049783707,
+          0.004923577886074781,
+          0.044908665120601654
+        ],
+        "target_matrix": [
+          [
+            -0.0028758041227412434,
+            -0.9998907016348781,
+            -0.014502225165766658,
+            0.1321757589506906
+          ],
+          [
+            0.0012559476481230902,
+            -0.014505885191085754,
+            0.9998939953266687,
+            -0.9907879136094866
+          ],
+          [
+            -0.9999950761609542,
+            0.0028572852384752823,
+            0.001297526459535181,
+            0.9622818876293824
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "achieved_fk_matrix": [
+          [
+            -0.0028752960456229146,
+            -0.9998921488378256,
+            -0.014402211740166168,
+            0.132943857296209
+          ],
+          [
+            0.001220796554462512,
+            -0.01440577034411568,
+            0.9998954864266157,
+            -0.9902211222985969
+          ],
+          [
+            -0.9999951213212478,
+            0.0028574133672038125,
+            0.0012620857444320902,
+            0.9622016672280258
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "translation_error_vector_m": [
+          0.0007680983455183865,
+          0.0005667913108896583,
+          -8.022040135657882e-05
+        ],
+        "translation_residual_m": 0.0009579471651828772,
+        "orientation_error_vector_base_rad": [
+          -3.5438892841783764e-05,
+          -3.842120009632171e-07,
+          -0.00010002444816309709
+        ],
+        "orientation_residual_rad": 0.00010369762510890704,
+        "bounds": {
+          "arm_1_joint": {
+            "position_bounds": [
+              0.07,
+              2.68
+            ],
+            "trust_bounds": [
+              0.07,
+              0.22103975613359034
+            ],
+            "delta_from_q0_rad": -0.0010397561335903222
+          },
+          "arm_2_joint": {
+            "position_bounds": [
+              -1.5,
+              1.02
+            ],
+            "trust_bounds": [
+              -0.15005633010302385,
+              0.14994366989697613
+            ],
+            "delta_from_q0_rad": -0.0015212929213525533
+          },
+          "arm_3_joint": {
+            "position_bounds": [
+              -3.46,
+              1.5
+            ],
+            "trust_bounds": [
+              -0.15002289653672216,
+              0.14997710346327783
+            ],
+            "delta_from_q0_rad": -0.14999999999999997
+          },
+          "arm_4_joint": {
+            "position_bounds": [
+              -0.32,
+              2.29
+            ],
+            "trust_bounds": [
+              -0.14997809627900463,
+              0.15002190372099536
+            ],
+            "delta_from_q0_rad": -0.002351561765907786
+          },
+          "arm_5_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.15000550120551104,
+              0.14999449879448895
+            ],
+            "delta_from_q0_rad": -0.14999998189546432
+          },
+          "arm_6_joint": {
+            "position_bounds": [
+              -1.39,
+              1.39
+            ],
+            "trust_bounds": [
+              -0.1499981518709654,
+              0.15000184812903458
+            ],
+            "delta_from_q0_rad": 0.006195627289294839
+          },
+          "arm_7_joint": {
+            "position_bounds": [
+              -2.07,
+              2.07
+            ],
+            "trust_bounds": [
+              -0.1500016805232136,
+              0.14999831947678638
+            ],
+            "delta_from_q0_rad": -0.0014474968445637392
+          }
+        },
+        "fk_matrix": [
+          [
+            -0.0028752960456229146,
+            -0.9998921488378256,
+            -0.014402211740166168,
+            0.132943857296209
+          ],
+          [
+            0.001220796554462512,
+            -0.01440577034411568,
+            0.9998954864266157,
+            -0.9902211222985969
+          ],
+          [
+            -0.9999951213212478,
+            0.0028574133672038125,
+            0.0012620857444320902,
+            0.9622016672280258
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      }
+    },
+    "q0": {
+      "arm_1_joint": 0.07103975613359034,
+      "arm_2_joint": -5.6330103023860545e-05,
+      "arm_3_joint": -2.289653672216385e-05,
+      "arm_4_joint": 2.1903720995360823e-05,
+      "arm_5_joint": -5.50120551103984e-06,
+      "arm_6_joint": 1.8481290345948952e-06,
+      "arm_7_joint": -1.680523213603215e-06,
+      "torso_lift_joint": 0.3497446130613471
+    },
+    "starting_pose_matrix": [
+      [
+        -0.0014344052177279742,
+        -0.9999530684188838,
+        -0.009581411238713033,
+        0.1325793562613417
+      ],
+      [
+        0.002031952611263821,
+        -0.009584315828228496,
+        0.9999520048775766,
+        -0.9902554368541618
+      ],
+      [
+        -0.9999969068203419,
+        0.0014148673996906558,
+        0.0020456050411501447,
+        0.9622251279422418
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "saved_action0": [
+      -0.0004035973106510937,
+      -0.0005324767553247511,
+      5.675968714058399e-05,
+      -0.0007653954671695828,
+      0.0014333073049783707,
+      0.004923577886074781,
+      0.044908665120601654
+    ],
+    "native_expert_action0": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.04500000178813934
+    ],
+    "joint_differences": {
+      "A_minus_q0": {
+        "delta_joint_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "max_abs_joint_rad": 0.0,
+        "l2_joint_rad": 0.0,
+        "q0_local_decomposition": {
+          "singular_values": [
+            1.7511074483391382,
+            1.7320508364881297,
+            1.697557729094693,
+            0.43979124070828257,
+            0.17722648577394035,
+            4.6916295918511057e-07
+          ],
+          "numerical_rank": 6,
+          "rank_cutoff_machine_precision": 2.7217677308342055e-15,
+          "task_component_rad": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "null_component_rad": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "task_norm_rad": 0.0,
+          "null_norm_rad": 0.0,
+          "reconstruction_error_rad": 0.0,
+          "null_task_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linearized_task_delta": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "B_minus_A": {
+        "delta_joint_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "max_abs_joint_rad": 0.0,
+        "l2_joint_rad": 0.0,
+        "q0_local_decomposition": {
+          "singular_values": [
+            1.7511074483391382,
+            1.7320508364881297,
+            1.697557729094693,
+            0.43979124070828257,
+            0.17722648577394035,
+            4.6916295918511057e-07
+          ],
+          "numerical_rank": 6,
+          "rank_cutoff_machine_precision": 2.7217677308342055e-15,
+          "task_component_rad": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "null_component_rad": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "task_norm_rad": 0.0,
+          "null_norm_rad": 0.0,
+          "reconstruction_error_rad": 0.0,
+          "null_task_residual": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linearized_task_delta": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "C_minus_B": {
+        "delta_joint_rad": [
+          -0.0010397561335903222,
+          -0.0015212929213525533,
+          -0.14999999999999997,
+          -0.002351561765907786,
+          -0.14999998189546432,
+          0.006195627289294839,
+          -0.0014474968445637392
+        ],
+        "max_abs_joint_rad": 0.14999999999999997,
+        "l2_joint_rad": 0.21224844140999308,
+        "q0_local_decomposition": {
+          "singular_values": [
+            1.7511074483391382,
+            1.7320508364881297,
+            1.697557729094693,
+            0.43979124070828257,
+            0.17722648577394035,
+            4.6916295918511057e-07
+          ],
+          "numerical_rank": 6,
+          "rank_cutoff_machine_precision": 2.7217677308342055e-15,
+          "task_component_rad": [
+            -0.0010404697275488248,
+            -0.0015206694827876086,
+            -0.16129122738570065,
+            -0.0023522580658359993,
+            -0.12155249789064916,
+            0.00619538982605218,
+            -0.04118620838715485
+          ],
+          "null_component_rad": [
+            7.135939585038439e-07,
+            -6.234385649614285e-07,
+            0.011291227385700679,
+            6.962999282477209e-07,
+            -0.02844748400481515,
+            2.3746324265705517e-07,
+            0.03973871154259112
+          ],
+          "task_norm_rad": 0.2062364771867166,
+          "null_norm_rad": 0.05015891105859646,
+          "reconstruction_error_rad": 3.950429967369709e-17,
+          "null_task_residual": [
+            -1.3234889800848443e-23,
+            -2.348505345766414e-19,
+            -7.8682081610534035e-19,
+            2.846030702774449e-19,
+            -1.734723475976807e-18,
+            1.0164395367051604e-20
+          ],
+          "linearized_task_delta": [
+            0.0005639337987805631,
+            3.213609343019843e-05,
+            -9.56840262684755e-06,
+            -0.0008220187841201133,
+            0.0014290280903626607,
+            0.005174497528130594
+          ]
+        }
+      },
+      "C_minus_A": {
+        "delta_joint_rad": [
+          -0.0010397561335903222,
+          -0.0015212929213525533,
+          -0.14999999999999997,
+          -0.002351561765907786,
+          -0.14999998189546432,
+          0.006195627289294839,
+          -0.0014474968445637392
+        ],
+        "max_abs_joint_rad": 0.14999999999999997,
+        "l2_joint_rad": 0.21224844140999308,
+        "q0_local_decomposition": {
+          "singular_values": [
+            1.7511074483391382,
+            1.7320508364881297,
+            1.697557729094693,
+            0.43979124070828257,
+            0.17722648577394035,
+            4.6916295918511057e-07
+          ],
+          "numerical_rank": 6,
+          "rank_cutoff_machine_precision": 2.7217677308342055e-15,
+          "task_component_rad": [
+            -0.0010404697275488248,
+            -0.0015206694827876086,
+            -0.16129122738570065,
+            -0.0023522580658359993,
+            -0.12155249789064916,
+            0.00619538982605218,
+            -0.04118620838715485
+          ],
+          "null_component_rad": [
+            7.135939585038439e-07,
+            -6.234385649614285e-07,
+            0.011291227385700679,
+            6.962999282477209e-07,
+            -0.02844748400481515,
+            2.3746324265705517e-07,
+            0.03973871154259112
+          ],
+          "task_norm_rad": 0.2062364771867166,
+          "null_norm_rad": 0.05015891105859646,
+          "reconstruction_error_rad": 3.950429967369709e-17,
+          "null_task_residual": [
+            -1.3234889800848443e-23,
+            -2.348505345766414e-19,
+            -7.8682081610534035e-19,
+            2.846030702774449e-19,
+            -1.734723475976807e-18,
+            1.0164395367051604e-20
+          ],
+          "linearized_task_delta": [
+            0.0005639337987805631,
+            3.213609343019843e-05,
+            -9.56840262684755e-06,
+            -0.0008220187841201133,
+            0.0014290280903626607,
+            0.005174497528130594
+          ]
+        }
+      }
+    },
+    "jacobian": {
+      "reference": "q0 only",
+      "matrix": [
+        [
+          1.0038891493302562,
+          0.0011973332565069596,
+          -7.062692141789582e-05,
+          -0.000623138205506895,
+          -1.2181078963279272e-06,
+          0.2578128931292262,
+          -3.421710932116108e-07
+        ],
+        [
+          0.029152461209575025,
+          -0.0017786615393796785,
+          -8.402588028714966e-07,
+          -0.018838632990111216,
+          -5.545013395290697e-09,
+          0.0024718396281190012,
+          -1.3016808671521482e-09
+        ],
+        [
+          -0.001310761475481847,
+          0.8790228401100325,
+          7.962731946180301e-05,
+          -0.5698643730009005,
+          -2.9926780438799955e-06,
+          -0.0003643737452043763,
+          -9.66040230633309e-07
+        ],
+        [
+          0.00136045892665208,
+          -0.9999521063875992,
+          -0.009691171831629113,
+          0.9999529344919684,
+          0.009593652590864511,
+          0.0014328656758852694,
+          0.009588119536081333
+        ],
+        [
+          -0.00188635956975334,
+          -0.009694473172523345,
+          0.9999511337638931,
+          0.009598884860607166,
+          -0.9999518741509267,
+          -0.0020384134799778467,
+          -0.9999519341811038
+        ],
+        [
+          0.999997295395884,
+          0.0013424369327739321,
+          0.001956113959874913,
+          -0.0014107545308727728,
+          -0.002052127675847546,
+          0.9999968958874043,
+          -0.0020487335619669062
+        ]
+      ],
+      "row_units": [
+        "m/rad",
+        "m/rad",
+        "m/rad",
+        "rad/rad",
+        "rad/rad",
+        "rad/rad"
+      ],
+      "translation_singular_values_m_per_rad": [
+        1.0476197864355805,
+        1.03686697091568,
+        0.01746008530152053
+      ],
+      "rotation_singular_values": [
+        1.7320508168808617,
+        1.4142143190433567,
+        1.414212799669853
+      ],
+      "mixed_SI_singular_values": [
+        1.7511074483391376,
+        1.73205083648813,
+        1.6975577290946924,
+        0.4397912407082826,
+        0.1772264857739403,
+        4.6916295918511067e-07
+      ],
+      "finite_difference_step_rad": 6.0554544523933395e-06,
+      "finite_difference_check_max_error": 1.3987223705658192e-11,
+      "warning": "Combined spectrum depends on translation/rotation row units; no calibrated condition-number claim. Null decomposition is local at q0, not a finite-motion causal proof."
+    },
+    "safety": {
+      "position_tolerance_m": 0.005,
+      "orientation_tolerance_rad": 0.08726646259971647,
+      "trust_region_rad": 0.15,
+      "gripper_bounds_m": [
+        0.0,
+        0.045
+      ],
+      "command_horizon_s": 1.0
+    },
+    "actual_numerical_ik_calls": 2,
+    "inference_calls": 0,
+    "simulator_starts": 0,
+    "actuator_commands": 0,
+    "scored_evaluations": 0,
+    "original_hashes_unchanged": true,
+    "original_gate": "FAILED_0_of_24",
+    "primary": "scripted"
+  },
+  "provenance": {
+    "identity": "A-D1-train-clear-i00-s100-frame0-v1",
+    "inputs_sha256": {
+      "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/native-snapshot.json": "5a2c58a69843fb6ad9aaaad76342a2a26db0568dfb0da79016e15864b735b9e0",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/processor-action-audit.json": "b24c1b310cec549a0468fc24236674802002328db4e9d26647d49a7df93bde9c",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/existing-import/import-validation.json": "4f7b6172cdc7d450e5bf6ce7d489a6fe086c83fbbcaf408503a2bdb8c1c56d22",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/existing-import/physical-action-chunk.npy": "ad048c0b963747f7eec2b4f89a285ecd10530724efec630151efc9ac494b5e0c",
+      "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/training_approval.json": "21904aa4007bd1ab2d8276913255c9d2f8e65f5f9c02239463f521eb9f8bf20a",
+      "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/source-provenance.json": "de7aff693700bbb0c8f0abb0b5a41564e52a6d1b17fb838f4590cef39564f602",
+      "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/dataset-integrity.json": "b8f529a9371ab10d5afb663e3e11dd08f8c4ddb57c03ee4d081ac02b0dfc0770",
+      "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/data/chunk-000/file-000.parquet": "33db29df8076407c8ece501a26b3bdfc2fc92fc54d89ec42f2ab064100f08ddc",
+      "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz": "dd56d7c9d5a05a5e8d4633f22311c259def08088bfed456cc32ec8ae053126e7",
+      "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.actions.jsonl": "1128399c0418681a5fe6e6894ef5fe8d607a47890ca73df358ce94c18423e03d",
+      "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3",
+      "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/policy.jsonl": "cea3ba43257b961d7f3a8133586e4f3e03c8f00abe84fd25746b7b3ffd4a637e",
+      "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/frames/episode-00/000000.jpg": "5c03d6c882e0e186e53703897c4061f6e53d7fbb9ffa31d96ac7a5c6da2ba214",
+      "/home/tj330/programs/VLA-Project/configs/robot.yaml": "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d",
+      "/home/tj330/programs/VLA-Project/configs/safety.yaml": "a54ace2a04021ad3c4a517ba93555ed73c3d5fe045659f67ab67578d5d2a511f",
+      "/home/tj330/programs/VLA-Project/configs/eval.yaml": "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f",
+      "/home/tj330/programs/VLA-Project/configs/scenarios.yaml": "e519dc59d09012ad94fb2ba10a269bdcda847272a607113990c1f22ffdefebfa",
+      "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0",
+      "/home/tj330/programs/VLA-Project/worlds/factory.wbt": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/kinematics.py": "cd564d9acd030ee19e8c4de80b9d96f2bff8811b73b5cef7c40be12ae538e69a",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/urdf_registration.py": "40b82d6feaff21d70229c0f952998fe7890b7dd7f20b670b3a5a2c4547224f64",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/images.py": "1533d84b79fb235428e90c645e113d4ee1f82cd24a4fce7388eaaf24a6c96ec2",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/backend.py": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/execution/scripted_can.py": "d89b7eb6c3b00b14df6686325d2c2742ae6588e92f045af072fb07f391f608a3",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/execution/scripted_baseline.py": "d304fef311e6ec7fc5464745fd3fc4f1cbb90439e159dc9c272f068e79869671",
+      "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/summary.json": "9695b1da66a2ec38dceba4b012e049cdd1c8412cc3c8aca7f0d4b076e7a3a416",
+      "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/vla-gate.json": "a97f646229b57ec2d658183c9758353d47883cd4d681bb12c9b52f7878136822",
+      "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/proposer-role.json": "d46bffae1d8828f950403ac507b6d02bcf99298f914fb4074bb2c847cab82f7a",
+      "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/provenance.json": "2375d2ab188406f1bcd600eb7cede307af226222a248236a79fdad27545f8b02",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_episode.py": "ffb73839499392e6a8ed3ee7f1e9be5daef41502be01954e73f23f4b959eb9eb",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_campaign.py": "793de9b859d12ec0de022775d463c99b7b3db18aad5731a9c0aff34df3fb9d39",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/vla/action_adapter.py": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/vla/model_service.py": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/pose_solver.py": "527550b2ff801b3a555050e8cde03b1dbc32a0f66f0101a64ef9c4a3ea949391",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/vla/checkpoint_export.py": "bbb6c72e8032a202331fcae1917227bb18ab300ed325dfad3335976b9ceef3b9",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/vla/schema.py": "71283d4427264798ab6865931ebbe11b87f1daf76eb79b3c8ce37bf3508e5206",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/execution/safety_monitor.py": "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a",
+      "/home/tj330/programs/VLA-Project/runs/week2-progress-v1/validate-import.py": "13fb97b77544bdd96f6b00aa8929832065754124d7ff83691cf0c4bf6d61fc2d",
+      "/home/tj330/programs/VLA-Project-analytic/tools/recovery/local_import_gate.py": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/audit-readonly.py": "7fce774fd0f6f96041d7f0d1d6d5d02a059fb682f3b96ecabd08b5733a4ff42b",
+      "/home/tj330/programs/VLA-Project/runs/colab-prep-v3/source.zip": "2d3cb4bd06ac8313b1bb3cdb5aae7f916c2b614dd3884172c4570be9ff36b2f5",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b",
+      "/home/tj330/programs/VLA-Project/src/vlarobot/vla/dataset_export.py": "d4853484517b3024aa54ff4d25a047eefe9eb647d0c26dd47629ce649ee84b02",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/model.safetensors": "7531991e27719e6fee402344aadbe43b2fc4ac858a87ae5ec77809c8efe385d8",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/optimizer-steps.jsonl": "6d114043cb660eecb79e5064707f77b1300e5080633819fc1d395ba7b872b36f",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/train_config.json": "63f4b7305f437bc01cb0d12fcfef2241f9c0251e2089322be31539fefea6b82f",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_preprocessor_step_5_normalizer_processor.safetensors": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_postprocessor.json": "3b51f092c70c710ce0213ee1b63bf51b4878ec67828dd2d67daf9ef51081a41a",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/config.json": "4b03cc3cb3257ec32491bb56d44566590bb9cd6aceb4b02ab8e3cef25cb119f4",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_preprocessor.json": "622c61c6ed6bd26bc741e1cef7eaa36e037f06665f1f218c5e1962b965bcf605",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/training-approval.json": "21904aa4007bd1ab2d8276913255c9d2f8e65f5f9c02239463f521eb9f8bf20a",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/special_tokens_map.json": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/tokenizer.json": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/tokenizer_config.json": "8b262ec2acb7773caac7b1e59edf921671cdb4c7c815a9c714242540d3fcb531",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/processor_config.json": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/generation_config.json": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/chat_template.json": "9bc4f36b8d064f824368648472a4a09268c4bbf9bf930f04fae47f1f596dae92",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/config.json": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/preprocessor_config.json": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/added_tokens.json": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a",
+      "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/recovery-provenance.json": "e88834db27737c711f02cb3bb657a119d75cd82936e8feab00b5400ff2e17c40",
+      "/home/tj330/programs/VLA-Project/.venv/lib/python3.11/site-packages/ikpy/chain.py": "a7b03b83884ea338d4a5f0fa091244d5f0461c1373fde3a85a5b1c09bdc81c30"
+    },
+    "solver_versions": {
+      "ikpy": "4.4.4",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "sympy": "1.14.0"
+    },
+    "runtime_executable": "/home/tj330/programs/VLA-Project/.venv/bin/python",
+    "registration_sha256": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0",
+    "observed_torso_m": 0.3497446130613471,
+    "configured_torso_m_not_substituted": 0.35,
+    "roundoff_pose_match_atol": 5.689525182137945e-14,
+    "explicit_joint_apply_events_before_frame0": 0,
+    "expert_target_source": "policy.jsonl line1 commanded_joint_target_rad INIT hold reference; corroborated by dataset label replay; no JointTarget apply event at frame0",
+    "diagnostic_script_sha256": "cbf5f7b95013d0115c2cc6ceab99b192b9dd57dd0aa466cbccd7a514dba25265"
+  },
+  "solve_ledger": {
+    "actual_inverse_kinematics_calls": 2,
+    "calls": [
+      {
+        "case": "B",
+        "target_position_m": [
+          0.1325793562613417,
+          -0.9902554368541618,
+          0.9622251279422418
+        ],
+        "kwargs": {
+          "target_orientation": [
+            [
+              -0.0014344052177308608,
+              -0.9999530684188864,
+              -0.009581411238713033
+            ],
+            [
+              0.002031952611263821,
+              -0.009584315828231382,
+              0.9999520048775793
+            ],
+            [
+              -0.9999969068203446,
+              0.0014148673996906558,
+              0.00204560504114748
+            ]
+          ],
+          "orientation_mode": "all",
+          "initial_position": [
+            0.0,
+            0.0,
+            0.0,
+            0.3497446130613471,
+            0.0,
+            0.07103975613359034,
+            -5.6330103023860545e-05,
+            -2.289653672216385e-05,
+            2.1903720995360823e-05,
+            -5.50120551103984e-06,
+            1.8481290345948952e-06,
+            -1.680523213603215e-06,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "C",
+        "target_position_m": [
+          0.1321757589506906,
+          -0.9907879136094866,
+          0.9622818876293824
+        ],
+        "kwargs": {
+          "target_orientation": [
+            [
+              -0.0028758041227412434,
+              -0.9998907016348781,
+              -0.014502225165766658
+            ],
+            [
+              0.0012559476481230902,
+              -0.014505885191085754,
+              0.9998939953266687
+            ],
+            [
+              -0.9999950761609542,
+              0.0028572852384752823,
+              0.001297526459535181
+            ]
+          ],
+          "orientation_mode": "all",
+          "initial_position": [
+            0.0,
+            0.0,
+            0.0,
+            0.3497446130613471,
+            0.0,
+            0.07103975613359034,
+            -5.6330103023860545e-05,
+            -2.289653672216385e-05,
+            2.1903720995360823e-05,
+            -5.50120551103984e-06,
+            1.8481290345948952e-06,
+            -1.680523213603215e-06,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ]
+  },
+  "derived_metrics": {
+    "A_reference_translation_residual_m": 0.0,
+    "A_reference_orientation_residual_rad": 0.0,
+    "A_residual_definition": "FK(q-star) compared with itself; no inverse solve for A",
+    "C_requested_translation_norm_m": 0.0006705549539077817,
+    "C_requested_rotation_norm_rad": 0.005184768003674731,
+    "C_achieved_translation_from_A_norm_m": 0.0003668635962513439,
+    "C_achieved_rotation_from_A_norm_rad": 0.005095220508089235,
+    "A_hold_position_error_to_C_target_m": 0.0006705549539077817,
+    "A_hold_rotation_error_to_C_target_rad": 0.005184768003672915,
+    "A_hold_satisfies_existing_C_residual_limits": true,
+    "C_task_component_norm_rad": 0.2062364771867166,
+    "C_null_component_norm_rad": 0.05015891105859646,
+    "C_null_fraction_of_joint_squared_norm": 0.05584794268922023,
+    "q0_local_linear_prediction": [
+      0.0005639337987805631,
+      3.213609343019843e-05,
+      -9.56840262684755e-06,
+      -0.0008220187841201133,
+      0.0014290280903626607,
+      0.005174497528130594
+    ],
+    "finite_FK_displacement_translation_m_rotation_rad": [
+      0.0003645010348672928,
+      3.4314555564907145e-05,
+      -2.3460714215994827e-05,
+      -0.0008007635118013178,
+      0.0014330485591089405,
+      0.004823527925850179
+    ],
+    "linearization_translation_error_m": 0.00019992791035933064,
+    "linearization_rotation_error_rad": 0.000351635624610418,
+    "C_boundary_distances": {
+      "arm_1_joint": {
+        "lower_position_margin_rad": 1.3877787807814457e-17,
+        "upper_position_margin_rad": 2.6100000000000003,
+        "lower_trust_margin_rad": 1.3877787807814457e-17,
+        "upper_trust_margin_rad": 0.15103975613359033
+      },
+      "arm_2_joint": {
+        "lower_position_margin_rad": 1.4984223769756235,
+        "upper_position_margin_rad": 1.0215776230243765,
+        "lower_trust_margin_rad": 0.14847870707864744,
+        "upper_trust_margin_rad": 0.15152129292135255
+      },
+      "arm_3_joint": {
+        "lower_position_margin_rad": 3.309977103463278,
+        "upper_position_margin_rad": 1.650022896536722,
+        "lower_trust_margin_rad": 2.7755575615628914e-17,
+        "upper_trust_margin_rad": 0.29999999999999993
+      },
+      "arm_4_joint": {
+        "lower_position_margin_rad": 0.3176703419550876,
+        "upper_position_margin_rad": 2.2923296580449124,
+        "lower_trust_margin_rad": 0.1476484382340922,
+        "upper_trust_margin_rad": 0.15235156176590778
+      },
+      "arm_5_joint": {
+        "lower_position_margin_rad": 1.9199945168990245,
+        "upper_position_margin_rad": 2.2200054831009752,
+        "lower_trust_margin_rad": 1.810453567618886e-08,
+        "upper_trust_margin_rad": 0.2999999818954643
+      },
+      "arm_6_joint": {
+        "lower_position_margin_rad": 1.3961974754183293,
+        "upper_position_margin_rad": 1.3838025245816705,
+        "lower_trust_margin_rad": 0.15619562728929484,
+        "upper_trust_margin_rad": 0.14380437271070515
+      },
+      "arm_7_joint": {
+        "lower_position_margin_rad": 2.0685508226322225,
+        "upper_position_margin_rad": 2.0714491773677772,
+        "lower_trust_margin_rad": 0.14855250315543628,
+        "upper_trust_margin_rad": 0.1514474968445637
+      }
+    },
+    "no_new_ik_calls": true,
+    "actual_ik_calls_from_ledger": 2,
+    "interpretation_limits": [
+      "One exact initial hold and one saved learned target, not a sensitivity sweep or full trajectory.",
+      "B reproduces the hold exactly; it does not prove IK branch fidelity for every expert target.",
+      "Local null-space component at q0 does not certify a finite motion is task-invariant.",
+      "Motor response was not measured. No physical causal attribution or performance prediction."
+    ]
+  },
+  "objective_analysis": {
+    "observed_orientation_coefficient": 1.0,
+    "objective_at_held_A_for_C_target": {
+      "position_squared": 4.496439462102673e-07,
+      "orientation_matrix_squared": 5.37635180652277e-05,
+      "total_squared": 5.421316201143797e-05
+    },
+    "objective_at_solved_C": {
+      "position_squared": 9.176627712819105e-07,
+      "orientation_matrix_squared": 2.2521905930944012e-08,
+      "total_squared": 9.401846772128545e-07
+    },
+    "regularization_passed_by_frozen_wrapper": false,
+    "optimizer_source_file": "/home/tj330/programs/VLA-Project/.venv/lib/python3.11/site-packages/ikpy/inverse_kinematics.py",
+    "optimizer_source_sha256": "00e59e3ebef11a83a4429932d8666114c18b2a5a6f5894f7107c25a40a893fe8",
+    "objective_note": "Arithmetic from saved matrices and installed residual formula; no optimizer call. Mixed position(m)/rotation-matrix residual scaling is the existing IK objective, not a proposed new weighting."
+  },
+  "unit_tests": "4 passed; analytic fixtures only, no real IK",
+  "full_cpu_suite": "not run: unrelated real-IK tests could exceed the explicitly authorized two-solve budget",
+  "frozen_campaign_files_verified_unchanged": 225,
+  "no_A_D2_proposed_or_executed": true,
+  "missing_phase_I_report_still_blocks_behavioral_or_physical_changes": true
+}

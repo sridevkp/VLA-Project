@@ -1,0 +1,8 @@
+{
+  "sha256": "957bd43615c875a242db98e778556720e355de7127703c3cf9f2848bf15c8f42",
+  "files_sha256": {
+    "checkpoint_guard.py": "2744c9f8903bc446e8fa314f1abd7c07ed62351348cb9bbe562e606e1efe9eea",
+    "recover_training.py": "8946315b9afa8fd53de9bc6b7c06638aa2ddf47fe8c516ef13b9312e9705cb46"
+  },
+  "training_executed": false
+}

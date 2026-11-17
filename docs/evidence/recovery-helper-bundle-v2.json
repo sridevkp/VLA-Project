@@ -1,0 +1,10 @@
+{
+  "sha256": "958013d958b386774a99745870095f5e841b76478b09e177eb9a0b29fa3ec76d",
+  "files_sha256": {
+    "checkpoint_guard.py": "51f33dc9a46ab80b4d3ef85e2004a6d18bf29f87fa1b522081160189d109cad0",
+    "restore_gate.py": "7b4caf30c63ae58799a5fbee00b37b9bfdf493e2382024342c8c04be178ba70a",
+    "recover_training.py": "fe4caf9c6caf88adfa0ac58e1da98d6d74ebbffbf447f542977dd15ce455acce"
+  },
+  "recovery_training_executed": false,
+  "mandatory_actual_cuda_restore_check": true
+}

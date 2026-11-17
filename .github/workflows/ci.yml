@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11.18"
+      - run: uv sync --locked --extra sim --extra dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run ty check src
+      - name: Fetch and verify required historical comparison commit
+        run: |
+          git fetch --no-tags --depth=1 origin 1b2e4da0cd14a825b6e9c52cbf9e217da7f3bf75
+          uv run python tools/verify_history_commit.py
+      - run: >-
+          uv run pytest --collect-only -q
+          tests/test_core_wire.py tests/test_eval_settings.py tests/test_report_contract.py
+          tests/test_geometry_inventory.py tests/test_kinematic_surrogate.py
+          tests/test_trace_compare.py
+          tests/test_controller_entrypoint_source.py tests/test_reset_repro_safe.py -m safe_ci
+      - run: uv run python tools/verify_safe_ci_selection.py
+      - run: uv run pytest -o addopts= -q tests/test_prepare_original_comparison.py
+      - run: >-
+          uv run pytest -q
+          tests/test_core_wire.py tests/test_eval_settings.py tests/test_report_contract.py
+          tests/test_geometry_inventory.py tests/test_kinematic_surrogate.py
+          tests/test_trace_compare.py
+          tests/test_controller_entrypoint_source.py tests/test_reset_repro_safe.py
+          -m safe_ci

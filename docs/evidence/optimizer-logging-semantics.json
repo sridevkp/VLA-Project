@@ -1,0 +1,8 @@
+{
+  "synthetic_logging_regression_only": true,
+  "actual_production_weights_examined": false,
+  "optimizer_step": 20000,
+  "sampled_parameters_changed": false,
+  "full_tensor_changed": true,
+  "conclusion": "per-update sampled equality does not establish full-weight equality"
+}

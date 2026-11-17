@@ -1,0 +1,28 @@
+{
+  "sha256": "d3626c42ceac5b93dc5ebc1b82c144aba7db1430b90cc669c5ed39784e2b1bd2",
+  "bytes": 1237521,
+  "helper_files_sha256": {
+    "account_migration.py": "60034c400e77599c86a6f26bb93490afd32b4c5f52d425bff8b2ce9ca7c29ed3",
+    "checkpoint_guard.py": "a737fc384da90f56ceee9744cb7cf1432fdb1429fcd877d1828e7f2d896d3973",
+    "drive_diagnostics.py": "59bb24b3ef291600726f8ed82a609dc334b2615698c539ee2fabd871ab1d3335",
+    "drive_handoff.py": "17c26cec76732b644fcd3b2dc60e6b3e36fdf8e55ec930095b43f45148af8493",
+    "drive_handoff_setup.py": "1f8e50fd87cd6b7d6146c3d7aff4332cf217703c0fc187b81e3c11dece988bb5",
+    "durable_sink.py": "3b73a5d650126158088e0a3c3f9af129a55f9ed85b4984cdeefdd7563e507bd6",
+    "durable_transfer.py": "2c73cf1c6d22351cca1f095016c4e750e25a3fc892f701b65e81e3179393fee9",
+    "local_import_gate.py": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e",
+    "package_backup.py": "5788c34e604a3cd558c77847b7d31358c528de981c3454a50401ed9d1a7134e7",
+    "receiver_dispatch.py": "3480e21117c8c0678da0a6a8d034c0acef77b254fcf46a719002272e87c53d25",
+    "recover_training.py": "4d4d874fee2863f58af21cd9e88031459b0ac71c62083ce7822a17cd4343f22e",
+    "restore_gate.py": "071cf660ee012a432fe51b1314ad7fd53a3cad072e1400c6a6e9867acc849063"
+  },
+  "base_v6_sha256": "cc30fc162fae8f23462c32d71195bd26390e23a08631eb1c3e1a6a8d36a3b47d",
+  "training_started": false,
+  "actual_remote_version_trigger": "not established from supplied evidence",
+  "observed_user_canary": {
+    "bytes": 1048694,
+    "receipt_version": "1",
+    "remote_version": "2",
+    "sha256": "aa6b8846a8fdd5d5ac12d5b8950914f2cd4dddec04146d7cf5b3f1bf0d96127b",
+    "independently_verified_locally": false
+  }
+}

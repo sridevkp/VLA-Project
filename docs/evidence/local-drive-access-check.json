@@ -1,0 +1,6 @@
+{
+  "google_application_credentials_env_present": false,
+  "google.auth_installed": false,
+  "googleapiclient.discovery_installed": false,
+  "authenticated_drive_api_called": false
+}

@@ -1,0 +1,1651 @@
+# Determinism forensics — runs/episode-runner episode-00..02 (2026-11-10)
+
+Scope: Webots-free analysis of existing traces/logs only. No Webots launched. No guesses.
+
+## Files examined
+- `runs/episode-runner/episode-00.jsonl` (132493 bytes, 27 records)
+- `runs/episode-runner/episode-01.jsonl` (252090 bytes, 46 records)
+- `runs/episode-runner/episode-02.jsonl` (619945 bytes, 106 records)
+- `runs/episode-runner/episode-00.log`, `episode-01.log`, `episode-02.log` (present)
+- No per-episode summary JSON found in `runs/episode-runner/`.
+
+## Record 0 (identical semantic/reset state except episode-specific volatile field)
+- Record 0 meta: event=`state_boundary`, phase=`enter`, state=`INIT`, sim_time_s=`0.0`, seed=`0` (same in all 3).
+- Differing field(s) in record 0 (raw): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'controller_reset_state', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad', 'reset_fingerprint', 'reset_torso_after_rad', 'reset_torso_before_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- `controller_reset_state` subfields differing: `['last_commanded_joint_targets', 'torso_command_rad', 'trace_path']`
+  - ep0 controller_reset_state.last_commanded_joint_targets = `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1 controller_reset_state.last_commanded_joint_targets = `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2 controller_reset_state.last_commanded_joint_targets = `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+  - ep0 controller_reset_state.torso_command_rad = `0.3497446202504888`
+  - ep1 controller_reset_state.torso_command_rad = `0.34974462025048886`
+  - ep2 controller_reset_state.torso_command_rad = `0.3497446202504886`
+  - ep0 controller_reset_state.trace_path = `"runs/episode-runner/episode-00.jsonl"`
+  - ep1 controller_reset_state.trace_path = `"runs/episode-runner/episode-01.jsonl"`
+  - ep2 controller_reset_state.trace_path = `"runs/episode-runner/episode-02.jsonl"`
+- `controller_reset_state.ik_seed` = `0` and `ik_rng_digest` identical in all 3 (`96302b42...`); `base_position`, `base_orientation`, `can_world_xyz_m`, `can_base_xyz_m`, arm joint targets/positions, gripper, etc. identical across episodes in record 0. `trace_path` differs by episode filename (expected/volatile per episode).
+
+## First differing record and first differing field
+- **Overall first differing record index:** `0` (0-based). **First differing field (sorted key order):** `achieved_ee_base_xyz_m`.
+- Pairwise first differing record/field:
+  - episodes 0-1: record `0`, first field `achieved_ee_base_xyz_m`
+  - episodes 0-2: record `0`, first field `achieved_ee_base_xyz_m`
+  - episodes 1-2: record `0`, first field `achieved_ee_base_xyz_m`
+- At record 1 (event=`waypoint`, state=`INIT`, sim_time_s=`null`), `reset_fingerprint` is identical across all 3 and `controller_reset_state` absent; many state/pose/joint/command/sensor fields already differ between all episode pairs (see per-record diff below). Record 1 is therefore the first substantive divergence point.
+
+## Field presence / absence (traces and nearby logs/summaries)
+
+- **reset fingerprint (top-level `reset_fingerprint`):** PRESENT (top-level in waypoint records, e.g. rec 1-2; identical across episodes at rec 1) (detected=False).
+- **base pose (`base_world_xyz_m`, `base_world_orientation_xyzw`, `base_drift_*`):** PRESENT (detected=True).
+- **torso (`torso_lift_joint_sensor_rad`, joint positions include torso):** PRESENT (detected=True).
+- **joints/joint positions (`joint_positions_rad`, `measured_joint_positions_rad`, `commanded_joint_positions_rad`, `joint_target`):** PRESENT (detected=True).
+- **IK restart seed (`controller_reset_state.ik_seed`, `ik_rng_digest` in rec 0):** PRESENT in record 0 controller_reset_state; not present as per-waypoint fields (detected=True).
+- **timing (`sim_time_s` present; wall-clock durations absent):** PARTIAL: `sim_time_s` present; no wall-clock/step-duration fields (detected=True).
+- **session id:** ABSENT (no `session_id` field in traces) (detected=False).
+- **sim_time:** PRESENT (`sim_time_s`) (detected=True).
+- **step counts / physics step count at first command:** ABSENT (no step counter fields) (detected=False).
+- **Webots world hash:** ABSENT (detected=False).
+- **controller start time:** ABSENT (detected=False).
+- Episode logs (`episode-*.log`): contain runner/sim output; not parsed here as structured determinism fields (no reset fingerprint/session/world hash/step-count schema found).
+- Episode summary JSON: **absent** in `runs/episode-runner/`.
+
+## Nondeterminism assessment (evidence-based)
+
+- Record 0 shows identical commanded/reset semantics and identical `reset_fingerprint` (rec 1) and identical IK seed/digest across episodes: policy-side reset/IK seeding appears consistent at trace start.
+- Divergence begins at record 1 (first waypoint, still INIT, same sim_time context as progression) with simultaneous differences in `base_world_*`/drift/tilt, measured and commanded joint states/targets, EE/can poses, wheel sensors, FK/GT offsets, clearances, and supervisor link poses — i.e. the **measured world/robot state differs immediately after reset/warm-up**, before a semantically different control decision is evidenced in the trace.
+- Episode lengths/outcomes diverge strongly (27/46/106 records), consistent with compounding from early state divergence.
+- **Most consistent source indicated by available evidence:** nondeterministic simulator/controller/world state across fresh Webots process runs at or immediately after reset (physics/contact/initialization timing/base-wheel settling), not an identified policy-seed difference in the recorded fields. This is **not** a definitive root cause from traces alone because key reset/session/world/step-identity fields are missing.
+
+## Fields to add next to confirm (exact)
+The traces/logs lack the following; add them (per episode, recorded at reset and at first command/first waypoint boundary) to confirm source:
+- `reset_fingerprint` as a canonical, stable top-level reset record (and hash) including commanded motor targets/modes, measured joint/base/can poses, and any transient velocities explicitly labeled.
+- `ik_seed` and `ik_rng_state`/`ik_rng_digest` at reset and at every IK solve/use that can affect commanded targets.
+- `webots_world_hash` (hash of the loaded world file/proto inputs as seen by the run).
+- `controller_start_time` (wall clock and monotonic) and `webots_session_id`/process identifiers.
+- `physics_step_count` (and basicTimeStep/index) at reset complete and at first command application / first waypoint.
+- `sim_time_s` at reset complete and at first command (already partly present) plus explicit `reset_step_index`.
+- Server/client session identity (`ping.session_id`), `webots_version`, and snapshot/world identity fields in episode summaries.
+
+## Bench-steps ms/step (recorded, Webots-free reference)
+- Measured ~**447 ms/step** (step+observation, RGB + `kinematics_telemetry` enabled, 200-step probe) per `docs/MANUAL.md`, `docs/PROGRESS.md`, `docs/DECISIONS.md`, `configs/robot.yaml` comments; live operator observation ~446.8 ms/step cited in docs (session pid 152341).
+
+## Field-by-field diff, first 10 records (per episode)
+
+### Record 0
+- meta (ep0): `{"event":"state_boundary","phase":"enter","sim_time_s":0.0,"state":"INIT"}`
+- differing fields (38): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'controller_reset_state', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad', 'reset_fingerprint', 'reset_torso_after_rad', 'reset_torso_before_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.20348620692801306,-0.9854741698489159,0.9630241497531875]`
+  - ep1: `[0.2034862069280176,-0.9854741698489153,0.9630241497532163]`
+  - ep2: `[0.2034862069280174,-0.9854741698489151,0.9630241497532028]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-1.1934897514720433e-15,-6.869504964868156e-16,-5.074066167232161e-17]`
+  - ep1: `[-1.2004286453759505e-15,-6.591949208711867e-16,-5.117434254131581e-17]`
+  - ep2: `[-1.2073675392798577e-15,-6.453171330633722e-16,-5.182486384480711e-17]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `1.378003405742971e-15`
+  - ep1: `1.370469149479858e-15`
+  - ep2: `1.3699840851792263e-15`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.3068908737006355,-3.8880587172765777,1.0203074665749747]`
+  - ep1: `[-1.3068908737006404,-3.8880587172765857,1.0203074665749892]`
+  - ep2: `[-1.3068908737006448,-3.8880587172765924,1.0203074665749758]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.3641092409423041,-3.8340595296149194,1.0183726890940619]`
+  - ep1: `[-1.3641092409423083,-3.8340595296149007,1.0183726890940645]`
+  - ep2: `[-1.3641092409423137,-3.8340595296148945,1.0183726890940634]`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.019647562937407107,-0.006505029763178251,-0.7175338995241773,0.6962160303325604]`
+  - ep1: `[0.019647562937412353,-0.0065050297631755885,-0.7175338995241775,0.6962160303325602]`
+  - ep2: `[0.019647562937414716,-0.006505029763176846,-0.7175338995241773,0.6962160303325602]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5379101195250965,-3.710338512095813,0.08829686018713309]`
+  - ep1: `[-0.5379101195250968,-3.710338512095814,0.08829686018713254]`
+  - ep2: `[-0.537910119525097,-3.710338512095814,0.08829686018713304]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.02981276231843569,-0.9993770345672028,-0.018887614529335378,0.9988933051404627,-0.03047539848763067,0.035824782380117264,-0.03637807235831921,-0.017798675981218728,0.9991795849519787]`
+  - ep1: `[-0.029812762318435923,-0.9993770345672026,-0.01888761452934662,0.9988933051404627,-0.030475398487631557,0.03582478238012074,-0.036378072358323035,-0.017798675981229837,0.9991795849519783]`
+  - ep2: `[-0.029812762318435482,-0.9993770345672025,-0.018887614529348257,0.9988933051404624,-0.030475398487631335,0.03582478238012583,-0.03637807235832818,-0.01779867598123133,0.9991795849519781]`
+- **can_base_xyz_m**
+  - ep0: `[0.6731897053660492,-0.21443817622002592,0.7441522121738784]`
+  - ep1: `[0.6731897053660401,-0.21443817622002248,0.7441522121738872]`
+  - ep2: `[0.6731897053660388,-0.2144381762200187,0.7441522121738889]`
+- **clearance_left_m**
+  - ep0: `0.9178853928955`
+  - ep1: `0.9178853928955164`
+  - ep2: `0.9178853928955277`
+- **clearance_right_m**
+  - ep0: `0.9178853784151371`
+  - ep1: `0.9178853784151535`
+  - ep2: `0.9178853784151644`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06,"torso_lift_joint":0.3497446202504888}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06,"torso_lift_joint":0.34974462025048886}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06,"torso_lift_joint":0.3497446202504886}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+- **controller_reset_state**
+  - ep0: `{"ik_rng_digest":"96302b4281adc7b1408b3586585707fa7137008bc5d53b0e57a31043ef710231","ik_seed":0,"last_commanded_joint_targets":{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06},"state_settle_durations":{},"state_sim_durations":{},"state_wall_durations":{},"torso_command_rad":0.3497446202504888,"trace_path":"runs/episode-runner/episode-00.jsonl"}`
+  - ep1: `{"ik_rng_digest":"96302b4281adc7b1408b3586585707fa7137008bc5d53b0e57a31043ef710231","ik_seed":0,"last_commanded_joint_targets":{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06},"state_settle_durations":{},"state_sim_durations":{},"state_wall_durations":{},"torso_command_rad":0.34974462025048886,"trace_path":"runs/episode-runner/episode-01.jsonl"}`
+  - ep2: `{"ik_rng_digest":"96302b4281adc7b1408b3586585707fa7137008bc5d53b0e57a31043ef710231","ik_seed":0,"last_commanded_joint_targets":{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06},"state_settle_durations":{},"state_sim_durations":{},"state_wall_durations":{},"torso_command_rad":0.3497446202504886,"trace_path":"runs/episode-runner/episode-02.jsonl"}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5642010914230187,-3.9010143555028236,1.0104416712656605]`
+  - ep1: `[-1.5642010914230233,-3.90101435550284,1.0104416712656825]`
+  - ep2: `[-1.5642010914230275,-3.9010143555028405,1.010441671265664]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.13245667496982527,-0.9901752330986553,0.9622135978579587]`
+  - ep1: `[0.1324566749697939,-0.9901752330986574,0.9622135978579673]`
+  - ep2: `[0.13245667496977964,-0.9901752330986572,0.9622135978579722]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.07118954558256531`
+  - ep1: `0.07118954558260207`
+  - ep2: `0.07118954558261506`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.0025492316570354667,0.07114288927475876,0.00037699317013406564]`
+  - ep1: `[-0.002549231657036133,0.07114288927479562,0.0003769931701154139]`
+  - ep2: `[-0.002549231657036577,0.0711428892748085,0.0003769931701338436]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9456004397081261`
+  - ep1: `0.9456004397081433`
+  - ep2: `0.9456004397081538`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.5667503230800541,-3.829871466228065,1.0108186644357946]`
+  - ep1: `[-1.5667503230800595,-3.8298714662280444,1.010818664435798]`
+  - ep2: `[-1.5667503230800641,-3.829871466228032,1.010818664435798]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.5667503369071931,-3.8298714728839736,1.0108190227355645],"gripper_right_finger_joint":[-1.5667503092529151,-3.829871459572156,1.0108183061360247]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5667503369071982,-3.8298714728839527,1.0108190227355678],"gripper_right_finger_joint":[-1.5667503092529205,-3.8298714595721357,1.0108183061360279]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.5667503369072033,-3.8298714728839407,1.010819022735568],"gripper_right_finger_joint":[-1.566750309252925,-3.8298714595721233,1.0108183061360276]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07118954558256531`
+  - ep1: `0.07118954558260207`
+  - ep2: `0.07118954558261506`
+- **fk_to_can_world_m**
+  - ep0: `0.9289902071474923`
+  - ep1: `0.9289902071474921`
+  - ep2: `0.9289902071474914`
+- **fk_to_can_xy_m**
+  - ep0: `0.907342098920915`
+  - ep1: `0.90734209892091`
+  - ep2: `0.9073420989209133`
+- **gripper_opening_m**
+  - ep0: `1.4348657562654596e-06`
+  - ep1: `1.4348657562604627e-06`
+  - ep2: `1.4348657562174057e-06`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5667503230800541,-3.829871466228065,1.0108186644357946]`
+  - ep1: `[-1.5667503230800595,-3.8298714662280444,1.010818664435798]`
+  - ep2: `[-1.5667503230800641,-3.829871466228032,1.010818664435798]`
+- **gt_to_can_world_m**
+  - ep0: `0.9704179303283006`
+  - ep1: `0.9704179303283172`
+  - ep2: `0.970417930328328`
+- **gt_to_can_xy_m**
+  - ep0: `0.9496353856553185`
+  - ep1: `0.9496353856553348`
+  - ep2: `0.9496353856553459`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06,"torso_lift_joint":0.3497446202504888}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06,"torso_lift_joint":0.34974462025048886}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06,"torso_lift_joint":0.3497446202504886}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06,"torso_lift_joint":0.3497446202504888}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06,"torso_lift_joint":0.34974462025048886}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06,"torso_lift_joint":0.3497446202504886}`
+- **reset_fingerprint**
+  - ep0: `{"base":{"angular_velocity_world_xyz_rad_s":[0.0033958893981096173,-0.007197770178941385,4.1927445672402784e-05],"velocity_world_xyz_m_s":[-0.0019120049283194401,-0.0008872572877515818,-0.0005098051773636252],"world_orientation_matrix":[-0.029794424757183923,0.9988615903481665,-0.03725339689907907,-0.9993728222748935,-0.030481847391503,-0.018022737802993183,-0.019137772903418598,0.03669305529296968,0.9991433157168017],"world_xyz_m":[-0.5379101195250965,-3.710338512095813,0.08829686018713309]},"can":{"world_orientation_matrix":[0.9999996162324271,-1.7799987721518297e-06,-0.000876088939655284,1.5835901920790525e-06,0.9999999748684841,-0.00022418858881542643,0.0008760893166932537,0.00022418711541326346,0.9999995911037398],"world_xyz_m":[-0.7998836749928728,-4.3899811963169615,0.8110598252973551]},"joint_sensors_rad":{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06,"gripper_left_finger_joint":-1.0762350124720177e-06,"gripper_right_finger_joint":1.7934965000589017e-06,"head_1_joint":1.065...(truncated)`
+  - ep1: `{"base":{"angular_velocity_world_xyz_rad_s":[0.0033958893981153736,-0.007197770178901247,4.1927445676580825e-05],"velocity_world_xyz_m_s":[-0.001912004928314588,-0.0008872572877509216,-0.0005098051773583138],"world_orientation_matrix":[-0.029794424757183947,0.9988615903481664,-0.03725339689908289,-0.9993728222748932,-0.030481847391503503,-0.0180227378030043,-0.019137772903429842,0.03669305529297316,0.9991433157168013],"world_xyz_m":[-0.5379101195250968,-3.710338512095814,0.08829686018713254]},"can":{"world_orientation_matrix":[0.9999996162324271,-1.7799987721518297e-06,-0.000876088939655284,1.5835901920790525e-06,0.9999999748684841,-0.00022418858881542643,0.0008760893166932537,0.00022418711541326346,0.9999995911037398],"world_xyz_m":[-0.7998836749928728,-4.3899811963169615,0.8110598252973551]},"joint_sensors_rad":{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06,"gripper_left_finger_joint":-1.0762350124639548e-06,"gripper_right_finger_joint":1.7934965000569707e-06,"head_1_joint":...(truncated)`
+  - ep2: `{"base":{"angular_velocity_world_xyz_rad_s":[0.0033958893980384542,-0.007197770178901202,4.1927445658573596e-05],"velocity_world_xyz_m_s":[-0.0019120049283173112,-0.0008872572877324595,-0.0005098051773516275],"world_orientation_matrix":[-0.02979442475718399,0.9988615903481661,-0.03725339689908804,-0.9993728222748932,-0.0304818473915037,-0.01802273780300578,-0.01913777290343149,0.03669305529297826,0.999143315716801],"world_xyz_m":[-0.537910119525097,-3.710338512095814,0.08829686018713304]},"can":{"world_orientation_matrix":[0.9999996162324271,-1.7799987721518297e-06,-0.000876088939655284,1.5835901920790525e-06,0.9999999748684841,-0.00022418858881542643,0.0008760893166932537,0.00022418711541326346,0.9999995911037398],"world_xyz_m":[-0.7998836749928728,-4.3899811963169615,0.8110598252973551]},"joint_sensors_rad":{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06,"gripper_left_finger_joint":-1.076235012472019e-06,"gripper_right_finger_joint":1.7934964999627925e-06,"head_1_joint":1.06522...(truncated)`
+- **reset_torso_after_rad**
+  - ep0: `0.3497446202504888`
+  - ep1: `0.34974462025048886`
+  - ep2: `0.3497446202504886`
+- **reset_torso_before_rad**
+  - ep0: `-0.00017224224350357998`
+  - ep1: `-0.00017224224350357342`
+  - ep2: `-0.00017224224350367786`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9961517772957007,-3.8142804278006968,1.0126757028021922],"tool":[-1.3641092409423041,-3.8340595296149194,1.0183726890940619],"wrist":[-1.3091591841754031,-3.835194918410574,1.0204451770453116]}`
+  - ep1: `{"elbow":[-0.9961517772957044,-3.8142804278006914,1.012675702802192],"tool":[-1.3641092409423083,-3.8340595296149007,1.0183726890940645],"wrist":[-1.3091591841754076,-3.835194918410557,1.0204451770453153]}`
+  - ep2: `{"elbow":[-0.9961517772957093,-3.8142804278006897,1.0126757028021909],"tool":[-1.3641092409423137,-3.8340595296148945,1.0183726890940634],"wrist":[-1.3091591841754129,-3.835194918410552,1.0204451770453127]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.3497446202504888`
+  - ep1: `0.34974462025048886`
+  - ep2: `0.3497446202504886`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-1.2419656846684984e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":6.635061047000003e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-1.2419656882515274e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":6.635061040267542e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-1.2419656888504387e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":6.635061033727979e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 1
+- meta (ep0): `{"event":"waypoint","phase":null,"sim_time_s":null,"state":"INIT"}`
+- differing fields (23): `['base_world_orientation_xyzw', 'base_world_xyz_m', 'base_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_ee_base_xyz_m', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad']`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.020264860474883913,-0.006750683727561996,-0.7175245895982987,0.6962055924947292]`
+  - ep1: `[0.020264860474886837,-0.0067506837275590915,-0.7175245895982988,0.6962055924947291]`
+  - ep2: `[0.020264860474885946,-0.0067506837275606016,-0.7175245895982985,0.6962055924947295]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5380618887268172,-3.7103884373048435,0.08823951200034122]`
+  - ep1: `[-0.5380618887268174,-3.710388437304844,0.08823951200033892]`
+  - ep2: `[-0.5380618887268175,-3.710388437304844,0.0882395120003398]`
+- **base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7648308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7648308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7648308693027973]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.029794100555289384,-0.9993674753790612,-0.019415476470659786,0.9988504756193729,-0.03049716020654299,0.03698176002151497,-0.03755048504418778,-0.018291319630302675,0.9991273135587518]`
+  - ep1: `[-0.029794100555289613,-0.9993674753790611,-0.019415476470668033,0.998850475619373,-0.030497160206543434,0.03698176002151487,-0.03755048504418793,-0.01829131963031091,0.9991273135587516]`
+  - ep2: `[-0.02979410055528872,-0.9993674753790613,-0.01941547647066463,0.998850475619373,-0.030497160206542324,0.036981760021515805,-0.03755048504418875,-0.01829131963030752,0.9991273135587516]`
+- **can_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7448308693027927]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7448308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7448308693027973]`
+- **clearance_left_m**
+  - ep0: `0.919487784035576`
+  - ep1: `0.9194877840355917`
+  - ep2: `0.9194877840356017`
+- **clearance_right_m**
+  - ep0: `0.9177284229089686`
+  - ep1: `0.9177284229089826`
+  - ep2: `0.9177284229089944`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7648308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7648308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7648308693027973]`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5654748997479886,-3.9016787329974663,1.0090236158491506]`
+  - ep1: `[-1.5654748997479884,-3.9016787329974942,1.0090236158491572]`
+  - ep2: `[-1.56547489974799,-3.90167873299748,1.0090236158491694]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.13248351124089797,-0.990179927422536,0.9622012125096085]`
+  - ep1: `[0.13248351124086644,-0.9901799274225375,0.9622012125096198]`
+  - ep2: `[0.1324835112408497,-0.990179927422537,0.9622012125096147]`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.0025650716001297535,0.07126697676311133,0.000399317088122908]`
+  - ep1: `[-0.002565071600131086,0.07126697676316285,0.00039931708812468436]`
+  - ep2: `[-0.0025650716001293095,0.07126697676316773,0.00039931708810825306]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9461897088317478`
+  - ep1: `0.9461897088317637`
+  - ep2: `0.9461897088317743`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.569714063807273,-3.8312158508754295,1.0524826551205078],"gripper_right_finger_joint":[-1.5663658788889636,-3.8296076615932804,0.9663632107540393]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5697140638072744,-3.8312158508754046,1.0524826551205158],"gripper_right_finger_joint":[-1.5663658788889647,-3.829607661593258,0.9663632107540483]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.569714063807273,-3.831215850875386,1.0524826551205122],"gripper_right_finger_joint":[-1.5663658788889654,-3.829607661593239,0.9663632107540433]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **fk_to_can_world_m**
+  - ep0: `0.9293834691694907`
+  - ep1: `0.9293834691694772`
+  - ep2: `0.9293834691694886`
+- **fk_to_can_xy_m**
+  - ep0: `0.9080555650890383`
+  - ep1: `0.9080555650890231`
+  - ep2: `0.908055565089032`
+- **gripper_opening_m**
+  - ep0: `0.04309975455713623`
+  - ep1: `0.04309975455713583`
+  - ep2: `0.043099754557135946`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **gt_to_can_world_m**
+  - ep0: `0.9708371805843431`
+  - ep1: `0.9708371805843592`
+  - ep2: `0.9708371805843692`
+- **gt_to_can_xy_m**
+  - ep0: `0.9503566959408211`
+  - ep1: `0.9503566959408357`
+  - ep2: `0.9503566959408468`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+
+### Record 2
+- meta (ep0): `{"event":"waypoint","phase":null,"sim_time_s":null,"state":"INIT"}`
+- differing fields (23): `['base_world_orientation_xyzw', 'base_world_xyz_m', 'base_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_ee_base_xyz_m', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad']`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.020264860474883913,-0.006750683727561996,-0.7175245895982987,0.6962055924947292]`
+  - ep1: `[0.020264860474886837,-0.0067506837275590915,-0.7175245895982988,0.6962055924947291]`
+  - ep2: `[0.020264860474885946,-0.0067506837275606016,-0.7175245895982985,0.6962055924947295]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5380618887268172,-3.7103884373048435,0.08823951200034122]`
+  - ep1: `[-0.5380618887268174,-3.710388437304844,0.08823951200033892]`
+  - ep2: `[-0.5380618887268175,-3.710388437304844,0.0882395120003398]`
+- **base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.029794100555289384,-0.9993674753790612,-0.019415476470659786,0.9988504756193729,-0.03049716020654299,0.03698176002151497,-0.03755048504418778,-0.018291319630302675,0.9991273135587518]`
+  - ep1: `[-0.029794100555289613,-0.9993674753790611,-0.019415476470668033,0.998850475619373,-0.030497160206543434,0.03698176002151487,-0.03755048504418793,-0.01829131963031091,0.9991273135587516]`
+  - ep2: `[-0.02979410055528872,-0.9993674753790613,-0.01941547647066463,0.998850475619373,-0.030497160206542324,0.036981760021515805,-0.03755048504418875,-0.01829131963030752,0.9991273135587516]`
+- **can_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7448308693027927]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7448308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7448308693027973]`
+- **clearance_left_m**
+  - ep0: `0.919487784035576`
+  - ep1: `0.9194877840355917`
+  - ep2: `0.9194877840356017`
+- **clearance_right_m**
+  - ep0: `0.9177284229089686`
+  - ep1: `0.9177284229089826`
+  - ep2: `0.9177284229089944`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5654748997479886,-3.9016787329974663,1.0090236158491506]`
+  - ep1: `[-1.5654748997479884,-3.9016787329974942,1.0090236158491572]`
+  - ep2: `[-1.56547489974799,-3.90167873299748,1.0090236158491694]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.13248351124089797,-0.990179927422536,0.9622012125096085]`
+  - ep1: `[0.13248351124086644,-0.9901799274225375,0.9622012125096198]`
+  - ep2: `[0.1324835112408497,-0.990179927422537,0.9622012125096147]`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.0025650716001297535,0.07126697676311133,0.000399317088122908]`
+  - ep1: `[-0.002565071600131086,0.07126697676316285,0.00039931708812468436]`
+  - ep2: `[-0.0025650716001293095,0.07126697676316773,0.00039931708810825306]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9461897088317478`
+  - ep1: `0.9461897088317637`
+  - ep2: `0.9461897088317743`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.569714063807273,-3.8312158508754295,1.0524826551205078],"gripper_right_finger_joint":[-1.5663658788889636,-3.8296076615932804,0.9663632107540393]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5697140638072744,-3.8312158508754046,1.0524826551205158],"gripper_right_finger_joint":[-1.5663658788889647,-3.829607661593258,0.9663632107540483]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.569714063807273,-3.831215850875386,1.0524826551205122],"gripper_right_finger_joint":[-1.5663658788889654,-3.829607661593239,0.9663632107540433]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **fk_to_can_world_m**
+  - ep0: `0.9293834691694907`
+  - ep1: `0.9293834691694772`
+  - ep2: `0.9293834691694886`
+- **fk_to_can_xy_m**
+  - ep0: `0.9080555650890383`
+  - ep1: `0.9080555650890231`
+  - ep2: `0.908055565089032`
+- **gripper_opening_m**
+  - ep0: `0.04309975455713623`
+  - ep1: `0.04309975455713583`
+  - ep2: `0.043099754557135946`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **gt_to_can_world_m**
+  - ep0: `0.9708371805843431`
+  - ep1: `0.9708371805843592`
+  - ep2: `0.9708371805843692`
+- **gt_to_can_xy_m**
+  - ep0: `0.9503566959408211`
+  - ep1: `0.9503566959408357`
+  - ep2: `0.9503566959408468`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+
+### Record 3
+- meta (ep0): `{"event":"state_boundary","phase":"exit","sim_time_s":1.44,"state":"INIT"}`
+- differing fields (39): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.20363656758799578,-0.9854590731406514,0.9630240920393234]`
+  - ep1: `[0.20363656758801577,-0.9854590731406498,0.9630240920393346]`
+  - ep2: `[0.20363656758800358,-0.9854590731406505,0.9630240920393457]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-5.631503598349519e-06,9.804290669134658e-05,3.1161182258831327e-06]`
+  - ep1: `[-5.631503595449061e-06,9.804290669416377e-05,3.11611824667336e-06]`
+  - ep2: `[-5.631503598980958e-06,9.804290669709892e-05,3.1161182134139404e-06]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.05722965090671961,0.054089544350381935,-0.0019784380771443733]`
+  - ep1: `[-0.05722965090671939,0.05408954435040769,-0.0019784380771392662]`
+  - ep2: `[-0.05722965090671961,0.05408954435042812,-0.0019784380771561416]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `9.825393416074492e-05`
+  - ep1: `9.825393416404917e-05`
+  - ep2: `9.825393416612564e-05`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.3081789979001957,-3.888689072588511,1.0192127393671861]`
+  - ep1: `[-1.3081789979001968,-3.888689072588514,1.0192127393671897]`
+  - ep2: `[-1.3081789979001965,-3.8886890725885266,1.0192127393671984]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.3654086488069153,-3.834599528238129,1.0172343012900418]`
+  - ep1: `[-1.3654086488069161,-3.8345995282381065,1.0172343012900504]`
+  - ep2: `[-1.3654086488069161,-3.8345995282380985,1.0172343012900422]`
+- **base_drift_distance_m**
+  - ep0: `0.00015976988792530122`
+  - ep1: `0.00015976988792505695`
+  - ep2: `0.0001597698879249515`
+- **base_drift_world_xyz_m**
+  - ep0: `[-0.000151769201720664,-4.992520903046582e-05,-5.734818679187237e-05]`
+  - ep1: `[-0.00015176920172055297,-4.992520903002173e-05,-5.734818679362097e-05]`
+  - ep2: `[-0.00015176920172044195,-4.992520903002173e-05,-5.734818679323239e-05]`
+- **base_drift_yaw_deg**
+  - ep0: `0.0011405392908990775`
+  - ep1: `0.0011405392908990775`
+  - ep2: `0.0011405392909499665`
+- **base_tilt_pitch_deg**
+  - ep0: `0.03115019037459521`
+  - ep1: `0.031150190374423348`
+  - ep2: `0.03115019037413469`
+- **base_tilt_roll_deg**
+  - ep0: `0.0694993648147797`
+  - ep1: `0.06949936481457408`
+  - ep2: `0.0694993648143356`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.020264860474883913,-0.006750683727561996,-0.7175245895982987,0.6962055924947292]`
+  - ep1: `[0.020264860474886837,-0.0067506837275590915,-0.7175245895982988,0.6962055924947291]`
+  - ep2: `[0.020264860474885946,-0.0067506837275606016,-0.7175245895982985,0.6962055924947295]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5380618887268172,-3.7103884373048435,0.08823951200034122]`
+  - ep1: `[-0.5380618887268174,-3.710388437304844,0.08823951200033892]`
+  - ep2: `[-0.5380618887268175,-3.710388437304844,0.0882395120003398]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.029794100555289384,-0.9993674753790612,-0.019415476470659786,0.9988504756193729,-0.03049716020654299,0.03698176002151497,-0.03755048504418778,-0.018291319630302675,0.9991273135587518]`
+  - ep1: `[-0.029794100555289613,-0.9993674753790611,-0.019415476470668033,0.998850475619373,-0.030497160206543434,0.03698176002151487,-0.03755048504418793,-0.01829131963031091,0.9991273135587516]`
+  - ep2: `[-0.02979410055528872,-0.9993674753790613,-0.01941547647066463,0.998850475619373,-0.030497160206542324,0.036981760021515805,-0.03755048504418875,-0.01829131963030752,0.9991273135587516]`
+- **can_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7448308693027927]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7448308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7448308693027973]`
+- **clearance_left_m**
+  - ep0: `0.919487784035576`
+  - ep1: `0.9194877840355917`
+  - ep2: `0.9194877840356017`
+- **clearance_right_m**
+  - ep0: `0.9177284229089686`
+  - ep1: `0.9177284229089826`
+  - ep2: `0.9177284229089944`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5654748997479886,-3.9016787329974663,1.0090236158491506]`
+  - ep1: `[-1.5654748997479884,-3.9016787329974942,1.0090236158491572]`
+  - ep2: `[-1.56547489974799,-3.90167873299748,1.0090236158491694]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.13248351124089797,-0.990179927422536,0.9622012125096085]`
+  - ep1: `[0.13248351124086644,-0.9901799274225375,0.9622012125096198]`
+  - ep2: `[0.1324835112408497,-0.990179927422537,0.9622012125096147]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.0025650716001297535,0.07126697676311133,0.000399317088122908]`
+  - ep1: `[-0.002565071600131086,0.07126697676316285,0.00039931708812468436]`
+  - ep2: `[-0.0025650716001293095,0.07126697676316773,0.00039931708810825306]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9461897088317478`
+  - ep1: `0.9461897088317637`
+  - ep2: `0.9461897088317743`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.569714063807273,-3.8312158508754295,1.0524826551205078],"gripper_right_finger_joint":[-1.5663658788889636,-3.8296076615932804,0.9663632107540393]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5697140638072744,-3.8312158508754046,1.0524826551205158],"gripper_right_finger_joint":[-1.5663658788889647,-3.829607661593258,0.9663632107540483]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.569714063807273,-3.831215850875386,1.0524826551205122],"gripper_right_finger_joint":[-1.5663658788889654,-3.829607661593239,0.9663632107540433]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **fk_to_can_world_m**
+  - ep0: `0.9293834691694907`
+  - ep1: `0.9293834691694772`
+  - ep2: `0.9293834691694886`
+- **fk_to_can_xy_m**
+  - ep0: `0.9080555650890383`
+  - ep1: `0.9080555650890231`
+  - ep2: `0.908055565089032`
+- **gripper_opening_m**
+  - ep0: `0.04309975455713623`
+  - ep1: `0.04309975455713583`
+  - ep2: `0.043099754557135946`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **gt_to_can_world_m**
+  - ep0: `0.9708371805843431`
+  - ep1: `0.9708371805843592`
+  - ep2: `0.9708371805843692`
+- **gt_to_can_xy_m**
+  - ep0: `0.9503566959408211`
+  - ep1: `0.9503566959408357`
+  - ep2: `0.9503566959408468`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9974444253958856,-3.814810190380824,1.01199985655898],"tool":[-1.3654086488069153,-3.834599528238129,1.0172343012900418],"wrist":[-1.3104610620072232,-3.835734769035554,1.0193738707627074]}`
+  - ep1: `{"elbow":[-0.9974444253958861,-3.8148101903808143,1.0119998565589812],"tool":[-1.3654086488069161,-3.8345995282381065,1.0172343012900504],"wrist":[-1.3104610620072243,-3.8357347690355312,1.019373870762718]}`
+  - ep2: `{"elbow":[-0.9974444253958861,-3.81481019038081,1.0119998565589765],"tool":[-1.3654086488069161,-3.8345995282380985,1.0172343012900422],"wrist":[-1.3104610620072246,-3.835734769035525,1.0193738707627062]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.34974460719139855`
+  - ep1: `0.34974460719139877`
+  - ep2: `0.34974460719139877`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475699157876e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289918561081e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475697575404e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289915204277e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475693043996e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289928870019e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 4
+- meta (ep0): `{"event":"state_boundary","phase":"enter","sim_time_s":1.44,"state":"PREGRASP"}`
+- differing fields (41): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'joint_positions_rad', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.20363656758799578,-0.9854590731406514,0.9630240920393234]`
+  - ep1: `[0.20363656758801577,-0.9854590731406498,0.9630240920393346]`
+  - ep2: `[0.20363656758800358,-0.9854590731406505,0.9630240920393457]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-5.631503598349519e-06,9.804290669134658e-05,3.1161182258831327e-06]`
+  - ep1: `[-5.631503595449061e-06,9.804290669416377e-05,3.11611824667336e-06]`
+  - ep2: `[-5.631503598980958e-06,9.804290669709892e-05,3.1161182134139404e-06]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.05722965090671961,0.054089544350381935,-0.0019784380771443733]`
+  - ep1: `[-0.05722965090671939,0.05408954435040769,-0.0019784380771392662]`
+  - ep2: `[-0.05722965090671961,0.05408954435042812,-0.0019784380771561416]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `9.825393416074492e-05`
+  - ep1: `9.825393416404917e-05`
+  - ep2: `9.825393416612564e-05`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.3081789979001957,-3.888689072588511,1.0192127393671861]`
+  - ep1: `[-1.3081789979001968,-3.888689072588514,1.0192127393671897]`
+  - ep2: `[-1.3081789979001965,-3.8886890725885266,1.0192127393671984]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.3654086488069153,-3.834599528238129,1.0172343012900418]`
+  - ep1: `[-1.3654086488069161,-3.8345995282381065,1.0172343012900504]`
+  - ep2: `[-1.3654086488069161,-3.8345995282380985,1.0172343012900422]`
+- **base_drift_distance_m**
+  - ep0: `0.00015976988792530122`
+  - ep1: `0.00015976988792505695`
+  - ep2: `0.0001597698879249515`
+- **base_drift_world_xyz_m**
+  - ep0: `[-0.000151769201720664,-4.992520903046582e-05,-5.734818679187237e-05]`
+  - ep1: `[-0.00015176920172055297,-4.992520903002173e-05,-5.734818679362097e-05]`
+  - ep2: `[-0.00015176920172044195,-4.992520903002173e-05,-5.734818679323239e-05]`
+- **base_drift_yaw_deg**
+  - ep0: `0.0011405392908990775`
+  - ep1: `0.0011405392908990775`
+  - ep2: `0.0011405392909499665`
+- **base_tilt_pitch_deg**
+  - ep0: `0.03115019037459521`
+  - ep1: `0.031150190374423348`
+  - ep2: `0.03115019037413469`
+- **base_tilt_roll_deg**
+  - ep0: `0.0694993648147797`
+  - ep1: `0.06949936481457408`
+  - ep2: `0.0694993648143356`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.020264860474883913,-0.006750683727561996,-0.7175245895982987,0.6962055924947292]`
+  - ep1: `[0.020264860474886837,-0.0067506837275590915,-0.7175245895982988,0.6962055924947291]`
+  - ep2: `[0.020264860474885946,-0.0067506837275606016,-0.7175245895982985,0.6962055924947295]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5380618887268172,-3.7103884373048435,0.08823951200034122]`
+  - ep1: `[-0.5380618887268174,-3.710388437304844,0.08823951200033892]`
+  - ep2: `[-0.5380618887268175,-3.710388437304844,0.0882395120003398]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.029794100555289384,-0.9993674753790612,-0.019415476470659786,0.9988504756193729,-0.03049716020654299,0.03698176002151497,-0.03755048504418778,-0.018291319630302675,0.9991273135587518]`
+  - ep1: `[-0.029794100555289613,-0.9993674753790611,-0.019415476470668033,0.998850475619373,-0.030497160206543434,0.03698176002151487,-0.03755048504418793,-0.01829131963031091,0.9991273135587516]`
+  - ep2: `[-0.02979410055528872,-0.9993674753790613,-0.01941547647066463,0.998850475619373,-0.030497160206542324,0.036981760021515805,-0.03755048504418875,-0.01829131963030752,0.9991273135587516]`
+- **can_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.7448308693027927]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.7448308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.7448308693027973]`
+- **clearance_left_m**
+  - ep0: `0.919487784035576`
+  - ep1: `0.9194877840355917`
+  - ep2: `0.9194877840356017`
+- **clearance_right_m**
+  - ep0: `0.9177284229089686`
+  - ep1: `0.9177284229089826`
+  - ep2: `0.9177284229089944`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.0708911244823955,"arm_2_joint":-5.630237448690273e-05,"arm_3_joint":6.394464695162649e-05,"arm_4_joint":2.1885889613509067e-05,"arm_5_joint":1.5240632533410022e-05,"arm_6_joint":-4.973013176308e-06,"arm_7_joint":4.643566867584874e-06}`
+  - ep1: `{"arm_1_joint":0.07089112448239071,"arm_2_joint":-5.6302374457059575e-05,"arm_3_joint":6.394464695525061e-05,"arm_4_joint":2.1885889609381984e-05,"arm_5_joint":1.5240632539434767e-05,"arm_6_joint":-4.973013140020937e-06,"arm_7_joint":4.643566909943974e-06}`
+  - ep2: `{"arm_1_joint":0.07089112448239823,"arm_2_joint":-5.630237447139941e-05,"arm_3_joint":6.394464695301001e-05,"arm_4_joint":2.1885889610046576e-05,"arm_5_joint":1.524063253539439e-05,"arm_6_joint":-4.973013170120018e-06,"arm_7_joint":4.643566896859967e-06}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5654748997479886,-3.9016787329974663,1.0090236158491506]`
+  - ep1: `[-1.5654748997479884,-3.9016787329974942,1.0090236158491572]`
+  - ep2: `[-1.56547489974799,-3.90167873299748,1.0090236158491694]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.13248351124089797,-0.990179927422536,0.9622012125096085]`
+  - ep1: `[0.13248351124086644,-0.9901799274225375,0.9622012125096198]`
+  - ep2: `[0.1324835112408497,-0.990179927422537,0.9622012125096147]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.0025650716001297535,0.07126697676311133,0.000399317088122908]`
+  - ep1: `[-0.002565071600131086,0.07126697676316285,0.00039931708812468436]`
+  - ep2: `[-0.0025650716001293095,0.07126697676316773,0.00039931708810825306]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9461897088317478`
+  - ep1: `0.9461897088317637`
+  - ep2: `0.9461897088317743`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.569714063807273,-3.8312158508754295,1.0524826551205078],"gripper_right_finger_joint":[-1.5663658788889636,-3.8296076615932804,0.9663632107540393]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5697140638072744,-3.8312158508754046,1.0524826551205158],"gripper_right_finger_joint":[-1.5663658788889647,-3.829607661593258,0.9663632107540483]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.569714063807273,-3.831215850875386,1.0524826551205122],"gripper_right_finger_joint":[-1.5663658788889654,-3.829607661593239,0.9663632107540433]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07131424137859499`
+  - ep1: `0.07131424137864653`
+  - ep2: `0.07131424137865125`
+- **fk_to_can_world_m**
+  - ep0: `0.9293834691694907`
+  - ep1: `0.9293834691694772`
+  - ep2: `0.9293834691694886`
+- **fk_to_can_xy_m**
+  - ep0: `0.9080555650890383`
+  - ep1: `0.9080555650890231`
+  - ep2: `0.908055565089032`
+- **gripper_opening_m**
+  - ep0: `0.04309975455713623`
+  - ep1: `0.04309975455713583`
+  - ep2: `0.043099754557135946`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5680399713481183,-3.830411756234355,1.0094229329372735]`
+  - ep1: `[-1.5680399713481195,-3.8304117562343314,1.009422932937282]`
+  - ep2: `[-1.5680399713481192,-3.8304117562343123,1.0094229329372777]`
+- **gt_to_can_world_m**
+  - ep0: `0.9708371805843431`
+  - ep1: `0.9708371805843592`
+  - ep2: `0.9708371805843692`
+- **gt_to_can_xy_m**
+  - ep0: `0.9503566959408211`
+  - ep1: `0.9503566959408357`
+  - ep2: `0.9503566959408468`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.07103983414251598,"arm_2_joint":-5.63327241733802e-05,"arm_3_joint":-2.289409530915128e-05,"arm_4_joint":2.1905012877528255e-05,"arm_5_joint":-5.501443307611781e-06,"arm_6_joint":1.8522986679810314e-06,"arm_7_joint":-1.6806352909515665e-06,"torso_lift_joint":0.34974460719139855}`
+  - ep1: `{"arm_1_joint":0.07103983414250949,"arm_2_joint":-5.633272416361024e-05,"arm_3_joint":-2.2894095321013386e-05,"arm_4_joint":2.190501287334633e-05,"arm_5_joint":-5.501443310059225e-06,"arm_6_joint":1.8522987709209285e-06,"arm_7_joint":-1.6806352082446683e-06,"torso_lift_joint":0.34974460719139877}`
+  - ep2: `{"arm_1_joint":0.07103983414252936,"arm_2_joint":-5.633272415117574e-05,"arm_3_joint":-2.2894095324916615e-05,"arm_4_joint":2.190501287314515e-05,"arm_5_joint":-5.5014433064874325e-06,"arm_6_joint":1.8522986462889428e-06,"arm_7_joint":-1.6806352732833876e-06,"torso_lift_joint":0.34974460719139877}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9974444253958856,-3.814810190380824,1.01199985655898],"tool":[-1.3654086488069153,-3.834599528238129,1.0172343012900418],"wrist":[-1.3104610620072232,-3.835734769035554,1.0193738707627074]}`
+  - ep1: `{"elbow":[-0.9974444253958861,-3.8148101903808143,1.0119998565589812],"tool":[-1.3654086488069161,-3.8345995282381065,1.0172343012900504],"wrist":[-1.3104610620072243,-3.8357347690355312,1.019373870762718]}`
+  - ep2: `{"elbow":[-0.9974444253958861,-3.81481019038081,1.0119998565589765],"tool":[-1.3654086488069161,-3.8345995282380985,1.0172343012900422],"wrist":[-1.3104610620072246,-3.835734769035525,1.0193738707627062]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.34974460719139855`
+  - ep1: `0.34974460719139877`
+  - ep2: `0.34974460719139877`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475699157876e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289918561081e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475697575404e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289915204277e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":9.617475693043996e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":9.419289928870019e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 5
+- meta (ep0): `{"event":"state_boundary","phase":"waypoint","sim_time_s":1.7599999999999998,"state":"PREGRASP"}`
+- differing fields (43): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'ik_error_m', 'joint_positions_rad', 'joint_target', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.24188066196067345,-0.9795630605144183,0.9598841460326252]`
+  - ep1: `[0.24180656974667883,-0.9795721276891822,0.9598091904210632]`
+  - ep2: `[0.24184567296735435,-0.9795673463347758,0.9598488176644717]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-0.007963495921118273,0.0014474321114779296,0.01312209609407626]`
+  - ep1: `[-0.007967544506105595,0.001450899230298154,0.013132092721877021]`
+  - ep2: `[-0.007886792001697555,0.001267384937988926,0.012341313934137513]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.060679681133945396,0.05688395447346739,-0.005354726888592065]`
+  - ep1: `[-0.06067529287216744,0.05689056140872273,-0.005359372937871809]`
+  - ep2: `[-0.06067758399419554,0.056886444683885706,-0.0053575463769170995]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `0.015417578697875236`
+  - ep1: `0.015428503922585256`
+  - ep2: `0.014700876922143743`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.3039680204164013,-3.941916134751445,1.0310789977744377]`
+  - ep1: `[-1.3039734309012903,-3.9418672102549057,1.031028424092418]`
+  - ep2: `[-1.303970590970962,-3.941892989545145,1.031055150838144]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.3646477015503466,-3.8850321802779777,1.0257242708858456]`
+  - ep1: `[-1.3646487237734577,-3.884976648846183,1.025669051154546]`
+  - ep2: `[-1.3646481749651576,-3.8850065448612594,1.025697604461227]`
+- **base_drift_distance_m**
+  - ep0: `0.00021059705068924263`
+  - ep1: `0.00021052477532956687`
+  - ep2: `0.00021056162137524158`
+- **base_drift_world_xyz_m**
+  - ep0: `[-0.0001489925689496241,-0.00014883659548914352,-4.51243644868371e-05]`
+  - ep1: `[-0.00014890201746031728,-0.00014882496505563836,-4.518332773201239e-05]`
+  - ep2: `[-0.0001489510118354298,-0.00014882806344695965,-4.515174480879125e-05]`
+- **base_drift_yaw_deg**
+  - ep0: `-0.0017095810006911652`
+  - ep1: `-0.001713996753973`
+  - ep2: `-0.0017116648858695753`
+- **base_tilt_pitch_deg**
+  - ep0: `0.09911997877314693`
+  - ep1: `0.0991180298963017`
+  - ep2: `0.09911727739256926`
+- **base_tilt_roll_deg**
+  - ep0: `0.06003503855243686`
+  - ep1: `0.05998447606726298`
+  - ep2: `0.060011909025287746`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.020632645100620288,-0.00627882177307186,-0.7175459443193456,0.6961771959380404]`
+  - ep1: `[0.020632325478062902,-0.006278517802298957,-0.7175459738204749,0.6961771777454356]`
+  - ep2: `[0.020632487558858187,-0.0062786937348481685,-0.7175459581134407,0.696177187544365]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5380591120940461,-3.710487348691302,0.08825173582264625]`
+  - ep1: `[-0.5380590215425571,-3.7104873370608695,0.08825167685940052]`
+  - ep2: `[-0.5380590705369325,-3.710487340159261,0.08825170844232424]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.02984447388244157,-0.9993423050238502,-0.020597688421240913,0.9988542996551844,-0.03058844839965884,0.03680264779677097,-0.03740849420963139,-0.019475733981538873,0.9991102543497631]`
+  - ep1: `[-0.029844550889821797,-0.9993423034265052,-0.020597654341978584,0.9988543303473092,-0.030588506908028754,0.03680176614737772,-0.03740761324401284,-0.01947572405186163,0.9991102875278794]`
+  - ep2: `[-0.029844510213808625,-0.999342304911118,-0.02059764124922511,0.9988543136966708,-0.030588475086775604,0.036802244516039695,-0.03740809029675994,-0.019475697851414956,0.999110270177196]`
+- **can_base_xyz_m**
+  - ep0: `[0.6717700486026628,-0.21345200381873522,0.7455774248253079]`
+  - ep1: `[0.6717701053675195,-0.21345269757941535,0.7455772746239542]`
+  - ep2: `[0.6717701013241281,-0.21345232123156627,0.7455773353643711]`
+- **clearance_left_m**
+  - ep0: `0.9026893982004169`
+  - ep1: `0.9027376525684139`
+  - ep2: `0.9024071582586299`
+- **clearance_right_m**
+  - ep0: `0.8855783257377698`
+  - ep1: `0.8856127011866426`
+  - ep2: `0.8858933946776697`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.13639427476400812,"arm_2_joint":0.08044732822752991,"arm_3_joint":-0.0859354047696121,"arm_4_joint":0.11971484345151845,"arm_5_joint":0.0973947116188529,"arm_6_joint":-0.12955653426200028,"arm_7_joint":0.06202366812845905,"torso_lift_joint":0.34974678139500676}`
+  - ep1: `{"arm_1_joint":0.1363192620886567,"arm_2_joint":0.08035454300347152,"arm_3_joint":-0.08615069983900306,"arm_4_joint":0.11969812259644148,"arm_5_joint":0.09723391456436761,"arm_6_joint":-0.1296101149481435,"arm_7_joint":0.06216884276957193,"torso_lift_joint":0.3497467738382636}`
+  - ep2: `{"arm_1_joint":0.1363588429263633,"arm_2_joint":0.08040356239100532,"arm_3_joint":-0.08603699527961711,"arm_4_joint":0.11970692802999444,"arm_5_joint":0.09731894940217349,"arm_6_joint":-0.12958179143315085,"arm_7_joint":0.047845671469128534,"torso_lift_joint":0.34974677794898495}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.1379928107160398,"arm_2_joint":0.08308927572432961,"arm_3_joint":-0.08867109134210664,"arm_4_joint":0.12645248958663605,"arm_5_joint":0.10105973646456452,"arm_6_joint":-0.1386865342133989,"arm_7_joint":0.06350146109641851}`
+  - ep1: `{"arm_1_joint":0.13791420657567122,"arm_2_joint":0.08298980531737662,"arm_3_joint":-0.08890190586694818,"arm_4_joint":0.12643292338951967,"arm_5_joint":0.10088129715169285,"arm_6_joint":-0.1387546909843666,"arm_7_joint":0.06365129810309648}`
+  - ep2: `{"arm_1_joint":0.13795568251457754,"arm_2_joint":0.08304235678275261,"arm_3_joint":-0.0887800052106872,"arm_4_joint":0.1264432271951966,"arm_5_joint":0.10097566200625392,"arm_6_joint":-0.13871866234081257,"arm_7_joint":0.04887970443439334}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5604926732778577,-3.941163527379744,1.0052281431038683]`
+  - ep1: `[-1.5604957588034376,-3.9410876502829826,1.0051553066788557]`
+  - ep2: `[-1.5604941493237772,-3.941127664585926,1.0051938106084168]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.17092957791578142,-0.9871735804434784,0.9592138326672346]`
+  - ep1: `[0.17085442356886363,-0.9871773696898787,0.9591387587636149]`
+  - ep2: `[0.1708934614678661,-0.9871753956808356,0.9591794032708194]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.07136123359880925`
+  - ep1: `0.07136172806017664`
+  - ep2: `0.07136208269908197`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.005459835932399626,0.07115013442306584,0.0005236639330341575]`
+  - ep1: `[-0.005454523387758314,0.07115103702619496,0.000523771366182757]`
+  - ep2: `[-0.005457366919064288,0.07115116798680132,0.0005246785447263758]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.9216757863872388`
+  - ep1: `0.921719256880454`
+  - ep2: `0.9216966986427418`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.5659525092102573,-3.870013392956678,1.0057518070369025]`
+  - ep1: `[-1.565950282191196,-3.8699366132567876,1.0056790780450384]`
+  - ep2: `[-1.5659515162428415,-3.869976496599125,1.0057184891531432]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.5695589326536705,-3.8600922617835582,1.0494715957400012],"gripper_right_finger_joint":[-1.5623460857668443,-3.879934524129798,0.9620320183338039]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5695586943990658,-3.8600068257976887,1.0493967689932895],"gripper_right_finger_joint":[-1.562341869983326,-3.879866400715887,0.9619613870967872]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.5696170688842779,-3.8606746720120637,1.0495675729640683],"gripper_right_finger_joint":[-1.5622859636014048,-3.8792783211861854,0.9618694053422179]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07136123359880925`
+  - ep1: `0.07136172806017664`
+  - ep2: `0.07136208269908197`
+- **fk_to_can_world_m**
+  - ep0: `0.9042446608597878`
+  - ep1: `0.9042692834003525`
+  - ep2: `0.9042563319733363`
+- **fk_to_can_xy_m**
+  - ep0: `0.8831522826659366`
+  - ep1: `0.8831935031473843`
+  - ep2: `0.8831717799099794`
+- **gripper_opening_m**
+  - ep0: `0.04497615501243815`
+  - ep1: `0.044976185692643264`
+  - ep2: `0.04497445821386328`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.5659525092102573,-3.870013392956678,1.0057518070369025]`
+  - ep1: `[-1.565950282191196,-3.8699366132567876,1.0056790780450384]`
+  - ep2: `[-1.5659515162428415,-3.869976496599125,1.0057184891531432]`
+- **gt_to_can_world_m**
+  - ep0: `0.9461113940589327`
+  - ep1: `0.946136827320547`
+  - ep2: `0.9461240128560527`
+- **gt_to_can_xy_m**
+  - ep0: `0.9258632123165933`
+  - ep1: `0.9259044917527911`
+  - ep2: `0.9258831124088411`
+- **ik_error_m**
+  - ep0: `1.6214935043890384e-08`
+  - ep1: `5.896889796417286e-09`
+  - ep2: `1.3400804339189607e-10`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.13639427476400812,"arm_2_joint":0.08044732822752991,"arm_3_joint":-0.0859354047696121,"arm_4_joint":0.11971484345151845,"arm_5_joint":0.0973947116188529,"arm_6_joint":-0.12955653426200028,"arm_7_joint":0.06202366812845905,"torso_lift_joint":0.34974678139500676}`
+  - ep1: `{"arm_1_joint":0.1363192620886567,"arm_2_joint":0.08035454300347152,"arm_3_joint":-0.08615069983900306,"arm_4_joint":0.11969812259644148,"arm_5_joint":0.09723391456436761,"arm_6_joint":-0.1296101149481435,"arm_7_joint":0.06216884276957193,"torso_lift_joint":0.3497467738382636}`
+  - ep2: `{"arm_1_joint":0.1363588429263633,"arm_2_joint":0.08040356239100532,"arm_3_joint":-0.08603699527961711,"arm_4_joint":0.11970692802999444,"arm_5_joint":0.09731894940217349,"arm_6_joint":-0.12958179143315085,"arm_7_joint":0.047845671469128534,"torso_lift_joint":0.34974677794898495}`
+- **joint_target**
+  - ep0: `{"arm_1_joint":0.1379928107160398,"arm_2_joint":0.08308927572432961,"arm_3_joint":-0.08867109134210664,"arm_4_joint":0.12645248958663605,"arm_5_joint":0.10105973646456452,"arm_6_joint":-0.1386865342133989,"arm_7_joint":0.06350146109641851}`
+  - ep1: `{"arm_1_joint":0.13791420657567122,"arm_2_joint":0.08298980531737662,"arm_3_joint":-0.08890190586694818,"arm_4_joint":0.12643292338951967,"arm_5_joint":0.10088129715169285,"arm_6_joint":-0.1387546909843666,"arm_7_joint":0.06365129810309648}`
+  - ep2: `{"arm_1_joint":0.13795568251457754,"arm_2_joint":0.08304235678275261,"arm_3_joint":-0.0887800052106872,"arm_4_joint":0.1264432271951966,"arm_5_joint":0.10097566200625392,"arm_6_joint":-0.13871866234081257,"arm_7_joint":0.04887970443439334}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.13639427476400812,"arm_2_joint":0.08044732822752991,"arm_3_joint":-0.0859354047696121,"arm_4_joint":0.11971484345151845,"arm_5_joint":0.0973947116188529,"arm_6_joint":-0.12955653426200028,"arm_7_joint":0.06202366812845905,"torso_lift_joint":0.34974678139500676}`
+  - ep1: `{"arm_1_joint":0.1363192620886567,"arm_2_joint":0.08035454300347152,"arm_3_joint":-0.08615069983900306,"arm_4_joint":0.11969812259644148,"arm_5_joint":0.09723391456436761,"arm_6_joint":-0.1296101149481435,"arm_7_joint":0.06216884276957193,"torso_lift_joint":0.3497467738382636}`
+  - ep2: `{"arm_1_joint":0.1363588429263633,"arm_2_joint":0.08040356239100532,"arm_3_joint":-0.08603699527961711,"arm_4_joint":0.11970692802999444,"arm_5_joint":0.09731894940217349,"arm_6_joint":-0.12958179143315085,"arm_7_joint":0.047845671469128534,"torso_lift_joint":0.34974677794898495}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9991020911300231,-3.846698877678047,1.0339813047440312],"tool":[-1.3646477015503466,-3.8850321802779777,1.0257242708858456],"wrist":[-1.3100523329897833,-3.8891129101107507,1.031153748934779]}`
+  - ep1: `{"elbow":[-0.9991012202026817,-3.8466703104304827,1.0339479620809922],"tool":[-1.3646487237734577,-3.884976648846183,1.025669051154546],"wrist":[-1.310054213292755,-3.8890631681478425,1.0311032452970847]}`
+  - ep2: `{"elbow":[-0.9991016938085817,-3.8466853486030295,1.033965575904003],"tool":[-1.3646481749651576,-3.8850065448612594,1.025697604461227],"wrist":[-1.3100532357131085,-3.8890893783741385,1.0311299330375068]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.34974678139500676`
+  - ep1: `0.3497467738382636`
+  - ep2: `0.34974677794898495`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-2.3529740048393786e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":1.269327343097524e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-2.3501601975551766e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":1.268872846623217e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-2.3516980849482706e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":1.2691132190508474e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 6
+- meta (ep0): `{"event":"state_boundary","phase":"waypoint","sim_time_s":2.112,"state":"PREGRASP"}`
+- differing fields (44): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_rate_m_per_s', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'ik_error_m', 'joint_positions_rad', 'joint_target', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.29401155491455916,-0.9619316478152167,0.9444221009354578]`
+  - ep1: `[0.2938914530378902,-0.9619494834203456,0.9442671857419301]`
+  - ep2: `[0.2939548257390498,-0.961940090065265,0.944349077690743]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-0.017550283741995215,0.005052189513035155,0.02448357049061855]`
+  - ep1: `[-0.017560626875598603,0.005064164153818766,0.024499475279168167]`
+  - ep2: `[-0.01726606589475954,0.004344521358926434,0.023029477845476043]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.06387799386557114,0.0576854491270522,-0.01125269179026489]`
+  - ep1: `[-0.0638690058951148,0.057696143202806915,-0.011263718072205942]`
+  - ep2: `[-0.06387371805477216,0.057689408081347704,-0.011258231401606977]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `0.030544758998382215`
+  - ep1: `0.03056543249809155`
+  - ep2: `0.02910925535213188`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.2907230527870908,-4.0069687268276075,1.042954172284435]`
+  - ep1: `[-1.2907456343387915,-4.0068799884731225,1.0428520570979072]`
+  - ep2: `[-1.2907337236254672,-4.0069269230540305,1.0429059918638282]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.354601046652662,-3.9492832777005553,1.0317014804941702]`
+  - ep1: `[-1.3546146402339063,-3.9491838452703156,1.0315883390257012]`
+  - ep2: `[-1.3546074416802394,-3.949237514972683,1.0316477604622212]`
+- **base_drift_distance_m**
+  - ep0: `0.0006373097962401467`
+  - ep1: `0.000636744494340732`
+  - ep2: `0.000637054470706948`
+- **base_drift_rate_m_per_s**
+  - ep0: `0.0005588906754499047`
+  - ep1: `0.0005586489931436386`
+  - ep2: `0.0005587597163322393`
+- **base_drift_world_xyz_m**
+  - ep0: `[-5.017907073423533e-05,-0.0006353312814932899,-7.173694419487786e-05]`
+  - ep1: `[-5.0351903126522046e-05,-0.0006347505312520596,-7.175964064687346e-05]`
+  - ep2: `[-5.0260675668489796e-05,-0.0006350687074081485,-7.174765767950508e-05]`
+- **base_drift_yaw_deg**
+  - ep0: `2.5753550574089834e-05`
+  - ep1: `1.6076164729887747e-05`
+  - ep2: `2.144912545899263e-05`
+- **base_tilt_pitch_deg**
+  - ep0: `0.3855776154790429`
+  - ep1: `0.38525295430052986`
+  - ep2: `0.3854308602016703`
+- **base_tilt_roll_deg**
+  - ep0: `-0.01347356178174497`
+  - ep1: `-0.01335663726281755`
+  - ep2: `-0.013418594089871672`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.021979130342310978,-0.004077148202174772,-0.7175500737958674,0.6961481065746559]`
+  - ep1: `[0.021977808284278894,-0.004079855504885363,-0.7175501187303274,0.6961480861369741]`
+  - ep2: `[0.021978545587676646,-0.004078385202171766,-0.7175500936081685,0.696148097369304]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5379602985958307,-3.7109738433773063,0.08822512324293821]`
+  - ep1: `[-0.5379604714282233,-3.710973262627066,0.08822510054648566]`
+  - ep2: `[-0.5379603802007655,-3.710973580803222,0.08822511252945353]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.02981577376978334,-0.9992277274852308,-0.025592347668990045,0.9988974161935739,-0.030715247560339203,0.03550387991627199,-0.036262536539948285,-0.02450555430934867,0.9990417940465155]`
+  - ep1: `[-0.029815941485188655,-0.9992278675499614,-0.025586682960259174,0.9988973431615665,-0.030715259803142915,0.03550592401261126,-0.03626441035113753,-0.024499827076582638,0.9990418664976467]`
+  - ep2: `[-0.02981584836075613,-0.9992277908385,-0.02558978707491862,0.9988973818807025,-0.03071525278126902,0.035504840775046675,-0.03626342039034755,-0.02450296436339926,0.999041825490304]`
+- **can_base_xyz_m**
+  - ep0: `[0.667585861596323,-0.21442023369116503,0.7486761708781916]`
+  - ep1: `[0.667590672115373,-0.2144185365813326,0.7486728555764391]`
+  - ep2: `[0.6675880357277458,-0.21441943626201196,0.7486746805427857]`
+- **clearance_left_m**
+  - ep0: `0.8665902819386164`
+  - ep1: `0.8666723679993487`
+  - ep2: `0.8661985622940991`
+- **clearance_right_m**
+  - ep0: `0.8349189993543125`
+  - ep1: `0.8349780431988902`
+  - ep2: `0.8353453256644108`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.20395620804415707,"arm_2_joint":0.16431299596020074,"arm_3_joint":-0.1754186592591824,"arm_4_joint":0.24749297295684905,"arm_5_joint":0.19936684855623868,"arm_6_joint":-0.2697093085842302,"arm_7_joint":0.12596232829515935,"torso_lift_joint":0.3497463497736537}`
+  - ep1: `{"arm_1_joint":0.20380155320906596,"arm_2_joint":0.16411877742195546,"arm_3_joint":-0.17586902435189913,"arm_4_joint":0.24745709911722882,"arm_5_joint":0.19902315289140698,"arm_6_joint":-0.2698279306699339,"arm_7_joint":0.12625873380157798,"torso_lift_joint":0.34974634283752376}`
+  - ep2: `{"arm_1_joint":0.20388315776176047,"arm_2_joint":0.1642213850344632,"arm_3_joint":-0.17563117172871684,"arm_4_joint":0.2474759907854425,"arm_5_joint":0.1992049108548468,"arm_6_joint":-0.2697652253579753,"arm_7_joint":0.09703688129793238,"torso_lift_joint":0.349746346595878}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.20509449694968415,"arm_2_joint":0.16623485382314615,"arm_3_joint":-0.1774061273311649,"arm_4_joint":0.2528830932836586,"arm_5_joint":0.20210423229659563,"arm_6_joint":-0.2773680954136215,"arm_7_joint":0.12699827862596944}`
+  - ep1: `{"arm_1_joint":0.2049372886689517,"arm_2_joint":0.1660359130092103,"arm_3_joint":-0.17786775638085162,"arm_4_joint":0.25284396088942995,"arm_5_joint":0.20174735367084626,"arm_6_joint":-0.2775044089555932,"arm_7_joint":0.12729795263928304}`
+  - ep2: `{"arm_1_joint":0.20502024054675683,"arm_2_joint":0.1661410159399766,"arm_3_joint":-0.17762395506832743,"arm_4_joint":0.25286456850078315,"arm_5_joint":0.20193608337997246,"arm_6_joint":-0.27743235166845504,"arm_7_joint":0.09775476530188983}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.5427070072861164,-3.9985784440118346,0.9890336707695534]`
+  - ep1: `[-1.5427174001102395,-3.9984480940253744,0.988881110612689]`
+  - ep2: `[-1.5427119372204448,-3.998516997465195,0.9889617272988832]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.22420548439391105,-0.9733140877242266,0.9436975376545143]`
+  - ep1: `[0.22408379317011004,-0.9733233845544892,0.9435423085060232]`
+  - ep2: `[0.22414684807965582,-0.9733185021500949,0.9436252564621022]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.07073169312100523`
+  - ep1: `0.07073189132373126`
+  - ep2: `0.07073291966006874`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.009263045598714603,0.0701193535857696,0.0006668213508972398]`
+  - ep1: `[-0.009254443203767115,0.07012069300245116,0.0006664413525395707]`
+  - ep2: `[-0.009258986740942499,0.07012111978315394,0.0006675691165464182]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.8789232279199969`
+  - ep1: `0.8789965414886045`
+  - ep2: `0.8789584057898038`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.551970052884831,-3.928459090426065,0.9897004921204506]`
+  - ep1: `[-1.5519718433140066,-3.928327401022923,0.9895475519652286]`
+  - ep2: `[-1.5519709239613872,-3.928395877682041,0.9896292964154296]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.5583720038298239,-3.9086112580618866,1.0295888934150212],"gripper_right_finger_joint":[-1.5455681019398382,-3.948306922790243,0.9498120908258801]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.558375588374923,-3.9084637318353774,1.029427803179339],"gripper_right_finger_joint":[-1.54556809825309,-3.948191070210469,0.9496673007511184]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.5586080388094732,-3.9097153681511263,1.0300384190778589],"gripper_right_finger_joint":[-1.545333809113301,-3.9470763872129555,0.9492201737530003]}`
+- **fk_gt_offset_m**
+  - ep0: `0.07073169312100523`
+  - ep1: `0.07073189132373126`
+  - ep2: `0.07073291966006874`
+- **fk_to_can_world_m**
+  - ep0: `0.8582817404515161`
+  - ep1: `0.8583185683730945`
+  - ep2: `0.8582991163738409`
+- **fk_to_can_xy_m**
+  - ep0: `0.8396286347337437`
+  - ep1: `0.8396986008938729`
+  - ep2: `0.8396616419768842`
+- **gripper_opening_m**
+  - ep0: `0.04501117538760383`
+  - ep1: `0.045011194910413097`
+  - ep2: `0.0450101085091963`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.551970052884831,-3.928459090426065,0.9897004921204506]`
+  - ep1: `[-1.5519718433140066,-3.928327401022923,0.9895475519652286]`
+  - ep2: `[-1.5519709239613872,-3.928395877682041,0.9896292964154296]`
+- **gt_to_can_world_m**
+  - ep0: `0.9002996023972308`
+  - ep1: `0.9003382828881615`
+  - ep2: `0.9003186136917453`
+- **gt_to_can_xy_m**
+  - ep0: `0.8824002985449518`
+  - ep1: `0.8824707093099861`
+  - ep2: `0.8824341048643315`
+- **ik_error_m**
+  - ep0: `1.6214935043890384e-08`
+  - ep1: `5.896889796417286e-09`
+  - ep2: `1.3400804339189607e-10`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.20395620804415707,"arm_2_joint":0.16431299596020074,"arm_3_joint":-0.1754186592591824,"arm_4_joint":0.24749297295684905,"arm_5_joint":0.19936684855623868,"arm_6_joint":-0.2697093085842302,"arm_7_joint":0.12596232829515935,"torso_lift_joint":0.3497463497736537}`
+  - ep1: `{"arm_1_joint":0.20380155320906596,"arm_2_joint":0.16411877742195546,"arm_3_joint":-0.17586902435189913,"arm_4_joint":0.24745709911722882,"arm_5_joint":0.19902315289140698,"arm_6_joint":-0.2698279306699339,"arm_7_joint":0.12625873380157798,"torso_lift_joint":0.34974634283752376}`
+  - ep2: `{"arm_1_joint":0.20388315776176047,"arm_2_joint":0.1642213850344632,"arm_3_joint":-0.17563117172871684,"arm_4_joint":0.2474759907854425,"arm_5_joint":0.1992049108548468,"arm_6_joint":-0.2697652253579753,"arm_7_joint":0.09703688129793238,"torso_lift_joint":0.349746346595878}`
+- **joint_target**
+  - ep0: `{"arm_1_joint":0.20509449694968415,"arm_2_joint":0.16623485382314615,"arm_3_joint":-0.1774061273311649,"arm_4_joint":0.2528830932836586,"arm_5_joint":0.20210423229659563,"arm_6_joint":-0.2773680954136215,"arm_7_joint":0.12699827862596944}`
+  - ep1: `{"arm_1_joint":0.2049372886689517,"arm_2_joint":0.1660359130092103,"arm_3_joint":-0.17786775638085162,"arm_4_joint":0.25284396088942995,"arm_5_joint":0.20174735367084626,"arm_6_joint":-0.2775044089555932,"arm_7_joint":0.12729795263928304}`
+  - ep2: `{"arm_1_joint":0.20502024054675683,"arm_2_joint":0.1661410159399766,"arm_3_joint":-0.17762395506832743,"arm_4_joint":0.25286456850078315,"arm_5_joint":0.20193608337997246,"arm_6_joint":-0.27743235166845504,"arm_7_joint":0.09775476530188983}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.20395620804415707,"arm_2_joint":0.16431299596020074,"arm_3_joint":-0.1754186592591824,"arm_4_joint":0.24749297295684905,"arm_5_joint":0.19936684855623868,"arm_6_joint":-0.2697093085842302,"arm_7_joint":0.12596232829515935,"torso_lift_joint":0.3497463497736537}`
+  - ep1: `{"arm_1_joint":0.20380155320906596,"arm_2_joint":0.16411877742195546,"arm_3_joint":-0.17586902435189913,"arm_4_joint":0.24745709911722882,"arm_5_joint":0.19902315289140698,"arm_6_joint":-0.2698279306699339,"arm_7_joint":0.12625873380157798,"torso_lift_joint":0.34974634283752376}`
+  - ep2: `{"arm_1_joint":0.20388315776176047,"arm_2_joint":0.1642213850344632,"arm_3_joint":-0.17563117172871684,"arm_4_joint":0.2474759907854425,"arm_5_joint":0.1992049108548468,"arm_6_joint":-0.2697652253579753,"arm_7_joint":0.09703688129793238,"torso_lift_joint":0.349746346595878}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9956764832012257,-3.8838816771719924,1.056918275646287],"tool":[-1.354601046652662,-3.9492832777005553,1.0317014804941702],"wrist":[-1.3010703584468217,-3.9549433600458705,1.0431104664413486]}`
+  - ep1: `{"elbow":[-0.9956883114228304,-3.8838185566974164,1.056848991838055],"tool":[-1.3546146402339063,-3.9491838452703156,1.0315883390257012],"wrist":[-1.3010871302141862,-3.9548527122719817,1.043008105968333]}`
+  - ep2: `{"elbow":[-0.9956820692639083,-3.8838519836526957,1.0568855743952046],"tool":[-1.3546074416802394,-3.949237514972683,1.0316477604622212],"wrist":[-1.3010782839845758,-3.95490065481513,1.0430621760576073]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.3497463497736537`
+  - ep1: `0.34974634283752376`
+  - ep2: `0.349746346595878`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":6.620795464692822e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":-4.097908589923162e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":6.623566023931321e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":-4.096605237973005e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":6.622148507704654e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":-4.097296979324764e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 7
+- meta (ep0): `{"event":"state_boundary","phase":"waypoint","sim_time_s":2.4640000000000004,"state":"PREGRASP"}`
+- differing fields (44): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_rate_m_per_s', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'ik_error_m', 'joint_positions_rad', 'joint_target', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.3596052139890004,-0.9289849000187254,0.9228747107537467]`
+  - ep1: `[0.3594728476023451,-0.929007493377394,0.9226549489785482]`
+  - ep2: `[0.35954267433201537,-0.9289956150264609,0.9227711134861919]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-0.028386579693248322,0.009505428338673155,0.03231262361815163]`
+  - ep1: `[-0.02840412293315145,0.009527968669932746,0.03232899351132134]`
+  - ep2: `[-0.027735752505072243,0.008032406355324893,0.030436691468355946]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.06630162969620557,0.055686898488190195,-0.01890571280895781]`
+  - ep1: `[-0.06628821329916024,0.055698639246116066,-0.018921977835363757]`
+  - ep2: `[-0.0662953116316729,0.05569091950576155,-0.018913320816628332]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `0.04404834525463039`
+  - ep1: `0.044076526723777334`
+  - ep2: `0.04195454333465658`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.2681387807070084,-4.073976857570644,1.056544430210728]`
+  - ep1: `[-1.2681815763511184,-4.073871311706706,1.0564015379016511]`
+  - ep2: `[-1.2681589982891799,-4.073927076387875,1.056477032445925]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.334440410403214,-4.018289959082454,1.0376387174017703]`
+  - ep1: `[-1.3344697896502786,-4.01817267246059,1.0374795600662874]`
+  - ep2: `[-1.3344543099208528,-4.018236156882113,1.0375637116292966]`
+- **base_drift_distance_m**
+  - ep0: `0.0009472414100859258`
+  - ep1: `0.0009464721137685067`
+  - ep2: `0.0009468870641700096`
+- **base_drift_rate_m_per_s**
+  - ep0: `0.0013207025173616678`
+  - ep1: `0.0013196918676494334`
+  - ep2: `0.0013202590702554827`
+- **base_drift_world_xyz_m**
+  - ep0: `[5.3321882358847716e-05,-0.0009457394280896203,-8.741022698854906e-05]`
+  - ep1: `[5.299375760925429e-05,-0.0009449873670033249,-8.741387773128495e-05]`
+  - ep2: `[5.31676147511595e-05,-0.0009453932076306515,-8.741186085414743e-05]`
+- **base_drift_yaw_deg**
+  - ep0: `-0.003239435198053529`
+  - ep1: `-0.003254535467567282`
+  - ep2: `-0.0032460218415158067`
+- **base_tilt_pitch_deg**
+  - ep0: `0.5628191738891177`
+  - ep1: `0.5623903121001939`
+  - ep2: `0.562621748009448`
+- **base_tilt_roll_deg**
+  - ep0: `-0.08520665904233704`
+  - ep1: `-0.08499578843897382`
+  - ep2: `-0.0851076692176127`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.022652611054657917,-0.0025513343842788762,-0.717576078410539,0.6961069756856471]`
+  - ep1: `[0.02265120747201444,-0.002555264415154171,-0.7175761584208369,0.6961069244662219]`
+  - ep2: `[0.022651976564001,-0.002553155493212081,-0.7175761129875191,0.6961069540124525]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5378567976427376,-3.7112842515239026,0.08820944996014454]`
+  - ep1: `[-0.5378571257674876,-3.711283499462817,0.08820944630940125]`
+  - ep2: `[-0.5378569519103459,-3.7112839053034445,0.08820944832627889]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.029876830436586167,-0.9991411193681898,-0.028712342132685108,0.9989413374910187,-0.030851455320984364,0.03412318795529505,-0.03497969775053198,-0.027662452752028076,0.9990051098232797]`
+  - ep1: `[-0.02987709212296658,-0.9991413265324712,-0.0287048598883438,0.9989412084882868,-0.030851557013028403,0.03412687231248698,-0.034983158094098736,-0.027654855718400213,0.999005198987952]`
+  - ep2: `[-0.029876944543257348,-0.9991412149329147,-0.028708897699811185,0.9989412771330182,-0.030851496707541653,0.03412491744692251,-0.03498132394026645,-0.027658954667225615,0.9990051497375289]`
+- **can_base_xyz_m**
+  - ep0: `[0.6649969990541508,-0.21536588619555927,0.7504763684906834]`
+  - ep1: `[0.6650033613147005,-0.21536276754214584,0.7504721948912978]`
+  - ep2: `[0.6649999262937195,-0.21536442658565172,0.7504744543370386]`
+- **clearance_left_m**
+  - ep0: `0.8129030236122621`
+  - ep1: `0.8129898740630022`
+  - ep2: `0.8126464343525255`
+- **clearance_right_m**
+  - ep0: `0.7692210906341139`
+  - ep1: `0.769284072919177`
+  - ep2: `0.7694744508745435`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.2710723915467105,"arm_2_joint":0.2475051383834745,"arm_3_joint":-0.26418762546724345,"arm_4_joint":0.3741191681026062,"arm_5_joint":0.3004740191471643,"arm_6_joint":-0.40870583453270487,"arm_7_joint":0.189468662223951,"torso_lift_joint":0.3497461610277548}`
+  - ep1: `{"arm_1_joint":0.27083910110535253,"arm_2_joint":0.2472113550399429,"arm_3_joint":-0.2648689981324383,"arm_4_joint":0.3740637868009963,"arm_5_joint":0.2999515845099862,"arm_6_joint":-0.40889194739652673,"arm_7_joint":0.18991493483950234,"torso_lift_joint":0.34974615584258395}`
+  - ep2: `{"arm_1_joint":0.27096219822341433,"arm_2_joint":0.24736656647147515,"arm_3_joint":-0.26450914294611944,"arm_4_joint":0.37409295136315124,"arm_5_joint":0.3002278658405872,"arm_6_joint":-0.4087935654969551,"arm_7_joint":0.14591661694243777,"torso_lift_joint":0.34974615865005315}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.2721961831833285,"arm_2_joint":0.2493804319219627,"arm_3_joint":-0.2661411633202232,"arm_4_joint":0.37931369698068124,"arm_5_joint":0.30314872812862675,"arm_6_joint":-0.41604965661384413,"arm_7_joint":0.19049509615552035}`
+  - ep1: `{"arm_1_joint":0.2719603707622322,"arm_2_joint":0.24908202070104402,"arm_3_joint":-0.26683360689475505,"arm_4_joint":0.3792549983893403,"arm_5_joint":0.30261341018999965,"arm_6_joint":-0.4162541269268198,"arm_7_joint":0.19094460717546963}`
+  - ep2: `{"arm_1_joint":0.2720847985789362,"arm_2_joint":0.24923967509720063,"arm_3_joint":-0.26646790492596767,"arm_4_joint":0.3792859098063697,"arm_5_joint":0.30289650475369095,"arm_6_joint":-0.41614604099609753,"arm_7_joint":0.14662982616938633}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.509836052410419,-4.067638401938498,0.96701240507764]`
+  - ep1: `[-1.5098502399981082,-4.067491545222545,0.9667952530543036]`
+  - ep2: `[-1.5098427927962845,-4.067569119584872,0.9669100153515017]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.2920112105135613,-0.9451362264316004,0.9220873479558964]`
+  - ep1: `[0.2918770205408704,-0.9451494240048378,0.9218671381767595]`
+  - ep2: `[0.29194607848160525,-0.9451425424467429,0.9219844178046385]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.06950132797945967`
+  - ep1: `0.0695009237806625`
+  - ep2: `0.0695028195526983`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.014087961113582903,0.06805586778684569,0.0006023307645949272]`
+  - ep1: `[-0.014078481938896381,0.06805742213750854,0.0006017014696582113]`
+  - ep2: `[-0.014083503384332507,0.06805830801464374,0.0006029663193866108]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.8195627785236911`
+  - ep1: `0.8196412813726891`
+  - ep2: `0.8196006782312887`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.523924013524002,-3.9995825341516524,0.9676147358422349]`
+  - ep1: `[-1.5239287219370046,-3.9994341230850363,0.9673969545239618]`
+  - ep2: `[-1.523926296180617,-3.9995108115702287,0.9675129816708883]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.5337486169700734,-3.9717705945583353,1.0016134913827976],"gripper_right_finger_joint":[-1.5140994100779308,-4.02739447374497,0.9336159803016723]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.5337526697243473,-3.9716023202767174,1.0013796606148988],"gripper_right_finger_joint":[-1.5141047741496616,-4.027265925893355,0.9334142484330247]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.5342967949063566,-3.9732536477123985,1.002568468705279],"gripper_right_finger_joint":[-1.5135557974548774,-4.025767975428059,0.9324574946364975]}`
+- **fk_gt_offset_m**
+  - ep0: `0.06950132797945967`
+  - ep1: `0.0695009237806625`
+  - ep2: `0.0695028195526983`
+- **fk_to_can_world_m**
+  - ep0: `0.7951335910966655`
+  - ep1: `0.7951632475956574`
+  - ep2: `0.7951476244354863`
+- **fk_to_can_xy_m**
+  - ep0: `0.7796915136885543`
+  - ep1: `0.7797651564192556`
+  - ep2: `0.7797262963005697`
+- **gripper_opening_m**
+  - ep0: `0.04501046791464619`
+  - ep1: `0.04501048252867365`
+  - ep2: `0.04500970018970919`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.523924013524002,-3.9995825341516524,0.9676147358422349]`
+  - ep1: `[-1.5239287219370046,-3.9994341230850363,0.9673969545239618]`
+  - ep2: `[-1.523926296180617,-3.9995108115702287,0.9675129816708883]`
+- **gt_to_can_world_m**
+  - ep0: `0.8373371341428028`
+  - ep1: `0.8373697252194459`
+  - ep2: `0.8373535330586751`
+- **gt_to_can_xy_m**
+  - ep0: `0.8225732078955977`
+  - ep1: `0.8226477990045568`
+  - ep2: `0.8226092593786913`
+- **ik_error_m**
+  - ep0: `1.6214935043890384e-08`
+  - ep1: `5.896889796417286e-09`
+  - ep2: `1.3400804339189607e-10`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.2710723915467105,"arm_2_joint":0.2475051383834745,"arm_3_joint":-0.26418762546724345,"arm_4_joint":0.3741191681026062,"arm_5_joint":0.3004740191471643,"arm_6_joint":-0.40870583453270487,"arm_7_joint":0.189468662223951,"torso_lift_joint":0.3497461610277548}`
+  - ep1: `{"arm_1_joint":0.27083910110535253,"arm_2_joint":0.2472113550399429,"arm_3_joint":-0.2648689981324383,"arm_4_joint":0.3740637868009963,"arm_5_joint":0.2999515845099862,"arm_6_joint":-0.40889194739652673,"arm_7_joint":0.18991493483950234,"torso_lift_joint":0.34974615584258395}`
+  - ep2: `{"arm_1_joint":0.27096219822341433,"arm_2_joint":0.24736656647147515,"arm_3_joint":-0.26450914294611944,"arm_4_joint":0.37409295136315124,"arm_5_joint":0.3002278658405872,"arm_6_joint":-0.4087935654969551,"arm_7_joint":0.14591661694243777,"torso_lift_joint":0.34974615865005315}`
+- **joint_target**
+  - ep0: `{"arm_1_joint":0.2721961831833285,"arm_2_joint":0.2493804319219627,"arm_3_joint":-0.2661411633202232,"arm_4_joint":0.37931369698068124,"arm_5_joint":0.30314872812862675,"arm_6_joint":-0.41604965661384413,"arm_7_joint":0.19049509615552035}`
+  - ep1: `{"arm_1_joint":0.2719603707622322,"arm_2_joint":0.24908202070104402,"arm_3_joint":-0.26683360689475505,"arm_4_joint":0.3792549983893403,"arm_5_joint":0.30261341018999965,"arm_6_joint":-0.4162541269268198,"arm_7_joint":0.19094460717546963}`
+  - ep2: `{"arm_1_joint":0.2720847985789362,"arm_2_joint":0.24923967509720063,"arm_3_joint":-0.26646790492596767,"arm_4_joint":0.3792859098063697,"arm_5_joint":0.30289650475369095,"arm_6_joint":-0.41614604099609753,"arm_7_joint":0.14662982616938633}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.2710723915467105,"arm_2_joint":0.2475051383834745,"arm_3_joint":-0.26418762546724345,"arm_4_joint":0.3741191681026062,"arm_5_joint":0.3004740191471643,"arm_6_joint":-0.40870583453270487,"arm_7_joint":0.189468662223951,"torso_lift_joint":0.3497461610277548}`
+  - ep1: `{"arm_1_joint":0.27083910110535253,"arm_2_joint":0.2472113550399429,"arm_3_joint":-0.2648689981324383,"arm_4_joint":0.3740637868009963,"arm_5_joint":0.2999515845099862,"arm_6_joint":-0.40889194739652673,"arm_7_joint":0.18991493483950234,"torso_lift_joint":0.34974615584258395}`
+  - ep2: `{"arm_1_joint":0.27096219822341433,"arm_2_joint":0.24736656647147515,"arm_3_joint":-0.26450914294611944,"arm_4_joint":0.37409295136315124,"arm_5_joint":0.3002278658405872,"arm_6_joint":-0.4087935654969551,"arm_7_joint":0.14591661694243777,"torso_lift_joint":0.34974615865005315}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9881467976452507,-3.9184646441269932,1.079958632301462],"tool":[-1.334440410403214,-4.018289959082454,1.0376387174017703],"wrist":[-1.2830457481503004,-4.023379458581878,1.056654341448738]}`
+  - ep1: `{"elbow":[-0.9881791499156258,-3.9183750808532882,1.0798559361376971],"tool":[-1.3344697896502786,-4.01817267246059,1.0374795600662874],"wrist":[-1.2830817995252248,-4.023270652040109,1.0565110909705528]}`
+  - ep2: `{"elbow":[-0.988162067419311,-3.918422434704566,1.0799101753587093],"tool":[-1.3344543099208528,-4.018236156882113,1.0375637116292966],"wrist":[-1.283062777896278,-4.023328137306817,1.0565867789770769]}`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.3497461610277548`
+  - ep1: `0.34974615584258395`
+  - ep2: `0.34974615865005315`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":4.4459571845609027e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.3153023559796832e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":4.4470180729487265e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.312948896594497e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":4.446471988316043e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.314217260648172e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 8
+- meta (ep0): `{"event":"state_boundary","phase":"waypoint","sim_time_s":2.816,"state":"PREGRASP"}`
+- differing fields (45): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_rate_m_per_s', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'ik_error_m', 'joint_positions_rad', 'joint_target', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'supervisor_min_table_clearance_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.4354180166827308,-0.877046466127473,0.899904303041692]`
+  - ep1: `[0.43530078118810367,-0.8770672100446112,0.8996435116391864]`
+  - ep2: `[0.43536260650457137,-0.8770563399252576,0.8997813601511608]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-0.0402307703668964,0.013031816596432863,0.036083764067987134]`
+  - ep1: `[-0.040255389501565216,0.013063827681987848,0.03609551469883117]`
+  - ep2: `[-0.03904294267249022,0.01068968691630065,0.03408050164535575]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.06733855646968334,0.05099110376710758,-0.02730280898335291]`
+  - ep1: `[-0.06732097078519028,0.05100136822344403,-0.027322105254902418]`
+  - ep2: `[-0.06733036661841973,0.05099412832373318,-0.027311442797366414]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `0.05559119676199795`
+  - ep1: `0.05562415086094291`
+  - ep2: `0.05291598408132445`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.2344758670973073,-4.142874894966499,1.072289998681141]`
+  - ep1: `[-1.2345388217174071,-4.142770832301431,1.0721196591352529]`
+  - ep2: `[-1.2345056095062386,-4.142825762186133,1.0722096776846641]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.3018144235669906,-4.0918837911993915,1.044987189697788]`
+  - ep1: `[-1.3018597925025974,-4.091769464077987,1.0447975538803504]`
+  - ep2: `[-1.3018359761246583,-4.0918316338624,1.0448982348872977]`
+- **base_drift_distance_m**
+  - ep0: `0.0012556979656484456`
+  - ep1: `0.0012548817346036325`
+  - ep2: `0.0012553166641664098`
+- **base_drift_rate_m_per_s**
+  - ep0: `0.0013335514581257753`
+  - ep1: `0.0013330959479834462`
+  - ep2: `0.001333361573965599`
+- **base_drift_world_xyz_m**
+  - ep0: `[0.00019222303115229433,-0.0012408979358626837,-0.00010250096170649758]`
+  - ep1: `[0.00019177322591257262,-0.0012401416038763102,-0.00010249098985976035]`
+  - ep2: `[0.00019201162322679544,-0.0012405448254213525,-0.00010249610538631826]`
+- **base_drift_yaw_deg**
+  - ep0: `-0.009784041999820215`
+  - ep1: `-0.009803906807814504`
+  - ep2: `-0.00979235988206882`
+- **base_tilt_pitch_deg**
+  - ep0: `0.7269105513606204`
+  - ep1: `0.726469467805098`
+  - ep2: `0.7267052581976812`
+- **base_tilt_roll_deg**
+  - ep0: `-0.17744824205836252`
+  - ep1: `-0.17716587013327323`
+  - ep2: `-0.17731565482561007`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.023119249720534626,-0.0009777041559044326,-0.7176187988521017,0.6960515813652103]`
+  - ep1: `[0.023118203922249073,-0.0009821571961768402,-0.7176189159969292,0.6960514890566959]`
+  - ep2: `[0.0231187700484898,-0.0009797838274882883,-0.7176188477327763,0.696051543977728]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5377178964939442,-3.7115794100316757,0.0881943592254266]`
+  - ep1: `[-0.5377183462991842,-3.71157865369969,0.08819436919727278]`
+  - ep2: `[-0.5377181079018702,-3.7115790569212352,0.08819436408174672]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.02999263677288422,-0.999046389495495,-0.03172937716731849,0.9989909734215356,-0.031022378658767263,0.03247532978500443,-0.03342868172247558,-0.030723340612117275,0.9989687680703182]`
+  - ep1: `[-0.029992981908038285,-0.9990466234907355,-0.031721682301304205,0.998990805666098,-0.031022617924667362,0.03248026126281182,-0.03343338497467012,-0.030715489070840023,0.9989688521171591]`
+  - ep2: `[-0.029992781231737303,-0.9990464988961857,-0.031725795770300304,0.998990895169728,-0.031022474477382662,0.032477645316212285,-0.03343089053511279,-0.030719686205653164,0.9989688065387505]`
+- **can_base_xyz_m**
+  - ep0: `[0.6625949323397424,-0.2165811536723423,0.7520388630643164]`
+  - ep1: `[0.6626014887063936,-0.2165769085814316,0.7520348248473145]`
+  - ep2: `[0.662597980992449,-0.21657917163645152,0.752036987963274]`
+- **clearance_left_m**
+  - ep0: `0.7391637356377792`
+  - ep1: `0.7392325140153635`
+  - ep2: `0.739309859225034`
+- **clearance_right_m**
+  - ep0: `0.6867852842655122`
+  - ep1: `0.6868374132042936`
+  - ep2: `0.686566145765463`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.3381746876896874,"arm_2_joint":0.33066431200148005,"arm_3_joint":-0.3529236483289559,"arm_4_joint":0.5005776961572865,"arm_5_joint":0.40152296352002953,"arm_6_joint":-0.5474549465973156,"arm_7_joint":0.25296588458595504,"torso_lift_joint":0.3497463898455975}`
+  - ep1: `{"arm_1_joint":0.33786279292890287,"arm_2_joint":0.3302709800262666,"arm_3_joint":-0.35383584235048676,"arm_4_joint":0.5005027553023107,"arm_5_joint":0.4008220695884129,"arm_6_joint":-0.5477090737380769,"arm_7_joint":0.2535619955285717,"torso_lift_joint":0.34974638575599687}`
+  - ep2: `{"arm_1_joint":0.33802736611577155,"arm_2_joint":0.3304787918360165,"arm_3_joint":-0.3533540829502943,"arm_4_joint":0.5005422201854387,"arm_5_joint":0.4011927263800002,"arm_6_joint":-0.547574738509283,"arm_7_joint":0.19479189714005204,"torso_lift_joint":0.3497463879896988}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.33929786941697276,"arm_2_joint":0.3325260100207792,"arm_3_joint":-0.35487619930928144,"arm_4_joint":0.5057443006777037,"arm_5_joint":0.4041932239606579,"arm_6_joint":-0.5547312178140666,"arm_7_joint":0.2539919136850713}`
+  - ep1: `{"arm_1_joint":0.3389834528555127,"arm_2_joint":0.33212812839287764,"arm_3_joint":-0.3557994574086585,"arm_4_joint":0.5056660358892505,"arm_5_joint":0.4034794667091531,"arm_6_joint":-0.5550038448980463,"arm_7_joint":0.25459126171165614}`
+  - ep2: `{"arm_1_joint":0.33914935661111545,"arm_2_joint":0.3323383342544246,"arm_3_joint":-0.35531185478360783,"arm_4_joint":0.5057072511119562,"arm_5_joint":0.40385692612740953,"arm_6_joint":-0.5548597303237399,"arm_7_joint":0.1955048870368828}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.45797536575841,-4.14707335761034,0.9438218012332648]`
+  - ep1: `[-1.457988250878949,-4.146939635177882,0.9435634284950675]`
+  - ep2: `[-1.457981515253946,-4.147010232029946,0.9436999873556158]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.3713923538450591,-0.8987337011758041,0.8990590423453984]`
+  - ep1: `[0.371273517892672,-0.898746143238741,0.8987977073603053]`
+  - ep2: `[0.37133377959579666,-0.8987398388785359,0.8989366899825575]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.06760426119328176`
+  - ep1: `0.06760312104049801`
+  - ep2: `0.06760605202098686`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.01971744291628852,0.06466330308667523,0.00046455382158017144]`
+  - ep1: `[-0.019709052643527514,0.06466467476630555,0.0004637409608957421]`
+  - ep2: `[-0.019713623222122,0.06466633606668903,0.0004650903467374734]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.7417081904545849`
+  - ep1: `0.7417727760516557`
+  - ep2: `0.7417398539564902`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.4776928086746985,-4.082410054523665,0.9442863550548449]`
+  - ep1: `[-1.4776973035224765,-4.082274960411577,0.9440271694559632]`
+  - ep2: `[-1.477695138476068,-4.082343895963257,0.9441650777023533]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.491310321323574,-4.04900567839901,0.971203439191525],"gripper_right_finger_joint":[-1.4640752960258228,-4.115814430648319,0.9173692709181649]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.4913100276552727,-4.04884960557052,0.9709206389344898],"gripper_right_finger_joint":[-1.4640845793896804,-4.115700315252634,0.9171336999774367]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.4923276319449332,-4.050744124859013,0.9726804373095748],"gripper_right_finger_joint":[-1.4630626450072026,-4.113943667067502,0.9156497180951317]}`
+- **fk_gt_offset_m**
+  - ep0: `0.06760426119328176`
+  - ep1: `0.06760312104049801`
+  - ep2: `0.06760605202098686`
+- **fk_to_can_world_m**
+  - ep0: `0.7139243435432001`
+  - ep1: `0.7139337324861869`
+  - ep2: `0.7139288513308863`
+- **fk_to_can_xy_m**
+  - ep0: `0.70147326026574`
+  - ep1: `0.7015316624766641`
+  - ep2: `0.7015008900125848`
+- **gripper_opening_m**
+  - ep0: `0.045009093679515874`
+  - ep1: `0.04500910358392101`
+  - ep2: `0.045008679721347505`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.4776928086746985,-4.082410054523665,0.9442863550548449]`
+  - ep1: `[-1.4776973035224765,-4.082274960411577,0.9440271694559632]`
+  - ep2: `[-1.477695138476068,-4.082343895963257,0.9441650777023533]`
+- **gt_to_can_world_m**
+  - ep0: `0.7561388582153785`
+  - ep1: `0.756152230027064`
+  - ep2: `0.7561465026043233`
+- **gt_to_can_xy_m**
+  - ep0: `0.7443112133172105`
+  - ep1: `0.7443711393263297`
+  - ep2: `0.7443406750197`
+- **ik_error_m**
+  - ep0: `1.6214935043890384e-08`
+  - ep1: `5.896889796417286e-09`
+  - ep2: `1.3400804339189607e-10`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.3381746876896874,"arm_2_joint":0.33066431200148005,"arm_3_joint":-0.3529236483289559,"arm_4_joint":0.5005776961572865,"arm_5_joint":0.40152296352002953,"arm_6_joint":-0.5474549465973156,"arm_7_joint":0.25296588458595504,"torso_lift_joint":0.3497463898455975}`
+  - ep1: `{"arm_1_joint":0.33786279292890287,"arm_2_joint":0.3302709800262666,"arm_3_joint":-0.35383584235048676,"arm_4_joint":0.5005027553023107,"arm_5_joint":0.4008220695884129,"arm_6_joint":-0.5477090737380769,"arm_7_joint":0.2535619955285717,"torso_lift_joint":0.34974638575599687}`
+  - ep2: `{"arm_1_joint":0.33802736611577155,"arm_2_joint":0.3304787918360165,"arm_3_joint":-0.3533540829502943,"arm_4_joint":0.5005422201854387,"arm_5_joint":0.4011927263800002,"arm_6_joint":-0.547574738509283,"arm_7_joint":0.19479189714005204,"torso_lift_joint":0.3497463879896988}`
+- **joint_target**
+  - ep0: `{"arm_1_joint":0.33929786941697276,"arm_2_joint":0.3325260100207792,"arm_3_joint":-0.35487619930928144,"arm_4_joint":0.5057443006777037,"arm_5_joint":0.4041932239606579,"arm_6_joint":-0.5547312178140666,"arm_7_joint":0.2539919136850713}`
+  - ep1: `{"arm_1_joint":0.3389834528555127,"arm_2_joint":0.33212812839287764,"arm_3_joint":-0.3557994574086585,"arm_4_joint":0.5056660358892505,"arm_5_joint":0.4034794667091531,"arm_6_joint":-0.5550038448980463,"arm_7_joint":0.25459126171165614}`
+  - ep2: `{"arm_1_joint":0.33914935661111545,"arm_2_joint":0.3323383342544246,"arm_3_joint":-0.35531185478360783,"arm_4_joint":0.5057072511119562,"arm_5_joint":0.40385692612740953,"arm_6_joint":-0.5548597303237399,"arm_7_joint":0.1955048870368828}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.3381746876896874,"arm_2_joint":0.33066431200148005,"arm_3_joint":-0.3529236483289559,"arm_4_joint":0.5005776961572865,"arm_5_joint":0.40152296352002953,"arm_6_joint":-0.5474549465973156,"arm_7_joint":0.25296588458595504,"torso_lift_joint":0.3497463898455975}`
+  - ep1: `{"arm_1_joint":0.33786279292890287,"arm_2_joint":0.3302709800262666,"arm_3_joint":-0.35383584235048676,"arm_4_joint":0.5005027553023107,"arm_5_joint":0.4008220695884129,"arm_6_joint":-0.5477090737380769,"arm_7_joint":0.2535619955285717,"torso_lift_joint":0.34974638575599687}`
+  - ep2: `{"arm_1_joint":0.33802736611577155,"arm_2_joint":0.3304787918360165,"arm_3_joint":-0.3533540829502943,"arm_4_joint":0.5005422201854387,"arm_5_joint":0.4011927263800002,"arm_6_joint":-0.547574738509283,"arm_7_joint":0.19479189714005204,"torso_lift_joint":0.3497463879896988}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9761755488786413,-3.9518693101468427,1.103085992397357],"tool":[-1.3018144235669906,-4.0918837911993915,1.044987189697788],"wrist":[-1.2541069474543451,-4.094469396583532,1.0723289560095692]}`
+  - ep1: `{"elbow":[-0.9762361026994218,-3.9517604357387364,1.1029522259802194],"tool":[-1.3018597925025974,-4.091769464077987,1.0447975538803504],"wrist":[-1.2541633895549866,-4.0943607361774434,1.0721582057509056]}`
+  - ep2: `{"elbow":[-0.9762041283580385,-3.9518179398257613,1.103022889544757],"tool":[-1.3018359761246583,-4.0918316338624,1.0448982348872977],"wrist":[-1.2541336103908045,-4.094418091567649,1.0722484437141628]}`
+- **supervisor_min_table_clearance_m**
+  - ep0: `0.29498718969778803`
+  - ep1: `0.29479755388035045`
+  - ep2: `0.2948982348872977`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.3497463898455975`
+  - ep1: `0.34974638575599687`
+  - ep2: `0.3497463879896988`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":1.9213720559964363e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.5843340343696668e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":1.9268838332400183e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.5824524329369744e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":1.9240327751120162e-07,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.583467856604117e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+
+### Record 9
+- meta (ep0): `{"event":"state_boundary","phase":"waypoint","sim_time_s":3.168,"state":"PREGRASP"}`
+- differing fields (45): `['achieved_ee_base_xyz_m', 'arm_7_joint_endpoint_offset_change_world_xyz_m', 'arm_7_joint_endpoint_offset_world_xyz_m', 'arm_7_joint_endpoint_reset_offset_world_xyz_m', 'arm_7_joint_fk_ground_truth_error_m', 'arm_7_joint_fk_world_xyz_m', 'arm_7_joint_ground_truth_world_xyz_m', 'base_drift_distance_m', 'base_drift_rate_m_per_s', 'base_drift_world_xyz_m', 'base_drift_yaw_deg', 'base_tilt_pitch_deg', 'base_tilt_roll_deg', 'base_world_orientation_xyzw', 'base_world_xyz_m', 'can_base_orientation_matrix', 'can_base_xyz_m', 'clearance_left_m', 'clearance_right_m', 'commanded_base_xyz_m', 'commanded_ee_base_xyz_m', 'commanded_joint_positions_rad', 'commanded_joint_target_rad', 'ee_fk_world_xyz_m', 'finger_midpoint_base_xyz_m', 'finger_midpoint_fk_offset_m', 'finger_midpoint_fk_offset_world_xyz_m', 'finger_midpoint_to_can_base_xy_m', 'finger_midpoint_world_xyz_m', 'finger_tip_world_xyz_m', 'fk_gt_offset_m', 'fk_to_can_world_m', 'fk_to_can_xy_m', 'gripper_opening_m', 'gt_midpoint_world_xyz_m', 'gt_to_can_world_m', 'gt_to_can_xy_m', 'ik_error_m', 'joint_positions_rad', 'joint_target', 'measured_joint_positions_rad', 'supervisor_arm_link_world_xyz_m', 'supervisor_min_table_clearance_m', 'torso_lift_joint_sensor_rad', 'wheel_motors']`
+- **achieved_ee_base_xyz_m**
+  - ep0: `[0.5149367266663862,-0.8036170524095995,0.8797881271111986]`
+  - ep1: `[0.5148514892259363,-0.8036280134761108,0.8795162491550541]`
+  - ep2: `[0.5148961699931786,-0.8036222548843153,0.879659805788367]`
+- **arm_7_joint_endpoint_offset_change_world_xyz_m**
+  - ep0: `[-0.05226497807958645,0.01401717672814538,0.035765591129167926]`
+  - ep1: `[-0.052295402667036216,0.014055149814035717,0.03576931838122073]`
+  - ep2: `[-0.05038381438334879,0.010834666693035504,0.033914573675052226]`
+- **arm_7_joint_endpoint_offset_world_xyz_m**
+  - ep0: `[-0.06641553650704357,0.044264496036485745,-0.03549771338296148]`
+  - ep1: `[-0.06639425667149457,0.04427191103498185,-0.03551719406188969]`
+  - ep2: `[-0.06640569206666314,0.04426605894786739,-0.03550616275560059]`
+- **arm_7_joint_endpoint_reset_offset_world_xyz_m**
+  - ep0: `[-0.05721836724166862,0.05399918766165834,-0.0019347774809128637]`
+  - ep1: `[-0.057218367241667956,0.05399918766168499,-0.001934777480924632]`
+  - ep2: `[-0.057218367241668844,0.05399918766169787,-0.0019347774809124196]`
+- **arm_7_joint_fk_ground_truth_error_m**
+  - ep0: `0.06486360062397499`
+  - ep1: `0.0648983860651371`
+  - ep2: `0.061693736000711305`
+- **arm_7_joint_fk_world_xyz_m**
+  - ep0: `[-1.1884933589115345,-4.211461341778866,1.090272275943761]`
+  - ep1: `[-1.1885728103605167,-4.211372033491388,1.0900907590676814]`
+  - ep2: `[-1.1885308922478675,-4.2114191488583765,1.0901867047382168]`
+- **arm_7_joint_ground_truth_world_xyz_m**
+  - ep0: `[-1.254908895418578,-4.167196845742381,1.0547745625607996]`
+  - ep1: `[-1.2549670670320112,-4.167100122456406,1.0545735650057917]`
+  - ep2: `[-1.2549365843145306,-4.167153089910509,1.0546805419826162]`
+- **base_drift_distance_m**
+  - ep0: `0.0016128886514383898`
+  - ep1: `0.0016120353807677868`
+  - ep2: `0.0016124864478270508`
+- **base_drift_rate_m_per_s**
+  - ep0: `0.0015048250224435854`
+  - ep1: `0.0015045110381001442`
+  - ep2: `0.0015047058007192434`
+- **base_drift_world_xyz_m**
+  - ep0: `[0.0003885814088661066,-0.0015653799189405682,-0.00011825248135108324]`
+  - ep1: `[0.00038799593233351803,-0.0015646460383549332,-0.00011824273533117546]`
+  - ep2: `[0.0003883066422173398,-0.0015650337044408325,-0.00011824731505438724]`
+- **base_drift_yaw_deg**
+  - ep0: `-0.018979145410705476`
+  - ep1: `-0.019003750751536732`
+  - ep2: `-0.01898901323110351`
+- **base_tilt_pitch_deg**
+  - ep0: `0.9042214085327043`
+  - ep1: `0.9037803376639106`
+  - ep2: `0.9040151797533444`
+- **base_tilt_roll_deg**
+  - ep0: `-0.3039216988377744`
+  - ep1: `-0.3035598634238579`
+  - ep2: `-0.3037520250347947`
+- **base_world_orientation_xyzw**
+  - ep0: `[0.023460910538356052,0.0008900561348445435,-0.717673682165758,0.695983677540954]`
+  - ep1: `[0.023460347466911086,0.000885104559970112,-0.7176738405471583,0.6959835395186741]`
+  - ep2: `[0.02346065024630618,0.0008877382072209865,-0.7176737462863619,0.6959836231566047]`
+- **base_world_xyz_m**
+  - ep0: `[-0.5375215381162304,-3.7119038920147536,0.08817860770578201]`
+  - ep1: `[-0.5375221235927633,-3.711903158134169,0.08817861745180136]`
+  - ep2: `[-0.5375218128828797,-3.7119035458002547,0.08817861287207865]`
+- **can_base_orientation_matrix**
+  - ep0: `[-0.030147568171782307,-0.9989370475060838,-0.034869746961455714,0.9990493820253276,-0.031213221022900677,0.030431350745353976,-0.031487400784106494,-0.03391916793206691,0.9989284427018069]`
+  - ep1: `[-0.030147997953527073,-0.9989373030741644,-0.034862053099456676,0.9990491770393708,-0.03121362275147192,0.030437667645290604,-0.03149349260324257,-0.03391127071703467,0.9989285187850057]`
+  - ep2: `[-0.03014774058614079,-0.998937167868137,-0.03486614961730719,0.999049286806832,-0.031213380621913363,0.030434312887139846,-0.031490256720317814,-0.033915476139032105,0.9989284780253045]`
+- **can_base_xyz_m**
+  - ep0: `[0.6600052590775257,-0.21826196248420932,0.7536168639145929]`
+  - ep1: `[0.6600118244823642,-0.21825646086123573,0.7536131544882465]`
+  - ep2: `[0.6600083249903278,-0.21825940212737874,0.7536151312464239]`
+- **clearance_left_m**
+  - ep0: `0.6458036887332994`
+  - ep1: `0.6458405275296957`
+  - ep2: `0.6465926398669584`
+- **clearance_right_m**
+  - ep0: `0.5883169258183485`
+  - ep1: `0.5883503104831938`
+  - ep2: `0.5873572495425967`
+- **commanded_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_ee_base_xyz_m**
+  - ep0: `[0.672730145493587,-0.2133861714758569,0.8848308693027928]`
+  - ep1: `[0.6727301454935805,-0.2133861714758564,0.8848308693028003]`
+  - ep2: `[0.6727301454935829,-0.2133861714758564,0.8848308693027973]`
+- **commanded_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.40527654786014283,"arm_2_joint":0.41381851392790664,"arm_3_joint":-0.4416579668717628,"arm_4_joint":0.6270117426953505,"arm_5_joint":0.50256791506761,"arm_6_joint":-0.686148780359272,"arm_7_joint":0.31646290023339474,"torso_lift_joint":0.34974665376465763}`
+  - ep1: `{"arm_1_joint":0.4048860494978573,"arm_2_joint":0.41332561650984045,"arm_3_joint":-0.44280097340490826,"arm_4_joint":0.6269172344402044,"arm_5_joint":0.5016885805994387,"arm_6_joint":-0.6864732862121402,"arm_7_joint":0.31720884876599953,"torso_lift_joint":0.3497466508433447}`
+  - ep2: `{"arm_1_joint":0.40509209838241556,"arm_2_joint":0.41358604462243764,"arm_3_joint":-0.4421973144749886,"arm_4_joint":0.6269670037729614,"arm_5_joint":0.5021536029380367,"arm_6_joint":-0.6863029384865714,"arm_7_joint":0.24366710131637948,"torso_lift_joint":0.3497466524300642}`
+- **commanded_joint_target_rad**
+  - ep0: `{"arm_1_joint":0.4063995556506171,"arm_2_joint":0.41567158811959565,"arm_3_joint":-0.4436112352983397,"arm_4_joint":0.6321749043747262,"arm_5_joint":0.5052377197926889,"arm_6_joint":-0.6934127790142892,"arm_7_joint":0.3174887312146222}`
+  - ep1: `{"arm_1_joint":0.40600653494879313,"arm_2_joint":0.4151742360847113,"arm_3_joint":-0.44476530792256186,"arm_4_joint":0.6320770733891607,"arm_5_joint":0.5043455232283064,"arm_6_joint":-0.6937535628692728,"arm_7_joint":0.3182379162478427}`
+  - ep2: `{"arm_1_joint":0.4062139146432947,"arm_2_joint":0.4154369934116486,"arm_3_joint":-0.44415580464124804,"arm_4_joint":0.6321285924175427,"arm_5_joint":0.5048173475011279,"arm_6_joint":-0.6935734196513823,"arm_7_joint":0.24437994790437922}`
+- **ee_fk_world_xyz_m**
+  - ep0: `[-1.3843936960473024,-4.23106568947166,0.9238016831301623]`
+  - ep1: `[-1.3843992600063384,-4.2309631036786275,0.9235316932711383]`
+  - ep2: `[-1.3843963087819413,-4.231016999023718,0.9236742617038034]`
+- **finger_midpoint_base_xyz_m**
+  - ep0: `[0.45602788108146547,-0.8311342755812452,0.8788998400908088]`
+  - ep1: `[0.4559418221603356,-0.8311392304213407,0.878627385140683]`
+  - ep2: `[0.45598402251649367,-0.8311370375922482,0.8787719217812959]`
+- **finger_midpoint_fk_offset_m**
+  - ep0: `0.06502490840483252`
+  - ep1: `0.06502311904871601`
+  - ep2: `0.06502686157111896`
+- **finger_midpoint_fk_offset_world_xyz_m**
+  - ep0: `[-0.025687547661866983,0.05973520747573691,0.000305934644716066]`
+  - ep1: `[-0.02568146690108497,0.05973587929476665,0.00030494837766548155]`
+  - ep2: `[-0.02568500764144277,0.05973842421748987,0.00030623562776921354]`
+- **finger_midpoint_to_can_base_xy_m**
+  - ep0: `0.6459251062585034`
+  - ep1: `0.6459642831235931`
+  - ep2: `0.6459449760257788`
+- **finger_midpoint_world_xyz_m**
+  - ep0: `[-1.4100812437091694,-4.171330481995923,0.9241076177748784]`
+  - ep1: `[-1.4100807269074234,-4.171227224383861,0.9238366416488037]`
+  - ep2: `[-1.410081316423384,-4.171278574806228,0.9239804973315726]`
+- **finger_tip_world_xyz_m**
+  - ep0: `{"gripper_left_finger_joint":[-1.4275365407878817,-4.134749914043985,0.9436742503737324],"gripper_right_finger_joint":[-1.3926259466304571,-4.207911049947862,0.9045409851760242]}`
+  - ep1: `{"gripper_left_finger_joint":[-1.4275261073524401,-4.134626483352375,0.9433743849336738],"gripper_right_finger_joint":[-1.3926353464624068,-4.207827965415347,0.9042988983639337]}`
+  - ep2: `{"gripper_left_finger_joint":[-1.4291765250569288,-4.136700053983099,0.9455530891116679],"gripper_right_finger_joint":[-1.3909861077898393,-4.205857095629357,0.9024079055514774]}`
+- **fk_gt_offset_m**
+  - ep0: `0.06502490840483252`
+  - ep1: `0.06502311904871601`
+  - ep2: `0.06502686157111896`
+- **fk_to_can_world_m**
+  - ep0: `0.6161206440739591`
+  - ep1: `0.6161030488393863`
+  - ep2: `0.6161123817097333`
+- **fk_to_can_xy_m**
+  - ep0: `0.6057200851081025`
+  - ep1: `0.6057523740897954`
+  - ep2: `0.6057353814067777`
+- **gripper_opening_m**
+  - ep0: `0.045007539638797556`
+  - ep1: `0.04500754515432112`
+  - ep2: `0.04500753264044684`
+- **gt_midpoint_world_xyz_m**
+  - ep0: `[-1.4100812437091694,-4.171330481995923,0.9241076177748784]`
+  - ep1: `[-1.4100807269074234,-4.171227224383861,0.9238366416488037]`
+  - ep2: `[-1.410081316423384,-4.171278574806228,0.9239804973315726]`
+- **gt_to_can_world_m**
+  - ep0: `0.6579628158297618`
+  - ep1: `0.6579501599186659`
+  - ep2: `0.6579583073948786`
+- **gt_to_can_xy_m**
+  - ep0: `0.6481806626683386`
+  - ep1: `0.6482150133148236`
+  - ep2: `0.6481982417855375`
+- **ik_error_m**
+  - ep0: `1.6214935043890384e-08`
+  - ep1: `5.896889796417286e-09`
+  - ep2: `1.3400804339189607e-10`
+- **joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.40527654786014283,"arm_2_joint":0.41381851392790664,"arm_3_joint":-0.4416579668717628,"arm_4_joint":0.6270117426953505,"arm_5_joint":0.50256791506761,"arm_6_joint":-0.686148780359272,"arm_7_joint":0.31646290023339474,"torso_lift_joint":0.34974665376465763}`
+  - ep1: `{"arm_1_joint":0.4048860494978573,"arm_2_joint":0.41332561650984045,"arm_3_joint":-0.44280097340490826,"arm_4_joint":0.6269172344402044,"arm_5_joint":0.5016885805994387,"arm_6_joint":-0.6864732862121402,"arm_7_joint":0.31720884876599953,"torso_lift_joint":0.3497466508433447}`
+  - ep2: `{"arm_1_joint":0.40509209838241556,"arm_2_joint":0.41358604462243764,"arm_3_joint":-0.4421973144749886,"arm_4_joint":0.6269670037729614,"arm_5_joint":0.5021536029380367,"arm_6_joint":-0.6863029384865714,"arm_7_joint":0.24366710131637948,"torso_lift_joint":0.3497466524300642}`
+- **joint_target**
+  - ep0: `{"arm_1_joint":0.4063995556506171,"arm_2_joint":0.41567158811959565,"arm_3_joint":-0.4436112352983397,"arm_4_joint":0.6321749043747262,"arm_5_joint":0.5052377197926889,"arm_6_joint":-0.6934127790142892,"arm_7_joint":0.3174887312146222}`
+  - ep1: `{"arm_1_joint":0.40600653494879313,"arm_2_joint":0.4151742360847113,"arm_3_joint":-0.44476530792256186,"arm_4_joint":0.6320770733891607,"arm_5_joint":0.5043455232283064,"arm_6_joint":-0.6937535628692728,"arm_7_joint":0.3182379162478427}`
+  - ep2: `{"arm_1_joint":0.4062139146432947,"arm_2_joint":0.4154369934116486,"arm_3_joint":-0.44415580464124804,"arm_4_joint":0.6321285924175427,"arm_5_joint":0.5048173475011279,"arm_6_joint":-0.6935734196513823,"arm_7_joint":0.24437994790437922}`
+- **measured_joint_positions_rad**
+  - ep0: `{"arm_1_joint":0.40527654786014283,"arm_2_joint":0.41381851392790664,"arm_3_joint":-0.4416579668717628,"arm_4_joint":0.6270117426953505,"arm_5_joint":0.50256791506761,"arm_6_joint":-0.686148780359272,"arm_7_joint":0.31646290023339474,"torso_lift_joint":0.34974665376465763}`
+  - ep1: `{"arm_1_joint":0.4048860494978573,"arm_2_joint":0.41332561650984045,"arm_3_joint":-0.44280097340490826,"arm_4_joint":0.6269172344402044,"arm_5_joint":0.5016885805994387,"arm_6_joint":-0.6864732862121402,"arm_7_joint":0.31720884876599953,"torso_lift_joint":0.3497466508433447}`
+  - ep2: `{"arm_1_joint":0.40509209838241556,"arm_2_joint":0.41358604462243764,"arm_3_joint":-0.4421973144749886,"arm_4_joint":0.6269670037729614,"arm_5_joint":0.5021536029380367,"arm_6_joint":-0.6863029384865714,"arm_7_joint":0.24366710131637948,"torso_lift_joint":0.3497466524300642}`
+- **supervisor_arm_link_world_xyz_m**
+  - ep0: `{"elbow":[-0.9595924795429502,-3.9840797378604242,1.1261456726846726],"tool":[-1.254908895418578,-4.167196845742381,1.0547745625607996],"wrist":[-1.212815270368874,-4.166089162971969,1.0902484500024472]}`
+  - ep1: `{"elbow":[-0.9596881798538939,-3.983958536850581,1.1259838743045818],"tool":[-1.2549670670320112,-4.167100122456406,1.0545735650057917],"wrist":[-1.2128893544190777,-4.165994237315671,1.0900664621692753]}`
+  - ep2: `{"elbow":[-0.9596376402395455,-3.9840225267061373,1.126069358314868],"tool":[-1.2549365843145306,-4.167153089910509,1.0546805419826162],"wrist":[-1.212850264575995,-4.166044315456536,1.0901626579921284]}`
+- **supervisor_min_table_clearance_m**
+  - ep0: `0.3047745625607996`
+  - ep1: `0.3045735650057917`
+  - ep2: `0.3046805419826162`
+- **torso_lift_joint_sensor_rad**
+  - ep0: `0.34974665376465763`
+  - ep1: `0.3497466508433447`
+  - ep2: `0.3497466524300642`
+- **wheel_motors**
+  - ep0: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-4.569248361850612e-08,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.9369207930423526e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep1: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-4.51289897280609e-08,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.935454706622337e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`
+  - ep2: `{"wheel_left_joint":{"control_mode":"position","sensor_position_rad":-4.542281813917143e-08,"target_position_rad":0.0,"target_velocity_rad_s":10.1523},"wheel_right_joint":{"control_mode":"position","sensor_position_rad":2.9362432507321456e-06,"target_position_rad":0.0,"target_velocity_rad_s":10.1523}}`

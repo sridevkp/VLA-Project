@@ -1,0 +1,15 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago/protos/Tiago.proto"
+
+WorldInfo {
+  basicTimeStep 32
+}
+Viewpoint {
+  position 2 2 1.5
+}
+DEF TIAGO_ROBOT Tiago {
+  translation 0 0 0.0885438
+  controller "<extern>"
+  supervisor TRUE
+}

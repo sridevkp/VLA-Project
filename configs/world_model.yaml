@@ -1,0 +1,4 @@
+# Fixed control-setting-derived diagnostic, not fitted against outcomes.
+# Frozen RobotIO initializes each arm motor with setVelocity(0.5).
+commanded_joint_speed_rad_s: 0.5
+# Risk component definitions, weights and calibration are not guessed here.

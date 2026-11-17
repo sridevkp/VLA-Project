@@ -1,0 +1,21 @@
+{
+  "backup_all_manifest_entries_verified": 12,
+  "frozen_config": {
+    "steps": 20000,
+    "batch_size": 8,
+    "seed": 0,
+    "save_freq": 1000
+  },
+  "full_native_dataset_integrity_verified": true,
+  "approved_successful_train_episodes": 80,
+  "dataset_identity_matches_checkpoint": true,
+  "approved_source_hashes": {
+    "configs/training.yaml": "f9be85879dfbc5529ec26237dc17931581de3d117a3f1eb831246cf6c27335bc",
+    "src/vlarobot/vla/training.py": "825d0add165ce04ea94e3e8566e383b64896d7cddbdabe5fdd1fe17a730af078",
+    "src/vlarobot/vla/training_evidence.py": "87dacb750f7ce352989439a18a98869b390f6f0de37b7d6d97be564da946beed",
+    "src/vlarobot/vla/training_runs.py": "098ce08cccb4c5587e174c008aed5f17094c2e429c5ab5e4082676a8ac5913d2",
+    "src/vlarobot/vla/checkpoint_export.py": "bbb6c72e8032a202331fcae1917227bb18ab300ed325dfad3335976b9ceef3b9"
+  },
+  "training_started": false,
+  "test_accessed": false
+}

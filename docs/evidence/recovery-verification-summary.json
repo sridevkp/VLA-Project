@@ -1,0 +1,18 @@
+{
+  "isolated_cpu_suite": {
+    "passed": 298,
+    "deselected": 1,
+    "warnings": 496,
+    "seconds": 156.39,
+    "deselection_reason": "legacy TEST scene-generation unit excluded before Week 4"
+  },
+  "targeted_recovery_regressions_passed": 12,
+  "scoped_ruff_check": "src tests tools passed",
+  "scoped_ruff_format_check": "121 files passed",
+  "colab_cells_ast_parse": 8,
+  "actual_production_017000_full_file_audit_executed_here": false,
+  "actual_cuda_restore_executed_here": false,
+  "recovery_training_started": false,
+  "original_production_artifacts_modified": false,
+  "test_evaluation_run": false
+}

@@ -1,0 +1,12 @@
+{
+  "source": "owner authenticated Colab report; remote Drive not independently opened here",
+  "diagnostic_updates": 20,
+  "steps_per_s": 1.0675,
+  "peak_reserved_GiB": 2.73,
+  "estimated_20000_steps_hours": 5.32,
+  "estimated_1000_step_checkpoint_minutes": 16,
+  "checkpoint_restore_reported_passed": true,
+  "production_start_reported": false,
+  "first_production_event_observed_here": false,
+  "approved_configuration_changed": false
+}

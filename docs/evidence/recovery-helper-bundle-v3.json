@@ -1,0 +1,13 @@
+{
+  "sha256": "e1fd75546967e299102d231d180f908eac4c6ef81184c2cb69a9f80a972a3c70",
+  "files_sha256": {
+    "checkpoint_guard.py": "4801a353fb7aa25c6b935933aca1be20417930c7f7ce084d26ea4ced131623c9",
+    "restore_gate.py": "7b4caf30c63ae58799a5fbee00b37b9bfdf493e2382024342c8c04be178ba70a",
+    "recover_training.py": "13754fdf1714556bdad1229080190a4b193f666a52f0a58335562412471b6bc2"
+  },
+  "supersedes": "recovery-tools-v2.zip",
+  "project_root_resolved_before_run_path_construction": true,
+  "prewrite_canonical_output_checks": true,
+  "production_checkpoint_modified": false,
+  "training_started": false
+}

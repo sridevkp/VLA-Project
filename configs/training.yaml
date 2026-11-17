@@ -1,0 +1,5 @@
+# Prepared SmolVLA configuration; no validation/test gate tuning.
+steps: 20000
+batch_size: 8
+seed: 0
+save_freq: 1000

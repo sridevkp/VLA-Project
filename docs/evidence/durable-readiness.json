@@ -1,0 +1,20 @@
+{
+  "linux_017000_full_file_hash_audit": "12/12 verified",
+  "independent_receiver_subprocess_test_passed": true,
+  "frozen_save_hook_model_first_and_retry_tests_passed": true,
+  "latest_targeted_tests_passed": 41,
+  "full_cpu_suite_passed": 327,
+  "full_cpu_suite_deselected": 1,
+  "deselection_reason": "legacy TEST scene generation unit excluded before Week 4",
+  "full_cpu_suite_seconds": 171.69,
+  "scoped_lint_format_passed": true,
+  "colab_cells_ast_checked": 5,
+  "actual_drive_quota_verified": false,
+  "drive_persistence_root_cause_proven": false,
+  "actual_ssh_route_verified": false,
+  "actual_colab_gpu_restore_executed": false,
+  "gpu_training_started": false,
+  "test_evaluation_run": false,
+  "original_backup_modified": false,
+  "existing_recovery_evidence_modified": false
+}

@@ -1,0 +1,116 @@
+{
+  "technical_readiness": "GO_unchanged_pending_explicit_launch_authorization",
+  "launch_authorized": false,
+  "launch_executed": false,
+  "webots_started": false,
+  "model_server_started": false,
+  "inference_calls": 0,
+  "validation_test_scenes_accessed": false,
+  "train_episodes": 24,
+  "scene_slots": 8,
+  "paired_seeds": [
+    0,
+    1,
+    2
+  ],
+  "baseline_successes": 23,
+  "threshold": 0.4,
+  "required_successes": 10,
+  "baseline_source_hashes_verified": 12,
+  "model_manifest_sha256": "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1",
+  "weights_sha256": "7531991e27719e6fee402344aadbe43b2fc4ac858a87ae5ec77809c8efe385d8",
+  "strict_export_integrity": "PASS",
+  "training_approval_identity": "PASS",
+  "adapter_static_instantiation": "PASS_no_simulator",
+  "gripper_limits_m": [
+    0.0,
+    0.045
+  ],
+  "horizon_steps": 1140,
+  "action_dt_s": 0.032,
+  "max_chunks_per_episode": 23,
+  "measured_single_chunk_latency_s": 14.086286406003637,
+  "runtime_inference_only_seconds": {
+    "1": 338.0708737440873,
+    "5": 1690.3543687204365,
+    "23": 7775.630096114008
+  },
+  "runtime_scope": "one measured CPU sample; excludes world startup/reset, IK, sim stepping, RGB, recordings, shutdown and cold model load; not a wall-time bound",
+  "cwd": "/home/tj330/programs/VLA-Project",
+  "argv": [
+    "/home/tj330/programs/VLA-Project/.venv/bin/python",
+    "-m",
+    "vlarobot.cli",
+    "eval-vla",
+    "--export",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000",
+    "--out",
+    "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1",
+    "--baseline",
+    "/home/tj330/programs/VLA-Project/runs/eval/baseline-train-s0-fresh-v2-registered",
+    "--model-python",
+    "/home/tj330/programs/VLA-Project/.venv-vla/bin/python",
+    "--webots",
+    "/home/tj330/.local/opt/webots/webots"
+  ],
+  "env": {
+    "PYTHONPATH": "/home/tj330/programs/VLA-Project/src",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1"
+  },
+  "campaign_output": "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1",
+  "free_disk_bytes": 273978171392,
+  "source_hashes": {
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_campaign.py": "793de9b859d12ec0de022775d463c99b7b3db18aad5731a9c0aff34df3fb9d39",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_episode.py": "ffb73839499392e6a8ed3ee7f1e9be5daef41502be01954e73f23f4b959eb9eb",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/model_service.py": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/action_adapter.py": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/safety_monitor.py": "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/eval/runner.py": "d3e6a5b89f884a61ec38e6072d9f7349645bea144ed0fcb22cc9f598c25930a5",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/eval/vla_metrics.py": "df0e5279475842748295443186706196d4de4acd8edfc0c7e970caef286288d0"
+  },
+  "targeted_tests": "17 passed in 0.57s",
+  "rejection_unit_check": {
+    "unit_fixture_only": true,
+    "physical_evaluation_episodes": 0,
+    "actual_model_calls": 0,
+    "rejected_action_index": 1,
+    "fixture_predict_calls": 1,
+    "fixture_accepted_commands": 2,
+    "fixture_steps": 1,
+    "outcome": {
+      "success": false,
+      "failure_state": "SAFETY",
+      "model_chunks": 1,
+      "executed_actions": 1,
+      "max_episode_steps": 100,
+      "learned_input_state_source": "robot_rgb",
+      "scripted_actions_sent": 0,
+      "rejections": 0,
+      "adapter_vetoes": 1
+    },
+    "failed_safety_record_reused_on_resume": true,
+    "no_resampling_or_retry": true
+  },
+  "artifact_sha256": {
+    "check_rejection.py": "58f16aa75cc9a66a24afc05de8d0bdb098b5f75bf9a359d3dc2741ad296a80b1",
+    "eval-cli-help.txt": "4fd5c810726f9f070a751a6ad49d73e2e8f6ac76384a25592803c66e52dd58e2",
+    "model-cli-help.txt": "66c9f21cb0e1af498803cbc1f0e25931bc6e0714936fb213f212165d283ef3db",
+    "preflight.json": "5dca689f9a9fa6f5ffa70b1fe8c2f31522d143a6a5bc03a904bf3e04dab6cd6f",
+    "preflight.log": "5dca689f9a9fa6f5ffa70b1fe8c2f31522d143a6a5bc03a904bf3e04dab6cd6f",
+    "preflight.py": "32b6e05844374224029e4056f398dad6fbeee2b91d6f2034089331ba8d041f35",
+    "prepared-train-plan.json": "3a97a1a2a2f276f45fc94b1a601337892a0a796dc3f75b7f4e70d1e5fd596974",
+    "rejection-check.json": "243623b28fbbbdc8dcf91f22d56974b406997ac6d59ce66e74ccd91d3b600893",
+    "rejection-check.log": "f2cb314b081ffd584a89a471f6448b5f86f2dc4dc0e8796741dd394d90f3351e",
+    "targeted-tests.log": "40625c89f78f4c8e15a6e0b892e46a994dac5af9d56bc4e15cf4892eabdb2f4e",
+    "command.json": "8b378bb52dbb494674a0f33a27aa8fcbff5b7face61098b50bf47a09a2ba55b9"
+  },
+  "limitations": [
+    "No new live Webots or model-service startup test was allowed.",
+    "Fresh-world/seed/reset logic was inspected, not a newly measured bitwise physical reproducibility guarantee.",
+    "EXCEPTION/incomplete recordings are not eligible for final gate; partial latency traces prevent blind resume.",
+    "Model shutdown uses a shutdown request, terminate and 30s wait; no guaranteed model kill escalation is implemented."
+  ],
+  "campaign_output_still_absent": true,
+  "source_hashes_unchanged_after_preparation": true
+}

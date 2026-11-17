@@ -1,0 +1,23 @@
+{
+  "approved_production_sources_verified": {
+    "configs/training.yaml": "f9be85879dfbc5529ec26237dc17931581de3d117a3f1eb831246cf6c27335bc",
+    "src/vlarobot/vla/training.py": "825d0add165ce04ea94e3e8566e383b64896d7cddbdabe5fdd1fe17a730af078",
+    "src/vlarobot/vla/training_evidence.py": "87dacb750f7ce352989439a18a98869b390f6f0de37b7d6d97be564da946beed",
+    "src/vlarobot/vla/training_runs.py": "098ce08cccb4c5587e174c008aed5f17094c2e429c5ab5e4082676a8ac5913d2",
+    "src/vlarobot/vla/checkpoint_export.py": "bbb6c72e8032a202331fcae1917227bb18ab300ed325dfad3335976b9ceef3b9"
+  },
+  "diagnostic_step20_excluded_from_fresh_production": true,
+  "diagnostic_step20000_excluded_from_production_resume": true,
+  "diagnostic_export_rejected": true,
+  "toy_namespace_test_only": true,
+  "expected_first_production_event": {
+    "run_kind": "smolvla-finetune",
+    "optimizer_step": 1,
+    "restored_training_step": 0,
+    "actual_post_step_hook": true
+  },
+  "actual_first_production_event_verified": false,
+  "authenticated_drive_files_verified": false,
+  "gpu_optimizer_steps_executed_here": 0,
+  "production_settings_changed": false
+}

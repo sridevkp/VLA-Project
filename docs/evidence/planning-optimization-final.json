@@ -1,0 +1,90 @@
+{
+  "status": "MEASURED identical inputs/reference versus optimized nominal planning",
+  "candidate_count": 32,
+  "horizon": 50,
+  "completed_control_steps_per_batch": 1600,
+  "all_valid_fixture_requested": true,
+  "seed": 20261115,
+  "initialization": "actual VALIDATION episode-00 middle observation",
+  "max_absolute_state_difference": 0.0,
+  "all_vetoes_identical": true,
+  "max_prepared_fk_difference_100_joint_configurations": 0.0,
+  "inputs_sha256": "acfb3ef9971fe61a44a445160b147f1fdecff44d661917e80b3c914cf7abd184",
+  "cold_after_full_batch_s": 0.47460791500634514,
+  "timings_s": {
+    "before": {
+      "samples": [
+        2.0996246860013343,
+        2.088810528977774,
+        2.1057432609959505,
+        2.058836895012064,
+        2.120130394003354
+      ],
+      "p50": 2.0996246860013343,
+      "p95": 2.1172529674018734
+    },
+    "after": {
+      "samples": [
+        0.46168912199209444,
+        0.4677052999904845,
+        0.48282314100652,
+        0.45472835400141776,
+        0.4702993590035476
+      ],
+      "p50": 0.4677052999904845,
+      "p95": 0.4803183846059255
+    }
+  },
+  "components_profiled_inclusive_not_additive": {
+    "before": {
+      "FK_inclusive_s": 0.9076847640000001,
+      "Jacobian_inclusive_s": 0.153840594,
+      "IK_inclusive_s": 2.0107275280000003,
+      "state_deepcopy_inclusive_s": 1.271148034,
+      "world_copy_inclusive_s": 0,
+      "robot_copy_inclusive_s": 0
+    },
+    "after": {
+      "FK_inclusive_s": 0.195284962,
+      "Jacobian_inclusive_s": 0,
+      "IK_inclusive_s": 0.646024845,
+      "state_deepcopy_inclusive_s": 0,
+      "world_copy_inclusive_s": 0.016260594,
+      "robot_copy_inclusive_s": 0.012629076000000001
+    }
+  },
+  "uncertified_full_arm_sweep_remains_vetoed": true,
+  "includes_model_inference": false,
+  "safety_and_trust_thresholds_unchanged": true,
+  "test_accessed": false,
+  "source_sha256": {
+    "/home/tj330/programs/VLA-Project-analytic/tests/fixtures/planning_reference/linearized_ik.py": "8a16b14105a2b5ecfa48068346b53fe4ea48dab97f12d09f66a682dfde6d4df0",
+    "/home/tj330/programs/VLA-Project-analytic/tests/fixtures/planning_reference/rollout.py": "dee6487d7b319561af6c7168a299d0f59caa400d0078abbab31fe710963d0b3e",
+    "/home/tj330/programs/VLA-Project-analytic/tests/fixtures/planning_reference/kinematic.py": "0145d30effe264b2902dbb8388de0d747f0c701c044a7638c8fc5a536adf79fe",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/__init__.py": "16d097d274407f11ad7cd1ec550f623f340a7783db0f4543c45987001219baef",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/analytic.py": "caa2f2468e72cdca442c4eec0c61522608444faf9d61bcda9ed46585f5efa5a9",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/kinematic.py": "608d0350045c8a7ffcfc6809d8a8dffe3516213406b7f37379e822aa61450247",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/rollout.py": "07dd5d12b8306af7be8873fb78d5a5ebd04eba54e3e3e8a44cf685ce329f2bb7",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/evaluation.py": "1d14f1c1b209dd461a4261e1298ff2ae17d054a7b4dbabfe6f3087480b542d38",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/arm_geometry.py": "45a0194e0eba2209ec078f84bf6fb52aa0c7474abddbf82dd6fd14d2d0af817b",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/linearized_ik.py": "119369f209508eb97cd57e36cfd9739214d2d8a1840659cc30e47615d7bb6f38",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/state_copy.py": "b4f23e06de51dbae4b009aba6204f9563d8578e983c3789773923f0896bc1e41",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/prepared_fk.py": "29aae5274ed628e2f6deb60c5cb15777871baaf82920e6ae23530d91e95ab0d8"
+  },
+  "frozen_source_verified_after_run": {
+    "configs/robot.yaml": "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d",
+    "configs/safety.yaml": "a54ace2a04021ad3c4a517ba93555ed73c3d5fe045659f67ab67578d5d2a511f",
+    "configs/eval.yaml": "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f",
+    "configs/scenarios.yaml": "e519dc59d09012ad94fb2ba10a269bdcda847272a607113990c1f22ffdefebfa",
+    "configs/calibration/urdf-base-train-v1.yaml": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0",
+    "worlds/factory.wbt": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706",
+    "src/vlarobot/backends/webots/kinematics.py": "cd564d9acd030ee19e8c4de80b9d96f2bff8811b73b5cef7c40be12ae538e69a",
+    "src/vlarobot/backends/webots/urdf_registration.py": "40b82d6feaff21d70229c0f952998fe7890b7dd7f20b670b3a5a2c4547224f64",
+    "src/vlarobot/backends/webots/images.py": "1533d84b79fb235428e90c645e113d4ee1f82cd24a4fce7388eaaf24a6c96ec2",
+    "src/vlarobot/backends/webots/backend.py": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05",
+    "src/vlarobot/execution/scripted_can.py": "d89b7eb6c3b00b14df6686325d2c2742ae6588e92f045af072fb07f391f608a3",
+    "src/vlarobot/execution/scripted_baseline.py": "d304fef311e6ec7fc5464745fd3fc4f1cbb90439e159dc9c272f068e79869671"
+  },
+  "initial_validation_npz_sha256": "46eaccc13a5e4f7b2d9c68fac82ca5ae44ae387e9efe1a6b2e2622052e6a7963",
+  "comparison_qualification": "nominal kernel only; missing full-arm geometry remains vetoed, not silently certified"
+}

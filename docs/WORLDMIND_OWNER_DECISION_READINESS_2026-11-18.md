@@ -57,3 +57,65 @@
 | Runtime table-transform grounding gate | Partially evidenced (v2/v3 matched 5/5 runtime table geometry, geometry export valid) but not acceptable as closure due to stale observation at consumption in each inspection | **Yes** — fresh authorized read-only verification with valid/fresh observation and accepted grounding evidence |
 
 **Offline implementation direction (finite, no new broad framework):** complete explicit bound accounting in sweep/coverage artifacts, enumerate every uncovered body/pair and required bound term with pass/fail criteria, and keep runtime checks/certificates fail-closed until owner-supplied evidence is linked.
+
+## 6. Arm-level execution gate matrix (audited 2026-11-18 after ADR-0060)
+
+The safety gate is not uniform across the five frozen arms. Sources:
+`risk/comparison.py::ComparisonPlanner.select` (returns at the first branch for arms 1–2; adds
+`prediction_constraints` only for `full_system`) and `world_model/rollout.py` (`check_transition
+is None ⇒ hard_reason "unverified-arm-sweep"`).
+
+| Frozen arm | Predicts? | Hard-checks prediction validity | Needs Eq. 3.8 components | Needs sweep certificate | Executable after authorization alone |
+|---|---|---|---|---|---|
+| `scripted_baseline` | no | no | no | no | **yes** (already MEASURED 23/24 TRAIN, 15/18 VALIDATION) |
+| `vla_only` | no | no | no | no | **yes** (already MEASURED 0/24 TRAIN — gate FAILED) |
+| `vla_risk_veto` | no | no | **yes** | no | no — blocked on Eq. 3.8 definitions/weights |
+| `vla_world_model` | yes | **no** (explicit no-veto ablation) | **yes** | no | no — blocked on Eq. 3.8 definitions/weights |
+| `full_system` | yes | **yes** (`prediction_complete`, `prediction_constraints`) | **yes** | **yes** | no — blocked on Eq. 3.8 **and** sweep scope |
+
+Consequences for the reviewer question "is full-body swept certification a mandatory prerequisite?":
+
+- With `check_transition=None`, every predicted trajectory carries `unverified-arm-sweep`, so
+  `full_system` vetoes all K=32 candidates, reaches an empty safe set and aborts with a recorded
+  `NO_SAFE_SET` rationale. This is verified behaviour, not a guess:
+  `tests/test_rollout_comparison.py::test_close_command_never_fabricates_grasp_and_unknown_sweep_fails_closed`
+  and `tests/test_worldmind_arm_sweep.py` (module docstring) assert it.
+- Arms 1–4 do not consult that veto. Therefore the certified swept volume is **not** a global
+  prerequisite for simulated execution; it gates **only the `full_system` arm**.
+- The Phase I report's collision requirement is a measurement (displacement/tilt proxy plus FK
+  clearance, ADR-0029 DESIGN bullet), not a certified swept-volume guarantee. `ARCHITECTURE.md`
+  §7 requires a veto when *predicted minimum clearance < margin*. The residual-certificate
+  inequality (`arm_sweep.py`, `SWEEP_INEQUALITY`, four finite bounds + margin) is therefore a
+  **team-imposed assurance objective that is stricter than the report text**, adopted under
+  AGENTS hard rule 6.
+- Relaxing it for `full_system` is a **safety-scope owner decision**, not an engineering fix.
+  The smallest legitimate version of that decision is either (a) owner supplies the four finite
+  residual bounds and a reviewed certificate for the declared simulation scope, or (b) owner
+  approves a declared scope limitation that `full_system` reports the sweep-veto ablation and is
+  reported as BLOCKED. Both are one-signature decisions; no new framework is needed.
+
+## 7. Measured throughput budget (OBSERVED + INFERRED)
+
+OBSERVED — `runs/validation-evidence-v2-canonical/parallel-progress.json`
+(`/home/tj330/programs/VLA-Project-analytic`), matching artifact timestamps 2026-11-15
+10:54 → 11:47 local:
+
+- `wall_s_parallel = 3167.826…` s = **52.8 min** for 18 episodes with 3 workers;
+- **20.46 episodes/hour aggregate**, **6.82 episodes/hour per worker**, **528 s serial per
+  episode**;
+- `completed=18`, `planned=18`, `successes=15`, `test_accessed=false`.
+
+INFERRED (nominal, not full-system measured) — `planning/execution.py::execute_first` applies
+exactly one control action per decision and re-observes, and the scripted episodes averaged
+24.44 s simulated at `dt=0.032` (≈764 control steps). At the hash-pinned nominal kernel p50 of
+`0.4677 s` per K=32/H=50 decision batch (`docs/evidence/planning-optimization-final.json`),
+full-system planning adds ≈6 min per episode:
+
+- per full-system episode ≈ 885 s → 3 workers ≈ 12 episodes/hour;
+- frozen VALIDATION, five arms (90 episodes) ≈ **4.4 h**;
+- frozen TEST, five arms (150 episodes) ≈ **12.3 h**.
+
+Conclusion: on the measured harness the campaign fits inside the remaining calendar. **Time is
+not the binding constraint; the owner decisions in §1–§5 are.** Actual decision count depends on
+the owner-set `bounds.max_decisions`/`max_steps`, and CPU contention across 3 workers is not
+measured, so the full-system figure stays INFERRED until a real run exists.

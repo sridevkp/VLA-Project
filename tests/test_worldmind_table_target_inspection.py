@@ -404,6 +404,10 @@ def _fake_scene(
     *,
     broken_table: bool = False,
     omit_last_box: bool = False,
+    shared_invalid_id: bool = False,
+    wrong_hierarchy: bool = False,
+    missing_translation: bool = False,
+    ambiguous_sfbool: bool = False,
 ) -> _Supervisor:
     expected = _expected_table_geometry(config)
     definitions = expected["boxes"][:-1] if omit_last_box else expected["boxes"]
@@ -415,19 +419,24 @@ def _fake_scene(
             "Box",
             fields={"size": _Field(list(box["size_m"]))},
         )
+        fields: dict[str, object] = {
+            "translation": _Field(list(box["local_translation_m"])),
+            "rotation": _Field(list(box["local_rotation_axis_angle"])),
+            "size": _Field(list(box["size_m"])),
+            "name": _Field(str(box["name"])),
+            "enableBoundingObject": _Field(True),
+        }
+        if missing_translation and index == len(definitions) - 1:
+            fields.pop("translation")
+        if ambiguous_sfbool and index == len(definitions) - 1:
+            fields["enableBoundingObject"] = _Field(2)
         boxes.append(
             _Node(
-                300 + index,
+                -1 if shared_invalid_id else 300 + index,
                 "SolidBox",
                 "Solid",
                 proto_type="SolidBox",
-                fields={
-                    "translation": _Field(list(box["local_translation_m"])),
-                    "rotation": _Field(list(box["local_rotation_axis_angle"])),
-                    "size": _Field(list(box["size_m"])),
-                    "name": _Field(str(box["name"])),
-                    "enableBoundingObject": _Field(True),
-                },
+                fields=fields,
                 base_fields={"boundingObject": _Field(bounding)},
                 world_pose=_pose16(box["world_rotation_matrix"], box["world_translation_m"]),
                 base_pose=_pose16(box["base_rotation_matrix"], box["base_translation_m"]),
@@ -445,6 +454,8 @@ def _fake_scene(
     )
     for box in boxes:
         box.parent_node = table
+    if wrong_hierarchy and boxes:
+        boxes[-1].parent_node = _Node(201, "Group", "Group")
     root = _Node(1, "Group", "Group", children=[table])
     table.parent_node = root
     return _Supervisor(root, robot)
@@ -470,18 +481,55 @@ def test_supervisor_probe_captures_all_five_boxes_without_source_substitution():
     assert all(len(row["transforms"]["T_base"]) == 16 for row in rows)
 
 
+def test_supervisor_probe_expands_five_nested_boxes_with_shared_invalid_runtime_id():
+    config = _config()
+    descriptor = table_target_descriptor(config)
+    observation = inspect_table_targets(
+        _fake_scene(config, shared_invalid_id=True), descriptor, _Node(100, "Tiago", "Robot")
+    )
+    assert observation["errors"] == []
+    rows = observation["rows"]
+    assert [row["source_name"] for row in rows] == list(config.table_targets.source_names)
+    assert all(row["status"] == "observed" for row in rows)
+    assert all(row["runtime_node"]["id"] == -1 for row in rows)
+    assert all(row["hierarchy"]["reachable"] is True for row in rows)
+    assert all(row["hierarchy"]["table_ancestor"]["id"] == 200 for row in rows)
+    assert all(row["unsupported_reasons"] == [] for row in rows)
+    assert all(len(row["transforms"]["T_world"]) == 16 for row in rows)
+    assert all(len(row["transforms"]["T_base"]) == 16 for row in rows)
+
+    report = _reconcile(config, observation)
+    assert report["summary"] == {
+        "Matched": 5,
+        "Mismatched": 0,
+        "Missing": 0,
+        "Unsupported": 0,
+    }
+    assert report["runtime_grounded"] is True
+
+
 def test_supervisor_probe_records_missing_and_failed_proto_expansion():
     config = _config()
     descriptor = table_target_descriptor(config)
     missing = inspect_table_targets(
-        _fake_scene(config, omit_last_box=True), descriptor, _Node(100, "Tiago", "Robot")
+        _fake_scene(config, omit_last_box=True, shared_invalid_id=True),
+        descriptor,
+        _Node(100, "Tiago", "Robot"),
     )
     missing_rows = {row["source_name"]: row for row in missing["rows"]}
-    assert missing_rows["foot 4"]["status"] == "missing"
-    assert missing_rows["foot 4"]["evaluated"] == {}
+    foot4 = missing_rows["foot 4"]
+    assert foot4["status"] == "missing"
+    assert foot4["reason"] == "nested runtime node was not observed"
+    assert foot4["runtime_node"] == {}
+    assert foot4["hierarchy"] == {"reachable": False}
+    assert foot4["evaluated"] == {}
+    assert foot4["transforms"] == {}
     assert all(
         row["status"] == "observed" for name, row in missing_rows.items() if name != "foot 4"
     )
+    report = _reconcile(config, missing)
+    assert _target(report, "foot 4")["verdict"] == "Missing"
+    assert report["runtime_grounded"] is False
 
     broken = inspect_table_targets(
         _fake_scene(config, broken_table=True), descriptor, _Node(100, "Tiago", "Robot")
@@ -490,6 +538,53 @@ def test_supervisor_probe_records_missing_and_failed_proto_expansion():
     assert all(row["status"] == "missing" for row in broken["rows"])
     assert all(row["evaluated"] == {} for row in broken["rows"])
     assert all(row["transforms"] == {} for row in broken["rows"])
+
+
+def test_wrong_nested_hierarchy_is_unsupported():
+    config = _config()
+    descriptor = table_target_descriptor(config)
+    observation = inspect_table_targets(
+        _fake_scene(config, shared_invalid_id=True, wrong_hierarchy=True),
+        descriptor,
+        _Node(100, "Tiago", "Robot"),
+    )
+    rows = {row["source_name"]: row for row in observation["rows"]}
+    foot4 = rows["foot 4"]
+    assert foot4["status"] == "unsupported"
+    assert foot4["hierarchy"]["reachable"] is True
+    assert foot4["hierarchy"]["table_ancestor"] == {}
+    assert "runtime Table ancestry is not observed" in foot4["unsupported_reasons"]
+    report = _reconcile(config, observation)
+    assert _target(report, "foot 4")["verdict"] == "Unsupported"
+    assert report["runtime_grounded"] is False
+
+
+def test_missing_and_ambiguous_runtime_fields_are_unsupported():
+    config = _config()
+    descriptor = table_target_descriptor(config)
+    missing = inspect_table_targets(
+        _fake_scene(config, shared_invalid_id=True, missing_translation=True),
+        descriptor,
+        _Node(100, "Tiago", "Robot"),
+    )
+    missing_row = missing["rows"][-1]
+    assert missing_row["status"] == "unsupported"
+    assert "translation is not readable" in missing_row["unsupported_reasons"]
+    assert missing_row["evaluated"]["translation_m"] is None
+    assert _reconcile(config, missing)["runtime_grounded"] is False
+
+    ambiguous = inspect_table_targets(
+        _fake_scene(config, shared_invalid_id=True, ambiguous_sfbool=True),
+        descriptor,
+        _Node(100, "Tiago", "Robot"),
+    )
+    ambiguous_row = ambiguous["rows"][-1]
+    assert ambiguous_row["status"] == "unsupported"
+    assert "enableBoundingObject is not a documented SFBool" in ambiguous_row["unsupported_reasons"]
+    assert ambiguous_row["evaluated"]["enable_bounding_object"] == 2
+    report = _reconcile(config, ambiguous)
+    assert _target(report, "foot 4")["verdict"] == "Unsupported"
+    assert report["runtime_grounded"] is False
 
 
 def test_capture_rejects_descriptor_that_carries_expected_geometry():

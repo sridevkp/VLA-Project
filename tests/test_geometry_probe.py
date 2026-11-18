@@ -87,3 +87,33 @@ def test_probe_does_not_call_empty_traversal_complete():
     )
     with pytest.raises(RuntimeError, match="incomplete"):
         snapshot(supervisor)
+
+
+def test_probe_keeps_distinct_proto_nodes_sharing_invalid_runtime_id():
+    feet = [
+        Node(
+            -1,
+            "Solid",
+            name=f"foot {index}",
+            boundingObject=Node(-1, "Box", size=[0.1, 0.2, 0.3]),
+        )
+        for index in range(1, 5)
+    ]
+    table = Node(10, "Table", children=feet)
+    robot = Node(2, "Robot", name="fixture", selfCollision=False)
+    root = Node(1, "Group", children=[table, robot])
+    supervisor = SimpleNamespace(
+        getSelf=lambda: robot,
+        getRoot=lambda: root,
+        getNumberOfDevices=lambda: 0,
+        getTime=lambda: 0.032,
+    )
+    report = snapshot(supervisor)
+    assert len(report["objects"]) == 4
+    assert {item["name"] for item in report["objects"]} == {
+        "foot 1",
+        "foot 2",
+        "foot 3",
+        "foot 4",
+    }
+    assert all(item["id"] == -1 for item in report["objects"])

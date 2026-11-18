@@ -2338,3 +2338,64 @@ activation, push, merge or PR #2 update occurred. Motion remains `NO-GO` / `NOT_
   frozen-helper hash mismatch, which was not repaired by editing frozen evidence. Windows and live
   Webots execution remain unverified. No dependency, public `core/` interface, frozen live-artifact
   byte, seed, split or production safety threshold changed.
+
+## ADR-0059 — Preserved table-live repair: internal PROTO ID dedup and pinned-vs-live base pose (2026-11-18)
+
+**Status:** Accepted for local diagnostic repair and inert verification only. The single authorized
+live inspection remains valid evidence with outcome `FAILED`/FAIL-INCOMPLETE. No Webots launch or
+retry, actuation, physics step, real IK solve, calibration, scoring, TEST/TRAIN access, owner
+certificate activation, push, merge or PR #2 update occurred. Motion remains `NO-GO` /
+`NOT_READY`.
+
+- **Evidence acceptance:** all five preserved artifacts under
+  `runs/worldmind/validation-s0-webots-table-live-v1/` were re-hashed before use and remain
+  unchanged: `diagnostic.json` `24673d587adf6a77ccb3eacb053a3123b1f8404a634945d524a9745cc34a6921`,
+  `geometry.json` `09adc279a4709ad8b79219d2b33748362c51e0fd32f84f44fce37e60d7d32607`, `state.json`
+  `061a477bed8de7eab202ce49f603a66613da0079d52442bd4f08a5d0dcd16287`, `provenance.json`
+  `67e028a83369de00e164a21c1299a4a78296b69f166ea3ed5e80f7c2e4af8e0a`, and the log
+  `622c0d4559cd0ddc54bbc7f22ec6cc145b5bf099758791433c860611b9c1ec80`. The report records zero
+  `apply`/`step`/`reset`/`export`/`inspect`/ground-truth calls, zero motor commands and zero physics
+  steps. It is a read-only diagnostic observation, never a swept-volume or motion certificate.
+- **Missing-feet root cause:** `Table.proto:54-95` instantiates `main frame` and `foot 1..4` as five
+  nested `SolidBox` children; `SolidBox.proto:85-138` expands each to a real `Solid` with a
+  `boundingObject Box`. No deeper Supervisor API is needed: the existing
+  `getBaseNodeField("children")` traversal reached all five. The preserved probe reported no
+  traversal errors and a valid enclosing `Table` (`id=33400`), but internal PROTO nodes reported
+  `getId() == -1`. `walk()` keyed visited nodes by that sentinel, so `main frame` won and the four
+  feet were discarded before name selection. This is a probe identity bug, not evidence that the
+  feet are absent from the runtime collision tree. Existing evidence cannot close the four-feet
+  runtime gap and source-derived geometry is not backfilled.
+- **Traversal repair:** `geometry_probe.py` now deduplicates valid nonnegative runtime IDs by
+  number and invalid IDs by retained Python wrapper identity in `walk()`, `ancestors()`,
+  `snapshot().visit()` and device ancestry. The raw `id: -1` remains in every observation; no
+  synthetic identity, private API, expected geometry or tolerance is introduced.
+- **Base-pose root cause:** the original expectation uses the pinned initial robot pose at
+  `factory.wbt:59-61` (translation `[-0.53683, -3.70906, 0.0885438]`), whereas the observed
+  `node.getPose(robot)` uses the settled live base pose in `state.json` (translation
+  `[-0.5370347697854961, -3.7093265007325016, 0.088267810476998]`). With the documented
+  composition `T_BT = inverse(T_WB) @ T_WT`, the pinned expectation reproduces the preserved
+  errors `0.002728548164635969 m` and `0.003505397960478432 rad`; the live-base expectation
+  reproduces the observed transform to numerical precision. The live/pinned base rotation delta is
+  exactly the observed residual, and the live pose matches the exported robot `T_world_owner`.
+  Wrong composition order produces multi-metre translation error; applying the URDF registration
+  (`configs/calibration/urdf-base-train-v1.yaml`, used only for `T_world_urdf` in
+  `scene_geometry.py:401-402`) produces about `0.07 m`/`0.071 rad` error. The mismatch is therefore
+  consistent base-pose registration drift, not table geometry, frame selection, composition order
+  or URDF registration error. The original pinned comparison is retained for audit and the
+  `0.0001` m/rad tolerance is unchanged.
+- **Offline diagnostic:** the new pure `eval/worldmind_table_live_diagnosis.py` verifies all five
+  artifact hashes and all provenance/diagnostic source hashes before parsing JSON, then audits the
+  preserved reconciliation, reports both pinned-base and live-base comparisons, frame consistency,
+  wrong-order/URDF alternatives and the shared sentinel-ID diagnosis. It changes no verdict, closes
+  no runtime gap by arithmetic and never authorizes motion. One additional owner-authorized
+  read-only Webots observation with the repaired probe is still required to ground all five feet;
+  this task did not launch it.
+- **Verification:** 23 focused inert tests pass, including five shared-`-1` nested boxes, genuinely
+  absent feet, incorrect hierarchy, missing/ambiguous fields, snapshot dedup, hash tampering,
+  frame consistency, composition order and URDF discrepancy. `ruff check .`, `ruff format --check .`,
+  `ty check src`, `compileall` and the frozen-evidence checker pass. The full non-Webots suite is
+  `1 failed, 711 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch, which was not repaired by editing frozen evidence. No dependency,
+  public `core/` interface, config, pinned evidence byte, tolerance, split, seed or production
+  safety threshold changed.

@@ -34,6 +34,36 @@ def _target_vector(value: object, method: str, size: int) -> list[float] | None:
     return numbers if all(math.isfinite(number) for number in numbers) else None
 
 
+class _VisitTracker:
+    """Deduplicate by runtime ID when valid, by wrapper identity when ID is unavailable.
+
+    Webots internal PROTO nodes may report ``getId() == -1``. That sentinel is not a unique
+    runtime ID: distinct ``SolidBox`` feet can all report it. A strong reference is retained for
+    identity-keyed nodes so Python ``id()`` values cannot be recycled during a traversal. The
+    original sentinel is still exported in evidence; this key is internal only.
+    """
+
+    def __init__(self) -> None:
+        self._ids: set[int] = set()
+        self._nodes: dict[int, Any] = {}
+
+    def first_visit(self, node: Any) -> bool:
+        try:
+            identifier = node.getId()
+        except Exception:
+            identifier = -1
+        if type(identifier) is int and identifier >= 0:
+            if identifier in self._ids:
+                return False
+            self._ids.add(identifier)
+            return True
+        key = id(node)
+        if key in self._nodes:
+            return False
+        self._nodes[key] = node
+        return True
+
+
 def inspect_table_targets(
     supervisor: Any, descriptor: Mapping[str, object], robot: Any
 ) -> dict[str, Any]:
@@ -170,17 +200,12 @@ def inspect_table_targets(
 
     def walk(start_nodes: Sequence[Any]) -> list[Any]:
         result: list[Any] = []
-        seen: set[int] = set()
+        visited = _VisitTracker()
         queue = [(node, 0) for node in start_nodes]
         while queue:
             node, depth = queue.pop(0)
-            try:
-                node_id = int(node.getId())
-            except Exception:
+            if not visited.first_visit(node):
                 continue
-            if node_id in seen:
-                continue
-            seen.add(node_id)
             result.append(node)
             if depth < 12:
                 queue.extend((child, depth + 1) for child in node_children(node))
@@ -188,22 +213,15 @@ def inspect_table_targets(
 
     def ancestors(node: Any) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
-        try:
-            seen: set[int] = {int(node.getId())}
-        except Exception:
-            return result
+        visited = _VisitTracker()
+        visited.first_visit(node)
         try:
             parent = node.getParentNode()
         except Exception:
             return result
         while parent is not None and len(result) < 16:
-            try:
-                parent_id = int(parent.getId())
-            except Exception:
+            if not visited.first_visit(parent):
                 break
-            if parent_id in seen:
-                break
-            seen.add(parent_id)
             result.append(identity(parent))
             try:
                 parent = parent.getParentNode()
@@ -432,13 +450,12 @@ def snapshot(supervisor: Any, table_targets: Mapping[str, object] | None = None)
             return result
         return [{"type": kind, "supported": False, "T_owner_shape": matrix.tolist()}]
 
-    seen = set()
+    visited = _VisitTracker()
     objects = []
 
     def visit(node):
-        if node.getId() in seen:
+        if not visited.first_visit(node):
             return
-        seen.add(node.getId())
         f = field(node, "boundingObject")
         if f and f.getSFNode():
             name = values(node, "name", "getSFString", node.getTypeName())
@@ -476,9 +493,8 @@ def snapshot(supervisor: Any, table_targets: Mapping[str, object] | None = None)
                 }
             )
         node = supervisor.getFromDevice(device._tag)
-        ancestry = set()
-        while node is not None and node.getId() not in ancestry:
-            ancestry.add(node.getId())
+        ancestry = _VisitTracker()
+        while node is not None and ancestry.first_visit(node):
             visit(node)
             node = node.getParentNode()
     if not objects:

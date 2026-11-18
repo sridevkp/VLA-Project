@@ -759,3 +759,74 @@ def test_missing_launch_version_is_not_substituted_from_config(tmp_path):
     assert report["runtime_webots_version_verified"] is False
     assert report["runtime_webots_version_source"] is None
     assert report["simulator_version"] is None
+
+
+def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        # Captured at wall time 1000.0; received/validated at 1000.2 despite delayed startup.
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+    }
+
+    class LowLevel:
+        def ping(self):
+            return {
+                "status": "ok",
+                "payload": copy.deepcopy(snapshot.ping),
+            }
+
+        def inspect(self):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(adapter, "time", lambda: 1000.2)
+    captured = _capture(
+        ReadOnlyBackendClient(LowLevel()),
+        config,
+        "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
+    )
+    assert captured.age_s == pytest.approx(0.2)
+    assert captured.captured_at_utc == "2026-11-18T00:00:00+00:00"
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["observation_valid"] is True
+    assert "observation is stale" not in report["observation_blockers"]
+    assert "observation is stale" not in report["blockers"]
+
+
+def test_capture_age_marks_truly_stale_capture(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+    }
+
+    class LowLevel:
+        def ping(self):
+            return {"status": "ok", "payload": copy.deepcopy(snapshot.ping)}
+
+        def inspect(self):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(adapter, "time", lambda: 1000.0 + config.observation_freshness_max_s + 1.0)
+    captured = _capture(ReadOnlyBackendClient(LowLevel()), config, "tcp://127.0.0.1:5555")
+    assert captured.age_s > config.observation_freshness_max_s
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "FAILED"
+    assert "observation is stale" in report["blockers"]

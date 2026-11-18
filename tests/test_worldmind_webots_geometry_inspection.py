@@ -229,6 +229,15 @@ def _observation() -> Observation:
         base_pose=Pose2D(0.0, 0.0, 0.0),
         ee_pose=_pose(),
         gripper_opening=0.1,
+        base_pose_world=Pose3D(
+            Vec3(-0.5368299999999999, -3.709059999999999, 0.08854380000000017),
+            (
+                -0.011215228341161438,
+                0.00752273316005514,
+                0.717650835270671,
+                -0.6962721492163583,
+            ),
+        ),
     )
     return Observation(
         t=1.0,
@@ -875,3 +884,92 @@ def test_collection_checks_dependencies_before_any_session_is_created(tmp_path, 
     monkeypatch.setattr(adapter, "launch_webots_session", no_launch)
     with pytest.raises(RuntimeError, match="dependencies unavailable"):
         adapter.collect_geometry_inspection_snapshot(unknown, tmp_path)
+
+
+def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    envelope = _ping_envelope(snapshot)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "geometry": dict(snapshot.geometry),
+        # Captured recently at server, even if startup/request handling took long.
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+    }
+
+    class LowLevel:
+        def ping(self):
+            return copy.deepcopy(envelope)
+
+        def inspect_geometry(self, table_targets=None):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(adapter, "time", lambda: 1000.2)
+    captured = _capture(
+        ReadOnlyGeometryBackendClient(LowLevel()),
+        config,
+        "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
+    )
+    assert captured.age_s == pytest.approx(0.2)
+    assert captured.captured_at_utc == "2026-11-18T00:00:00+00:00"
+    report, _, _, _ = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), captured
+    )
+    assert report["observation_valid"] is True
+    assert report["geometry_export_valid"] is True
+    assert "observation is stale" not in report["blockers"]
+
+
+def test_geometry_success_is_reported_separately_from_stale_observation(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    envelope = _ping_envelope(snapshot)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "geometry": dict(snapshot.geometry),
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+    }
+
+    class LowLevel:
+        def ping(self):
+            return copy.deepcopy(envelope)
+
+        def inspect_geometry(self, table_targets=None):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        adapter,
+        "time",
+        lambda: 1000.0 + config.diagnostic.observation_freshness_max_s + 1.0,
+    )
+    captured = _capture(
+        ReadOnlyGeometryBackendClient(LowLevel()),
+        config,
+        "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
+    )
+    report, _, _, _ = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), captured
+    )
+    assert report["geometry_export_valid"] is True
+    assert report["geometry_blockers"] == []
+    assert report["geometry_object_count"] == 1
+    assert report["observation_valid"] is False
+    assert "observation is stale" in report["observation_blockers"]
+    assert "observation is stale" in report["blockers"]
+    assert report["outcome"] == "FAILED"

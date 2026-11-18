@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from time import perf_counter
+from time import time
 from typing import Any, NoReturn
 
 from vlarobot.backends.worldmind_webots_diagnostic import (
@@ -99,9 +99,7 @@ def _capture(
     ping = _ping_payload(client)
     ping["endpoint"] = endpoint
     ping["launch_mode"] = config.diagnostic.mode
-    started = perf_counter()
     payload = client.inspect_geometry(table_target_descriptor(config))
-    age_s = perf_counter() - started
     if not {"observation", "ground_truth", "identity", "geometry"}.issubset(payload):
         raise ValueError("inspect_geometry reply omitted state, identity or geometry")
     observation = payload["observation"]
@@ -116,12 +114,22 @@ def _capture(
         raise TypeError("inspect_geometry identity has the wrong type")
     if not isinstance(geometry, Mapping):
         raise TypeError("inspect_geometry geometry has the wrong type")
+    capture_wall_time = payload.get("capture_wall_time_s")
+    if isinstance(capture_wall_time, (int, float)) and not isinstance(capture_wall_time, bool):
+        age_s = max(0.0, time() - float(capture_wall_time))
+        captured_at_utc = payload.get("captured_at_utc")
+        if not isinstance(captured_at_utc, str) or not captured_at_utc.strip():
+            captured_at_utc = datetime.now(UTC).isoformat()
+    else:
+        # Compatibility with older capture payloads: age reflects request latency only.
+        age_s = 0.0
+        captured_at_utc = datetime.now(UTC).isoformat()
     return GeometryInspectionSnapshot(
         ping=ping,
         observation=observation,
         ground_truth=ground_truth,
         identity=dict(identity),
-        captured_at_utc=datetime.now(UTC).isoformat(),
+        captured_at_utc=captured_at_utc,
         age_s=age_s,
         dependency_availability=dependency_availability(config.diagnostic),
         call_counts=client.call_counts(),

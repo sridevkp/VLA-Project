@@ -266,6 +266,15 @@ def _full_joint_vector(joints: Mapping[str, float]) -> np.ndarray:
     return vector
 
 
+def _link_transforms(kinematics: Kinematics, joints: Mapping[str, float]) -> Sequence[Any]:
+    """Return one rigid FK transform per chain index for the corrected URDF.
+
+    ``Kinematics.forward`` returns only the tool matrix, so indexing it with link indices raises
+    or, once guarded, yields no certificate at all. Sweep geometry needs the full-chain call.
+    """
+    return kinematics.chain.forward_kinematics(_full_joint_vector(joints), full_kinematics=True)
+
+
 def _corrected_forward(joints: Mapping[str, float]) -> Pose3D:
     matrix = corrected_kinematics().forward(_full_joint_vector(joints))
     return Pose3D(Vec3(*map(float, matrix[:3, 3])), _rotation_to_quaternion(matrix[:3, :3]))
@@ -972,7 +981,7 @@ def _build_configured_sweep_check(config: ArmSweepConfig) -> IntermediateSweptAr
         raise SweepGeometryError("sweep contract does not cover the full relevant arm")
 
     def geometry(state: Any) -> tuple[Capsule, ...]:
-        transforms = kinematics.forward(_full_joint_vector(state.robot.joint_pos))
+        transforms = _link_transforms(kinematics, state.robot.joint_pos)
         if len(transforms) <= max(frames.values()):
             raise SweepGeometryError("FK returned incomplete link transforms")
         result: list[Capsule] = []
@@ -1296,7 +1305,7 @@ def unverified_urdf_sweep_check(
     )
 
     def geometry(state: Any) -> tuple[Capsule, ...]:
-        transforms = kinematics.forward(_full_joint_vector(state.robot.joint_pos))
+        transforms = _link_transforms(kinematics, state.robot.joint_pos)
         if len(transforms) <= max(frames.values()):
             raise SweepGeometryError("FK returned incomplete link transforms")
         result: list[Capsule] = []

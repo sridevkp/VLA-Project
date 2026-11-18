@@ -129,12 +129,20 @@ def _synthetic_urdf(path: Path) -> Path:
 
 
 class _FakeKinematics:
+    """Mirror the real ``Kinematics`` contract: ``forward`` is the tool matrix only.
+
+    ``ikpy`` exposes per-link transforms only through ``chain.forward_kinematics(...,
+    full_kinematics=True)``. Modelling that split here keeps the sweep adapter honest.
+    """
+
     def __init__(self, *, bad_registration: bool = False) -> None:
         self.idx = {"j1": 1, "j2": 2}
-        self.chain = SimpleNamespace(links=(None, None, None))
+        self.chain = SimpleNamespace(
+            links=(None, None, None), forward_kinematics=self._full_kinematics
+        )
         self.bad_registration = bad_registration
 
-    def forward(self, q: np.ndarray) -> list[np.ndarray]:
+    def _full_kinematics(self, q: np.ndarray, full_kinematics: bool = False) -> list[np.ndarray]:
         identity = np.eye(4)
         a = np.eye(4)
         a[:3, 3] = (float(q[1]), 0.0, 0.0)
@@ -144,6 +152,9 @@ class _FakeKinematics:
             a[:3, :3] *= 2.0
             b[:3, :3] *= 2.0
         return [identity, a, b]
+
+    def forward(self, q: np.ndarray) -> np.ndarray:
+        return self._full_kinematics(q)[-1]
 
 
 def _adapter_config(urdf: Path, *, adjacent: frozenset[frozenset[str]] = frozenset()):

@@ -2399,3 +2399,42 @@ certificate activation, push, merge or PR #2 update occurred. Motion remains `NO
   frozen-helper hash mismatch, which was not repaired by editing frozen evidence. No dependency,
   public `core/` interface, config, pinned evidence byte, tolerance, split, seed or production
   safety threshold changed.
+
+## ADR-0060 — Point-of-use observation freshness for read-only Webots inspection (2026-11-18)
+
+**Status:** Accepted for local diagnostic repair and inert verification only. No Webots launch or
+retry, no actuation, physics step, real IK solve, calibration, scoring, TEST/TRAIN access, owner
+certificate activation, push, merge or PR update is included. The preserved v3 evidence remains
+byte-identical and `FAILED`; motion remains `NO-GO` / `NOT_READY`.
+
+- **Root cause:** `capture_read_only_geometry()` called `capture_read_only_state()` before the
+  supervisor `boundingObject` export. The observation's server-side capture timestamp was therefore
+  stamped before the slow export and table traversal that followed it within the same RPC. The
+  client then recomputed `observation_age_s` during finalization *after* session teardown, so the
+  measured age mixed genuine pre-receipt work with post-consumption shutdown latency. The preserved
+  v3 run recorded `observation_age_s≈12.8636 s` without a receipt-age field, so the exact split
+  cannot be recovered from that evidence.
+- **Repair — capture at the real point of use:** the read-only geometry export now runs first and
+  the state observation is captured afterwards, in the same unstepped session. The expensive
+  export can no longer age the observation. This is a genuine freshness repair, not a timestamp
+  rewrite: no capture value is mutated, backdated or synthesized, and the `5.0 s` limit is
+  unchanged.
+- **Repair — consumption boundary:** `DiagnosticSnapshot` now records
+  `consumption_wall_time_s`, stamped at client receipt/validation while the read-only session is
+  still live and before teardown. `observation_age_at_consumption()` uses that recorded point of
+  use; an explicit `now_wall_time_s` still overrides it for diagnostic recomputation.
+  `observation_age_s_at_receipt` is retained, and the report/state still fail closed when the age
+  at consumption exceeds `observation_freshness_max_s`. Post-consumption teardown and report
+  finalization are not observation use and cannot be counted as staleness.
+- **Fail-closed boundary unchanged:** capture-timestamp validation, future/inconsistent timestamp
+  rejection, forbidden-call counters, commanded/stepped-session rejection, identity/world-hash
+  checks, `motion_allowed=false` and the `unverified-arm-sweep` veto are unchanged. Stale
+  observations still produce `observation_valid=false`, the `observation is stale` blocker and an
+  overall `FAILED` outcome.
+- **Verification:** focused WorldMind/diagnostic tests plus new point-of-use and export-order
+  cases pass; `ruff check .`, `ruff format --check .`, `ty check src`, `compileall` and the
+  frozen-evidence checker pass. The full non-Webots suite is `1 failed, 746 passed, 3 skipped`; the
+  only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch. Live Webots verification of the repaired path still requires a new
+  explicit read-only authorization and a single attempt with a new output path.

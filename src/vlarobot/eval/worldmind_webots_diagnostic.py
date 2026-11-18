@@ -145,6 +145,10 @@ class DiagnosticSnapshot:
     launch_attestation: Mapping[str, object] = field(default_factory=dict)
     capture_wall_time_s: float | None = None
     capture_timestamp_blockers: tuple[str, ...] = ()
+    # Wall-clock time at which the snapshot was consumed (validated and used by the caller)
+    # while the read-only session was still live. Recorded before session teardown so that
+    # shutdown latency is never misattributed to observation staleness.
+    consumption_wall_time_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -371,9 +375,18 @@ def _finite_pose(pose: Pose3D) -> bool:
 def observation_age_at_consumption(
     snapshot: DiagnosticSnapshot, *, now_wall_time_s: float | None = None
 ) -> float:
-    """Observation age derived from actual capture time at validation/consumption."""
+    """Observation age derived from actual capture time at validation/consumption.
+
+    When the snapshot records the point-of-use time (``consumption_wall_time_s``), that
+    recorded time is authoritative. The caller records it while the session is still live,
+    immediately after receipt and before teardown, so post-consumption shutdown/finalization
+    latency cannot be mistaken for observation staleness. An explicit ``now_wall_time_s``
+    still overrides the recorded value for diagnostic recomputation.
+    """
     if snapshot.capture_timestamp_blockers or snapshot.capture_wall_time_s is None:
         return float("inf")
+    if now_wall_time_s is None:
+        now_wall_time_s = snapshot.consumption_wall_time_s
     return capture_age_s(snapshot.capture_wall_time_s, now_wall_time_s=now_wall_time_s)
 
 

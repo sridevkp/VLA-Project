@@ -713,6 +713,39 @@ def test_geometry_capture_blocks_commanded_or_stepped_backends(tmp_path, monkeyp
         read_only_geometry.capture_read_only_geometry(FakeBackend())
 
 
+def test_geometry_export_runs_before_fresh_state_capture(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    events: list[str] = []
+
+    def fake_export(supervisor, table_targets=None):
+        events.append("export")
+        return dict(snapshot.geometry)
+
+    def fake_state(backend):
+        events.append("state")
+        return {
+            "observation": snapshot.observation,
+            "ground_truth": snapshot.ground_truth,
+            "identity": dict(snapshot.identity),
+        }
+
+    monkeypatch.setattr(read_only_geometry, "export_bounding_objects", fake_export)
+    monkeypatch.setattr(read_only_geometry, "capture_read_only_state", fake_state)
+
+    class FakeIO:
+        robot = object()
+
+    class FakeBackend:
+        io = FakeIO()
+
+    result = read_only_geometry.capture_read_only_geometry(FakeBackend())
+    # The slow export must not age the observation: state is captured afterwards, at use.
+    assert events == ["export", "state"]
+    assert result["geometry"] == snapshot.geometry
+
+
 def test_finalize_reports_pass_without_motion_and_fails_closed_on_bad_evidence(tmp_path):
     path, _ = _write_config(tmp_path)
     config = load_geometry_inspection_config(path)
@@ -967,6 +1000,37 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
     )
     assert report["observation_valid"] is True
     assert report["geometry_export_valid"] is True
+    assert "observation is stale" not in report["blockers"]
+
+
+def test_post_receipt_teardown_delay_is_not_geometry_consumption_staleness(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "geometry": dict(snapshot.geometry),
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
+    }
+    captured = _geometry_capture_with_payload(
+        config, snapshot, payload, now_s=1000.2, monkeypatch=monkeypatch
+    )
+    assert captured.age_s == pytest.approx(0.2)
+    assert captured.consumption_wall_time_s == pytest.approx(1000.2)
+    # Teardown and report finalization after the point of use must not age the observation.
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
+    monkeypatch.setattr(eval_diag, "time", lambda: 1013.0)
+    report, state, _, _ = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), captured
+    )
+    assert report["observation_valid"] is True
+    assert report["observation_age_s"] == pytest.approx(0.2)
+    assert report["observation_age_s_at_receipt"] == pytest.approx(0.2)
+    assert state["observation_age_s"] == pytest.approx(0.2)
     assert "observation is stale" not in report["blockers"]
 
 

@@ -1025,7 +1025,7 @@ def test_valid_recent_capture_passes_adapter_and_finalization(tmp_path, monkeypa
     assert report["observation_age_s"] == pytest.approx(0.5)
 
 
-def test_valid_capture_followed_by_delayed_consumption_uses_capture_time(tmp_path, monkeypatch):
+def test_post_receipt_teardown_delay_is_not_consumption_staleness(tmp_path, monkeypatch):
     path, _ = _write_config(tmp_path)
     config = load_webots_diagnostic_config(path)
     snapshot = _snapshot(config)
@@ -1037,15 +1037,43 @@ def test_valid_capture_followed_by_delayed_consumption_uses_capture_time(tmp_pat
     monkeypatch.setattr(adapter, "time", lambda: 1000.2)
     captured = _capture_with_payload(config, snapshot, payload)
     assert captured.age_s == pytest.approx(0.2)
-    # Simulate delayed validation/consumption: observation remains fresh because age is derived
-    # from capture time, not request start/processing delay, and is below the 5s threshold.
+    # The point-of-use time is recorded while the session is live, before teardown.
+    assert captured.consumption_wall_time_s == pytest.approx(1000.2)
+    # Simulate post-receipt session teardown and report finalization. That latency is not
+    # observation age: the observation was consumed (validated and used) at 1000.2s.
     import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
 
-    monkeypatch.setattr(eval_diag, "time", lambda: 1004.0)
-    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    monkeypatch.setattr(eval_diag, "time", lambda: 1013.0)
+    report, state, _ = finalize_webots_diagnostic(
+        config, preflight_webots_diagnostic(config), captured
+    )
     assert report["observation_valid"] is True
-    assert report["observation_age_s"] == pytest.approx(4.0)
+    assert report["observation_age_s"] == pytest.approx(0.2)
+    assert report["observation_age_s_at_receipt"] == pytest.approx(0.2)
+    assert state["observation_age_s"] == pytest.approx(0.2)
     assert "observation is stale" not in report["blockers"]
+
+
+def test_point_of_use_age_still_fails_closed_when_receipt_exceeds_limit(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(
+        snapshot,
+        capture_wall_time_s=1000.0,
+        captured_at_utc="1970-01-01T00:16:40+00:00",
+    )
+    # Receipt itself is already past the unchanged 5s limit; recording the point-of-use time
+    # must not hide genuine staleness.
+    captured = _capture_with_payload(
+        config, snapshot, payload, now_s=1005.5, monkeypatch=monkeypatch
+    )
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["observation_valid"] is False
+    assert report["observation_age_s"] == pytest.approx(5.5)
+    assert "observation is stale" in report["observation_blockers"]
+    assert "observation is stale" in report["blockers"]
+    assert report["outcome"] == "FAILED"
 
 
 def test_cli_propagates_capture_timestamp_blockers(tmp_path, monkeypatch):

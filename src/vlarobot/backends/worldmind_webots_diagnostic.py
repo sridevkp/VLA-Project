@@ -176,6 +176,7 @@ def _capture(
         launch_attestation=dict(launch_attestation or {}),
         capture_wall_time_s=capture_wall_time_s,
         capture_timestamp_blockers=capture_blockers,
+        consumption_wall_time_s=now_wall_time_s,
     )
 
 

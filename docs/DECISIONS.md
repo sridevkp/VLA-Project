@@ -2050,3 +2050,63 @@ TEST/TRAIN access, push, merge or PR #2 change is included.
   frozen-helper hash mismatch. Windows and live Webots execution remain unverified in this
   environment. No dependency, public `core/` interface, frozen baseline, seed, split or threshold
   changed.
+
+## ADR-0055 — Local Webots geometry resolution, conservative scene/sweep checks and dedicated read-only geometry inspection (2026-11-18)
+
+**Status:** Accepted for local implementation and inert verification only. This does not approve
+motion, create an owner certificate, authorize Webots launch, or update PR #2. No push, merge,
+scored evaluation, TEST/TRAIN access, actuation, physics step/reset, IK solve, trajectory execution
+or frozen-evidence change is included. The prior read-only Webots PASS remains connectivity-only.
+
+- **Phase A — source resolution:** all 27 external `EXTERNPROTO` references in the pinned factory
+  world and 5 nested dependencies were copied byte-for-byte from the pinned Webots R2025a asset
+  cache into `assets/webots/protos/r2025a/`. `configs/geometry/webots-proto-sources-v1.yaml`
+  (SHA-256 `2d6f84e260b36ff4b754793813216a6ef0c38d8d76aa225ebc534ed4eb0a7362`) records source
+  URLs, asset hashes and classification: 29 relevant, 3 unrelated. PROTO text is parsed for nested
+  `Solid`/`boundingObject` declarations, shape kinds and `selfCollision`; mesh/visual geometry and
+  unsupported shape tokens fail closed. Relevant forwarded geometry with `IS`/`USE` bounding fields
+  is explicitly listed as `unresolved_forwarded_geometry: [PipeSection, StraightStairsRail]` and
+  remains a motion blocker. This updates the PROTO-availability statement in ADR-0054: the files
+  are now pinned locally, but their forwarded geometry is still not certified.
+- **Phase B — transforms, enclosure and subdivision:**
+  `configs/geometry/scene-collision-v1.yaml` (SHA-256
+  `68397a05106ca39b9d233c692081583652ad57f76049b6d288ebc2b6c7b9f313`) verifies hashes, finite
+  rigid world/base/URDF transforms, the transformed table box, conservative floor half-space,
+  gripper tool capsule, CAN envelope and base-pose tolerances (`0.003 m`, `0.005 rad`). Transformed
+  corners are proven enclosed by the conservative box, and floor tests use the padded swept AABB
+  corners. Static checks cover table, floor, gripper, carried CAN and self-collision; missing or
+  unsupported scene geometry returns `None` or fails closed rather than clearing a transition.
+  The sweep contract (SHA-256 `1c587b2b78b214734eaf2e154bec13b7e3ec331003f2f9e5fa92fff96116f393`)
+  keeps the blocked status and derives an adaptive count from the pinned speed bound without
+  changing the fixed eight-substep certificate contract:
+  `28.49316700274912 m/s * 0.032 s / 8 = 0.1139726680109965 m > 0.02 m`,
+  so `ceil(0.1139726680109965 / 0.02) = 46`, giving `0.019821333567129826 m` per sub-interval.
+  Unsupported hard blocks include mesh/visual geometry, dynamic carried-object motion, arbitrary
+  planes, `PipeSection`/`StraightStairsRail` forwarding, the remaining 20 obstacle PROTO types
+  (42 world instances), `selfCollision FALSE`, and non-reviewed diagnostic primitives.
+- **Phase C — read-only geometry inspection:** the dedicated
+  `worldmind-webots-geometry-inspection` command and config (SHA-256
+  `30e8520c6fcbfbe155273ba4f758945c56f9fa9635f6a1318857f24f9250cb5c`) add a backend-only
+  `inspect_geometry` RPC; `core/wire.py` and public `core/` interfaces are unchanged. The collector
+  reuses the existing session, identity and launch-attestation checks, and its client permits only
+  `ping` and `inspect_geometry`. The config forbids any swept-arm certificate; the evidence rules
+  fail closed on `apply`, `step`, `reset`, `export_kinematics`, the older `inspect`,
+  `get_ground_truth`, motor commands, a commanded/stepped session, stale or nonfinite observations,
+  identity mismatch and missing or mismatched catalog hashes. Output files are `diagnostic.json`,
+  `state.json`, `provenance.json` and `geometry.json`, all with `motion_allowed=false` and
+  `motion_readiness="NOT_READY"`. No Webots process was launched and the CLI command was not run;
+  tests inject synthetic snapshots to exercise the exact inert path.
+- **Unchanged motion gate:** production still has `check_transition=None`, sweep status `blocked`,
+  `certificate=None`, `unverified-arm-sweep` veto and `unresolved_forwarded_geometry` blocker. No
+  owner-reviewed full-arm swept certificate exists, and this project will not create one. The
+  authoritative inert artifacts under `runs/worldmind/validation-s0-geometry-inert-v3` retain
+  SHA-256 values `9cdee7cf2dec62365218dcecbfdf753110a92296d30f38aee12abe5f213f2806`,
+  `bcf0c94679a2a35ee7ad253942f64ac0f2f81fb6868b9ddc392d7baba5beaa29` and
+  `65022dc0007b2d3e393574a9b8b913268154dba0e4bc67423668088b17049649`.
+- **Verification and residual risk:** the 53 focused inert tests pass; Ruff check, Ruff format
+  check, `ty check src`, `compileall` and the frozen-evidence checker pass. The full non-Webots
+  suite is `1 failed, 639 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch, which must not be repaired by editing frozen evidence. Windows
+  execution and live Webots geometry inspection remain unverified in this environment. No new
+  dependency, public `core/` interface, frozen pin, seed, split or threshold changed.

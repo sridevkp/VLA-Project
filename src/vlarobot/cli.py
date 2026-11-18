@@ -716,6 +716,89 @@ def worldmind_webots_diagnostic(
         raise typer.Exit(code=1)
 
 
+@app.command("worldmind-webots-geometry-inspection")
+def worldmind_webots_geometry_inspection(
+    config: Annotated[
+        Path,
+        typer.Option(help="Reviewed read-only Webots geometry config (VALIDATION only)."),
+    ],
+    out: Annotated[
+        Path,
+        typer.Option(
+            help="New exclusive output directory; prior geometry evidence is never overwritten."
+        ),
+    ],
+) -> None:
+    """Export Webots boundingObject geometry read-only. Never actuates, steps, IKs or scores."""
+    from vlarobot.backends.worldmind_webots_geometry_inspection import (
+        collect_geometry_inspection_snapshot,
+    )
+    from vlarobot.eval.worldmind_webots_diagnostic import ensure_fresh_output
+    from vlarobot.eval.worldmind_webots_geometry_inspection import (
+        failed_geometry_inspection,
+        finalize_geometry_inspection,
+        load_geometry_inspection_config,
+        preflight_geometry_inspection,
+        write_geometry_inspection_evidence,
+    )
+
+    try:
+        resolved = load_geometry_inspection_config(config)
+    except Exception as error:  # noqa: BLE001 - config failures must fail closed with one error
+        typer.echo(
+            f"worldmind-webots-geometry-inspection config failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    try:
+        ensure_fresh_output(out)
+        out.mkdir(parents=True, exist_ok=False)
+    except Exception as error:  # noqa: BLE001 - output exclusivity is a hard gate
+        typer.echo(
+            f"worldmind-webots-geometry-inspection output failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    preflight = preflight_geometry_inspection(resolved)
+    if preflight.blockers:
+        report = failed_geometry_inspection(resolved, preflight, "config_preflight_failed")
+        write_geometry_inspection_evidence(out, report, None)
+        typer.echo("worldmind-webots-geometry-inspection preflight failed:", err=True)
+        for blocker in preflight.blockers:
+            typer.echo(f"  - {blocker}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        snapshot = collect_geometry_inspection_snapshot(resolved, out)
+    except Exception as error:  # noqa: BLE001 - preserve one fail-closed report
+        report = failed_geometry_inspection(resolved, preflight, f"{type(error).__name__}: {error}")
+        write_geometry_inspection_evidence(out, report, None)
+        typer.echo(
+            f"worldmind-webots-geometry-inspection failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    report, state, provenance, geometry = finalize_geometry_inspection(
+        resolved, preflight, snapshot
+    )
+    files = write_geometry_inspection_evidence(out, report, geometry, state, provenance)
+    typer.echo(
+        f"worldmind-webots-geometry-inspection outcome={report['outcome']} "
+        f"mode=live_read_only_bounding_object_export apply=0 step=0 reset=0 "
+        f"scored_evaluation_allowed=False motion_allowed=False"
+    )
+    blockers = report.get("blockers", [])
+    if isinstance(blockers, (list, tuple)):
+        for blocker in blockers:
+            typer.echo(f"  - {blocker}", err=True)
+    typer.echo(f"  out={out} evidence={','.join(path.name for path in files)}")
+    if report["outcome"] != "PASS":
+        raise typer.Exit(code=1)
+
+
 @app.command("worldmind-geometry-diagnostic")
 def worldmind_geometry_diagnostic(
     config: Annotated[

@@ -216,8 +216,14 @@ def _sha256_file(path: Path) -> str | None:
         return None
 
 
-def load_webots_diagnostic_config(path: Path) -> WebotsDiagnosticConfig:
-    """Load the strict read-only config; reject scoring, TEST/TRAIN and scientific parameters."""
+def load_webots_diagnostic_config(
+    path: Path, *, extra_top_level_keys: frozenset[str] = frozenset()
+) -> WebotsDiagnosticConfig:
+    """Load the strict read-only config; reject scoring, TEST/TRAIN and scientific parameters.
+
+    ``extra_top_level_keys`` is used only by sibling read-only diagnostics that nest their own
+    reviewed section; it cannot override the forbidden-key or diagnostic-mode gates below.
+    """
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"Webots diagnostic config not found: {source}")
@@ -226,7 +232,7 @@ def load_webots_diagnostic_config(path: Path) -> WebotsDiagnosticConfig:
     unexpected = sorted(set(root) & _FORBIDDEN_TOP_LEVEL_KEYS)
     if unexpected:
         raise ValueError(f"Webots diagnostic config forbids keys: {unexpected}")
-    _keys(root, _TOP_LEVEL_KEYS, "Webots diagnostic config")
+    _keys(root, _TOP_LEVEL_KEYS | extra_top_level_keys, "Webots diagnostic config")
 
     if root["schema_version"] != WEBOTS_DIAGNOSTIC_SCHEMA_VERSION:
         raise ValueError("unsupported Webots diagnostic schema_version")

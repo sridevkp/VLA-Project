@@ -340,6 +340,8 @@ def test_blocked_sweep_contract_keeps_hard_veto_and_factory_absent(tmp_path):
             "registration": str(config.registration_path),
             "robot_config": str(bindings.SETTINGS_PATH),
             "world": str(config.world_path),
+            "scene_catalog": str(config.scene_catalog_path),
+            "proto_manifest": str(config.proto_manifest_path),
         }
     )
     raw["geometry"]["registration_sha256"] = "1" * 64

@@ -31,6 +31,7 @@ REQUEST_TIMEOUTS_MS: dict[str, int] = {
     "step": 30_000,  # 1 step ~0.45 s measured; headroom for load/diagnostics
     "apply": 30_000,
     "get_gt": 30_000,
+    "inspect_geometry": 30_000,  # read-only supervisor export; no physics or actuation
     "ping": 5_000,  # lightweight liveness/session probe
     "shutdown": 10_000,
     "export_kinematics": 300_000,  # per-poll chunk (one joint probe); bounded by probe caps
@@ -125,6 +126,21 @@ class ZmqBackendClient:
             "identity",
         }.issubset(payload):
             raise ValueError("inspect reply omitted observation, ground truth or identity")
+        return payload
+
+    def inspect_geometry(self) -> dict[str, Any]:
+        """Read the supervisor boundingObject export without advancing simulation."""
+        response = self._request(
+            "inspect_geometry", {}, timeout_ms=self._timeout_for("inspect_geometry", None)
+        )
+        payload = response.get("payload", {})
+        if not isinstance(payload, dict) or not {
+            "observation",
+            "ground_truth",
+            "identity",
+            "geometry",
+        }.issubset(payload):
+            raise ValueError("inspect_geometry reply omitted state, identity or geometry")
         return payload
 
     def ping(self) -> dict[str, Any]:

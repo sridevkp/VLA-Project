@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -27,6 +28,45 @@ from vlarobot.world_model.arm_geometry import Capsule, SweptArmCheck
 
 class SweepGeometryError(ValueError):
     """Required geometry, a transform or a contact type is missing or unsupported."""
+
+
+def required_substeps(
+    *,
+    speed_bound_m_s: float,
+    dt_s: float,
+    margin_m: float,
+    minimum: int = 1,
+    maximum: int = 4096,
+) -> int:
+    """Conservative count keeping maximum certified centreline travel below the margin.
+
+    Eight fixed substeps at the pinned 28.49 m/s point-speed bound and 32 ms tick allow
+    0.114 m of travel per sub-interval, which is larger than the 0.02 m margin. The count
+    returned here is ``ceil(speed * dt / margin)`` so each sub-interval travel is at most the
+    margin; it never lowers an explicitly configured minimum and fails closed above ``maximum``.
+    """
+    if (
+        isinstance(speed_bound_m_s, bool)
+        or not math.isfinite(speed_bound_m_s)
+        or speed_bound_m_s <= 0
+        or isinstance(dt_s, bool)
+        or not math.isfinite(dt_s)
+        or dt_s <= 0
+        or isinstance(margin_m, bool)
+        or not math.isfinite(margin_m)
+        or margin_m <= 0
+        or isinstance(minimum, bool)
+        or minimum < 1
+        or isinstance(maximum, bool)
+        or maximum < 1
+    ):
+        raise SweepGeometryError("adaptive subdivision requires finite positive inputs")
+    required = max(minimum, int(math.ceil(speed_bound_m_s * dt_s / margin_m)))
+    if required > maximum:
+        raise SweepGeometryError(
+            f"required {required} substeps exceeds the conservative cap {maximum}"
+        )
+    return required
 
 
 @dataclass(frozen=True)
@@ -41,6 +81,8 @@ class ArmSweepContract:
     substeps: int
     scene_complete: bool = True
     permitted_contact_objects: frozenset[str] = frozenset()
+    adaptive_speed_bound_m_s: float | None = None
+    max_adaptive_substeps: int = 4096
 
     def __post_init__(self) -> None:
         if (
@@ -53,8 +95,30 @@ class ArmSweepContract:
             or not math.isfinite(self.margin_m)
             or self.margin_m <= 0
             or self.scene_complete is not True
+            or isinstance(self.max_adaptive_substeps, bool)
+            or self.max_adaptive_substeps < 1
         ):
             raise SweepGeometryError("incomplete or invalid full-arm sweep contract")
+        if self.adaptive_speed_bound_m_s is not None and (
+            isinstance(self.adaptive_speed_bound_m_s, bool)
+            or not math.isfinite(self.adaptive_speed_bound_m_s)
+            or self.adaptive_speed_bound_m_s <= 0
+        ):
+            raise SweepGeometryError("adaptive speed bound must be positive and finite")
+
+    @property
+    def effective_substeps(self) -> int:
+        """Substeps after enlarging the configured minimum for the speed certificate."""
+        if self.adaptive_speed_bound_m_s is None:
+            return self.substeps
+        required = required_substeps(
+            speed_bound_m_s=self.adaptive_speed_bound_m_s,
+            dt_s=self.dt_s,
+            margin_m=self.margin_m,
+            minimum=self.substeps,
+            maximum=self.max_adaptive_substeps,
+        )
+        return required
 
 
 def interpolate_world_states(
@@ -141,23 +205,29 @@ class IntermediateSweptArmCheck:
         self,
         geometry: Callable[[WorldState], tuple[Capsule, ...]],
         contract: ArmSweepContract,
+        *,
+        scene: Any = None,
+        expected_base_pose_world: Any = None,
     ) -> None:
         self.contract = contract
         self.geometry = geometry
+        self.substeps = contract.effective_substeps
         self.inner = SweptArmCheck(
             geometry,
             required_links=contract.required_links,
             required_objects=contract.required_objects,
             scene_complete=contract.scene_complete,
-            dt_s=contract.dt_s / contract.substeps,
+            dt_s=contract.dt_s / self.substeps,
             margin_m=contract.margin_m,
             adjacent_pairs=contract.adjacent_pairs,
             permitted_contact_objects=contract.permitted_contact_objects,
+            scene=scene,
+            expected_base_pose_world=expected_base_pose_world,
         )
 
     def __call__(self, before: WorldState, after: WorldState) -> bool | None:
         try:
-            states = interpolate_world_states(before, after, self.contract.substeps)
+            states = interpolate_world_states(before, after, self.substeps)
             results = [self.inner(states[i], states[i + 1]) for i in range(len(states) - 1)]
         except Exception:  # noqa: BLE001 - fail closed on any missing/invalid geometry
             return None

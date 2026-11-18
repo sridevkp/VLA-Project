@@ -258,9 +258,29 @@ It reads only the pinned URDF, registration, robot config and world file. It doe
 simulator, open a socket, solve IK, apply/step/reset a backend, score an episode or read
 TEST/TRAIN evidence. It writes `diagnostic.json`, `state.json` and `provenance.json`, and always
 reports `motion_allowed=false` and `motion_readiness="NOT_READY"`. A `PASS` reports that evidence
-was collected; unresolved external PROTOs, self-collision, floor/table/finger envelopes and the
-missing owner-reviewed full-arm certificate keep geometric motion readiness blocked. See
-`DECISIONS.md` ADR-0054 for the separate engineering and owner-safety gates.
+was collected, not that motion is safe. The 27 external PROTOs are now pinned locally, but forwarded
+`USE`/`IS` geometry and other unsupported classes remain explicit hard blocks; self-collision, the
+conservative floor/table/finger/carried-object envelopes, reviewed reference cases and the owner
+certificate are still unresolved for motion. See `DECISIONS.md` ADR-0054 and ADR-0055 for the
+separate engineering and owner-safety gates.
+
+A dedicated read-only Webots geometry inspection is implemented as a separate capability. It is
+**not authorized by this setup note** and must not be run until an owner explicitly authorizes the
+exact command below. From the project root, with a new exclusive output path:
+
+```text
+uv run python -m vlarobot.cli worldmind-webots-geometry-inspection --config configs/worldmind_webots_geometry_inspection.yaml --out runs/worldmind/validation-s0-webots-geometry-inspection-<NEW-ID>
+```
+
+It starts one Webots process in `mode: launch`, reuses the existing session identity and
+launch-attestation checks, and adds only the `inspect_geometry` RPC. It exports live
+`boundingObject` geometry and writes `diagnostic.json`, `state.json`, `provenance.json` and
+`geometry.json`. It forbids a swept-arm certificate in its config and fails closed on `apply`,
+`step`, `reset`, `export_kinematics`, the older `inspect`, `get_ground_truth`, motor commands, a
+commanded or stepped session, or missing pinned catalogs. It never scores an episode, reads
+TEST/TRAIN evidence or permits motion; every result records `motion_allowed=false` and
+`motion_readiness="NOT_READY"`. A prior connectivity-only Webots PASS is not collision-safety
+approval. See `DECISIONS.md` ADR-0055.
 
 Inert FakeBackend verification without Webots:
 

@@ -195,6 +195,20 @@ class SimServer:
                         "Backend read-only inspection returned an incomplete snapshot."
                     )
                 response_payload = dict(snapshot)
+            elif operation == "inspect_geometry":
+                from vlarobot.backends.read_only_geometry import capture_read_only_geometry
+
+                snapshot = capture_read_only_geometry(self.backend)
+                if not isinstance(snapshot, dict) or not {
+                    "observation",
+                    "ground_truth",
+                    "identity",
+                    "geometry",
+                }.issubset(snapshot):
+                    raise RuntimeError(
+                        "Backend read-only geometry inspection returned an incomplete snapshot."
+                    )
+                response_payload = dict(snapshot)
             elif operation == "export_kinematics":
                 action = payload.get("action", "poll")
                 if not isinstance(action, str):

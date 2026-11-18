@@ -1,0 +1,103 @@
+schema_version: 1
+status: diagnostic_uncalibrated
+source: webots_r2025a_factory_v1
+sources:
+  world: ../../worlds/factory.wbt
+  registration: ../calibration/urdf-base-train-v1.yaml
+  tiago: ../../assets/webots/protos/r2025a/Tiago.proto
+  floor: ../../assets/webots/protos/r2025a/Floor.proto
+  table: ../../assets/webots/protos/r2025a/Table.proto
+  can: ../../assets/webots/protos/r2025a/Can.proto
+  gripper: ../../assets/webots/protos/r2025a/TiagoGripper.proto
+hashes:
+  world_sha256: 35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706
+  registration_sha256: dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0
+  tiago_sha256: 5306bc3b6517b8196aa00f8f523852a2386a1303d47d66946ad45083d08d8065
+  floor_sha256: e5dc2b8dc43a13747299861d90fa000a2d2dcccdcc7f4cea4d6f6c5642a99fc9
+  table_sha256: d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb
+  can_sha256: d7dfa3fa8665520f4d00bc9044233b95b57218db6c7789d21dd1a194a1fe7593
+  gripper_sha256: 2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9
+robot_world_pose:
+  translation:
+  - -0.53683
+  - -3.70906
+  - 0.0885438
+  rotation:
+  - 0.015624928760601675
+  - -0.010480586407633047
+  - -0.9998229937892898
+  - 1.601211204317911
+base_pose_tolerance:
+  position_m: 0.003
+  orientation_rad: 0.005
+  source: pinned_factory_pose_vs_validation_s0_webots_readonly_state.json; observed drift 0.0012 m and 0.0035 rad
+static_boxes:
+- name: table
+  world_center:
+  - -0.23882837
+  - -4.8402928
+  - 0.375
+  world_rotation:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  size:
+  - 4.5
+  - 1.5
+  - 0.75
+  source: worlds/factory.wbt:150-153; Table.proto:54-98 (SolidBox frame)
+  supported: true
+floor_planes:
+- name: lower_floor
+  world_point:
+  - 0.0
+  - 0.0
+  - 0.0
+  world_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  source: worlds/factory.wbt:51-58; Floor.proto:76-78
+  supported: true
+- name: upper_floor
+  world_point:
+  - 0.0
+  - 0.0
+  - 7.0
+  world_normal:
+  - 0.0
+  - 0.0
+  - -1.0
+  source: worlds/factory.wbt:90-104; Floor.proto:76-78 (rotated PI about X)
+  supported: true
+gripper_envelope:
+  name: gripper_fingers_and_body
+  frame: wrist_ft_tool_link
+  start_tool:
+  - 0.0
+  - 0.0
+  - 0.0
+  end_tool:
+  - 0.0
+  - 0.0
+  - -0.21875
+  radius_m: 0.1
+  max_point_speed_m_s: 28.49316700274912
+  source: TiagoGripper.proto:378-470,488-584,588-642
+  supported: true
+can_envelope:
+  name: CAN
+  radius_m: 0.03175
+  height_m: 0.1222
+  source: Can.proto:51-59
+  supported: true
+unsupported:
+- Mesh and IndexedFaceSet visual geometry is not used as collision geometry
+- dynamic carried-object motion is only covered when WorldState scene objects remain static
+- arbitrary oriented plane normals are not supported; only the two pinned horizontal planes are
+- PipeSection and StraightStairsRail forwarded boundingObject geometry is unresolved and blocked
+- all remaining instantiated obstacle PROTO types (20 types, 42 world instances) are not reduced
+  to reviewed collision primitives and remain blocked
+- Tiago.proto declares selfCollision FALSE; robot self-collision geometry is not covered
+- table, floor, gripper and CAN primitives are diagnostic-only and are not owner-reviewed

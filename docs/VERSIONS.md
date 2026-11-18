@@ -131,3 +131,15 @@ config files are `worldmind_arm_sweep.yaml` and `worldmind_geometry_diagnostic.y
 Windows, Webots execution, real IK, actuation, scored VALIDATION and pilot execution remain
 unverified. The `unverified-arm-sweep` hard veto is unchanged until an independent safety owner
 supplies a certificate.
+
+Local PROTO resolution, conservative static-scene/swept checks and dedicated read-only Webots
+geometry inspection (ADR-0055) add no dependency or version pin. They reuse Python 3.11 standard
+library, NumPy, PyYAML, Typer, ZeroMQ/msgpack and the in-repo Webots backend. The backend-only
+`inspect_geometry` RPC does not change `core/wire.py`; public `core/` interfaces and frozen evidence
+are unchanged. New packaged data files are
+`configs/worldmind_webots_geometry_inspection.yaml`, `configs/geometry/scene-collision-v1.yaml`,
+`configs/geometry/webots-proto-sources-v1.yaml` and 32 byte-pinned R2025a PROTO sources under
+`assets/webots/protos/r2025a/`. Linux inert checks pass; Windows, live Webots execution, real IK,
+actuation, scored VALIDATION and pilot execution remain unverified. Production still has
+`check_transition=None`, sweep status `blocked`, `certificate=None` and motion readiness
+`NOT_READY`.

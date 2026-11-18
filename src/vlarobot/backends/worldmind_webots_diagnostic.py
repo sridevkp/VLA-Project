@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Protocol
 
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.core.types import Action, ApplyResult, GroundTruth, Observation, ScenarioSpec
@@ -105,7 +105,11 @@ def dependency_availability(config: WebotsDiagnosticConfig) -> dict[str, bool]:
     }
 
 
-def _ping_payload(client: ReadOnlyBackendClient) -> dict[str, Any]:
+class _PingClient(Protocol):
+    def ping(self) -> dict[str, Any]: ...
+
+
+def _ping_payload(client: _PingClient) -> dict[str, Any]:
     """Return only the documented ping payload; never synthesize attestation fields."""
     envelope = client.ping()
     if not isinstance(envelope, Mapping):

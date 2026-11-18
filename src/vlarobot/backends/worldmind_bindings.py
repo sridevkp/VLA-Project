@@ -42,6 +42,7 @@ from vlarobot.backends.webots.config import (
 )
 from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
+from vlarobot.backends.webots.proto_sources import load_proto_source_manifest
 from vlarobot.backends.webots.urdf_registration import load_registration
 from vlarobot.core.types import (
     GripperCmd,
@@ -69,7 +70,7 @@ from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_chunk_adapter import ScriptedWaypoint
 from vlarobot.planning.verification import PlacementVerifier
 from vlarobot.vla.action_adapter import PoseSolution
-from vlarobot.world_model.arm_geometry import Capsule
+from vlarobot.world_model.arm_geometry import Capsule, StaticSceneGeometry
 from vlarobot.world_model.arm_sweep import (
     ArmSweepContract,
     IntermediateSweptArmCheck,
@@ -78,6 +79,7 @@ from vlarobot.world_model.arm_sweep import (
 )
 from vlarobot.world_model.kinematic import MemoizedForward, VelocityLimitedKinematics
 from vlarobot.world_model.rollout import AnalyticSurrogate, compose, rotate
+from vlarobot.world_model.scene_geometry import load_scene_collision_catalog
 
 CORRECTED_REGISTRATION_RELATIVE = Path("calibration") / "urdf-base-train-v1.yaml"
 CORRECTED_REGISTRATION_SHA256 = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
@@ -307,6 +309,12 @@ class ArmSweepConfig:
     substeps: int
     speed_bound_m_s: float
     certificate: ArmSweepCertificate | None
+    scene_catalog_path: Path | None = None
+    scene_catalog_sha256: str | None = None
+    proto_manifest_path: Path | None = None
+    proto_manifest_sha256: str | None = None
+    adaptive_speed_bound_m_s: float | None = None
+    max_adaptive_substeps: int = 4096
 
 
 _SWEEP_TOP_KEYS = frozenset({"schema_version", "status", "geometry", "contract", "certificate"})
@@ -351,6 +359,15 @@ _SWEEP_CONTRACT_KEYS = frozenset(
         "permitted_contact_objects",
     }
 )
+_SWEEP_OPTIONAL_GEOMETRY_KEYS = frozenset(
+    {
+        "scene_catalog",
+        "scene_catalog_sha256",
+        "proto_manifest",
+        "proto_manifest_sha256",
+    }
+)
+_SWEEP_OPTIONAL_CONTRACT_KEYS = frozenset({"adaptive_speed_bound_m_s", "max_adaptive_substeps"})
 _SWEEP_CERTIFICATE_KEYS = frozenset(
     {
         "id",
@@ -373,10 +390,17 @@ def _sweep_mapping(value: object, name: str) -> Mapping[str, object]:
     return value
 
 
-def _sweep_keys(value: Mapping[str, object], expected: frozenset[str], name: str) -> None:
-    if set(value) != expected:
+def _sweep_keys(
+    value: Mapping[str, object],
+    expected: frozenset[str],
+    name: str,
+    *,
+    optional: frozenset[str] = frozenset(),
+) -> None:
+    allowed = expected | optional
+    if not expected.issubset(value) or not set(value).issubset(allowed):
         missing = sorted(expected - set(value))
-        unexpected = sorted(set(value) - expected)
+        unexpected = sorted(set(value) - allowed)
         raise SweepGeometryError(f"{name} has missing={missing} and unexpected={unexpected}")
 
 
@@ -404,6 +428,33 @@ def _sweep_path(value: object, name: str, source: Path) -> Path:
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _sweep_optional_sha(value: object, name: str) -> str | None:
+    return None if value is None else _sweep_sha(value, name)
+
+
+def _sweep_optional_path(value: object, name: str, source: Path) -> Path | None:
+    return None if value is None else _sweep_path(value, name, source)
+
+
+def _sweep_optional_float(value: object, name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SweepGeometryError(f"{name} must be a finite positive number")
+    number = float(value)
+    if not math.isfinite(number) or number <= 0.0:
+        raise SweepGeometryError(f"{name} must be a finite positive number")
+    return number
+
+
+def _sweep_optional_int(value: object, name: str, default: int) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SweepGeometryError(f"{name} must be a positive integer")
+    return value
 
 
 def _sweep_string_set(value: object, name: str, *, required: bool = False) -> frozenset[str]:
@@ -519,6 +570,16 @@ def _sweep_contract_sha256(config: ArmSweepConfig) -> str:
             "permitted_contact_objects": sorted(config.permitted_contact_objects),
         },
     }
+    geometry_payload = payload["geometry"]
+    contract_payload = payload["contract"]
+    assert isinstance(geometry_payload, dict) and isinstance(contract_payload, dict)
+    if config.scene_catalog_sha256 is not None:
+        geometry_payload["scene_catalog_sha256"] = config.scene_catalog_sha256
+    if config.proto_manifest_sha256 is not None:
+        geometry_payload["proto_manifest_sha256"] = config.proto_manifest_sha256
+    if config.adaptive_speed_bound_m_s is not None:
+        contract_payload["adaptive_speed_bound_m_s"] = config.adaptive_speed_bound_m_s
+    contract_payload["max_adaptive_substeps"] = config.max_adaptive_substeps
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -625,7 +686,12 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
         raise SweepGeometryError("arm sweep status must be blocked or owner_approved")
 
     geometry = _sweep_mapping(root["geometry"], "geometry")
-    _sweep_keys(geometry, _SWEEP_GEOMETRY_KEYS, "geometry")
+    _sweep_keys(
+        geometry,
+        _SWEEP_GEOMETRY_KEYS,
+        "geometry",
+        optional=_SWEEP_OPTIONAL_GEOMETRY_KEYS,
+    )
     urdf_path = _sweep_path(geometry["urdf"], "geometry.urdf", source)
     registration_path = _sweep_path(geometry["registration"], "geometry.registration", source)
     robot_config_path = _sweep_path(geometry["robot_config"], "geometry.robot_config", source)
@@ -653,8 +719,48 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
     if registration_sha != CORRECTED_REGISTRATION_SHA256:
         raise SweepGeometryError("sweep contract must use the corrected URDF registration")
 
+    scene_path = _sweep_optional_path(
+        geometry.get("scene_catalog"), "geometry.scene_catalog", source
+    )
+    scene_sha = _sweep_optional_sha(
+        geometry.get("scene_catalog_sha256"), "geometry.scene_catalog_sha256"
+    )
+    proto_path = _sweep_optional_path(
+        geometry.get("proto_manifest"), "geometry.proto_manifest", source
+    )
+    proto_sha = _sweep_optional_sha(
+        geometry.get("proto_manifest_sha256"), "geometry.proto_manifest_sha256"
+    )
+    if (scene_path is None) != (scene_sha is None):
+        raise SweepGeometryError("scene catalog path and hash must be supplied together")
+    if (proto_path is None) != (proto_sha is None):
+        raise SweepGeometryError("PROTO manifest path and hash must be supplied together")
+    if scene_path is not None and scene_sha is not None:
+        if not scene_path.is_file() or _sha256_file(scene_path) != scene_sha:
+            raise SweepGeometryError(f"scene catalog hash mismatch or missing file: {scene_path}")
+        catalog = load_scene_collision_catalog(scene_path)
+        if (
+            catalog.hashes["world"] != world_sha
+            or catalog.hashes["registration"] != registration_sha
+            or catalog.geometry.catalog_sha256 != scene_sha
+        ):
+            raise SweepGeometryError("scene catalog is not pinned to the sweep world/registration")
+    if proto_path is not None and proto_sha is not None:
+        if not proto_path.is_file() or _sha256_file(proto_path) != proto_sha:
+            raise SweepGeometryError(f"PROTO manifest hash mismatch or missing file: {proto_path}")
+        load_proto_source_manifest(
+            proto_path,
+            world_path=world_path,
+            expected_world_sha256=world_sha,
+        )
+
     contract = _sweep_mapping(root["contract"], "contract")
-    _sweep_keys(contract, _SWEEP_CONTRACT_KEYS, "contract")
+    _sweep_keys(
+        contract,
+        _SWEEP_CONTRACT_KEYS,
+        "contract",
+        optional=_SWEEP_OPTIONAL_CONTRACT_KEYS,
+    )
     if contract["dt_source"] != ARM_SWEEP_DT_SOURCE:
         raise SweepGeometryError("sweep contract dt_source is not the pinned robot time step")
     if contract["speed_source"] != ARM_SWEEP_SPEED_SOURCE:
@@ -687,7 +793,19 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
     )
     if any(len(pair) != 2 for pair in pairs):
         raise SweepGeometryError("each adjacent pair must name exactly two collision capsules")
+    adaptive_speed = _sweep_optional_float(
+        contract.get("adaptive_speed_bound_m_s"), "contract.adaptive_speed_bound_m_s"
+    )
+    max_adaptive = _sweep_optional_int(
+        contract.get("max_adaptive_substeps"), "contract.max_adaptive_substeps", 4096
+    )
     speed = _urdf_reach_speed_bound(urdf_path, links)
+    if adaptive_speed is not None and not math.isclose(
+        adaptive_speed, speed, rel_tol=1e-12, abs_tol=0.0
+    ):
+        raise SweepGeometryError(
+            "adaptive speed bound must equal the pinned URDF point-speed certificate"
+        )
     base = ArmSweepConfig(
         source_path=source,
         status=status,
@@ -708,6 +826,12 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
         substeps=substeps,
         speed_bound_m_s=speed,
         certificate=None,
+        scene_catalog_path=scene_path,
+        scene_catalog_sha256=scene_sha,
+        proto_manifest_path=proto_path,
+        proto_manifest_sha256=proto_sha,
+        adaptive_speed_bound_m_s=adaptive_speed,
+        max_adaptive_substeps=max_adaptive,
     )
     certificate = _load_sweep_certificate(
         _sweep_mapping(root["certificate"], "certificate"),
@@ -718,6 +842,8 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
             "registration": registration_sha,
             "robot_config": robot_sha,
             "world": world_sha,
+            **({"scene_catalog": scene_sha} if scene_sha is not None else {}),
+            **({"proto_manifest": proto_sha} if proto_sha is not None else {}),
         },
     )
     if status == "owner_approved" and certificate is None:
@@ -739,6 +865,19 @@ def _build_configured_sweep_check(config: ArmSweepConfig) -> IntermediateSweptAr
         raise SweepGeometryError("owner_approved status is required for the arm-sweep callback")
     if config.certificate is None:
         raise SweepGeometryError("owner-reviewed swept-arm certificate is absent")
+    scene: StaticSceneGeometry | None = None
+    expected_base_pose_world: Pose3D | None = None
+    if config.scene_catalog_path is not None:
+        catalog = load_scene_collision_catalog(config.scene_catalog_path)
+        if catalog.geometry.catalog_sha256 != config.scene_catalog_sha256:
+            raise SweepGeometryError("scene catalog hash does not match the sweep contract")
+        if (
+            catalog.hashes["world"] != config.world_sha256
+            or catalog.hashes["registration"] != config.registration_sha256
+        ):
+            raise SweepGeometryError("scene catalog is not pinned to the sweep contract")
+        scene = catalog.geometry
+        expected_base_pose_world = catalog.expected_base_pose_world
     kinematics = corrected_kinematics()
     frames: dict[str, int] = {}
     for link in config.required_arm_links:
@@ -758,6 +897,10 @@ def _build_configured_sweep_check(config: ArmSweepConfig) -> IntermediateSweptAr
             for primitive in primitives[link]
         )
     )
+    if scene is not None and scene.gripper is not None:
+        if scene.gripper.name in required_links:
+            raise SweepGeometryError("gripper envelope name collides with a URDF capsule")
+        required_links = tuple(sorted((*required_links, scene.gripper.name)))
     if any(not pair.issubset(required_links) for pair in config.adjacent_pairs):
         raise SweepGeometryError("adjacent pair names must be present collision capsules")
     if not set(UNVERIFIED_ARM_LINKS).issubset(config.required_arm_links):
@@ -782,8 +925,15 @@ def _build_configured_sweep_check(config: ArmSweepConfig) -> IntermediateSweptAr
         margin_m=config.margin_m,
         substeps=config.substeps,
         permitted_contact_objects=config.permitted_contact_objects,
+        adaptive_speed_bound_m_s=config.adaptive_speed_bound_m_s,
+        max_adaptive_substeps=config.max_adaptive_substeps,
     )
-    return IntermediateSweptArmCheck(geometry, contract)
+    return IntermediateSweptArmCheck(
+        geometry,
+        contract,
+        scene=scene,
+        expected_base_pose_world=expected_base_pose_world,
+    )
 
 
 def build_reviewed_arm_sweep(config_path: Path) -> IntermediateSweptArmCheck:

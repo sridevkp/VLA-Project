@@ -1,0 +1,207 @@
+schema_version: 1
+status: diagnostic_not_certified
+webots_version: R2025a
+provenance:
+  cache_log: /home/tj330/.cache/Cyberbotics/Webots/assets/log.txt
+  cache_log_sha256: ef8618147fe245fc29763f71cc5289ad020f13faf6985d77840e3376af2a4fc5
+  webots_version_file: /home/tj330/.local/opt/webots/resources/version.txt
+  webots_version_sha256: 911e1e72cf088d19b0b6baca8be6aa7d6a48fd2ba6a18c731af2274d79d22553
+  method: byte-for-byte copy from Webots R2025a asset cache; no geometry substitution
+scene_catalog: ../../configs/geometry/scene-collision-v1.yaml
+protos:
+- name: TexturedBackground
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto
+  asset: ../../assets/webots/protos/r2025a/TexturedBackground.proto
+  sha256: ca0a23da938b24a6e363c7baf4184087292af115986a3c072f5cd792825320e4
+  relevance: unrelated
+  reason: background appearance only; no collision role
+- name: Floor
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto
+  asset: ../../assets/webots/protos/r2025a/Floor.proto
+  sha256: e5dc2b8dc43a13747299861d90fa000a2d2dcccdcc7f4cea4d6f6c5642a99fc9
+  relevance: relevant_collision
+  reason: floor collision Plane boundary
+- name: ThreadMetalPlate
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/ThreadMetalPlate.proto
+  asset: ../../assets/webots/protos/r2025a/ThreadMetalPlate.proto
+  sha256: a09393c7d6eefa5f033fe478dcb2b416c3f49274c42ec07ce725f643a5522512
+  relevance: unrelated
+  reason: floor appearance only; geometry comes from Floor.proto
+- name: Door
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/apartment_structure/protos/Door.proto
+  asset: ../../assets/webots/protos/r2025a/Door.proto
+  sha256: d2f02a8e56cce08746a223128a5f64a2f2ef3794120cf19ade7d38e1ff82600f
+  relevance: relevant_obstacle
+  reason: instantiated scene obstacle with bounding geometry
+- name: GlossyPaint
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/GlossyPaint.proto
+  asset: ../../assets/webots/protos/r2025a/GlossyPaint.proto
+  sha256: ffe28363cb674d9d3d10861e8df9304e78c25154b146a5902c46b7b7b7aa7b38
+  relevance: unrelated
+  reason: appearance only
+- name: OilBarrel
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/obstacles/protos/OilBarrel.proto
+  asset: ../../assets/webots/protos/r2025a/OilBarrel.proto
+  sha256: 5479a019876e6aa1fe56c25ac38b698cec9abc364594982fd44fbf822f1b4643
+  relevance: relevant_obstacle
+  reason: instantiated obstacle near scene
+- name: Darwin-op
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/robotis/darwin-op/protos/Darwin-op.proto
+  asset: ../../assets/webots/protos/r2025a/Darwin-op.proto
+  sha256: 311e499f1e3db55baf3bef001cd7972d09864105c44afe11a46c8a23c88b3b75
+  relevance: relevant_obstacle
+  reason: instantiated robot-shaped obstacle
+- name: AiboErs7
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/sony/aibo/protos/AiboErs7.proto
+  asset: ../../assets/webots/protos/r2025a/AiboErs7.proto
+  sha256: 9af0ce633503d234e149e2ba6bf6ae4783298a55d02b347727793b59b48414ef
+  relevance: relevant_obstacle
+  reason: instantiated robot-shaped obstacle
+- name: LJoint
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/pipes/protos/LJoint.proto
+  asset: ../../assets/webots/protos/r2025a/LJoint.proto
+  sha256: 722d24386065adf09090d3a85d3edcc13a855b637ef2d11c9999ab0453ad0d82
+  relevance: relevant_obstacle
+  reason: instantiated pipe obstacle
+- name: Wrench
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/tools/protos/Wrench.proto
+  asset: ../../assets/webots/protos/r2025a/Wrench.proto
+  sha256: b20d966a89cee211a55dec53cafb8d755832ac919a85353fc77b39926f0fa50e
+  relevance: relevant_obstacle
+  reason: instantiated tool obstacle
+- name: Hammer
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/tools/protos/Hammer.proto
+  asset: ../../assets/webots/protos/r2025a/Hammer.proto
+  sha256: 9672241772c97d74a21244ddaec36ad5f01677fc708d469b8938d8786698b736
+  relevance: relevant_obstacle
+  reason: instantiated tool obstacle
+- name: WoodenPallet
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/pallet/protos/WoodenPallet.proto
+  asset: ../../assets/webots/protos/r2025a/WoodenPallet.proto
+  sha256: 5d529c650f3afbce8c15233482081769c1f972a1a8c1d54299d670a5e584bcd0
+  relevance: relevant_obstacle
+  reason: instantiated pallet obstacle
+- name: Table
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/tables/protos/Table.proto
+  asset: ../../assets/webots/protos/r2025a/Table.proto
+  sha256: d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb
+  relevance: relevant_collision
+  reason: table nested solids define the support surface
+- name: CardboardBox
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto
+  asset: ../../assets/webots/protos/r2025a/CardboardBox.proto
+  sha256: 697c1aa1c48ad64bb3d4f5625cc211da13f4400ed58a099e2cbf18ca1873c971
+  relevance: relevant_obstacle
+  reason: instantiated container obstacle
+- name: PaintBucket
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/tools/protos/PaintBucket.proto
+  asset: ../../assets/webots/protos/r2025a/PaintBucket.proto
+  sha256: 30567b3594fdc9d37b3a5a830aaed174fb370ab4615f479c6fbb944d1774e74c
+  relevance: relevant_obstacle
+  reason: instantiated tool obstacle
+- name: Screwdriver
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/tools/protos/Screwdriver.proto
+  asset: ../../assets/webots/protos/r2025a/Screwdriver.proto
+  sha256: 75145f54d0e3b7ad108aa127033355fc84371406d9817f55fb1f22a94cc0c80a
+  relevance: relevant_obstacle
+  reason: instantiated tool obstacle
+- name: WoodenBox
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto
+  asset: ../../assets/webots/protos/r2025a/WoodenBox.proto
+  sha256: 418d0209031249a47a5b12f359d8a8e4078d9f021762fdce846f2d07f8b6687c
+  relevance: relevant_obstacle
+  reason: instantiated container obstacle
+- name: LeverValve
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/valves/protos/LeverValve.proto
+  asset: ../../assets/webots/protos/r2025a/LeverValve.proto
+  sha256: 45b6df4e9c1415b7e8749a528e4aeb8f88073bb1cba8a0b5385d3e583fa208cb
+  relevance: relevant_obstacle
+  reason: instantiated valve obstacle
+- name: LargeValve
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/valves/protos/LargeValve.proto
+  asset: ../../assets/webots/protos/r2025a/LargeValve.proto
+  sha256: e84271b263091f9f085a25a45021607fed0c6b0a87e5ebb3da52892c6fbba3bf
+  relevance: relevant_obstacle
+  reason: instantiated valve obstacle
+- name: PipeSection
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/pipes/protos/PipeSection.proto
+  asset: ../../assets/webots/protos/r2025a/PipeSection.proto
+  sha256: c54a024364046169e67790688e68b70446f5f6576ed83dc7e6c946d0415ae71a
+  relevance: relevant_obstacle
+  reason: instantiated pipe obstacle
+- name: SmallValve
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/valves/protos/SmallValve.proto
+  asset: ../../assets/webots/protos/r2025a/SmallValve.proto
+  sha256: d77b058dcf819ffd7a56c740f85c712a31f19e5f266c5c21a6ab2b985249f403
+  relevance: relevant_obstacle
+  reason: instantiated valve obstacle
+- name: Cabinet
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/cabinet/protos/Cabinet.proto
+  asset: ../../assets/webots/protos/r2025a/Cabinet.proto
+  sha256: 7dabbc1e32eb8c4cf67ffa543ae6bd547f816988d51a510b2daaf8c40bb46e23
+  relevance: relevant_obstacle
+  reason: instantiated cabinet obstacle
+- name: EmergencyExitSign
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/hospital/protos/EmergencyExitSign.proto
+  asset: ../../assets/webots/protos/r2025a/EmergencyExitSign.proto
+  sha256: b02638bfeef556334da5e850f3f15dedef8feca3518c4d09701e7a944fec99ae
+  relevance: relevant_obstacle
+  reason: instantiated scene obstacle
+- name: StraightStairsRail
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/stairs/protos/StraightStairsRail.proto
+  asset: ../../assets/webots/protos/r2025a/StraightStairsRail.proto
+  sha256: 3aa0e913834f8d5fa2a8ddf755bf6ca3c56ea16237a48ef91d853043b2ce4c35
+  relevance: relevant_obstacle
+  reason: instantiated scene obstacle
+- name: Tiago
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago/protos/Tiago.proto
+  asset: ../../assets/webots/protos/r2025a/Tiago.proto
+  sha256: 5306bc3b6517b8196aa00f8f523852a2386a1303d47d66946ad45083d08d8065
+  relevance: relevant_collision
+  reason: robot root; declares selfCollision FALSE
+- name: Can
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/drinks/protos/Can.proto
+  asset: ../../assets/webots/protos/r2025a/Can.proto
+  sha256: d7dfa3fa8665520f4d00bc9044233b95b57218db6c7789d21dd1a194a1fe7593
+  relevance: relevant_grasp
+  reason: carried-object cylinder envelope and contact object
+- name: Apple
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/fruits/protos/Apple.proto
+  asset: ../../assets/webots/protos/r2025a/Apple.proto
+  sha256: 86535a2243d9ee303e57292c134d4fdf4e24f1ee9fd34d536c4da208781e3c2e
+  relevance: relevant_obstacle
+  reason: instantiated fruit obstacle
+nested_sources:
+- name: TiagoBody
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoBody.proto
+  asset: ../../assets/webots/protos/r2025a/TiagoBody.proto
+  sha256: adeede86539f936c9627741d3597f2b40a0f43907370ebcfd5cc4fae29bd8974
+  relevance: relevant_nested
+  reason: resolved dependency of robot/table collision geometry
+- name: TiagoBase
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_base/protos/TiagoBase.proto
+  asset: ../../assets/webots/protos/r2025a/TiagoBase.proto
+  sha256: 75415c02c46265c811632f33c5f9e0999efc40965ef9b3fd5cb7fc23e06faa7b
+  relevance: relevant_nested
+  reason: resolved dependency of robot/table collision geometry
+- name: TiagoFrontArm
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoFrontArm.proto
+  asset: ../../assets/webots/protos/r2025a/TiagoFrontArm.proto
+  sha256: 4d606ab949b324a3d13f702b6f642786cab602f2f99a0faba4217a4cf0dcdb10
+  relevance: relevant_nested
+  reason: resolved dependency of robot/table collision geometry
+- name: TiagoGripper
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoGripper.proto
+  asset: ../../assets/webots/protos/r2025a/TiagoGripper.proto
+  sha256: 2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9
+  relevance: relevant_nested
+  reason: resolved dependency of robot/table collision geometry
+- name: SolidBox
+  url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto
+  asset: ../../assets/webots/protos/r2025a/SolidBox.proto
+  sha256: f9e18612ce325bc7abfd2d94cbd1c391a244f54ce5a2789a97fd1f901dc0dfba
+  relevance: relevant_nested
+  reason: resolved dependency of robot/table collision geometry
+unresolved_forwarded_geometry:
+- PipeSection
+- StraightStairsRail

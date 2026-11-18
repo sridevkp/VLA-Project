@@ -19,6 +19,7 @@ import numpy as np
 import yaml
 
 from vlarobot.backends.webots.proto_sources import load_proto_source_manifest
+from vlarobot.core.types import Pose3D
 from vlarobot.eval.worldmind_webots_diagnostic import (
     AUTHORITATIVE_REPORT_SHA256,
     DiagnosticSnapshot,
@@ -334,7 +335,79 @@ def _pose_matrix(value: object, name: str) -> np.ndarray | None:
     rotation = matrix[:3, :3]
     if not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-8, rtol=0):
         return None
+    if not math.isclose(float(np.linalg.det(rotation)), 1.0, rel_tol=0.0, abs_tol=1e-8):
+        return None
     return matrix
+
+
+def _pose4(rotation: object, translation: object) -> np.ndarray:
+    matrix = np.eye(4, dtype=float)
+    matrix[:3, :3] = np.asarray(rotation, dtype=float).reshape(3, 3)
+    matrix[:3, 3] = np.asarray(translation, dtype=float).reshape(3)
+    return matrix
+
+
+def pose3d_to_matrix(pose: Pose3D | None) -> np.ndarray | None:
+    """Convert an observed xyzw ``Pose3D`` to a finite rigid transform, or None if invalid."""
+    if pose is None:
+        return None
+    try:
+        position = pose.position.as_array().reshape(3)
+        orientation = np.asarray(pose.orientation, dtype=float).reshape(4)
+    except Exception:
+        return None
+    if not np.isfinite(position).all() or not np.isfinite(orientation).all():
+        return None
+    norm = float(np.linalg.norm(orientation))
+    if not math.isclose(norm, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        return None
+    x, y, z, w = (float(value) for value in orientation)
+    rotation = np.asarray(
+        [
+            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
+            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
+            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+        ],
+        dtype=float,
+    )
+    matrix = _pose4(rotation, position)
+    return _pose_matrix(matrix.reshape(16), "T_world_base_live")
+
+
+def _snapshot_live_base(
+    snapshot: GeometryInspectionSnapshot,
+) -> tuple[np.ndarray | None, str | None]:
+    observation = getattr(snapshot, "observation", None)
+    robot = getattr(observation, "robot", None) if observation is not None else None
+    pose = getattr(robot, "base_pose_world", None) if robot is not None else None
+    matrix = pose3d_to_matrix(pose)
+    if matrix is None:
+        return None, "observed live robot-base pose is unavailable for runtime base comparison"
+    return matrix, None
+
+
+def _derive_live_base_expectation(
+    expected: Mapping[str, object], T_world_base_live: np.ndarray
+) -> Mapping[str, object] | None:
+    world_translation = _number_vector(
+        expected.get("world_translation_m"), 3, "world_translation_m"
+    )
+    world_rotation = expected.get("world_rotation_matrix")
+    if world_translation is None or world_rotation is None:
+        return None
+    try:
+        T_world_target = _pose4(
+            np.asarray(world_rotation, dtype=float).reshape(3, 3), world_translation
+        )
+        T_base_live = np.linalg.inv(T_world_base_live) @ T_world_target
+    except Exception:
+        return None
+    return {
+        "base_translation_m": tuple(float(value) for value in T_base_live[:3, 3]),
+        "base_rotation_matrix": [row[:] for row in T_base_live[:3, :3].tolist()],
+        "T_world_base_live": [row[:] for row in T_world_base_live.tolist()],
+        "derivation": "T_BT = inverse(T_WB_live_observed) @ T_WT_pinned_source",
+    }
 
 
 def _rotation_angle(observed: np.ndarray, expected: np.ndarray) -> float | None:
@@ -445,16 +518,50 @@ def _table_check(
     }
 
 
+def _append_rotation_check(
+    checks: list[dict[str, object]],
+    name: str,
+    observed_pose: np.ndarray | None,
+    expected_rotation: object,
+    tolerance: float,
+) -> None:
+    if observed_pose is None or expected_rotation is None:
+        checks.append({"name": name, "matched": False, "reason": "missing observation"})
+        return
+    try:
+        expected_matrix = np.asarray(expected_rotation, dtype=float).reshape(3, 3)
+    except Exception:
+        checks.append({"name": name, "matched": False, "reason": "invalid rotation"})
+        return
+    angle = _rotation_angle(observed_pose, expected_matrix)
+    if angle is None:
+        checks.append({"name": name, "matched": False, "reason": "invalid rotation"})
+    else:
+        checks.append(
+            {
+                "name": name,
+                "matched": bool(angle <= tolerance),
+                "metric": "geodesic",
+                "unit": "rad",
+                "tolerance": tolerance,
+                "angle": angle,
+            }
+        )
+
+
 def _reconcile_table_row(
     config: GeometryInspectionConfig,
     row: Mapping[str, object],
     expected: Mapping[str, object],
     descriptor: Mapping[str, object],
     source_protos: Mapping[str, dict[str, str]],
+    live_expected: Mapping[str, object] | None = None,
+    live_base_reason: str | None = None,
 ) -> tuple[dict[str, object], list[str]]:
     """Compare one raw runtime row with source-derived expectations; never backfill observations."""
     reasons: list[str] = []
     checks: list[dict[str, object]] = []
+    audit_checks: list[dict[str, object]] = []
     source_name = row.get("source_name")
     if row.get("source_protos") != descriptor.get("source_protos"):
         reasons.append("source PROTO provenance differs from the pinned descriptor")
@@ -591,9 +698,44 @@ def _reconcile_table_row(
             unit="m",
         )
     )
+    _append_rotation_check(
+        checks,
+        "T_world_rotation_rad",
+        world_pose,
+        expected.get("world_rotation_matrix"),
+        config.table_targets.transform_rotation_tolerance_rad,
+    )
+
+    if live_expected is not None:
+        primary_base_expected = live_expected
+        base_comparison_source = "observed_live_base"
+    else:
+        primary_base_expected = expected
+        base_comparison_source = "pinned_initial_base_fallback"
+        if live_base_reason:
+            reasons.append(live_base_reason)
+
     checks.append(
         _table_check(
             "T_base_translation_m",
+            None if base_pose is None else base_pose[:3, 3],
+            primary_base_expected.get("base_translation_m"),
+            config.table_targets.transform_translation_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+    _append_rotation_check(
+        checks,
+        "T_base_rotation_rad",
+        base_pose,
+        primary_base_expected.get("base_rotation_matrix"),
+        config.table_targets.transform_rotation_tolerance_rad,
+    )
+
+    audit_checks.append(
+        _table_check(
+            "audit_pinned_T_base_translation_m",
             None if base_pose is None else base_pose[:3, 3],
             expected.get("base_translation_m"),
             config.table_targets.transform_translation_tolerance_m,
@@ -601,27 +743,31 @@ def _reconcile_table_row(
             unit="m",
         )
     )
-    for name, observed_pose, key in (
-        ("T_world_rotation_rad", world_pose, "world_rotation_matrix"),
-        ("T_base_rotation_rad", base_pose, "base_rotation_matrix"),
-    ):
-        if observed_pose is None or expected.get(key) is None:
-            checks.append({"name": name, "matched": False, "reason": "missing observation"})
-            continue
-        angle = _rotation_angle(observed_pose, np.asarray(expected[key], dtype=float).reshape(3, 3))
-        if angle is None:
-            checks.append({"name": name, "matched": False, "reason": "invalid rotation"})
-        else:
-            checks.append(
-                {
-                    "name": name,
-                    "matched": bool(angle <= config.table_targets.transform_rotation_tolerance_rad),
-                    "metric": "geodesic",
-                    "unit": "rad",
-                    "tolerance": config.table_targets.transform_rotation_tolerance_rad,
-                    "angle": angle,
-                }
+    _append_rotation_check(
+        audit_checks,
+        "audit_pinned_T_base_rotation_rad",
+        base_pose,
+        expected.get("base_rotation_matrix"),
+        config.table_targets.transform_rotation_tolerance_rad,
+    )
+    if live_expected is not None:
+        audit_checks.append(
+            _table_check(
+                "audit_live_T_base_translation_m",
+                None if base_pose is None else base_pose[:3, 3],
+                live_expected.get("base_translation_m"),
+                config.table_targets.transform_translation_tolerance_m,
+                metric="max_abs",
+                unit="m",
             )
+        )
+        _append_rotation_check(
+            audit_checks,
+            "audit_live_T_base_rotation_rad",
+            base_pose,
+            live_expected.get("base_rotation_matrix"),
+            config.table_targets.transform_rotation_tolerance_rad,
+        )
 
     failed = [
         f"{check['name']}: {check.get('reason', check.get('max_abs_error', check.get('angle')))}"
@@ -664,6 +810,20 @@ def _reconcile_table_row(
         "evaluated": dict(evaluated),
         "transforms": dict(transforms),
         "expected": dict(expected),
+        "expected_base_comparison": dict(primary_base_expected),
+        "base_comparison": {
+            "primary": base_comparison_source,
+            "live_expected_available": live_expected is not None,
+            "pinned_initial_base_preserved": True,
+        },
+        "audit_comparisons": {
+            "pinned_initial_base": {
+                "translation_m": expected.get("base_translation_m"),
+                "rotation_matrix": expected.get("base_rotation_matrix"),
+            },
+            "observed_live_base": live_expected,
+            "checks": audit_checks,
+        },
         "source_provenance": {
             "world_sha256": config.diagnostic.world_sha256,
             "table_proto": source_protos.get("Table"),
@@ -681,7 +841,14 @@ def _reconcile_table_row(
 def reconcile_table_targets(
     config: GeometryInspectionConfig, snapshot: GeometryInspectionSnapshot
 ) -> dict[str, object]:
-    """Reconcile raw supervisor observations with pinned source geometry, fail-closed."""
+    """Reconcile raw supervisor observations with pinned source geometry, fail-closed.
+
+    Observed world-frame geometry is compared against pinned source geometry. Observed
+    base-frame geometry is compared against the expected base-relative pose derived from
+    pinned world geometry and the observed live robot-base pose in the same snapshot
+    (``T_BT = inverse(T_WB_live) @ T_WT``). The original pinned-initial-base comparison
+    is retained for every target as an audit diagnostic and never determines verdict.
+    """
     expected_geometry = _expected_table_geometry(config)
     descriptor = table_target_descriptor(config)
     source_protos = table_source_provenance(config)
@@ -713,6 +880,11 @@ def reconcile_table_targets(
             blockers.append("table target observation errors are invalid")
         else:
             blockers.extend(f"table probe error: {item}" for item in raw_errors)
+
+    T_world_base_live, live_base_reason = _snapshot_live_base(snapshot)
+    live_base_available = T_world_base_live is not None
+    if not live_base_available and live_base_reason:
+        blockers.append(live_base_reason)
 
     targets: list[dict[str, object]] = []
     for name in config.table_targets.source_names:
@@ -753,8 +925,20 @@ def reconcile_table_targets(
             )
             blockers.append(f"table target {name}: Unsupported (incomplete runtime row)")
             continue
+        expected_box = expected_boxes[name]
+        live_expected = (
+            _derive_live_base_expectation(expected_box, T_world_base_live)
+            if T_world_base_live is not None
+            else None
+        )
         detail, row_blockers = _reconcile_table_row(
-            config, row, expected_boxes[name], descriptor, source_protos
+            config,
+            row,
+            expected_box,
+            descriptor,
+            source_protos,
+            live_expected=live_expected,
+            live_base_reason=live_base_reason,
         )
         targets.append(detail)
         blockers.extend(row_blockers)
@@ -773,7 +957,16 @@ def reconcile_table_targets(
             "table_proto": source_protos["Table"],
             "solid_box_proto": source_protos["SolidBox"],
             "scene_catalog_sha256": config.scene_catalog_sha256,
-            "method": "pinned source arithmetic compared with raw runtime observations only",
+            "method": "pinned source world geometry compared with raw runtime observations; "
+            "runtime base comparison uses the observed live robot-base pose from the snapshot",
+        },
+        "base_comparison": {
+            "primary": "observed_live_base" if live_base_available else "unavailable",
+            "audit_pinned_initial_base_preserved": True,
+            "observed_live_base_available": live_base_available,
+            "T_world_base_live_observed": (
+                [row[:] for row in T_world_base_live.tolist()] if live_base_available else None
+            ),
         },
         "tolerances": {
             "translation_tolerance_m": config.table_targets.translation_tolerance_m,
@@ -1113,6 +1306,7 @@ __all__ = [
     "finalize_geometry_inspection",
     "load_geometry_inspection_config",
     "normalize_webots_sfbool",
+    "pose3d_to_matrix",
     "preflight_geometry_inspection",
     "reconcile_table_targets",
     "table_source_provenance",

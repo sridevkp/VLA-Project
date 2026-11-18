@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -18,6 +19,7 @@ from vlarobot.backends.webots.geometry_probe import inspect_table_targets
 from vlarobot.backends.worldmind_webots_geometry_inspection import (
     ReadOnlyGeometryBackendClient,
 )
+from vlarobot.core.types import Pose3D, Vec3
 from vlarobot.eval.worldmind_webots_geometry_inspection import (
     GeometryInspectionConfig,
     GeometryInspectionSnapshot,
@@ -26,6 +28,7 @@ from vlarobot.eval.worldmind_webots_geometry_inspection import (
     reconcile_table_targets,
     table_target_descriptor,
 )
+from vlarobot.world_model.scene_geometry import load_scene_collision_catalog, matrix_quaternion
 
 CONFIG_PATH = (
     Path(__file__).resolve().parents[1] / "configs" / "worldmind_webots_geometry_inspection.yaml"
@@ -103,10 +106,24 @@ def _valid_observation(config: GeometryInspectionConfig) -> dict[str, Any]:
     }
 
 
-def _snapshot(config: GeometryInspectionConfig, observation: object) -> GeometryInspectionSnapshot:
+def _snapshot(
+    config: GeometryInspectionConfig,
+    observation: object,
+    *,
+    robot_base_pose_world: object = "pinned",
+) -> GeometryInspectionSnapshot:
+    if robot_base_pose_world == "pinned":
+        catalog = load_scene_collision_catalog(config.scene_catalog_path)
+        robot_base_pose_world = catalog.expected_base_pose_world
+    robot_observation = None
+    if robot_base_pose_world is not None or robot_base_pose_world == "pinned":
+        robot_observation = SimpleNamespace(
+            t=0.0,
+            robot=SimpleNamespace(base_pose_world=robot_base_pose_world),
+        )
     return GeometryInspectionSnapshot(  # type: ignore[arg-type]
         ping={},
-        observation=None,
+        observation=robot_observation,
         ground_truth=None,
         identity={},
         captured_at_utc="2026-11-18T00:00:00+00:00",
@@ -594,3 +611,192 @@ def test_capture_rejects_descriptor_that_carries_expected_geometry():
     bad["expected_geometry"] = {"foot 1": {"size_m": [1, 1, 1]}}
     with pytest.raises(ValueError, match="unexpected keys"):
         inspect_table_targets(_fake_scene(config), bad, _Node(100, "Tiago", "Robot"))
+
+
+def test_runtime_reconciliation_uses_observed_live_base_and_preserves_pinned_audit():
+    config = _config()
+    expected = _expected_table_geometry(config)
+    observation = _valid_observation(config)
+    catalog = load_scene_collision_catalog(config.scene_catalog_path)
+    T_world_base_pinned = np.asarray(catalog.T_world_base, dtype=float)
+    T_world_base_live = T_world_base_pinned.copy()
+    T_world_base_live[:3, 3] += np.asarray([0.0012, -0.0008, 0.0003], dtype=float)
+    live_pose = Pose3D(
+        Vec3(*map(float, T_world_base_live[:3, 3])),
+        matrix_quaternion(T_world_base_live),
+    )
+    for row, box in zip(observation["rows"], expected["boxes"], strict=True):
+        T_world_target = np.eye(4)
+        T_world_target[:3, :3] = np.asarray(box["world_rotation_matrix"], dtype=float)
+        T_world_target[:3, 3] = np.asarray(box["world_translation_m"], dtype=float)
+        T_base_live = np.linalg.inv(T_world_base_live) @ T_world_target
+        row["transforms"]["T_base"] = _pose16(T_base_live[:3, :3], T_base_live[:3, 3])
+
+    report = _reconcile_with_live_base(config, observation, live_pose)
+    assert report["runtime_grounded"] is True
+    assert report["summary"] == {
+        "Matched": 5,
+        "Mismatched": 0,
+        "Missing": 0,
+        "Unsupported": 0,
+    }
+    assert report["blockers"] == []
+    assert report["base_comparison"]["primary"] == "observed_live_base"
+    assert report["base_comparison"]["observed_live_base_available"] is True
+    assert report["base_comparison"]["audit_pinned_initial_base_preserved"] is True
+    for name in config.table_targets.source_names:
+        target = _target(report, name)
+        assert target["verdict"] == "Matched"
+        assert target["base_comparison"]["primary"] == "observed_live_base"
+        audit = target["audit_comparisons"]["checks"]
+        pinned_t = next(
+            item for item in audit if item["name"] == "audit_pinned_T_base_translation_m"
+        )
+        pinned_r = next(
+            item for item in audit if item["name"] == "audit_pinned_T_base_rotation_rad"
+        )
+        live_t = next(item for item in audit if item["name"] == "audit_live_T_base_translation_m")
+        live_r = next(item for item in audit if item["name"] == "audit_live_T_base_rotation_rad")
+        assert pinned_t["matched"] is False or pinned_r["matched"] is False
+        assert live_t["matched"] is True
+        assert live_r["matched"] is True
+
+
+def _reconcile_with_live_base(
+    config: GeometryInspectionConfig, observation: object, live_base_pose: object
+) -> dict[str, object]:
+    report = reconcile_table_targets(
+        config, _snapshot(config, observation, robot_base_pose_world=live_base_pose)
+    )
+    assert isinstance(report, dict)
+    return report
+
+
+def test_missing_live_base_pose_blocks_runtime_reconciliation():
+    config = _config()
+    report = reconcile_table_targets(
+        config, _snapshot(config, _valid_observation(config), robot_base_pose_world=None)
+    )
+    assert report["runtime_grounded"] is False
+    assert report["base_comparison"]["observed_live_base_available"] is False
+    assert report["base_comparison"]["primary"] == "unavailable"
+    assert any("live robot-base pose is unavailable" in str(item) for item in report["blockers"])
+    assert all(target["verdict"] == "Mismatched" for target in report["targets"])
+    assert all(
+        target["base_comparison"]["primary"] == "pinned_initial_base_fallback"
+        for target in report["targets"]
+    )
+
+
+def test_finalize_geometry_inspection_uses_live_base_runtime_reconciliation(tmp_path: Path):
+    from vlarobot.eval.worldmind_webots_geometry_inspection import (
+        finalize_geometry_inspection,
+        preflight_geometry_inspection,
+    )
+
+    config = _config()
+    expected = _expected_table_geometry(config)
+    observation = _valid_observation(config)
+    catalog = load_scene_collision_catalog(config.scene_catalog_path)
+    T_world_base_live = np.asarray(catalog.T_world_base, dtype=float).copy()
+    T_world_base_live[:3, 3] += np.asarray([0.0007, 0.0006, -0.0002], dtype=float)
+    for row, box in zip(observation["rows"], expected["boxes"], strict=True):
+        T_world_target = np.eye(4)
+        T_world_target[:3, :3] = np.asarray(box["world_rotation_matrix"], dtype=float)
+        T_world_target[:3, 3] = np.asarray(box["world_translation_m"], dtype=float)
+        T_base_live = np.linalg.inv(T_world_base_live) @ T_world_target
+        row["transforms"]["T_base"] = _pose16(T_base_live[:3, :3], T_base_live[:3, 3])
+    live_pose = Pose3D(
+        Vec3(*map(float, T_world_base_live[:3, 3])),
+        matrix_quaternion(T_world_base_live),
+    )
+    ee_pose = Pose3D(Vec3(0.5, 0.0, 0.8), (0.0, 0.0, 0.0, 1.0))
+    observation_payload = SimpleNamespace(
+        t=0.0,
+        robot=SimpleNamespace(
+            base_pose_world=live_pose,
+            joint_pos={},
+            joint_vel={},
+            ee_pose=ee_pose,
+            gripper_opening=0.0,
+        ),
+    )
+    snapshot = GeometryInspectionSnapshot(  # type: ignore[arg-type]
+        ping={
+            "endpoint": "tcp://127.0.0.1:5555",
+            "session_id": None,
+            "world_sha256": config.diagnostic.world_sha256,
+        },
+        observation=observation_payload,
+        ground_truth=SimpleNamespace(object_poses={}),
+        identity={
+            "robot_def": config.diagnostic.robot_identity,
+            "robot_def_cross_checked": True,
+            "physics_step_count": 0,
+            "webots_version": "R2025a",
+        },
+        captured_at_utc="2026-11-18T00:00:00+00:00",
+        age_s=0.0,
+        dependency_availability={
+            "backend": True,
+            "safety": True,
+            "verification": True,
+            "pose_solver": True,
+            "webots": True,
+        },
+        call_counts={
+            name: 0
+            for name in (
+                "ping",
+                "inspect_geometry",
+                "apply",
+                "step",
+                "reset",
+                "export_kinematics",
+                "inspect",
+                "get_ground_truth",
+            )
+        },
+        launch_attestation={
+            "reported_version": "R2025a",
+            "verified_executable_version_pair": True,
+            "process_identity_verified": True,
+        },
+        geometry={
+            "status": "MEASURED live expanded boundingObject export",
+            "robot_id": 100,
+            "self_collision_enabled": False,
+            "sim_time_s": 0.032,
+            "objects": [
+                {
+                    "id": 1,
+                    "name": config.diagnostic.robot_identity,
+                    "def": config.diagnostic.robot_identity,
+                    "type": "Robot",
+                    "T_base_owner": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                    "T_world_owner": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                    "shapes": [],
+                }
+            ],
+            "devices": [],
+            "joint_positions": {},
+            "motor_velocity_settings": [],
+            "scene": (
+                "development copy of factory initial pose; no TRAIN/VALIDATION/TEST task rollout"
+            ),
+            "unsupported_shapes": [],
+            "motor_commands_sent": 0,
+            "table_targets": observation,
+        },
+    )
+    preflight = preflight_geometry_inspection(config)
+    report, _state, _provenance, geometry = finalize_geometry_inspection(
+        config, preflight, snapshot
+    )
+    table = geometry["table_target_reconciliation"]
+    assert table["runtime_grounded"] is True
+    assert table["base_comparison"]["primary"] == "observed_live_base"
+    assert table["base_comparison"]["audit_pinned_initial_base_preserved"] is True
+    assert report["table_transform_grounded"] is True
+    assert report["table_transform_verification"] == "runtime_grounded"
+    assert "unverified-runtime-table-transform" not in report["motion_blockers"]

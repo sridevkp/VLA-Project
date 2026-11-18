@@ -12,7 +12,9 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+from time import time
 from typing import Literal, cast
 
 import yaml
@@ -25,6 +27,8 @@ WEBOTS_DIAGNOSTIC_MODE = "read_only_inspection"
 FROZEN_DIAGNOSTIC_SPLIT = "validation"
 FROZEN_STATE_SOURCE = "oracle"
 AUTHORITATIVE_REPORT_SHA256 = "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+CAPTURE_TIMESTAMP_FUTURE_SKEW_MAX_S = 1.0
+CAPTURE_TIMESTAMP_CONSISTENCY_MAX_S = 1.0
 
 _TOP_LEVEL_KEYS = frozenset(
     {
@@ -139,6 +143,8 @@ class DiagnosticSnapshot:
     dependency_availability: Mapping[str, bool]
     call_counts: Mapping[str, int]
     launch_attestation: Mapping[str, object] = field(default_factory=dict)
+    capture_wall_time_s: float | None = None
+    capture_timestamp_blockers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -362,16 +368,26 @@ def _finite_pose(pose: Pose3D) -> bool:
     return all(math.isfinite(float(value)) for value in values)
 
 
+def observation_age_at_consumption(
+    snapshot: DiagnosticSnapshot, *, now_wall_time_s: float | None = None
+) -> float:
+    """Observation age derived from actual capture time at validation/consumption."""
+    if snapshot.capture_timestamp_blockers or snapshot.capture_wall_time_s is None:
+        return float("inf")
+    return capture_age_s(snapshot.capture_wall_time_s, now_wall_time_s=now_wall_time_s)
+
+
 def _observation_blockers(
     config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot
 ) -> list[str]:
-    blockers: list[str] = []
+    blockers: list[str] = list(snapshot.capture_timestamp_blockers)
     observation = snapshot.observation
     if not math.isfinite(observation.t) or observation.t < 0.0:
         blockers.append("observation timestamp is not finite and nonnegative")
-    if not math.isfinite(snapshot.age_s) or snapshot.age_s < 0.0:
-        blockers.append("observation age is not finite and nonnegative")
-    if snapshot.age_s > config.observation_freshness_max_s:
+    age_s = observation_age_at_consumption(snapshot)
+    if not math.isfinite(age_s) or age_s < 0.0:
+        blockers.append("observation age is invalid")
+    elif age_s > config.observation_freshness_max_s:
         blockers.append("observation is stale")
     robot = observation.robot
     if not all(math.isfinite(float(value)) for value in robot.joint_pos.values()):
@@ -501,6 +517,86 @@ def _pose_payload(pose: Pose3D | None) -> dict[str, object] | None:
     }
 
 
+@dataclass(frozen=True)
+class CaptureTimestamp:
+    captured_at_utc: str
+    capture_wall_time_s: float
+
+
+def _parse_captured_at_utc(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def validate_capture_timestamp(
+    payload: Mapping[str, object], *, now_wall_time_s: float | None = None
+) -> tuple[CaptureTimestamp | None, tuple[str, ...]]:
+    """Validate server-side capture timestamps; reject missing/invalid/future/inconsistent values.
+
+    A valid runtime-grounded read-only observation must carry a finite capture wall-clock time
+    and a consistent UTC timestamp recorded at capture. Future timestamps are rejected (never
+    clamped to zero). Age is derived from the validated capture time at validation/consumption.
+    """
+    now_s = time() if now_wall_time_s is None else float(now_wall_time_s)
+    blockers: list[str] = []
+
+    if "capture_wall_time_s" not in payload or "captured_at_utc" not in payload:
+        blockers.append("capture timestamp is missing")
+        return None, tuple(blockers)
+
+    raw_wall = payload.get("capture_wall_time_s")
+    if raw_wall is None:
+        blockers.append("capture timestamp is null")
+    elif isinstance(raw_wall, bool) or not isinstance(raw_wall, (int, float)):
+        blockers.append("capture timestamp has invalid type")
+    else:
+        wall_s = float(raw_wall)
+        if not math.isfinite(wall_s):
+            blockers.append("capture timestamp is non-finite")
+        elif wall_s < 0.0:
+            blockers.append("capture timestamp is negative")
+        elif wall_s - now_s > CAPTURE_TIMESTAMP_FUTURE_SKEW_MAX_S:
+            blockers.append("capture timestamp is unreasonably ahead of receiving clock")
+        else:
+            parsed_utc = _parse_captured_at_utc(payload.get("captured_at_utc"))
+            if parsed_utc is None:
+                blockers.append("capture timestamp UTC value is invalid")
+            else:
+                utc_epoch_s = parsed_utc.timestamp()
+                if (
+                    not math.isfinite(utc_epoch_s)
+                    or abs(wall_s - utc_epoch_s) > CAPTURE_TIMESTAMP_CONSISTENCY_MAX_S
+                ):
+                    blockers.append("capture timestamp fields are inconsistent")
+                else:
+                    return (
+                        CaptureTimestamp(
+                            captured_at_utc=parsed_utc.isoformat(), capture_wall_time_s=wall_s
+                        ),
+                        (),
+                    )
+    return None, tuple(blockers)
+
+
+def capture_age_s(capture_wall_time_s: float, *, now_wall_time_s: float | None = None) -> float:
+    """Age at validation/consumption derived from actual capture time (never request latency)."""
+    now_s = time() if now_wall_time_s is None else float(now_wall_time_s)
+    age = now_s - float(capture_wall_time_s)
+    if not math.isfinite(age):
+        return float("inf")
+    return max(0.0, age)
+
+
 def finalize_webots_diagnostic(
     config: WebotsDiagnosticConfig, preflight: ConfigPreflight, snapshot: DiagnosticSnapshot
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
@@ -550,7 +646,11 @@ def finalize_webots_diagnostic(
         "robot_type_observed": snapshot.identity.get("robot_type"),
         "robot_identity_declared": config.robot_identity,
         "observation_timestamp_s": snapshot.observation.t,
-        "observation_age_s": snapshot.age_s,
+        "observation_age_s": (
+            observation_age_at_consumption(snapshot)
+            if math.isfinite(observation_age_at_consumption(snapshot))
+            else None
+        ),
         "observation_freshness_limit_s": config.observation_freshness_max_s,
         "observation_valid": not observation_blockers,
         "observation_blockers": observation_blockers,
@@ -572,10 +672,11 @@ def finalize_webots_diagnostic(
         "safety_check_readiness": all(snapshot.dependency_availability.values()),
         "blockers": blockers,
     }
+    age_s = observation_age_at_consumption(snapshot)
     state = {
         "captured_at_utc": snapshot.captured_at_utc,
         "observation_timestamp_s": snapshot.observation.t,
-        "observation_age_s": snapshot.age_s,
+        "observation_age_s": age_s if math.isfinite(age_s) else None,
         "joint_pos": dict(snapshot.observation.robot.joint_pos),
         "joint_vel": dict(snapshot.observation.robot.joint_vel),
         "ee_pose": _pose_payload(snapshot.observation.robot.ee_pose),

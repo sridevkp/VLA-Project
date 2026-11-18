@@ -35,6 +35,7 @@ from vlarobot.eval.worldmind_webots_diagnostic import (
     _snapshot_blockers,
     _text,
     load_webots_diagnostic_config,
+    observation_age_at_consumption,
     write_diagnostic_evidence,
 )
 from vlarobot.world_model.scene_geometry import axis_angle_matrix, load_scene_collision_catalog
@@ -1151,7 +1152,11 @@ def finalize_geometry_inspection(
         "robot_def_cross_checked": snapshot.identity.get("robot_def_cross_checked"),
         "robot_identity_declared": diagnostic.robot_identity,
         "observation_timestamp_s": snapshot.observation.t,
-        "observation_age_s": snapshot.age_s,
+        "observation_age_s": (
+            observation_age_at_consumption(snapshot)
+            if math.isfinite(observation_age_at_consumption(snapshot))
+            else None
+        ),
         "observation_freshness_limit_s": diagnostic.observation_freshness_max_s,
         "observation_valid": not observation_blockers,
         "observation_blockers": observation_blockers,
@@ -1186,10 +1191,11 @@ def finalize_geometry_inspection(
         "motion_blockers": motion_blockers,
         "blockers": blockers,
     }
+    age_s = observation_age_at_consumption(snapshot)
     state = {
         "captured_at_utc": snapshot.captured_at_utc,
         "observation_timestamp_s": snapshot.observation.t,
-        "observation_age_s": snapshot.age_s,
+        "observation_age_s": age_s if math.isfinite(age_s) else None,
         "joint_pos": dict(snapshot.observation.robot.joint_pos),
         "joint_vel": dict(snapshot.observation.robot.joint_vel),
         "ee_pose": _pose_payload(snapshot.observation.robot.ee_pose),

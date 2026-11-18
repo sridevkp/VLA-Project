@@ -8,7 +8,6 @@ backend's existing observation builder and oracle reader; it never calls ``step`
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from time import time
 from typing import Any
 
 from vlarobot.backends.webots.runtime_attestation import (
@@ -89,13 +88,14 @@ def capture_read_only_state(backend: Any) -> dict[str, object]:
 
     observation: Observation = observation_builder()
     ground_truth: GroundTruth = oracle_reader()
+    # Recorded at the actual read-only capture boundary; not request start or synthesized.
+    now_utc = datetime.now(UTC)
     return {
         "observation": observation,
         "ground_truth": ground_truth,
         "identity": _webots_identity(backend),
-        # Recorded at the actual read-only capture boundary; not request start or synthesized.
-        "captured_at_utc": datetime.now(UTC).isoformat(),
-        "capture_wall_time_s": time(),
+        "captured_at_utc": now_utc.isoformat(),
+        "capture_wall_time_s": now_utc.timestamp(),
     }
 
 

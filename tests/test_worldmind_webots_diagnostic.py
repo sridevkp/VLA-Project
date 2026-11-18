@@ -197,6 +197,9 @@ def _snapshot(
     robot_def_cross_checked: object = True,
     runtime_version: object = _UNSET,
     attestation: object = _UNSET,
+    capture_wall_time_s: object = _UNSET,
+    captured_at_utc: object = _UNSET,
+    capture_timestamp_blockers: tuple[str, ...] = (),
 ) -> DiagnosticSnapshot:
     observed_world_hash = config.world_sha256 if world_hash is _UNSET else world_hash
     observed_version = config.webots_version if runtime_version is _UNSET else runtime_version
@@ -206,6 +209,30 @@ def _snapshot(
         if attestation is _UNSET
         else ({} if attestation is None else dict(attestation))
     )
+    from datetime import UTC, datetime
+    from time import time as _time
+
+    if capture_wall_time_s is _UNSET:
+        if capture_timestamp_blockers:
+            capture_wall = None
+            capture_utc = "" if captured_at_utc is _UNSET else captured_at_utc
+        else:
+            capture_wall = _time() - float(age_s)
+            capture_utc = (
+                datetime.fromtimestamp(capture_wall, tz=UTC).isoformat()
+                if captured_at_utc is _UNSET
+                else captured_at_utc
+            )
+    else:
+        capture_wall = None if capture_wall_time_s is None else float(capture_wall_time_s)
+        if captured_at_utc is _UNSET:
+            capture_utc = (
+                datetime.fromtimestamp(capture_wall, tz=UTC).isoformat()
+                if capture_wall is not None
+                else ""
+            )
+        else:
+            capture_utc = captured_at_utc
     return DiagnosticSnapshot(
         ping={
             "status": "ok",
@@ -235,11 +262,13 @@ def _snapshot(
             ),
             "first_command_step_count": first_command,
         },
-        captured_at_utc="2026-11-17T00:00:00+00:00",
+        captured_at_utc=capture_utc,
         age_s=age_s,
         dependency_availability=dict(availability or _AVAILABILITY),
         call_counts=dict(call_counts or {name: 0 for name in _FORBIDDEN_CALLS}),
         launch_attestation=observed_attestation,
+        capture_wall_time_s=capture_wall,
+        capture_timestamp_blockers=capture_timestamp_blockers,
     )
 
 
@@ -508,42 +537,56 @@ def test_capture_parses_realistic_ping_envelope_and_rejects_missing_payload(tmp_
     path, _ = _write_config(tmp_path)
     config = load_webots_diagnostic_config(path)
     snapshot = _snapshot(config)
+    envelope = _ping_envelope(snapshot.ping)
+    inspect_payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
+    }
 
     class FakeLowLevel:
-        def __init__(self, envelope: dict[str, object]):
-            self.envelope = envelope
+        def __init__(self, env: dict[str, object], payload: dict[str, object] | None = None):
+            self.envelope = env
+            self.payload = payload
 
         def ping(self):
             return copy.deepcopy(self.envelope)
 
         def inspect(self):
-            return {
-                "observation": snapshot.observation,
-                "ground_truth": snapshot.ground_truth,
-                "identity": dict(snapshot.identity),
-            }
+            if self.payload is None:
+                return {}
+            return copy.deepcopy(self.payload)
 
         def close(self):
             return None
 
-    envelope = _ping_envelope(snapshot.ping)
-    captured = _capture(
-        ReadOnlyBackendClient(FakeLowLevel(envelope)),
-        config,
-        "tcp://127.0.0.1:5555",
-        _launch_attestation(config),
-    )
-    payload = envelope["payload"]
-    assert isinstance(payload, dict)
-    assert captured.ping["session_id"] == payload["session_id"]
-    assert captured.ping["world_sha256"] == config.world_sha256
-    assert "payload" not in captured.ping
-    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
-    assert report["outcome"] == "PASS"
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(adapter, "time", lambda: 1000.2)
+        mp.setattr(eval_diag, "time", lambda: 1000.2)
+        captured = _capture(
+            ReadOnlyBackendClient(FakeLowLevel(envelope, inspect_payload)),
+            config,
+            "tcp://127.0.0.1:5555",
+            _launch_attestation(config),
+        )
+        ping_payload = envelope["payload"]
+        assert isinstance(ping_payload, dict)
+        assert captured.ping["session_id"] == ping_payload["session_id"]
+        assert captured.ping["world_sha256"] == config.world_sha256
+        assert "payload" not in captured.ping
+        assert captured.capture_timestamp_blockers == ()
+        report, _, _ = finalize_webots_diagnostic(
+            config, preflight_webots_diagnostic(config), captured
+        )
+        assert report["outcome"] == "PASS"
 
     with pytest.raises(ValueError, match="omitted payload"):
         _capture(
-            ReadOnlyBackendClient(FakeLowLevel({"status": "ok"})),
+            ReadOnlyBackendClient(FakeLowLevel({"status": "ok"}, inspect_payload)),
             config,
             "tcp://127.0.0.1:5555",
         )
@@ -771,7 +814,7 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         "identity": dict(snapshot.identity),
         # Captured at wall time 1000.0; received/validated at 1000.2 despite delayed startup.
         "capture_wall_time_s": 1000.0,
-        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
     }
 
     class LowLevel:
@@ -787,7 +830,10 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         def close(self):
             return None
 
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
     monkeypatch.setattr(adapter, "time", lambda: 1000.2)
+    monkeypatch.setattr(eval_diag, "time", lambda: 1000.2)
     captured = _capture(
         ReadOnlyBackendClient(LowLevel()),
         config,
@@ -795,7 +841,7 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         _launch_attestation(config),
     )
     assert captured.age_s == pytest.approx(0.2)
-    assert captured.captured_at_utc == "2026-11-18T00:00:00+00:00"
+    assert captured.captured_at_utc == "1970-01-01T00:16:40+00:00"
     report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
     assert report["observation_valid"] is True
     assert "observation is stale" not in report["observation_blockers"]
@@ -811,7 +857,7 @@ def test_capture_age_marks_truly_stale_capture(tmp_path, monkeypatch):
         "ground_truth": snapshot.ground_truth,
         "identity": dict(snapshot.identity),
         "capture_wall_time_s": 1000.0,
-        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
     }
 
     class LowLevel:
@@ -830,3 +876,196 @@ def test_capture_age_marks_truly_stale_capture(tmp_path, monkeypatch):
     report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
     assert report["outcome"] == "FAILED"
     assert "observation is stale" in report["blockers"]
+
+
+def _inspect_payload(snapshot, **timestamp_fields):
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+    }
+    payload.update(timestamp_fields)
+    return payload
+
+
+def _capture_with_payload(config, snapshot, payload, now_s=1000.0, monkeypatch=None):
+    class LowLevel:
+        def ping(self):
+            return {"status": "ok", "payload": copy.deepcopy(snapshot.ping)}
+
+        def inspect(self):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    if monkeypatch is not None:
+        monkeypatch.setattr(adapter, "time", lambda: now_s)
+    return _capture(
+        ReadOnlyBackendClient(LowLevel()),
+        config,
+        "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
+    )
+
+
+@pytest.mark.parametrize(
+    "payload_extra",
+    [
+        {},
+        {"captured_at_utc": "1970-01-01T00:16:40+00:00"},
+        {"capture_wall_time_s": 1000.0},
+        {"capture_wall_time_s": None, "captured_at_utc": "1970-01-01T00:16:40+00:00"},
+        {"capture_wall_time_s": 1000.0, "captured_at_utc": None},
+    ],
+)
+def test_capture_rejects_missing_or_null_timestamps_fail_closed(
+    tmp_path, monkeypatch, payload_extra
+):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(snapshot, **payload_extra)
+    captured = _capture_with_payload(config, snapshot, payload, monkeypatch=monkeypatch)
+    assert captured.capture_timestamp_blockers
+    assert captured.age_s == float("inf")
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "FAILED"
+    assert report["observation_valid"] is False
+    assert report["observation_age_s"] is None
+    assert any("capture timestamp" in b for b in report["observation_blockers"])
+
+
+@pytest.mark.parametrize(
+    "bad_wall,bad_utc,expect",
+    [
+        ("1000.0", "1970-01-01T00:16:40+00:00", "capture timestamp has invalid type"),
+        (True, "1970-01-01T00:16:40+00:00", "capture timestamp has invalid type"),
+        (float("nan"), "1970-01-01T00:16:40+00:00", "capture timestamp is non-finite"),
+        (float("inf"), "1970-01-01T00:16:40+00:00", "capture timestamp is non-finite"),
+        (-1.0, "1969-12-31T23:59:59+00:00", "capture timestamp is negative"),
+        (1000.0, 1000.0, "capture timestamp UTC value is invalid"),
+        (1000.0, "not-a-time", "capture timestamp UTC value is invalid"),
+    ],
+)
+def test_capture_rejects_invalid_types_and_nonfinite_timestamps(
+    tmp_path, monkeypatch, bad_wall, bad_utc, expect
+):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(snapshot, capture_wall_time_s=bad_wall, captured_at_utc=bad_utc)
+    captured = _capture_with_payload(config, snapshot, payload, monkeypatch=monkeypatch)
+    assert expect in captured.capture_timestamp_blockers
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "FAILED"
+    assert expect in report["blockers"]
+
+
+def test_capture_rejects_future_timestamp_without_clamping(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(
+        snapshot,
+        capture_wall_time_s=1105.0,
+        captured_at_utc="1970-01-01T00:18:25+00:00",
+    )
+    captured = _capture_with_payload(
+        config, snapshot, payload, now_s=1000.0, monkeypatch=monkeypatch
+    )
+    assert (
+        "capture timestamp is unreasonably ahead of receiving clock"
+        in captured.capture_timestamp_blockers
+    )
+    assert captured.age_s == float("inf")
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "FAILED"
+    assert report["observation_valid"] is False
+    assert report["observation_age_s"] is None
+
+
+def test_capture_rejects_inconsistent_timestamp_fields(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(
+        snapshot,
+        capture_wall_time_s=1000.0,
+        captured_at_utc="1970-01-01T00:20:00+00:00",
+    )
+    captured = _capture_with_payload(
+        config, snapshot, payload, now_s=1000.2, monkeypatch=monkeypatch
+    )
+    assert "capture timestamp fields are inconsistent" in captured.capture_timestamp_blockers
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["outcome"] == "FAILED"
+    assert "capture timestamp fields are inconsistent" in report["blockers"]
+
+
+def test_valid_recent_capture_passes_adapter_and_finalization(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(
+        snapshot,
+        capture_wall_time_s=1000.0,
+        captured_at_utc="1970-01-01T00:16:40+00:00",
+    )
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
+    monkeypatch.setattr(eval_diag, "time", lambda: 1000.5)
+    captured = _capture_with_payload(
+        config, snapshot, payload, now_s=1000.5, monkeypatch=monkeypatch
+    )
+    assert captured.capture_timestamp_blockers == ()
+    assert captured.age_s == pytest.approx(0.5)
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["observation_valid"] is True
+    assert report["observation_age_s"] == pytest.approx(0.5)
+
+
+def test_valid_capture_followed_by_delayed_consumption_uses_capture_time(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(config)
+    payload = _inspect_payload(
+        snapshot,
+        capture_wall_time_s=1000.0,
+        captured_at_utc="1970-01-01T00:16:40+00:00",
+    )
+    monkeypatch.setattr(adapter, "time", lambda: 1000.2)
+    captured = _capture_with_payload(config, snapshot, payload)
+    assert captured.age_s == pytest.approx(0.2)
+    # Simulate delayed validation/consumption: observation remains fresh because age is derived
+    # from capture time, not request start/processing delay, and is below the 5s threshold.
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
+    monkeypatch.setattr(eval_diag, "time", lambda: 1004.0)
+    report, _, _ = finalize_webots_diagnostic(config, preflight_webots_diagnostic(config), captured)
+    assert report["observation_valid"] is True
+    assert report["observation_age_s"] == pytest.approx(4.0)
+    assert "observation is stale" not in report["blockers"]
+
+
+def test_cli_propagates_capture_timestamp_blockers(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_webots_diagnostic_config(path)
+    snapshot = _snapshot(
+        config,
+        capture_wall_time_s=None,
+        captured_at_utc="bad",
+        capture_timestamp_blockers=("capture timestamp UTC value is invalid",),
+    )
+    monkeypatch.setattr(adapter, "collect_diagnostic_snapshot", lambda *a, **k: snapshot)
+    out = tmp_path / "timestamp-fail-cli"
+    result = CliRunner().invoke(
+        app,
+        ["worldmind-webots-diagnostic", "--config", str(path), "--out", str(out)],
+    )
+    assert result.exit_code == 1
+    report = json.loads((out / "diagnostic.json").read_text(encoding="utf-8"))
+    assert report["outcome"] == "FAILED"
+    assert "capture timestamp UTC value is invalid" in report["blockers"]
+    assert "capture timestamp UTC value is invalid" in report["observation_blockers"]
+    assert report["observation_valid"] is False

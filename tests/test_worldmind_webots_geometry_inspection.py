@@ -361,6 +361,9 @@ def _snapshot(
     robot_def: object = _UNSET,
     geometry: dict[str, object] | None = None,
     attestation: object = _UNSET,
+    capture_wall_time_s: object = _UNSET,
+    captured_at_utc: object = _UNSET,
+    capture_timestamp_blockers: tuple[str, ...] = (),
 ) -> GeometryInspectionSnapshot:
     diagnostic = config.diagnostic
     observed_def = diagnostic.robot_identity if robot_def is _UNSET else robot_def
@@ -374,6 +377,31 @@ def _snapshot(
     counts["inspect_geometry"] = 1
     if call_counts:
         counts.update(call_counts)
+
+    from datetime import UTC, datetime
+    from time import time as _time
+
+    if capture_wall_time_s is _UNSET:
+        if capture_timestamp_blockers:
+            capture_wall = None
+            capture_utc = "" if captured_at_utc is _UNSET else captured_at_utc
+        else:
+            capture_wall = _time() - float(age_s)
+            capture_utc = (
+                datetime.fromtimestamp(capture_wall, tz=UTC).isoformat()
+                if captured_at_utc is _UNSET
+                else captured_at_utc
+            )
+    else:
+        capture_wall = None if capture_wall_time_s is None else float(capture_wall_time_s)
+        if captured_at_utc is _UNSET:
+            capture_utc = (
+                datetime.fromtimestamp(capture_wall, tz=UTC).isoformat()
+                if capture_wall is not None
+                else ""
+            )
+        else:
+            capture_utc = captured_at_utc
     return GeometryInspectionSnapshot(
         ping={
             "status": "ok",
@@ -398,7 +426,7 @@ def _snapshot(
             "physics_step_count": 0,
             "first_command_step_count": first_command,
         },
-        captured_at_utc="2026-11-18T00:00:00+00:00",
+        captured_at_utc=capture_utc,
         age_s=age_s,
         dependency_availability={
             name: True
@@ -415,6 +443,8 @@ def _snapshot(
         geometry=(
             geometry if geometry is not None else _geometry_export(str(observed_def), config=config)
         ),
+        capture_wall_time_s=capture_wall,
+        capture_timestamp_blockers=capture_timestamp_blockers,
     )
 
 
@@ -758,21 +788,30 @@ def test_capture_flattens_ping_and_rejects_incomplete_replies(tmp_path):
         "ground_truth": snapshot.ground_truth,
         "identity": dict(snapshot.identity),
         "geometry": dict(snapshot.geometry),
+        "capture_wall_time_s": 1000.0,
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
     }
-    captured = _capture(
-        ReadOnlyGeometryBackendClient(LowLevel(envelope, payload)),
-        config,
-        "tcp://127.0.0.1:5555",
-        _launch_attestation(config),
-    )
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(adapter, "time", lambda: 1000.2)
+        mp.setattr(eval_diag, "time", lambda: 1000.2)
+        captured = _capture(
+            ReadOnlyGeometryBackendClient(LowLevel(envelope, payload)),
+            config,
+            "tcp://127.0.0.1:5555",
+            _launch_attestation(config),
+        )
     assert captured.ping["session_id"] == snapshot.ping["session_id"]
     assert captured.ping["endpoint"] == "tcp://127.0.0.1:5555"
     assert captured.ping["launch_mode"] == "launch"
     assert "payload" not in captured.ping
     assert captured.geometry["status"] == _STATUS
-    report, _, _, _ = finalize_geometry_inspection(
-        config, preflight_geometry_inspection(config), captured
-    )
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(eval_diag, "time", lambda: 1000.2)
+        report, _, _, _ = finalize_geometry_inspection(
+            config, preflight_geometry_inspection(config), captured
+        )
     assert report["outcome"] == "PASS"
 
     with pytest.raises(ValueError, match="omitted payload"):
@@ -898,7 +937,7 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         "geometry": dict(snapshot.geometry),
         # Captured recently at server, even if startup/request handling took long.
         "capture_wall_time_s": 1000.0,
-        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
     }
 
     class LowLevel:
@@ -911,7 +950,10 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         def close(self):
             return None
 
+    import vlarobot.eval.worldmind_webots_diagnostic as eval_diag
+
     monkeypatch.setattr(adapter, "time", lambda: 1000.2)
+    monkeypatch.setattr(eval_diag, "time", lambda: 1000.2)
     captured = _capture(
         ReadOnlyGeometryBackendClient(LowLevel()),
         config,
@@ -919,7 +961,7 @@ def test_capture_age_uses_capture_timestamp_not_request_latency(tmp_path, monkey
         _launch_attestation(config),
     )
     assert captured.age_s == pytest.approx(0.2)
-    assert captured.captured_at_utc == "2026-11-18T00:00:00+00:00"
+    assert captured.captured_at_utc == "1970-01-01T00:16:40+00:00"
     report, _, _, _ = finalize_geometry_inspection(
         config, preflight_geometry_inspection(config), captured
     )
@@ -939,7 +981,7 @@ def test_geometry_success_is_reported_separately_from_stale_observation(tmp_path
         "identity": dict(snapshot.identity),
         "geometry": dict(snapshot.geometry),
         "capture_wall_time_s": 1000.0,
-        "captured_at_utc": "2026-11-18T00:00:00+00:00",
+        "captured_at_utc": "1970-01-01T00:16:40+00:00",
     }
 
     class LowLevel:
@@ -973,3 +1015,129 @@ def test_geometry_success_is_reported_separately_from_stale_observation(tmp_path
     assert "observation is stale" in report["observation_blockers"]
     assert "observation is stale" in report["blockers"]
     assert report["outcome"] == "FAILED"
+
+
+def _geometry_capture_with_payload(config, snapshot, payload, now_s=1000.0, monkeypatch=None):
+    class LowLevel:
+        def ping(self):
+            return copy.deepcopy(_ping_envelope(snapshot))
+
+        def inspect_geometry(self, table_targets=None):
+            return copy.deepcopy(payload)
+
+        def close(self):
+            return None
+
+    if monkeypatch is not None:
+        monkeypatch.setattr(adapter, "time", lambda: now_s)
+    return _capture(
+        ReadOnlyGeometryBackendClient(LowLevel()),
+        config,
+        "tcp://127.0.0.1:5555",
+        _launch_attestation(config),
+    )
+
+
+@pytest.mark.parametrize(
+    "payload_extra, expected",
+    [
+        ({}, "capture timestamp is missing"),
+        (
+            {"capture_wall_time_s": None, "captured_at_utc": "1970-01-01T00:16:40+00:00"},
+            "capture timestamp is null",
+        ),
+        (
+            {"capture_wall_time_s": "1000.0", "captured_at_utc": "1970-01-01T00:16:40+00:00"},
+            "capture timestamp has invalid type",
+        ),
+        (
+            {"capture_wall_time_s": float("nan"), "captured_at_utc": "1970-01-01T00:16:40+00:00"},
+            "capture timestamp is non-finite",
+        ),
+        (
+            {"capture_wall_time_s": 1105.0, "captured_at_utc": "1970-01-01T00:18:25+00:00"},
+            "capture timestamp is unreasonably ahead of receiving clock",
+        ),
+        (
+            {"capture_wall_time_s": 1000.0, "captured_at_utc": "1970-01-01T00:20:00+00:00"},
+            "capture timestamp fields are inconsistent",
+        ),
+    ],
+)
+def test_geometry_capture_rejects_missing_invalid_future_inconsistent_timestamps(
+    tmp_path, monkeypatch, payload_extra, expected
+):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "geometry": dict(snapshot.geometry),
+        **payload_extra,
+    }
+    captured = _geometry_capture_with_payload(config, snapshot, payload, monkeypatch=monkeypatch)
+    assert expected in captured.capture_timestamp_blockers
+    assert captured.age_s == float("inf")
+    report, _, _, _ = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), captured
+    )
+    assert report["outcome"] == "FAILED"
+    assert report["observation_valid"] is False
+    assert report["observation_age_s"] is None
+    assert expected in report["observation_blockers"]
+
+
+def test_geometry_export_remains_truthful_with_invalid_state_freshness(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(config)
+    payload = {
+        "observation": snapshot.observation,
+        "ground_truth": snapshot.ground_truth,
+        "identity": dict(snapshot.identity),
+        "geometry": dict(snapshot.geometry),
+        "capture_wall_time_s": 1105.0,  # future -> invalid timestamp
+        "captured_at_utc": "1970-01-01T00:18:25+00:00",
+    }
+    captured = _geometry_capture_with_payload(
+        config, snapshot, payload, now_s=1000.0, monkeypatch=monkeypatch
+    )
+    report, _, _, geometry_artifact = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), captured
+    )
+    assert report["geometry_export_valid"] is True
+    assert report["geometry_blockers"] == []
+    assert report["geometry_object_count"] == 1
+    assert report["observation_valid"] is False
+    assert report["observation_age_s"] is None
+    assert (
+        "capture timestamp is unreasonably ahead of receiving clock"
+        in report["observation_blockers"]
+    )
+    assert report["outcome"] == "FAILED"
+    assert geometry_artifact["export"]["motor_commands_sent"] == 0
+
+
+def test_geometry_cli_propagates_invalid_timestamp_blockers(tmp_path, monkeypatch):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    snapshot = _snapshot(
+        config,
+        capture_wall_time_s=None,
+        captured_at_utc="",
+        capture_timestamp_blockers=("capture timestamp is missing",),
+    )
+    monkeypatch.setattr(adapter, "collect_geometry_inspection_snapshot", lambda *a, **k: snapshot)
+    out = tmp_path / "geometry-timestamp-fail-cli"
+    result = CliRunner().invoke(
+        app,
+        ["worldmind-webots-geometry-inspection", "--config", str(path), "--out", str(out)],
+    )
+    assert result.exit_code == 1
+    report = json.loads((out / "diagnostic.json").read_text(encoding="utf-8"))
+    assert report["outcome"] == "FAILED"
+    assert report["geometry_export_valid"] is True
+    assert report["observation_valid"] is False
+    assert "capture timestamp is missing" in report["blockers"]

@@ -8,16 +8,21 @@ RPC. No planner, scored evaluator or split accessor is imported here.
 
 from __future__ import annotations
 
+import math
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from pathlib import Path
 from time import time
 from typing import Any, NoReturn, Protocol
 
 from vlarobot.backends.zmq.client import ZmqBackendClient
 from vlarobot.core.types import Action, ApplyResult, GroundTruth, Observation, ScenarioSpec
-from vlarobot.eval.worldmind_webots_diagnostic import DiagnosticSnapshot, WebotsDiagnosticConfig
+from vlarobot.eval.worldmind_webots_diagnostic import (
+    DiagnosticSnapshot,
+    WebotsDiagnosticConfig,
+    capture_age_s,
+    validate_capture_timestamp,
+)
 from vlarobot.execution.episode_runner import launch_webots_session
 
 _TRACE_PREFIX = "worldmind-webots-diagnostic"
@@ -141,16 +146,24 @@ def _capture(
         raise TypeError("inspect reply ground truth has the wrong type")
     if not isinstance(identity, Mapping):
         raise TypeError("inspect reply identity has the wrong type")
-    capture_wall_time = payload.get("capture_wall_time_s")
-    if isinstance(capture_wall_time, (int, float)) and not isinstance(capture_wall_time, bool):
-        age_s = max(0.0, time() - float(capture_wall_time))
-        captured_at_utc = payload.get("captured_at_utc")
-        if not isinstance(captured_at_utc, str) or not captured_at_utc.strip():
-            captured_at_utc = datetime.now(UTC).isoformat()
+    now_wall_time_s = time()
+    capture, capture_blockers = validate_capture_timestamp(payload, now_wall_time_s=now_wall_time_s)
+    if capture is not None:
+        captured_at_utc = capture.captured_at_utc
+        capture_wall_time_s = capture.capture_wall_time_s
+        age_s = capture_age_s(capture.capture_wall_time_s, now_wall_time_s=now_wall_time_s)
     else:
-        # Compatibility with older capture payloads: age reflects request latency only.
-        age_s = 0.0
-        captured_at_utc = datetime.now(UTC).isoformat()
+        raw_utc = payload.get("captured_at_utc")
+        captured_at_utc = raw_utc if isinstance(raw_utc, str) else ""
+        raw_wall = payload.get("capture_wall_time_s")
+        capture_wall_time_s = (
+            float(raw_wall)
+            if isinstance(raw_wall, (int, float))
+            and not isinstance(raw_wall, bool)
+            and math.isfinite(float(raw_wall))
+            else None
+        )
+        age_s = float("inf")
     return DiagnosticSnapshot(
         ping=ping,
         observation=observation,
@@ -161,6 +174,8 @@ def _capture(
         dependency_availability=dependency_availability(config),
         call_counts=client.call_counts(),
         launch_attestation=dict(launch_attestation or {}),
+        capture_wall_time_s=capture_wall_time_s,
+        capture_timestamp_blockers=capture_blockers,
     )
 
 

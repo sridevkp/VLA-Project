@@ -1157,6 +1157,7 @@ def finalize_geometry_inspection(
             if math.isfinite(observation_age_at_consumption(snapshot))
             else None
         ),
+        "observation_age_s_at_receipt": (snapshot.age_s if math.isfinite(snapshot.age_s) else None),
         "observation_freshness_limit_s": diagnostic.observation_freshness_max_s,
         "observation_valid": not observation_blockers,
         "observation_blockers": observation_blockers,
@@ -1192,10 +1193,12 @@ def finalize_geometry_inspection(
         "blockers": blockers,
     }
     age_s = observation_age_at_consumption(snapshot)
+    receipt_age_s = snapshot.age_s if math.isfinite(snapshot.age_s) else None
     state = {
         "captured_at_utc": snapshot.captured_at_utc,
         "observation_timestamp_s": snapshot.observation.t,
         "observation_age_s": age_s if math.isfinite(age_s) else None,
+        "observation_age_s_at_receipt": receipt_age_s,
         "joint_pos": dict(snapshot.observation.robot.joint_pos),
         "joint_vel": dict(snapshot.observation.robot.joint_vel),
         "ee_pose": _pose_payload(snapshot.observation.robot.ee_pose),

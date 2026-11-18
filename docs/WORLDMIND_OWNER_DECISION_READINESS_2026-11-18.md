@@ -54,6 +54,6 @@
 | Full-body/self-collision coverage and exclusions | No (42 uncovered bodies; exclusions not approved) | **Yes** — coverage proof or approved exclusions/adjacency/contact decisions |
 | CAN lifecycle/contact claims | No (ambiguous, fail-closed) | **Yes** — attachment/release/carried-pose evidence and contact policy |
 | Motion authorization/certification | No | **Yes** — independent safety-owner certificate/approval (external to code) |
-| Runtime table-transform grounding gate | Partially evidenced (v2 matched 5/5) but not acceptable as closure due to stale-observation failure | **Yes** — fresh authorized read-only verification with valid observation |
+| Runtime table-transform grounding gate | Partially evidenced (v2/v3 matched 5/5 runtime table geometry, geometry export valid) but not acceptable as closure due to stale observation at consumption in each inspection | **Yes** — fresh authorized read-only verification with valid/fresh observation and accepted grounding evidence |
 
 **Offline implementation direction (finite, no new broad framework):** complete explicit bound accounting in sweep/coverage artifacts, enumerate every uncovered body/pair and required bound term with pass/fail criteria, and keep runtime checks/certificates fail-closed until owner-supplied evidence is linked.

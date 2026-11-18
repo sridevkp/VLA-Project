@@ -38,11 +38,23 @@ def test_dossier_is_deterministic_fail_closed_and_never_approved():
 def test_gate_table_marks_missing_bounds_and_authorization_explicitly():
     dossier = build_motion_readiness_dossier()
     gates = {item["id"]: item for item in dossier["gates"]}
+    swept = gates["swept_residual"]["details"]
     assert gates["frozen_evidence"]["status"] == "PASS"
     assert gates["swept_residual"]["status"] == "UNVERIFIED"
-    assert gates["swept_residual"]["details"]["residual_m"] is None
-    assert gates["swept_residual"]["details"]["numerical_error_bound_m"] is None
-    assert gates["swept_residual"]["details"]["transform_error_bound_m"] is None
+    assert swept["residual_m"] is None
+    # Required swept bounds are not proven/satisfied; diagnostic-only estimates may exist
+    # in reconciliation artifacts but are not used for certification.
+    assert swept["geometry_approximation_error_bound_m"] is None
+    assert swept["numerical_error_bound_m"] is None
+    assert swept["transform_error_bound_m"] is None
+    assert swept["joint_motion_allowance_m"] is None
+    for required in (
+        "joint displacement/reach bound is missing",
+        "geometry approximation error bound is missing",
+        "numerical error bound is missing",
+        "transform error bound is missing",
+    ):
+        assert required in swept["blockers"]
     assert gates["gripper_envelope"]["status"] == "PASS"
     assert gates["can_lifecycle"]["status"] == "UNVERIFIED"
     assert gates["self_collision"]["status"] == "UNVERIFIED"

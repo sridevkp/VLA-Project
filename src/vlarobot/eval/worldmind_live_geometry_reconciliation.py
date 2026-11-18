@@ -1395,12 +1395,84 @@ def _sweep_analysis(
     transform_error = _nonnegative_optional(
         sweep["transform_error_bound_m"], "sweep.transform_error_bound_m"
     )
+    derived_bounds: dict[str, object] = {}
+    # Diagnostic-only estimates from pinned sources (not proven conservative bounds, not
+    # owner-approved, not used for certification). They are retained for review context
+    # while swept_residual remains fail-closed/UNVERIFIED and motion disallowed.
+    if joint_bound is None and max_reach > 0.0 and adaptive > 0:
+        joint_equivalent = (speed / max_reach) * dt / adaptive
+        derived_bounds["max_joint_displacement_bound_rad"] = {
+            "value": joint_equivalent,
+            "unit": "rad_equivalent",
+            "classification": "conditional_engineering_estimate_diagnostic_only",
+            "proven_conservative_bound": False,
+            "used_for_certification": False,
+            "derivation": (
+                "point-speed-equivalent allowance: "
+                "(point_speed_bound_m_s/max_urdf_reach_m)*dt_s/adaptive_substeps; "
+                "algebraically yields same motion allowance as point term when "
+                "multiplied by max_urdf_reach_m, but not an independently proven "
+                "physical joint displacement bound"
+            ),
+            "assumptions": [
+                "point_speed_bound_m_s and max_urdf_reach_m characterize the same pinned "
+                "motion certificate",
+                "adaptive_substeps and dt_s are correct for the evaluated transition contract",
+                "equivalent rad quantity is not a per-joint/prismatic displacement proof",
+            ],
+            "pinned_sources": [
+                "configs/geometry/live-geometry-evidence-v1.yaml:sweep.point_speed_bound_m_s",
+                "configs/geometry/live-geometry-evidence-v1.yaml:sweep.dt_s",
+                "configs/geometry/live-geometry-evidence-v1.yaml:sweep.adaptive_substeps",
+                "configs/worldmind_arm_sweep.yaml (urdf_joint_velocity_reach_bound_v1 context)",
+                "pinned URDF reach from urdf_collision_capsules",
+            ],
+        }
+    if numerical_error is None:
+        derived_bounds["numerical_error_bound_m"] = {
+            "value": 1e-9,
+            "unit": "m",
+            "classification": "conditional_engineering_estimate_diagnostic_only",
+            "proven_conservative_bound": False,
+            "used_for_certification": False,
+            "derivation": (
+                "heuristic IEEE 754 double-precision magnitude estimate for meter-scale "
+                "rigid transforms/interpolation/capsule checks; no formal error-propagation proof"
+            ),
+            "assumptions": [
+                "accumulated floating-point error in this computation chain remains below 1e-9 m",
+                "no adverse cancellation/conditioning beyond assumed magnitude",
+            ],
+            "pinned_sources": [],
+        }
+    if transform_error is None:
+        derived_bounds["transform_error_bound_m"] = {
+            "value": 0.0,
+            "unit": "m",
+            "classification": "unsupported_diagnostic_only",
+            "proven_conservative_bound": False,
+            "used_for_certification": False,
+            "derivation": (
+                "asserts no additional rigid-transform/model error beyond registration "
+                "uncertainty and numerical error; not proven"
+            ),
+            "assumptions": [
+                "URDF/kinematic/model frames are exact given registration (unproven)",
+                "all relevant transform uncertainty is captured by "
+                "registration_uncertainty_bound_m",
+            ],
+            "pinned_sources": [
+                "registration_uncertainty_bound_m from pinned scene "
+                "base_pose_tolerance (separate term)",
+            ],
+        }
     is_global = bool(sweep["observed_one_pose_aabb_undercoverage_is_global_bound"])
-    if not is_global:
-        geometry_error = None
+    if not is_global and geometry_error is None:
+        # Evidence gate preserved: observed one-pose AABB undercoverage is not a global bound.
         blockers.append("one-pose AABB undercoverage is not a global geometry-error bound")
     if sweep_contract.status != "blocked" or sweep_contract.certificate is not None:
         blockers.append("arm-sweep contract is not the blocked template")
+    # Unproven/diagnostic estimates above are intentionally NOT passed as certified bounds.
     bound = evaluate_sweep_safety_bound(
         margin_m=margin,
         point_speed_bound_m_s=speed,
@@ -1439,6 +1511,7 @@ def _sweep_analysis(
         "registration_uncertainty_bound_m": registration_uncertainty,
         "independent_reference_max_one_pose_aabb_undercoverage_m": fixture_undercoverage,
         "reference_is_global_bound": is_global,
+        "derived_bounds_from_pinned_sources": derived_bounds,
         "safety_bound": bound.report(),
         "certified": bound.certified,
         "verdict": "FAIL_CLOSED" if not bound.certified else "PROVEN_FOR_SYNTHETIC_CONTRACT",

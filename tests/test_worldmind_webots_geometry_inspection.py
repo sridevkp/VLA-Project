@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -44,13 +45,16 @@ from vlarobot.core.types import (
     Vec3,
 )
 from vlarobot.eval.worldmind_webots_geometry_inspection import (
+    TABLE_SOURCE_NAMES,
     GeometryInspectionConfig,
     GeometryInspectionSnapshot,
+    _expected_table_geometry,
     failed_geometry_inspection,
     finalize_geometry_inspection,
     load_geometry_inspection_config,
     normalize_webots_sfbool,
     preflight_geometry_inspection,
+    table_target_descriptor,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,16 +88,22 @@ def _write_config(tmp_path: Path) -> tuple[Path, dict[str, object]]:
     scene = geometry_dir / "scene-collision-v1.yaml"
     proto = geometry_dir / "webots-proto-sources-v1.yaml"
     sweep = config_dir / "worldmind_arm_sweep.yaml"
-    for path, payload in (
-        (world, b"geometry-inspection world bytes\n"),
-        (urdf, b"<robot><link name='arm_1_link'/><link name='arm_2_link'/></robot>"),
-        (registration, b"registration bytes\n"),
-        (robot, b"robot settings bytes\n"),
-        (scene, b"scene catalog bytes\n"),
-        (proto, b"proto manifest bytes\n"),
-        (sweep, b"blocked sweep contract bytes\n"),
-    ):
-        path.write_bytes(payload)
+    # The source-expansion checks need byte-identical pinned geometry. Copying the reviewed
+    # files into the temporary tree keeps the test self-contained and preserves relative paths.
+    shutil.copytree(ROOT / "configs" / "geometry", geometry_dir, dirs_exist_ok=True)
+    shutil.copytree(
+        ROOT / "configs" / "calibration", config_dir / "calibration", dirs_exist_ok=True
+    )
+    shutil.copytree(
+        ROOT / "assets" / "webots" / "protos" / "r2025a",
+        tmp_path / "assets" / "webots" / "protos" / "r2025a",
+        dirs_exist_ok=True,
+    )
+    shutil.copy2(ROOT / "worlds" / "factory.wbt", world)
+    shutil.copy2(ROOT / "src" / "vlarobot" / "backends" / "webots" / "tiago.urdf", urdf)
+    registration.write_bytes(b"registration bytes\n")
+    robot.write_bytes(b"robot settings bytes\n")
+    shutil.copy2(ROOT / "configs" / "worldmind_arm_sweep.yaml", sweep)
 
     raw: dict[str, object] = {
         "schema_version": 1,
@@ -119,7 +129,17 @@ def _write_config(tmp_path: Path) -> tuple[Path, dict[str, object]]:
             "urdf": "../src/vlarobot/backends/webots/tiago.urdf",
             "registration": "calibration.yaml",
             "robot_config": "robot.yaml",
-            "required_arm_links": ["arm_1_link", "arm_2_link"],
+            "required_arm_links": [
+                "TIAGo front arm",
+                "TIAGo front arm_3",
+                "arm_2_link",
+                "arm_3_link",
+                "arm_4_link",
+                "arm_5_link",
+                "arm_6_link",
+                "arm_7_link",
+                "wrist_ft_tool_link",
+            ],
             "swept_arm_certificate": None,
         },
         "dependencies": {
@@ -135,7 +155,7 @@ def _write_config(tmp_path: Path) -> tuple[Path, dict[str, object]]:
             "evidence_collection_split": "validation",
         },
         "geometry_inspection": {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "diagnostic_uncalibrated",
             "mode": "live_read_only_bounding_object_export",
             "scene_catalog": "geometry/scene-collision-v1.yaml",
@@ -144,6 +164,17 @@ def _write_config(tmp_path: Path) -> tuple[Path, dict[str, object]]:
             "proto_manifest_sha256": _sha256(proto),
             "arm_sweep_contract": "worldmind_arm_sweep.yaml",
             "arm_sweep_contract_sha256": _sha256(sweep),
+            "table_targets": {
+                "parent_type": "Table",
+                "nested_type": "SolidBox",
+                "bounding_shape_type": "Box",
+                "source_names": list(TABLE_SOURCE_NAMES),
+                "translation_tolerance_m": 0.0001,
+                "rotation_tolerance_rad": 0.0001,
+                "size_tolerance_m": 0.0001,
+                "transform_translation_tolerance_m": 0.0001,
+                "transform_rotation_tolerance_rad": 0.0001,
+            },
         },
     }
     path = config_dir / "geometry-inspection.yaml"
@@ -208,8 +239,76 @@ def _observation() -> Observation:
     )
 
 
-def _geometry_export(robot_def: str = "TIAGO_ROBOT") -> dict[str, object]:
+def _table_observation(config: GeometryInspectionConfig) -> dict[str, object]:
+    expected = _expected_table_geometry(config)
+    descriptor = table_target_descriptor(config)
+    rows: list[dict[str, object]] = []
+    for index, box in enumerate(expected["boxes"]):
+        world_pose = np.eye(4)
+        world_pose[:3, :3] = np.asarray(box["world_rotation_matrix"], dtype=float)
+        world_pose[:3, 3] = np.asarray(box["world_translation_m"], dtype=float)
+        base_pose = np.eye(4)
+        base_pose[:3, :3] = np.asarray(box["base_rotation_matrix"], dtype=float)
+        base_pose[:3, 3] = np.asarray(box["base_translation_m"], dtype=float)
+        name = str(box["name"])
+        rows.append(
+            {
+                "source_name": name,
+                "status": "observed",
+                "reason": None,
+                "source_protos": copy.deepcopy(descriptor["source_protos"]),
+                "runtime_node": {
+                    "id": 100 + index,
+                    "type": "SolidBox",
+                    "base_type": "Solid",
+                    "name": name,
+                    "def": "",
+                    "proto_type": "SolidBox",
+                },
+                "hierarchy": {
+                    "reachable": True,
+                    "table_ancestor": {
+                        "id": 99,
+                        "type": "Table",
+                        "base_type": "Solid",
+                        "name": "",
+                        "def": "",
+                        "proto_type": "Table",
+                    },
+                    "parent_chain": [{"type": "Table", "proto_type": "Table"}],
+                    "children": [],
+                    "bounding_object": {"type": "Box", "base_type": "Box"},
+                },
+                "evaluated": {
+                    "translation_m": list(box["local_translation_m"]),
+                    "rotation_axis_angle": list(box["local_rotation_axis_angle"]),
+                    "size_m": list(box["size_m"]),
+                    "enable_bounding_object": True,
+                    "bounding_object_type": "Box",
+                    "bounding_object_size_m": list(box["size_m"]),
+                },
+                "transforms": {
+                    "T_world": world_pose.reshape(16).tolist(),
+                    "T_base": base_pose.reshape(16).tolist(),
+                },
+                "unsupported_reasons": [],
+            }
+        )
     return {
+        "schema_version": 1,
+        "interface": copy.deepcopy(descriptor),
+        "rows": rows,
+        "errors": [],
+        "robot_base_node_id": 77,
+        "table_candidates": [{"type": "Table", "proto_type": "Table"}],
+        "traversal": "supported getBaseNodeField(children) expansion of the runtime Table PROTO",
+    }
+
+
+def _geometry_export(
+    robot_def: str = "TIAGO_ROBOT", config: GeometryInspectionConfig | None = None
+) -> dict[str, object]:
+    export: dict[str, object] = {
         "status": _STATUS,
         "robot_id": 77,
         "self_collision_enabled": False,
@@ -239,6 +338,9 @@ def _geometry_export(robot_def: str = "TIAGO_ROBOT") -> dict[str, object]:
         "scene": _SCENE,
         "unsupported_shapes": [],
     }
+    if config is not None:
+        export["table_targets"] = _table_observation(config)
+    return export
 
 
 def _snapshot(
@@ -301,7 +403,9 @@ def _snapshot(
         },
         call_counts=counts,
         launch_attestation=observed_attestation,
-        geometry=geometry if geometry is not None else _geometry_export(str(observed_def)),
+        geometry=(
+            geometry if geometry is not None else _geometry_export(str(observed_def), config=config)
+        ),
     )
 
 
@@ -356,6 +460,18 @@ def test_shipped_config_and_synthetic_config_preflight_without_webots(tmp_path):
             lambda raw: raw["geometry_inspection"].update(scene_catalog_sha256="not-a-digest"),
             "64-character SHA-256",
         ),
+        (
+            lambda raw: raw["geometry_inspection"].pop("table_targets"),
+            "table_targets",
+        ),
+        (
+            lambda raw: raw["geometry_inspection"]["table_targets"].update(source_names=["foot 1"]),
+            "five Table box names",
+        ),
+        (
+            lambda raw: raw["geometry_inspection"]["table_targets"].update(size_tolerance_m=-1),
+            "nonnegative",
+        ),
     ],
 )
 def test_geometry_config_loader_is_strict(tmp_path, mutate, message):
@@ -389,7 +505,7 @@ def test_self_collision_integer_zero_passes_with_distinct_raw_and_normalized_rep
 ):
     path, _ = _write_config(tmp_path)
     config = load_geometry_inspection_config(path)
-    geometry = _geometry_export()
+    geometry = _geometry_export(config=config)
     geometry["self_collision_enabled"] = 0
     snapshot = _snapshot(config, geometry=geometry)
     report, _, _, geometry_artifact = finalize_geometry_inspection(
@@ -406,7 +522,7 @@ def test_self_collision_integer_zero_passes_with_distinct_raw_and_normalized_rep
 def test_self_collision_mismatch_or_ambiguity_fails_closed(tmp_path, observed):
     path, _ = _write_config(tmp_path)
     config = load_geometry_inspection_config(path)
-    geometry = _geometry_export()
+    geometry = _geometry_export(config=config)
     geometry["self_collision_enabled"] = observed
     snapshot = _snapshot(config, geometry=geometry)
     report, _, _, _ = finalize_geometry_inspection(
@@ -421,7 +537,7 @@ def test_geometry_client_forbids_every_state_or_oracle_changing_call():
         def ping(self):
             return {"status": "ok"}
 
-        def inspect_geometry(self):
+        def inspect_geometry(self, table_targets=None):
             return {"observation": None}
 
         def close(self):
@@ -454,7 +570,7 @@ def test_inspect_geometry_rpc_dispatch_never_calls_forbidden_backend_operations(
     monkeypatch.setattr(
         read_only_geometry,
         "export_bounding_objects",
-        lambda supervisor: dict(snapshot.geometry),
+        lambda supervisor, table_targets=None: dict(snapshot.geometry),
     )
     assert REQUEST_TIMEOUTS_MS["inspect_geometry"] == 30_000
 
@@ -517,7 +633,7 @@ def test_geometry_capture_blocks_commanded_or_stepped_backends(tmp_path, monkeyp
     monkeypatch.setattr(
         read_only_geometry,
         "export_bounding_objects",
-        lambda supervisor: dict(snapshot.geometry),
+        lambda supervisor, table_targets=None: dict(snapshot.geometry),
     )
 
     class FakeSupervisor:
@@ -550,7 +666,9 @@ def test_geometry_capture_blocks_commanded_or_stepped_backends(tmp_path, monkeyp
         read_only_geometry.capture_read_only_geometry(FakeBackend(step_count=1))
 
     monkeypatch.setattr(
-        read_only_geometry, "export_bounding_objects", lambda supervisor: {"status": _STATUS}
+        read_only_geometry,
+        "export_bounding_objects",
+        lambda supervisor, table_targets=None: {"status": _STATUS},
     )
     with pytest.raises(RuntimeError, match="incomplete snapshot"):
         read_only_geometry.capture_read_only_geometry(FakeBackend())
@@ -592,7 +710,7 @@ def test_finalize_reports_pass_without_motion_and_fails_closed_on_bad_evidence(t
     wrong_def = _snapshot(
         config,
         robot_def="OTHER_ROBOT",
-        geometry=_geometry_export("TIAGO_ROBOT"),
+        geometry=_geometry_export("TIAGO_ROBOT", config=config),
     )
     identity_report, _, _, _ = finalize_geometry_inspection(config, preflight, wrong_def)
     assert identity_report["outcome"] == "FAILED"
@@ -620,7 +738,7 @@ def test_capture_flattens_ping_and_rejects_incomplete_replies(tmp_path):
         def ping(self):
             return copy.deepcopy(self.envelope)
 
-        def inspect_geometry(self):
+        def inspect_geometry(self, table_targets=None):
             return dict(self.payload) if self.payload is not None else {}
 
         def close(self):

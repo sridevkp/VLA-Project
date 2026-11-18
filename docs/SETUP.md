@@ -282,6 +282,17 @@ TEST/TRAIN evidence or permits motion; every result records `motion_allowed=fals
 `motion_readiness="NOT_READY"`. A prior connectivity-only Webots PASS is not collision-safety
 approval. See `DECISIONS.md` ADR-0055.
 
+The same command now uses `geometry_inspection.schema_version: 2` and its config pins a
+`table_targets` selector for the five nested `Table` / `SolidBox` boxes: `main frame`, `foot 1`,
+`foot 2`, `foot 3` and `foot 4`. It forwards only the selector and pinned PROTO identities/hashes to
+Webots; expected geometry is derived independently from the pinned sources. The supervisor probe
+captures expanded runtime node identity, hierarchy, evaluated fields, `enableBoundingObject`,
+actual `boundingObject Box.size` and world/base poses. The report classifies each box as `Matched`,
+`Mismatched`, `Missing` or `Unsupported` with explicit tolerances and source provenance. Missing or
+uninspectable boxes remain `UNVERIFIED`; source values are never substituted for runtime
+observations. No Webots process was launched for this extension; one read-only execution is ready
+for explicit owner authorization. See `DECISIONS.md` ADR-0058.
+
 The preserved live geometry inspection can be reconciled into a deterministic, non-approving
 readiness dossier without launching Webots. From the project root, choose a new output path:
 

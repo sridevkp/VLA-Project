@@ -153,3 +153,13 @@ frozen live-artifact byte, seed, split or safety threshold changed. Linux inert 
 Windows, Webots execution, real IK, actuation, scored VALIDATION and pilot execution remain
 unverified. The production `check_transition=None`, `unverified-arm-sweep` veto and
 `NOT_READY` status remain in force.
+
+Selector-only five-box read-only geometry inspection (ADR-0058) adds no dependency or version pin.
+It reuses Python 3.11 standard library, NumPy, PyYAML, Typer, ZeroMQ/msgpack and the existing
+Webots backend boundary. The geometry-inspection config schema moves to `2` and the runtime table
+observation schema is `1`; both are internal to this diagnostic. `core/wire.py` and public `core/`
+interfaces are unchanged, as are the CLI flags `--config` and `--out` and the four evidence file
+names. Linux inert checks, Ruff, `ty`, `compileall` and frozen-evidence verification pass; Windows
+and live Webots execution remain unverified. Motion stays `NOT_READY` and the new
+`unverified-runtime-table-transform` blocker remains until one authorized read-only Webots
+observation grounds all five boxes.

@@ -23,6 +23,7 @@ import yaml
 
 from vlarobot.backends import worldmind_bindings as bindings
 from vlarobot.backends.webots.proto_sources import (
+    ProtoSource,
     ProtoSourceManifest,
     load_proto_source_manifest,
 )
@@ -597,17 +598,38 @@ def _field_string(block: str, field: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _table_source_expansion(
-    cfg: LiveReconciliationConfig,
-    manifest: ProtoSourceManifest,
+def _matrix_axis_angle(rotation: np.ndarray) -> list[float]:
+    """Return an xyzw axis-angle for a proper rotation matrix (pure source arithmetic)."""
+    cosine = (float(np.trace(rotation)) - 1.0) / 2.0
+    angle = math.acos(max(-1.0, min(1.0, cosine)))
+    if angle <= 1e-12:
+        return [0.0, 0.0, 1.0, 0.0]
+    sine = math.sin(angle)
+    axis = np.asarray(
+        [
+            (rotation[2, 1] - rotation[1, 2]) / (2.0 * sine),
+            (rotation[0, 2] - rotation[2, 0]) / (2.0 * sine),
+            (rotation[1, 0] - rotation[0, 1]) / (2.0 * sine),
+        ]
+    )
+    return [*axis.tolist(), angle]
+
+
+def expand_table_source_geometry(
+    world_path: Path,
+    table_source: ProtoSource,
+    solid_source: ProtoSource,
     catalog: Any,
     reach_bound_m: float,
     geometry_error_available: bool,
+    world_sha256: str | None = None,
 ) -> tuple[dict[str, object], list[str]]:
-    """Expand pinned Table/SolidBox sources without claiming runtime grounding."""
+    """Expand pinned Table/SolidBox sources without claiming runtime grounding.
+
+    The returned translation, rotation and size values are source-derived expectations only. They
+    are never copied into a runtime observation when a live node is missing or uninspectable.
+    """
     blockers: list[str] = []
-    sources = {item.name: item for item in (*manifest.external, *manifest.nested)}
-    table_source, solid_source = sources["Table"], sources["SolidBox"]
     table_text = table_source.path.read_text(encoding="utf-8")
     solid_text = solid_source.path.read_text(encoding="utf-8")
     root_bounding_objects = len(re.findall(r"\bboundingObject\b", table_text))
@@ -616,7 +638,7 @@ def _table_source_expansion(
     if root_bounding_objects != 0 or nested_solid_boxes < 3 or not solidbox_bounding_box:
         blockers.append("pinned Table/SolidBox nested collision structure is not as expected")
 
-    table_block = _world_block(cfg.pinned["world"].read_text(encoding="utf-8"), "Table")
+    table_block = _world_block(world_path.read_text(encoding="utf-8"), "Table")
     translation_values = _field_values(table_block, "translation")
     size_values = _field_values(table_block, "size")
     if translation_values is None or len(translation_values) != 3:
@@ -629,21 +651,28 @@ def _table_source_expansion(
     size = np.asarray([float(value) for value in size_values])
 
     interface = _proto_interface_block(table_text, "Table")
+    solid_interface = _proto_interface_block(solid_text, "SolidBox")
     rotation_default = tuple(
         float(value) for value in _proto_default(interface, "rotation", "SFRotation")
+    )
+    local_rotation = tuple(
+        float(value) for value in _proto_default(solid_interface, "rotation", "SFRotation")
     )
     feet_size = np.asarray(
         [float(value) for value in _proto_default(interface, "feetSize", "SFVec2f")]
     )
     feet_padding = float(_proto_default(interface, "feetPadding", "SFFloat")[0])
     frame_thickness = float(_proto_default(interface, "frameThickness", "SFFloat")[0])
+    solidbox_blocks = re.findall(r"\bSolidBox\s*\{([^{}]*)\}", table_text, re.DOTALL)
+    if any(re.search(r"^\s*rotation\s+", block, re.MULTILINE) for block in solidbox_blocks):
+        blockers.append("pinned Table overrides a nested SolidBox rotation, which is unsupported")
     rotation_values = _field_values(table_block, "rotation")
-    if (
-        rotation_values is not None
-        and tuple(float(value) for value in rotation_values[:4]) != rotation_default
-    ):
-        blockers.append("pinned world Table rotation override is not supported by source expansion")
-    root_rotation = axis_angle_matrix(rotation_default)
+    root_rotation_axis_angle = (
+        tuple(float(value) for value in rotation_values[:4])
+        if rotation_values is not None and len(rotation_values) >= 4
+        else rotation_default
+    )
+    root_rotation = axis_angle_matrix(root_rotation_axis_angle)
     R_base_world = catalog.T_base_world[:3, :3]
 
     main_size = np.asarray((size[0], size[1], frame_thickness))
@@ -678,10 +707,16 @@ def _table_source_expansion(
         boxes.append(
             {
                 "name": name,
+                "root_translation_m": translation.tolist(),
+                "local_translation_m": local_array.tolist(),
+                "local_rotation_axis_angle": list(local_rotation),
                 "world_translation_m": world_center.tolist(),
-                "world_rotation_axis_angle": list(rotation_default),
+                "world_rotation_axis_angle": list(root_rotation_axis_angle),
+                "world_rotation_matrix": root_rotation.tolist(),
                 "size_m": box_size.tolist(),
                 "base_translation_m": base_center.tolist(),
+                "base_rotation_axis_angle": _matrix_axis_angle(base_rotation),
+                "base_rotation_matrix": base_rotation.tolist(),
                 "base_half_extents_m": base_half.tolist(),
                 "distance_to_base_origin_m": distance,
                 "reachability": reachability,
@@ -706,12 +741,13 @@ def _table_source_expansion(
         {
             "boxes": boxes,
             "source_hashes": {
-                "world_sha256": str(cfg.expected["world_sha256"]),
+                "world_sha256": world_sha256 or _sha256(world_path),
                 "table_proto_sha256": table_source.sha256,
                 "solid_box_proto_sha256": solid_source.sha256,
                 "scene_catalog_sha256": catalog.geometry.catalog_sha256,
             },
-            "root_rotation_axis_angle": list(rotation_default),
+            "root_translation_m": translation.tolist(),
+            "root_rotation_axis_angle": list(root_rotation_axis_angle),
             "reach_bound_m": reach_bound_m,
             "coarse_catalog_proxy_contains_all_boxes": contained,
             "cross_check": (
@@ -720,6 +756,26 @@ def _table_source_expansion(
             ),
         },
         blockers,
+    )
+
+
+def _table_source_expansion(
+    cfg: LiveReconciliationConfig,
+    manifest: ProtoSourceManifest,
+    catalog: Any,
+    reach_bound_m: float,
+    geometry_error_available: bool,
+) -> tuple[dict[str, object], list[str]]:
+    """Expand pinned Table/SolidBox sources without claiming runtime grounding."""
+    sources = {item.name: item for item in (*manifest.external, *manifest.nested)}
+    return expand_table_source_geometry(
+        cfg.pinned["world"],
+        sources["Table"],
+        sources["SolidBox"],
+        catalog,
+        reach_bound_m,
+        geometry_error_available,
+        str(cfg.expected["world_sha256"]),
     )
 
 
@@ -1681,6 +1737,7 @@ __all__ = [
     "LIVE_GEOMETRY_RECONCILIATION_SCHEMA_VERSION",
     "EvidenceFile",
     "LiveReconciliationConfig",
+    "expand_table_source_geometry",
     "load_live_reconciliation_config",
     "reconcile_preserved_live_geometry",
 ]

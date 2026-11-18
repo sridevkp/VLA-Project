@@ -1,4 +1,4 @@
-# Dedicated read-only Webots geometry inspection (ADR-0055).
+# Dedicated read-only Webots geometry inspection (ADR-0055, extended by ADR-0058).
 #
 # This config is read only by `worldmind-webots-geometry-inspection`. It reuses the existing
 # no-actuation session, identity and launch-attestation contract, and adds only the pinned
@@ -60,7 +60,7 @@ diagnostic:
   evidence_collection_split: "validation"
 
 geometry_inspection:
-  schema_version: 1
+  schema_version: 2
   status: "diagnostic_uncalibrated"
   mode: "live_read_only_bounding_object_export"
   scene_catalog: "geometry/scene-collision-v1.yaml"
@@ -69,3 +69,20 @@ geometry_inspection:
   proto_manifest_sha256: "2d6f84e260b36ff4b754793813216a6ef0c38d8d76aa225ebc534ed4eb0a7362"
   arm_sweep_contract: "worldmind_arm_sweep.yaml"
   arm_sweep_contract_sha256: "d1f75347fc9b13d48e8ab400caf1466c0f33758d531e2850f64a114d721ade7f"
+  # Selector-only descriptor. Expected geometry is derived independently from the pinned
+  # Table.proto, SolidBox.proto, world and scene catalog; no expected value is sent to Webots.
+  table_targets:
+    parent_type: "Table"
+    nested_type: "SolidBox"
+    bounding_shape_type: "Box"
+    source_names:
+      - "main frame"
+      - "foot 1"
+      - "foot 2"
+      - "foot 3"
+      - "foot 4"
+    translation_tolerance_m: 0.0001
+    rotation_tolerance_rad: 0.0001
+    size_tolerance_m: 0.0001
+    transform_translation_tolerance_m: 0.0001
+    transform_rotation_tolerance_rad: 0.0001

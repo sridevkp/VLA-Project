@@ -1,6 +1,7 @@
 """Pure evidence rules for the dedicated read-only Webots geometry inspection.
 
-This module imports no simulator, backend, ROS or MuJoCo package. The live export is collected by
+This module imports no simulator, controller, ROS or MuJoCo package. It reuses the file-only pinned
+PROTO source loader. The live export is collected by
 ``vlarobot.backends.worldmind_webots_geometry_inspection`` and injected as a snapshot. Session,
 identity and launch-attestation checks are reused from the existing no-actuation diagnostic.
 Nothing here launches Webots, solves IK, applies a command, scores an episode or reads TEST/TRAIN.
@@ -14,8 +15,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import yaml
 
+from vlarobot.backends.webots.proto_sources import load_proto_source_manifest
 from vlarobot.eval.worldmind_webots_diagnostic import (
     AUTHORITATIVE_REPORT_SHA256,
     DiagnosticSnapshot,
@@ -33,8 +36,17 @@ from vlarobot.eval.worldmind_webots_diagnostic import (
     load_webots_diagnostic_config,
     write_diagnostic_evidence,
 )
+from vlarobot.world_model.scene_geometry import axis_angle_matrix, load_scene_collision_catalog
 
-GEOMETRY_INSPECTION_SCHEMA_VERSION = 1
+GEOMETRY_INSPECTION_SCHEMA_VERSION = 2
+TABLE_TARGET_SCHEMA_VERSION = 1
+TABLE_SOURCE_NAMES: tuple[str, ...] = (
+    "main frame",
+    "foot 1",
+    "foot 2",
+    "foot 3",
+    "foot 4",
+)
 GEOMETRY_INSPECTION_STATUS = "diagnostic_uncalibrated"
 GEOMETRY_INSPECTION_MODE = "live_read_only_bounding_object_export"
 _FORBIDDEN_CALLS = ("apply", "step", "reset", "export_kinematics", "inspect", "get_ground_truth")
@@ -50,8 +62,47 @@ _GEOMETRY_INSPECTION_KEYS = frozenset(
         "proto_manifest_sha256",
         "arm_sweep_contract",
         "arm_sweep_contract_sha256",
+        "table_targets",
     }
 )
+_TABLE_TARGET_KEYS = frozenset(
+    {
+        "parent_type",
+        "nested_type",
+        "bounding_shape_type",
+        "source_names",
+        "translation_tolerance_m",
+        "rotation_tolerance_rad",
+        "size_tolerance_m",
+        "transform_translation_tolerance_m",
+        "transform_rotation_tolerance_rad",
+    }
+)
+_TABLE_OBSERVATION_KEYS = frozenset({"schema_version", "rows", "errors", "interface"})
+_TABLE_ROW_KEYS = frozenset(
+    {
+        "source_name",
+        "status",
+        "reason",
+        "source_protos",
+        "runtime_node",
+        "hierarchy",
+        "evaluated",
+        "transforms",
+        "unsupported_reasons",
+    }
+)
+_TABLE_VERDICTS = ("Matched", "Mismatched", "Missing", "Unsupported")
+
+
+def _table_identity_matches(value: object, expected: str) -> bool:
+    return isinstance(value, Mapping) and expected in {
+        value.get("type"),
+        value.get("proto_type"),
+        value.get("base_type"),
+    }
+
+
 _GEOMETRY_OBJECT_KEYS = frozenset(
     {"id", "name", "def", "type", "T_base_owner", "T_world_owner", "shapes"}
 )
@@ -77,6 +128,21 @@ def normalize_webots_sfbool(value: object, *, field_name: str = "SFBool") -> boo
 
 
 @dataclass(frozen=True)
+class TableTargetConfig:
+    """Strict selector and explicit numeric tolerances for the five nested table boxes."""
+
+    parent_type: str
+    nested_type: str
+    bounding_shape_type: str
+    source_names: tuple[str, ...]
+    translation_tolerance_m: float
+    rotation_tolerance_rad: float
+    size_tolerance_m: float
+    transform_translation_tolerance_m: float
+    transform_rotation_tolerance_rad: float
+
+
+@dataclass(frozen=True)
 class GeometryInspectionConfig:
     """Reviewed read-only geometry contract nested inside the Webots diagnostic contract."""
 
@@ -88,6 +154,7 @@ class GeometryInspectionConfig:
     proto_manifest_sha256: str
     arm_sweep_contract_path: Path
     arm_sweep_contract_sha256: str
+    table_targets: TableTargetConfig
 
 
 @dataclass(frozen=True)
@@ -127,6 +194,45 @@ def load_geometry_inspection_config(path: Path) -> GeometryInspectionConfig:
     )
     if diagnostic.swept_arm_certificate is not None:
         raise ValueError("read-only geometry inspection forbids a swept-arm certificate")
+    targets_raw = _mapping(section.get("table_targets"), "geometry_inspection.table_targets")
+    _keys(targets_raw, _TABLE_TARGET_KEYS, "geometry_inspection.table_targets")
+    parent_type = _text(targets_raw["parent_type"], "geometry_inspection.table_targets.parent_type")
+    nested_type = _text(targets_raw["nested_type"], "geometry_inspection.table_targets.nested_type")
+    shape_type = _text(
+        targets_raw["bounding_shape_type"],
+        "geometry_inspection.table_targets.bounding_shape_type",
+    )
+    if (parent_type, nested_type, shape_type) != ("Table", "SolidBox", "Box"):
+        raise ValueError("table_targets selector must be Table/SolidBox/Box")
+    raw_names = targets_raw["source_names"]
+    if not isinstance(raw_names, Sequence) or isinstance(raw_names, (str, bytes)):
+        raise ValueError("geometry_inspection.table_targets.source_names must be a list")
+    source_names = tuple(
+        _text(item, "geometry_inspection.table_targets.source_names[]") for item in raw_names
+    )
+    if source_names != TABLE_SOURCE_NAMES:
+        raise ValueError("table_targets.source_names must pin the five Table box names in order")
+    tolerance_values: dict[str, float] = {}
+    for name in (
+        "translation_tolerance_m",
+        "rotation_tolerance_rad",
+        "size_tolerance_m",
+        "transform_translation_tolerance_m",
+        "transform_rotation_tolerance_rad",
+    ):
+        value = _finite_number(targets_raw[name])
+        if value is None or value < 0.0:
+            raise ValueError(
+                f"geometry_inspection.table_targets.{name} must be finite and nonnegative"
+            )
+        tolerance_values[name] = value
+    table_targets = TableTargetConfig(
+        parent_type=parent_type,
+        nested_type=nested_type,
+        bounding_shape_type=shape_type,
+        source_names=source_names,
+        **tolerance_values,
+    )
     return GeometryInspectionConfig(
         diagnostic=diagnostic,
         inspection_mode=mode,
@@ -149,6 +255,7 @@ def load_geometry_inspection_config(path: Path) -> GeometryInspectionConfig:
             section["arm_sweep_contract_sha256"],
             "geometry_inspection.arm_sweep_contract_sha256",
         ),
+        table_targets=table_targets,
     )
 
 
@@ -199,8 +306,524 @@ def _finite_number(value: object) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _geometry_blockers(
+def _float_sequence(value: object) -> tuple[float, ...] | None:
+    if isinstance(value, np.ndarray):
+        if value.ndim != 1:
+            return None
+        value = value.tolist()
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return None
+    numbers = [_finite_number(item) for item in value]
+    if any(number is None for number in numbers):
+        return None
+    return tuple(float(number) for number in numbers if number is not None)
+
+
+def _number_vector(value: object, size: int, name: str) -> tuple[float, ...] | None:
+    numbers = _float_sequence(value)
+    return numbers if numbers is not None and len(numbers) == size else None
+
+
+def _pose_matrix(value: object, name: str) -> np.ndarray | None:
+    numbers = _number_vector(value, 16, name)
+    if numbers is None:
+        return None
+    matrix = np.asarray(numbers, dtype=float).reshape(4, 4)
+    if not np.allclose(matrix[3], [0.0, 0.0, 0.0, 1.0], atol=1e-9, rtol=0):
+        return None
+    rotation = matrix[:3, :3]
+    if not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-8, rtol=0):
+        return None
+    return matrix
+
+
+def _rotation_angle(observed: np.ndarray, expected: np.ndarray) -> float | None:
+    rotation = observed[:3, :3] @ expected[:3, :3].T
+    cosine = (float(np.trace(rotation)) - 1.0) / 2.0
+    angle = math.acos(max(-1.0, min(1.0, cosine)))
+    return angle if math.isfinite(angle) else None
+
+
+def table_source_provenance(config: GeometryInspectionConfig) -> dict[str, dict[str, str]]:
+    """Resolve only the pinned Table/SolidBox source identities and hashes."""
+    manifest = load_proto_source_manifest(
+        config.proto_manifest_path,
+        world_path=config.diagnostic.world,
+        expected_world_sha256=config.diagnostic.world_sha256,
+    )
+    sources = {item.name: item for item in (*manifest.external, *manifest.nested)}
+    provenance: dict[str, dict[str, str]] = {}
+    for name in ("Table", "SolidBox"):
+        source = sources.get(name)
+        if source is None:
+            raise ValueError(f"pinned PROTO source manifest has no {name} entry")
+        provenance[name] = {
+            "name": source.name,
+            "url": source.url,
+            "path": str(source.path),
+            "sha256": source.sha256,
+        }
+    return provenance
+
+
+def table_target_descriptor(config: GeometryInspectionConfig) -> dict[str, object]:
+    """Build the selector-only descriptor forwarded to the supervisor-side probe."""
+    targets = config.table_targets
+    return {
+        "schema_version": TABLE_TARGET_SCHEMA_VERSION,
+        "parent_type": targets.parent_type,
+        "nested_type": targets.nested_type,
+        "bounding_shape_type": targets.bounding_shape_type,
+        "source_names": list(targets.source_names),
+        "source_protos": table_source_provenance(config),
+    }
+
+
+def _expected_table_geometry(config: GeometryInspectionConfig) -> dict[str, object]:
+    """Derive expected five-box geometry from pinned sources; never from runtime observations."""
+    from vlarobot.eval.worldmind_live_geometry_reconciliation import (
+        expand_table_source_geometry,
+    )
+
+    if _sha256_file(config.scene_catalog_path) != config.scene_catalog_sha256:
+        raise ValueError("scene_catalog SHA-256 does not match the reviewed geometry config")
+    manifest = load_proto_source_manifest(
+        config.proto_manifest_path,
+        world_path=config.diagnostic.world,
+        expected_world_sha256=config.diagnostic.world_sha256,
+    )
+    sources = {item.name: item for item in (*manifest.external, *manifest.nested)}
+    catalog = load_scene_collision_catalog(config.scene_catalog_path)
+    expansion, blockers = expand_table_source_geometry(
+        config.diagnostic.world,
+        sources["Table"],
+        sources["SolidBox"],
+        catalog,
+        math.inf,
+        False,
+        config.diagnostic.world_sha256,
+    )
+    if blockers:
+        raise ValueError(f"source table expansion is blocked: {'; '.join(blockers)}")
+    # This reconciliation uses an unbounded source expansion only for arithmetic expectations.
+    # Workspace reach fields would be meaningless here and cannot be serialized as evidence.
+    expansion.pop("reach_bound_m", None)
+    raw_boxes = expansion.get("boxes")
+    if isinstance(raw_boxes, list):
+        for box in raw_boxes:
+            if isinstance(box, dict):
+                box.pop("distance_to_base_origin_m", None)
+                box.pop("reachability", None)
+    return expansion
+
+
+def _table_check(
+    name: str,
+    observed: object,
+    expected: object,
+    tolerance: float,
+    *,
+    metric: str,
+    unit: str,
+) -> dict[str, object]:
+    observed_numbers = _float_sequence(observed)
+    expected_numbers = _float_sequence(expected)
+    if observed_numbers is None or expected_numbers is None:
+        return {"name": name, "matched": False, "metric": metric, "reason": "missing observation"}
+    observed_array = np.asarray(observed_numbers, dtype=float)
+    expected_array = np.asarray(expected_numbers, dtype=float)
+    if observed_array.shape != expected_array.shape or not np.isfinite(observed_array).all():
+        return {"name": name, "matched": False, "metric": metric, "reason": "invalid observation"}
+    error = float(np.max(np.abs(observed_array - expected_array)))
+    return {
+        "name": name,
+        "matched": bool(error <= tolerance),
+        "metric": metric,
+        "unit": unit,
+        "tolerance": tolerance,
+        "max_abs_error": error,
+    }
+
+
+def _reconcile_table_row(
+    config: GeometryInspectionConfig,
+    row: Mapping[str, object],
+    expected: Mapping[str, object],
+    descriptor: Mapping[str, object],
+    source_protos: Mapping[str, dict[str, str]],
+) -> tuple[dict[str, object], list[str]]:
+    """Compare one raw runtime row with source-derived expectations; never backfill observations."""
+    reasons: list[str] = []
+    checks: list[dict[str, object]] = []
+    source_name = row.get("source_name")
+    if row.get("source_protos") != descriptor.get("source_protos"):
+        reasons.append("source PROTO provenance differs from the pinned descriptor")
+    runtime_node = row.get("runtime_node")
+    unsupported_identity = False
+    if not isinstance(runtime_node, Mapping):
+        reasons.append("runtime node identity is missing")
+        runtime_node = {}
+    else:
+        if not _table_identity_matches(runtime_node, config.table_targets.nested_type):
+            unsupported_identity = True
+            reasons.append("runtime node type is not the pinned nested type")
+        if runtime_node.get("name") != source_name:
+            reasons.append("runtime node name is not the pinned source name")
+    hierarchy = row.get("hierarchy")
+    if not isinstance(hierarchy, Mapping) or hierarchy.get("reachable") is not True:
+        reasons.append("node is not reachable through the supported Supervisor interface")
+        hierarchy = {}
+    else:
+        table_ancestor = hierarchy.get("table_ancestor")
+        if not _table_identity_matches(table_ancestor, config.table_targets.parent_type):
+            reasons.append("runtime Table parent ancestry is missing")
+    evaluated = row.get("evaluated")
+    if not isinstance(evaluated, Mapping):
+        reasons.append("evaluated runtime fields are missing")
+        evaluated = {}
+    transforms = row.get("transforms")
+    if not isinstance(transforms, Mapping):
+        reasons.append("runtime transforms are missing")
+        transforms = {}
+
+    observed_translation = _number_vector(
+        evaluated.get("translation_m"), 3, "evaluated.translation_m"
+    )
+    observed_size = _number_vector(evaluated.get("size_m"), 3, "evaluated.size_m")
+    observed_rotation = _number_vector(
+        evaluated.get("rotation_axis_angle"), 4, "evaluated.rotation_axis_angle"
+    )
+    checks.append(
+        _table_check(
+            "local_translation_m",
+            observed_translation,
+            expected.get("local_translation_m"),
+            config.table_targets.translation_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+    checks.append(
+        _table_check(
+            "size_m",
+            observed_size,
+            expected.get("size_m"),
+            config.table_targets.size_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+    expected_rotation = _number_vector(
+        expected.get("local_rotation_axis_angle"), 4, "local_rotation_axis_angle"
+    )
+    if observed_rotation is None or expected_rotation is None:
+        checks.append(
+            {"name": "local_rotation_rad", "matched": False, "reason": "missing observation"}
+        )
+    else:
+        try:
+            observed_rotation_matrix = axis_angle_matrix(observed_rotation)
+            expected_rotation_matrix = axis_angle_matrix(expected_rotation)
+        except (TypeError, ValueError):
+            checks.append(
+                {"name": "local_rotation_rad", "matched": False, "reason": "invalid rotation"}
+            )
+        else:
+            angle = _rotation_angle(observed_rotation_matrix, expected_rotation_matrix)
+            if angle is None:
+                checks.append(
+                    {"name": "local_rotation_rad", "matched": False, "reason": "invalid rotation"}
+                )
+            else:
+                checks.append(
+                    {
+                        "name": "local_rotation_rad",
+                        "matched": bool(angle <= config.table_targets.rotation_tolerance_rad),
+                        "metric": "geodesic",
+                        "unit": "rad",
+                        "tolerance": config.table_targets.rotation_tolerance_rad,
+                        "angle": angle,
+                    }
+                )
+
+    raw_enable = evaluated.get("enable_bounding_object")
+    try:
+        enable = normalize_webots_sfbool(raw_enable, field_name="enableBoundingObject")
+    except ValueError:
+        enable = None
+        checks.append(
+            {
+                "name": "enable_bounding_object",
+                "matched": False,
+                "reason": "ambiguous Webots SFBool",
+            }
+        )
+    else:
+        checks.append({"name": "enable_bounding_object", "matched": enable is True})
+    if evaluated.get("bounding_object_type") != config.table_targets.bounding_shape_type:
+        checks.append(
+            {
+                "name": "bounding_object_type",
+                "matched": False,
+                "reason": "bounding object is not the pinned Box shape",
+            }
+        )
+    checks.append(
+        _table_check(
+            "bounding_object_size_m",
+            _number_vector(evaluated.get("bounding_object_size_m"), 3, "boundingObject.size"),
+            expected.get("size_m"),
+            config.table_targets.size_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+
+    world_pose = _pose_matrix(transforms.get("T_world"), "T_world")
+    base_pose = _pose_matrix(transforms.get("T_base"), "T_base")
+    checks.append(
+        _table_check(
+            "T_world_translation_m",
+            None if world_pose is None else world_pose[:3, 3],
+            expected.get("world_translation_m"),
+            config.table_targets.transform_translation_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+    checks.append(
+        _table_check(
+            "T_base_translation_m",
+            None if base_pose is None else base_pose[:3, 3],
+            expected.get("base_translation_m"),
+            config.table_targets.transform_translation_tolerance_m,
+            metric="max_abs",
+            unit="m",
+        )
+    )
+    for name, observed_pose, key in (
+        ("T_world_rotation_rad", world_pose, "world_rotation_matrix"),
+        ("T_base_rotation_rad", base_pose, "base_rotation_matrix"),
+    ):
+        if observed_pose is None or expected.get(key) is None:
+            checks.append({"name": name, "matched": False, "reason": "missing observation"})
+            continue
+        angle = _rotation_angle(observed_pose, np.asarray(expected[key], dtype=float).reshape(3, 3))
+        if angle is None:
+            checks.append({"name": name, "matched": False, "reason": "invalid rotation"})
+        else:
+            checks.append(
+                {
+                    "name": name,
+                    "matched": bool(angle <= config.table_targets.transform_rotation_tolerance_rad),
+                    "metric": "geodesic",
+                    "unit": "rad",
+                    "tolerance": config.table_targets.transform_rotation_tolerance_rad,
+                    "angle": angle,
+                }
+            )
+
+    failed = [
+        f"{check['name']}: {check.get('reason', check.get('max_abs_error', check.get('angle')))}"
+        for check in checks
+        if not check["matched"]
+    ]
+    reasons.extend(failed)
+    unsupported_reasons = row.get("unsupported_reasons")
+    observed_unsupported: list[str] = []
+    if isinstance(unsupported_reasons, Sequence) and not isinstance(
+        unsupported_reasons, (str, bytes)
+    ):
+        observed_unsupported = [str(item) for item in unsupported_reasons]
+        reasons.extend(observed_unsupported)
+    if row.get("status") != "observed":
+        reasons.append(f"probe status={row.get('status')!r}")
+    if row.get("status") == "missing":
+        verdict = "Missing"
+    elif (
+        observed_unsupported
+        or unsupported_identity
+        or row.get("status") == "unsupported"
+        or not isinstance(runtime_node, Mapping)
+        or not runtime_node
+        or not _table_identity_matches(
+            hierarchy.get("table_ancestor"), config.table_targets.parent_type
+        )
+    ):
+        verdict = "Unsupported"
+    else:
+        verdict = "Matched" if not reasons else "Mismatched"
+    detail = {
+        "source_name": source_name,
+        "verdict": verdict,
+        "runtime_verification": "VERIFIED" if verdict == "Matched" else "UNVERIFIED",
+        "probe_status": row.get("status"),
+        "probe_reason": row.get("reason"),
+        "runtime_node": dict(runtime_node),
+        "hierarchy": dict(hierarchy),
+        "evaluated": dict(evaluated),
+        "transforms": dict(transforms),
+        "expected": dict(expected),
+        "source_provenance": {
+            "world_sha256": config.diagnostic.world_sha256,
+            "table_proto": source_protos.get("Table"),
+            "solid_box_proto": source_protos.get("SolidBox"),
+            "derivation": "pinned source arithmetic; not a runtime observation",
+        },
+        "checks": checks,
+        "reasons": reasons,
+    }
+    return detail, [
+        f"table target {source_name}: {verdict} ({'; '.join(reasons)})"
+    ] if reasons else []
+
+
+def reconcile_table_targets(
     config: GeometryInspectionConfig, snapshot: GeometryInspectionSnapshot
+) -> dict[str, object]:
+    """Reconcile raw supervisor observations with pinned source geometry, fail-closed."""
+    expected_geometry = _expected_table_geometry(config)
+    descriptor = table_target_descriptor(config)
+    source_protos = table_source_provenance(config)
+    boxes_value = expected_geometry.get("boxes")
+    if not isinstance(boxes_value, Sequence) or isinstance(boxes_value, (str, bytes)):
+        raise ValueError("source table expansion produced no boxes")
+    expected_boxes = {
+        str(item["name"]): item
+        for item in boxes_value
+        if isinstance(item, Mapping) and isinstance(item.get("name"), str)
+    }
+    raw = snapshot.geometry.get("table_targets")
+    blockers: list[str] = []
+    rows: Sequence[object] = ()
+    if not isinstance(raw, Mapping) or not set(raw).issuperset(_TABLE_OBSERVATION_KEYS):
+        blockers.append("geometry export omitted a complete table_targets observation")
+    else:
+        if raw.get("schema_version") != TABLE_TARGET_SCHEMA_VERSION:
+            blockers.append("table target observation schema_version is unsupported")
+        if raw.get("interface") != descriptor:
+            blockers.append("table target observation descriptor differs from the pinned contract")
+        raw_rows = raw.get("rows")
+        if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
+            blockers.append("table target observation rows are invalid")
+        else:
+            rows = raw_rows
+        raw_errors = raw.get("errors")
+        if not isinstance(raw_errors, Sequence) or isinstance(raw_errors, (str, bytes)):
+            blockers.append("table target observation errors are invalid")
+        else:
+            blockers.extend(f"table probe error: {item}" for item in raw_errors)
+
+    targets: list[dict[str, object]] = []
+    for name in config.table_targets.source_names:
+        candidates = [
+            item for item in rows if isinstance(item, Mapping) and item.get("source_name") == name
+        ]
+        if not candidates:
+            targets.append(
+                {
+                    "source_name": name,
+                    "verdict": "Missing",
+                    "runtime_verification": "UNVERIFIED",
+                    "reasons": ["no runtime row observed; source values were not substituted"],
+                }
+            )
+            blockers.append(f"table target {name}: Missing (no runtime row observed)")
+            continue
+        if len(candidates) > 1:
+            targets.append(
+                {
+                    "source_name": name,
+                    "verdict": "Unsupported",
+                    "runtime_verification": "UNVERIFIED",
+                    "reasons": ["duplicate runtime rows for one pinned source name"],
+                }
+            )
+            blockers.append(f"table target {name}: Unsupported (duplicate runtime rows)")
+            continue
+        row = candidates[0]
+        if not set(row).issuperset(_TABLE_ROW_KEYS):
+            targets.append(
+                {
+                    "source_name": name,
+                    "verdict": "Unsupported",
+                    "runtime_verification": "UNVERIFIED",
+                    "reasons": ["runtime row omitted required fields"],
+                }
+            )
+            blockers.append(f"table target {name}: Unsupported (incomplete runtime row)")
+            continue
+        detail, row_blockers = _reconcile_table_row(
+            config, row, expected_boxes[name], descriptor, source_protos
+        )
+        targets.append(detail)
+        blockers.extend(row_blockers)
+    counts = {verdict: 0 for verdict in _TABLE_VERDICTS}
+    for item in targets:
+        verdict = str(item.get("verdict"))
+        if verdict in counts:
+            counts[verdict] += 1
+    grounded = counts["Matched"] == len(config.table_targets.source_names) and not blockers
+    return {
+        "schema_version": TABLE_TARGET_SCHEMA_VERSION,
+        "status": "runtime_grounded" if grounded else "unverified",
+        "runtime_grounded": grounded,
+        "source_provenance": {
+            "world_sha256": config.diagnostic.world_sha256,
+            "table_proto": source_protos["Table"],
+            "solid_box_proto": source_protos["SolidBox"],
+            "scene_catalog_sha256": config.scene_catalog_sha256,
+            "method": "pinned source arithmetic compared with raw runtime observations only",
+        },
+        "tolerances": {
+            "translation_tolerance_m": config.table_targets.translation_tolerance_m,
+            "rotation_tolerance_rad": config.table_targets.rotation_tolerance_rad,
+            "size_tolerance_m": config.table_targets.size_tolerance_m,
+            "transform_translation_tolerance_m": (
+                config.table_targets.transform_translation_tolerance_m
+            ),
+            "transform_rotation_tolerance_rad": (
+                config.table_targets.transform_rotation_tolerance_rad
+            ),
+        },
+        "expected_source_geometry": expected_geometry,
+        "targets": targets,
+        "summary": counts,
+        "blockers": blockers,
+    }
+
+
+def _string_items(value: object) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    return [str(item) for item in value]
+
+
+def _failed_table_report(config: GeometryInspectionConfig, reason: str) -> dict[str, object]:
+    """Fail-closed table report used when pinned source reconciliation cannot run."""
+    return {
+        "schema_version": TABLE_TARGET_SCHEMA_VERSION,
+        "status": "unverified",
+        "runtime_grounded": False,
+        "targets": [
+            {
+                "source_name": name,
+                "verdict": "Missing",
+                "runtime_verification": "UNVERIFIED",
+                "reasons": [reason],
+            }
+            for name in config.table_targets.source_names
+        ],
+        "summary": {verdict: 0 for verdict in _TABLE_VERDICTS}
+        | {"Missing": len(config.table_targets.source_names)},
+        "blockers": [reason],
+    }
+
+
+def _geometry_blockers(
+    config: GeometryInspectionConfig,
+    snapshot: GeometryInspectionSnapshot,
+    table_report: Mapping[str, object] | None = None,
 ) -> list[str]:
     geometry = snapshot.geometry
     required = {
@@ -269,6 +892,8 @@ def _geometry_blockers(
             blockers.append(f"forbidden geometry backend call was attempted: {name}")
     if snapshot.identity.get("physics_step_count") != 0:
         blockers.append("a physics step occurred in this geometry inspection session")
+    if table_report is not None:
+        blockers.extend(_string_items(table_report.get("blockers", ())))
     return blockers
 
 
@@ -284,9 +909,16 @@ def finalize_geometry_inspection(
     controller_version = _observed_text(snapshot.identity.get("webots_version"))
     runtime_version = launch_version or controller_version
     session_blockers = _snapshot_blockers(diagnostic, snapshot)
-    geometry_blockers = _geometry_blockers(config, snapshot)
+    try:
+        table_report = reconcile_table_targets(config, snapshot)
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        table_report = _failed_table_report(config, f"table target reconciliation failed: {exc}")
+    geometry_blockers = _geometry_blockers(config, snapshot, table_report)
     blockers = [*preflight.blockers, *session_blockers, *geometry_blockers]
     ready = not blockers
+    motion_blockers = list(preflight.motion_blockers)
+    if table_report.get("runtime_grounded") is not True:
+        motion_blockers.append("unverified-runtime-table-transform")
     objects = snapshot.geometry.get("objects", ())
     unsupported = snapshot.geometry.get("unsupported_shapes", ())
     raw_self_collision = snapshot.geometry.get("self_collision_enabled")
@@ -341,6 +973,9 @@ def finalize_geometry_inspection(
         "physics_step_count": snapshot.identity.get("physics_step_count"),
         "geometry_export_valid": not geometry_blockers,
         "geometry_blockers": geometry_blockers,
+        "table_target_inspection": table_report,
+        "table_transform_verification": table_report.get("status"),
+        "table_transform_grounded": table_report.get("runtime_grounded"),
         "read_only_inspection_allowed": not preflight.blockers,
         "no_actuation": True,
         "backend_apply_calls": snapshot.call_counts.get("apply", 0),
@@ -355,7 +990,7 @@ def finalize_geometry_inspection(
         "safety_check_readiness": all(snapshot.dependency_availability.values()),
         "motion_allowed": False,
         "motion_readiness": "NOT_READY",
-        "motion_blockers": list(preflight.motion_blockers),
+        "motion_blockers": motion_blockers,
         "blockers": blockers,
     }
     state = {
@@ -394,6 +1029,7 @@ def finalize_geometry_inspection(
         "schema_version": GEOMETRY_INSPECTION_SCHEMA_VERSION,
         "inspection_mode": config.inspection_mode,
         "motion_ready": False,
+        "table_target_reconciliation": table_report,
         "export": dict(snapshot.geometry),
     }
     return report, state, provenance, geometry
@@ -472,10 +1108,14 @@ __all__ = [
     "GeometryInspectionConfig",
     "GeometryInspectionPreflight",
     "GeometryInspectionSnapshot",
+    "TableTargetConfig",
     "failed_geometry_inspection",
     "finalize_geometry_inspection",
     "load_geometry_inspection_config",
     "normalize_webots_sfbool",
     "preflight_geometry_inspection",
+    "reconcile_table_targets",
+    "table_source_provenance",
+    "table_target_descriptor",
     "write_geometry_inspection_evidence",
 ]

@@ -198,7 +198,13 @@ class SimServer:
             elif operation == "inspect_geometry":
                 from vlarobot.backends.read_only_geometry import capture_read_only_geometry
 
-                snapshot = capture_read_only_geometry(self.backend)
+                if "table_targets" in payload:
+                    table_targets = payload["table_targets"]
+                    if not isinstance(table_targets, dict):
+                        raise RuntimeError("inspect_geometry table_targets must be a mapping")
+                    snapshot = capture_read_only_geometry(self.backend, table_targets)
+                else:
+                    snapshot = capture_read_only_geometry(self.backend)
                 if not isinstance(snapshot, dict) or not {
                     "observation",
                     "ground_truth",

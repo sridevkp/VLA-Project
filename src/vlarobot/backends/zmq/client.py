@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from time import perf_counter
 from typing import Any
 
@@ -128,10 +129,20 @@ class ZmqBackendClient:
             raise ValueError("inspect reply omitted observation, ground truth or identity")
         return payload
 
-    def inspect_geometry(self) -> dict[str, Any]:
-        """Read the supervisor boundingObject export without advancing simulation."""
+    def inspect_geometry(self, table_targets: Mapping[str, object] | None = None) -> dict[str, Any]:
+        """Read the supervisor geometry export without advancing simulation.
+
+        ``table_targets`` is a selector-only descriptor; expected geometry is never sent to the
+        simulator side. Omitting it preserves the original direct boundingObject export.
+        """
+        if table_targets is None:
+            payload: dict[str, Any] = {}
+        elif isinstance(table_targets, Mapping):
+            payload = {"table_targets": dict(table_targets)}
+        else:
+            raise TypeError("table_targets must be a mapping or None")
         response = self._request(
-            "inspect_geometry", {}, timeout_ms=self._timeout_for("inspect_geometry", None)
+            "inspect_geometry", payload, timeout_ms=self._timeout_for("inspect_geometry", None)
         )
         payload = response.get("payload", {})
         if not isinstance(payload, dict) or not {

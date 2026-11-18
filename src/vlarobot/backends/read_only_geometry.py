@@ -8,6 +8,7 @@ backend source.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from vlarobot.backends.read_only_state import capture_read_only_state
@@ -30,7 +31,9 @@ _GEOMETRY_KEYS = frozenset(
 )
 
 
-def capture_read_only_geometry(backend: Any) -> dict[str, object]:
+def capture_read_only_geometry(
+    backend: Any, table_targets: Mapping[str, object] | None = None
+) -> dict[str, object]:
     """Return observation, oracle state, identity and geometry without touching simulator state."""
     state = capture_read_only_state(backend)
     identity = state.get("identity")
@@ -47,9 +50,11 @@ def capture_read_only_geometry(backend: Any) -> dict[str, object]:
     supervisor = getattr(io, "robot", None)
     if supervisor is None:
         raise RuntimeError("Backend does not expose a Webots supervisor for geometry inspection.")
-    geometry = export_bounding_objects(supervisor)
+    geometry = export_bounding_objects(supervisor, table_targets)
     if not isinstance(geometry, dict) or not _GEOMETRY_KEYS.issubset(geometry):
         raise RuntimeError("Backend read-only geometry export returned an incomplete snapshot.")
+    if table_targets is not None and "table_targets" not in geometry:
+        raise RuntimeError("Backend read-only geometry export omitted table target observations.")
     if geometry.get("motor_commands_sent") != 0:
         raise RuntimeError("Geometry export reported motor commands; inspection is blocked.")
     return {**state, "geometry": dict(geometry)}

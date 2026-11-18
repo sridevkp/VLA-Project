@@ -2086,7 +2086,7 @@ or frozen-evidence change is included. The prior read-only Webots PASS remains c
   (42 world instances), `selfCollision FALSE`, and non-reviewed diagnostic primitives.
 - **Phase C — read-only geometry inspection:** the dedicated
   `worldmind-webots-geometry-inspection` command and config (SHA-256
-  `30e8520c6fcbfbe155273ba4f758945c56f9fa9635f6a1318857f24f9250cb5c`) add a backend-only
+  `442cb25eb307fec9d5608863df2debf6c319d3cdac34b072313a463d2e35f233`) add a backend-only
   `inspect_geometry` RPC; `core/wire.py` and public `core/` interfaces are unchanged. The collector
   reuses the existing session, identity and launch-attestation checks, and its client permits only
   `ping` and `inspect_geometry`. The config forbids any swept-arm certificate; the evidence rules
@@ -2095,7 +2095,8 @@ or frozen-evidence change is included. The prior read-only Webots PASS remains c
   identity mismatch and missing or mismatched catalog hashes. Output files are `diagnostic.json`,
   `state.json`, `provenance.json` and `geometry.json`, all with `motion_allowed=false` and
   `motion_readiness="NOT_READY"`. No Webots process was launched and the CLI command was not run;
-  tests inject synthetic snapshots to exercise the exact inert path.
+  tests inject synthetic snapshots to exercise the exact inert path. ADR-0058 extends this contract
+  to the five nested Table `SolidBox` boxes without changing its no-actuation boundary.
 - **Unchanged motion gate:** production still has `check_transition=None`, sweep status `blocked`,
   `certificate=None`, `unverified-arm-sweep` veto and `unresolved_forwarded_geometry` blocker. No
   owner-reviewed full-arm swept certificate exists, and this project will not create one. The
@@ -2262,7 +2263,7 @@ frozen-evidence edit, push, merge or PR #2 update occurred.
   `configs/worldmind_arm_sweep.yaml` SHA-256
   `d1f75347fc9b13d48e8ab400caf1466c0f33758d531e2850f64a114d721ade7f`;
   `configs/worldmind_webots_geometry_inspection.yaml` SHA-256
-  `e2fe42dfa20b879c26097b59b238b6464447a5c7542412cfb8089198a070297c`. Frozen live artifacts are
+  `442cb25eb307fec9d5608863df2debf6c319d3cdac34b072313a463d2e35f233`. Frozen live artifacts are
   unchanged: `geometry.json` `034061c296abcada98b32fb2f22d7b421354a3a90bebf58e5feb6cea8b1a69d9`,
   `diagnostic.json` `4f2e8cca63a3914c595fc13a6ae635625bf4e946084dbb958c91c4099e30156b`,
   `state.json` `2b970678a27a784a5860500e95ca9e31b00bc4a20466e05e519090dfe07bc7b1`,
@@ -2286,3 +2287,54 @@ frozen-evidence edit, push, merge or PR #2 update occurred.
   frozen-helper hash mismatch, which was not repaired. Windows and live Webots execution remain
   unverified. No dependency, public `core/` interface, frozen live-artifact byte, seed, split or
   production safety threshold changed.
+
+## ADR-0058 — Selector-only read-only inspection of five nested Table boxes (2026-11-18)
+
+**Status:** Accepted for local implementation and inert verification only. The single read-only
+Webots execution that would ground the five nested runtime boxes is ready for explicit owner
+authorization but was **not** launched here. No actuation, physics step/reset, real IK solve,
+candidate execution, calibration, scored evaluation, TEST/TRAIN access, owner-certificate
+activation, push, merge or PR #2 update occurred. Motion remains `NO-GO` / `NOT_READY`.
+
+- **Selector-only RPC:** `configs/worldmind_webots_geometry_inspection.yaml` moves to
+  `geometry_inspection.schema_version: 2` and pins `table_targets` with parent `Table`, nested
+  `SolidBox`, bounding shape `Box`, names `main frame`, `foot 1`, `foot 2`, `foot 3`, `foot 4`, and
+  five finite nonnegative tolerances of `0.0001` (m or rad as applicable). The adapter forwards a
+  selector-only descriptor containing those names and the pinned PROTO identities/hashes
+  (`Table.proto` `d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb`;
+  `SolidBox.proto` `f9e18612ce325bc7abfd2d94cbd1c391a244f54ce5a2789a97fd1f901dc0dfba`) through
+  the existing backend-only `inspect_geometry` RPC. No expected translation, rotation, size, pose or
+  hierarchy value is sent to Webots. `core/wire.py` and public `core/` interfaces are unchanged;
+  the optional `table_targets` argument is internal to backend capture and dispatch.
+- **Raw runtime observation:** `geometry_probe.inspect_table_targets()` traverses exactly one
+  reachable runtime `Table` through supported `getBaseNodeField("children")` expansion and emits
+  runtime schema `1` rows. Each row preserves expanded node identity, parent/child hierarchy,
+  evaluated `translation`/`rotation`/`size`, `enableBoundingObject`, actual `boundingObject Box.size`,
+  world pose from `node.getPose()`, robot-base pose from `node.getPose(robot)`, and explicit
+  unsupported reasons. Missing nodes remain `missing` with empty evaluated/transform fields;
+  unreadable PROTO expansion or unsupported node types remain `unsupported`. No source value is ever
+  copied into an observation.
+- **Pure reconciliation:** `worldmind_webots_geometry_inspection.reconcile_table_targets()`
+  derives expectations independently from the pinned world, PROTO sources and scene catalog via the
+  new public `expand_table_source_geometry()` helper. It reports each of the five boxes as
+  `Matched`, `Mismatched`, `Missing`, or `Unsupported`, records the exact tolerance and error for
+  every checked quantity, and preserves source provenance. Duplicate rows are `Unsupported`; any
+  non-`Matched` target has `runtime_verification=UNVERIFIED`. Missing, mismatched or uninspectable
+  observations are never repaired with source arithmetic. Table blockers feed `geometry_blockers`,
+  and a non-grounded result adds the `unverified-runtime-table-transform` motion blocker.
+- **Evidence boundary:** the CLI contract remains exactly `--config` and `--out` (verified with
+  `--help`), and expected evidence files remain `diagnostic.json`, `state.json`, `provenance.json`
+  and `geometry.json`. Reports add `table_target_inspection`, `table_transform_verification`,
+  `table_transform_grounded` and geometric `table_target_reconciliation`; all retain
+  `motion_allowed=false`, `motion_readiness="NOT_READY"`, all pre-existing hard blockers and the
+  forbidden calls `apply`, `step`, `reset`, `export_kinematics`, `inspect` and `get_ground_truth`.
+  The config SHA-256 is `442cb25eb307fec9d5608863df2debf6c319d3cdac34b072313a463d2e35f233`.
+- **Verification and residual risk:** 66 focused inert tests pass, including all five boxes,
+  missing/duplicate/mismatched/disabled/unsupported cases, nested PROTO expansion failure, selector
+  forwarding and forbidden-call guards. `ruff check .`, `ruff format --check .`, `ty check src`,
+  `compileall`, and the frozen-evidence verifier pass. The full non-Webots suite is
+  `1 failed, 701 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch, which was not repaired by editing frozen evidence. Windows and live
+  Webots execution remain unverified. No dependency, public `core/` interface, frozen live-artifact
+  byte, seed, split or production safety threshold changed.

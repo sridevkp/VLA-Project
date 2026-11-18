@@ -29,6 +29,7 @@ from vlarobot.core.types import (
 from vlarobot.eval.worldmind_webots_geometry_inspection import (
     GeometryInspectionConfig,
     GeometryInspectionSnapshot,
+    table_target_descriptor,
 )
 from vlarobot.execution.episode_runner import launch_webots_session
 
@@ -56,9 +57,9 @@ class ReadOnlyGeometryBackendClient:
         self._calls["ping"] += 1
         return self._client.ping()
 
-    def inspect_geometry(self) -> dict[str, Any]:
+    def inspect_geometry(self, table_targets: Mapping[str, object] | None = None) -> dict[str, Any]:
         self._calls["inspect_geometry"] += 1
-        return self._client.inspect_geometry()
+        return self._client.inspect_geometry(table_targets)
 
     def close(self) -> None:
         self._client.close()
@@ -99,7 +100,7 @@ def _capture(
     ping["endpoint"] = endpoint
     ping["launch_mode"] = config.diagnostic.mode
     started = perf_counter()
-    payload = client.inspect_geometry()
+    payload = client.inspect_geometry(table_target_descriptor(config))
     age_s = perf_counter() - started
     if not {"observation", "ground_truth", "identity", "geometry"}.issubset(payload):
         raise ValueError("inspect_geometry reply omitted state, identity or geometry")

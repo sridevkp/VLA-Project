@@ -143,3 +143,13 @@ are unchanged. New packaged data files are
 actuation, scored VALIDATION and pilot execution remain unverified. Production still has
 `check_transition=None`, sweep status `blocked`, `certificate=None` and motion readiness
 `NOT_READY`.
+
+Fail-closed swept-residual accounting, frame-aware gripper evidence, bounded CAN lifecycle,
+self-collision pair coverage and the non-approving motion-readiness dossier (ADR-0057) add no
+dependency or version pin. They reuse Python 3.11 standard library, NumPy, PyYAML, Typer and the
+existing pinned geometry/URDF/PROTO sources. New internal modules and config data files are used
+only by inert reconciliation and CLI reporting; no public `core/` interface, production callback,
+frozen live-artifact byte, seed, split or safety threshold changed. Linux inert checks pass;
+Windows, Webots execution, real IK, actuation, scored VALIDATION and pilot execution remain
+unverified. The production `check_transition=None`, `unverified-arm-sweep` veto and
+`NOT_READY` status remain in force.

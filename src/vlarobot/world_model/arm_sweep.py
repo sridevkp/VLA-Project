@@ -39,14 +39,16 @@ def required_substeps(
     maximum: int = 4096,
     geometry_error_bound_m: float = 0.0,
     registration_uncertainty_bound_m: float = 0.0,
+    numerical_error_bound_m: float = 0.0,
+    transform_error_bound_m: float = 0.0,
 ) -> int:
     """Conservative count keeping bounded motion plus support error below the margin.
 
     Eight fixed substeps at the pinned 28.49 m/s point-speed bound and 32 ms tick allow
     0.114 m of travel per sub-interval, which is larger than the 0.02 m margin. The count
     returned here is ``ceil(speed * dt / usable_margin)``, where ``usable_margin`` subtracts
-    explicit geometry/registration error bounds. Missing error bounds must fail closed at the
-    caller's certificate layer; passing zero is only valid for synthetic exact geometry.
+    every explicit support-error bound. Missing error bounds must fail closed at the caller's
+    certificate layer; passing zero is only valid for synthetic exact geometry.
     """
     if (
         isinstance(speed_bound_m_s, bool)
@@ -67,12 +69,20 @@ def required_substeps(
     for value, name in (
         (geometry_error_bound_m, "geometry error bound"),
         (registration_uncertainty_bound_m, "registration uncertainty bound"),
+        (numerical_error_bound_m, "numerical error bound"),
+        (transform_error_bound_m, "transform error bound"),
     ):
         if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
             raise SweepGeometryError(f"{name} must be finite and nonnegative")
-    usable_margin = margin_m - geometry_error_bound_m - registration_uncertainty_bound_m
+    usable_margin = (
+        margin_m
+        - geometry_error_bound_m
+        - registration_uncertainty_bound_m
+        - numerical_error_bound_m
+        - transform_error_bound_m
+    )
     if usable_margin <= 0.0:
-        raise SweepGeometryError("geometry and registration error consume the collision margin")
+        raise SweepGeometryError("support-error bounds consume the collision margin")
     required = max(minimum, int(math.ceil(speed_bound_m_s * dt_s / usable_margin)))
     if required > maximum:
         raise SweepGeometryError(
@@ -86,13 +96,15 @@ class SweepSafetyBound:
     """Explicit no-false-clear inequality for one certified transition contract."""
 
     margin_m: float
-    point_speed_bound_m_s: float
+    point_speed_bound_m_s: float | None
     dt_s: float
     substeps: int
     point_motion_allowance_m: float
     joint_motion_allowance_m: float | None
     geometry_approximation_error_bound_m: float | None
     registration_uncertainty_bound_m: float | None
+    numerical_error_bound_m: float | None
+    transform_error_bound_m: float | None
     required_margin_m: float | None
     residual_m: float | None
     certified: bool
@@ -108,11 +120,14 @@ class SweepSafetyBound:
             "joint_motion_allowance_m": self.joint_motion_allowance_m,
             "geometry_approximation_error_bound_m": self.geometry_approximation_error_bound_m,
             "registration_uncertainty_bound_m": self.registration_uncertainty_bound_m,
+            "numerical_error_bound_m": self.numerical_error_bound_m,
+            "transform_error_bound_m": self.transform_error_bound_m,
             "required_margin_m": self.required_margin_m,
             "residual_m": self.residual_m,
             "inequality": (
                 "margin > max(point_speed*dt/substeps, joint_displacement*reach) "
-                "+ geometry_error + registration_error"
+                "+ geometry_approximation_error + registration_uncertainty "
+                "+ numerical_error + transform_error"
             ),
             "certified": self.certified,
             "blockers": list(self.blockers),
@@ -122,28 +137,30 @@ class SweepSafetyBound:
 def evaluate_sweep_safety_bound(
     *,
     margin_m: float,
-    point_speed_bound_m_s: float,
+    point_speed_bound_m_s: float | None,
     dt_s: float,
     substeps: int,
     max_joint_displacement_bound_rad: float | None = None,
     joint_reach_bound_m: float | None = None,
     geometry_approximation_error_bound_m: float | None = None,
     registration_uncertainty_bound_m: float | None = None,
+    numerical_error_bound_m: float | None = None,
+    transform_error_bound_m: float | None = None,
 ) -> SweepSafetyBound:
     """Return a fail-closed bound; ``certified`` is true only for a strict positive residual.
 
     A false-clear is impossible only when every term is bounded and the collision margin
-    strictly exceeds motion, geometry-approximation and registration uncertainty. Unknown terms
-    are never replaced by zero. Joint displacement is converted to a point bound only when both
-    the displacement and a finite reach are supplied.
+    strictly exceeds motion, geometry approximation, registration, numerical and transform
+    error. Unknown terms are never replaced by zero. Joint displacement is converted to a point
+    bound only when both the displacement and a finite reach are supplied.
     """
     if (
         isinstance(margin_m, bool)
         or not math.isfinite(margin_m)
         or margin_m <= 0
         or isinstance(point_speed_bound_m_s, bool)
-        or not math.isfinite(point_speed_bound_m_s)
-        or point_speed_bound_m_s <= 0
+        or (point_speed_bound_m_s is not None and not math.isfinite(point_speed_bound_m_s))
+        or (point_speed_bound_m_s is not None and point_speed_bound_m_s <= 0)
         or isinstance(dt_s, bool)
         or not math.isfinite(dt_s)
         or dt_s <= 0
@@ -153,7 +170,11 @@ def evaluate_sweep_safety_bound(
     ):
         raise SweepGeometryError("safety bound requires finite positive motion inputs")
     blockers: list[str] = []
-    point_allowance = point_speed_bound_m_s * dt_s / substeps
+    if point_speed_bound_m_s is None:
+        blockers.append("point speed bound is missing")
+        point_allowance = 0.0
+    else:
+        point_allowance = point_speed_bound_m_s * dt_s / substeps
     joint_allowance: float | None = None
     if max_joint_displacement_bound_rad is None or joint_reach_bound_m is None:
         blockers.append("joint displacement/reach bound is missing")
@@ -169,6 +190,8 @@ def evaluate_sweep_safety_bound(
     error_terms: dict[str, float | None] = {
         "geometry approximation error": geometry_approximation_error_bound_m,
         "registration uncertainty": registration_uncertainty_bound_m,
+        "numerical error": numerical_error_bound_m,
+        "transform error": transform_error_bound_m,
     }
     for name, value in error_terms.items():
         if value is None:
@@ -179,6 +202,8 @@ def evaluate_sweep_safety_bound(
         motion_allowance
         + (geometry_approximation_error_bound_m or 0.0)
         + (registration_uncertainty_bound_m or 0.0)
+        + (numerical_error_bound_m or 0.0)
+        + (transform_error_bound_m or 0.0)
         if not blockers
         else None
     )
@@ -194,6 +219,8 @@ def evaluate_sweep_safety_bound(
         joint_motion_allowance_m=joint_allowance,
         geometry_approximation_error_bound_m=geometry_approximation_error_bound_m,
         registration_uncertainty_bound_m=registration_uncertainty_bound_m,
+        numerical_error_bound_m=numerical_error_bound_m,
+        transform_error_bound_m=transform_error_bound_m,
         required_margin_m=required,
         residual_m=residual,
         certified=not blockers,
@@ -215,6 +242,12 @@ class ArmSweepContract:
     permitted_contact_objects: frozenset[str] = frozenset()
     adaptive_speed_bound_m_s: float | None = None
     max_adaptive_substeps: int = 4096
+    max_joint_displacement_bound_rad: float | None = None
+    joint_reach_bound_m: float | None = None
+    geometry_error_bound_m: float | None = None
+    registration_uncertainty_bound_m: float | None = None
+    numerical_error_bound_m: float | None = None
+    transform_error_bound_m: float | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -240,17 +273,66 @@ class ArmSweepContract:
 
     @property
     def effective_substeps(self) -> int:
-        """Substeps after enlarging the configured minimum for the speed certificate."""
+        """Motion-only substeps after enlarging the configured minimum for the speed bound.
+
+        This preserves the pinned 46-substep diagnostic derived from point speed alone. It does
+        not claim safety: :meth:`certified_substeps` and :meth:`safety_bound` require every
+        support-error bound before any transition may pass.
+        """
         if self.adaptive_speed_bound_m_s is None:
             return self.substeps
-        required = required_substeps(
+        return required_substeps(
             speed_bound_m_s=self.adaptive_speed_bound_m_s,
             dt_s=self.dt_s,
             margin_m=self.margin_m,
             minimum=self.substeps,
             maximum=self.max_adaptive_substeps,
         )
-        return required
+
+    @property
+    def certified_substeps(self) -> int | None:
+        """Substeps after subtracting all support errors, or ``None`` when unavailable."""
+        geometry_bound = self.geometry_error_bound_m
+        registration_bound = self.registration_uncertainty_bound_m
+        numerical_bound = self.numerical_error_bound_m
+        transform_bound = self.transform_error_bound_m
+        if (
+            geometry_bound is None
+            or registration_bound is None
+            or numerical_bound is None
+            or transform_bound is None
+            or self.adaptive_speed_bound_m_s is None
+        ):
+            return None
+        try:
+            return required_substeps(
+                speed_bound_m_s=self.adaptive_speed_bound_m_s,
+                dt_s=self.dt_s,
+                margin_m=self.margin_m,
+                minimum=self.substeps,
+                maximum=self.max_adaptive_substeps,
+                geometry_error_bound_m=geometry_bound,
+                registration_uncertainty_bound_m=registration_bound,
+                numerical_error_bound_m=numerical_bound,
+                transform_error_bound_m=transform_bound,
+            )
+        except SweepGeometryError:
+            return None
+
+    def safety_bound(self, substeps: int | None = None) -> SweepSafetyBound:
+        """Evaluate the exact fail-closed inequality for this contract."""
+        return evaluate_sweep_safety_bound(
+            margin_m=self.margin_m,
+            point_speed_bound_m_s=self.adaptive_speed_bound_m_s,
+            dt_s=self.dt_s,
+            substeps=substeps or self.effective_substeps,
+            max_joint_displacement_bound_rad=self.max_joint_displacement_bound_rad,
+            joint_reach_bound_m=self.joint_reach_bound_m,
+            geometry_approximation_error_bound_m=self.geometry_error_bound_m,
+            registration_uncertainty_bound_m=self.registration_uncertainty_bound_m,
+            numerical_error_bound_m=self.numerical_error_bound_m,
+            transform_error_bound_m=self.transform_error_bound_m,
+        )
 
 
 def interpolate_world_states(
@@ -344,6 +426,12 @@ class IntermediateSweptArmCheck:
         self.contract = contract
         self.geometry = geometry
         self.substeps = contract.effective_substeps
+        self.safety_bound = contract.safety_bound(self.substeps)
+        if self.safety_bound.certified:
+            certified_substeps = contract.certified_substeps
+            if certified_substeps is not None and certified_substeps > self.substeps:
+                self.substeps = certified_substeps
+                self.safety_bound = contract.safety_bound(self.substeps)
         self.inner = SweptArmCheck(
             geometry,
             required_links=contract.required_links,
@@ -355,9 +443,19 @@ class IntermediateSweptArmCheck:
             permitted_contact_objects=contract.permitted_contact_objects,
             scene=scene,
             expected_base_pose_world=expected_base_pose_world,
+            geometry_error_bound_m=contract.geometry_error_bound_m or 0.0,
+            registration_uncertainty_bound_m=contract.registration_uncertainty_bound_m or 0.0,
+            numerical_error_bound_m=contract.numerical_error_bound_m or 0.0,
+            transform_error_bound_m=contract.transform_error_bound_m or 0.0,
         )
 
+    def safety_bound_report(self) -> dict[str, object]:
+        """Return the deterministic residual evaluation used by this checker."""
+        return self.safety_bound.report()
+
     def __call__(self, before: WorldState, after: WorldState) -> bool | None:
+        if not self.safety_bound.certified:
+            return None
         try:
             states = interpolate_world_states(before, after, self.substeps)
             results = [self.inner(states[i], states[i + 1]) for i in range(len(states) - 1)]

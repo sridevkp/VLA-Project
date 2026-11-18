@@ -75,6 +75,13 @@ def _checker(
             dt_s=0.032,
             margin_m=0.01,
             substeps=substeps,
+            adaptive_speed_bound_m_s=0.5,
+            max_joint_displacement_bound_rad=0.0,
+            joint_reach_bound_m=0.0,
+            geometry_error_bound_m=0.0,
+            registration_uncertainty_bound_m=0.0,
+            numerical_error_bound_m=0.0,
+            transform_error_bound_m=0.0,
         ),
     )
 
@@ -146,6 +153,13 @@ def test_unsupported_contact_and_moving_obstacles_fail_closed():
         margin_m=0.01,
         substeps=4,
         permitted_contact_objects=frozenset({"OTHER"}),
+        adaptive_speed_bound_m_s=0.5,
+        max_joint_displacement_bound_rad=0.0,
+        joint_reach_bound_m=0.0,
+        geometry_error_bound_m=0.0,
+        registration_uncertainty_bound_m=0.0,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
     assert _checker(contract=contract)(full_before, static_after) is True
 

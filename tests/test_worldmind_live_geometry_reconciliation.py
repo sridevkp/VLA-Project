@@ -32,7 +32,10 @@ def test_config_verifies_every_pinned_artifact_hash_before_use():
     assert cfg.evidence["geometry"].sha256 == (
         "034061c296abcada98b32fb2f22d7b421354a3a90bebf58e5feb6cea8b1a69d9"
     )
-    assert len(cfg.evidence) == 6
+    assert len(cfg.evidence) == 7
+    assert cfg.evidence["reference_safety_cases"].sha256 == (
+        "b5e3d1f6de9a1c3da896a2da961dff95a2713b25c8f31b42102b3ecfa236a188"
+    )
     with pytest.raises(ValueError, match="evidence changed after config load: geometry"):
         _load_verified_json(replace(cfg.evidence["geometry"], sha256="0" * 64))
 
@@ -53,10 +56,7 @@ def test_reconciliation_accepts_failed_inspection_and_classifies_all_components(
         by_name["robot_arm_and_torso"]["classification"]
         == "observed_but_not_conservatively_represented"
     )
-    assert (
-        by_name["gripper_fingers"]["classification"]
-        == "observed_but_not_conservatively_represented"
-    )
+    assert by_name["gripper_fingers"]["classification"] == "matched_and_conservatively_represented"
     assert by_name["CAN"]["classification"] == "observed_but_not_conservatively_represented"
     assert by_name["table"]["classification"] == "missing_from_live_export"
     assert by_name["PipeSection"]["classification"] == "observed_but_not_conservatively_represented"
@@ -65,7 +65,7 @@ def test_reconciliation_accepts_failed_inspection_and_classifies_all_components(
     assert (
         by_name["onboard_sensors"]["classification"] == "irrelevant_with_documented_justification"
     )
-    assert report["classification_counts"]["matched_and_conservatively_represented"] == 1
+    assert report["classification_counts"]["matched_and_conservatively_represented"] == 2
     assert len(report["blockers"]) >= 6
 
 
@@ -86,6 +86,15 @@ def test_table_absence_is_grounded_in_nested_proto_structure():
         "geometry_probe records only nodes with a direct boundingObject"
         in live["probe_traversal_finding"]
     )
+    assert live["status"] == "source_derived_unverified"
+    assert live["runtime_collision_tree_grounded"] is False
+    expansion = live["source_expansion"]
+    assert len(expansion["boxes"]) == 5
+    assert expansion["coarse_catalog_proxy_contains_all_boxes"] is True
+    assert expansion["source_hashes"]["world_sha256"] == (
+        "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+    )
+    assert "evaluated translation/rotation/size" in live["missing_runtime_observation"]
 
 
 def test_forwarded_geometry_is_traced_and_unsupported_forwarding_stays_blocked():
@@ -103,19 +112,44 @@ def test_forwarded_geometry_is_traced_and_unsupported_forwarding_stays_blocked()
     assert rail["live"]["unresolved_leaf"] == "TexturedParallelepiped"
 
 
-def test_dynamic_envelopes_do_not_treat_static_can_as_carried_object_safety():
+def test_dynamic_envelopes_distinguish_frame_artifacts_from_missing_lifecycle_evidence():
     report = reconcile_preserved_live_geometry()
-    gripper = report["dynamic_envelopes"]["gripper"]
-    can = report["dynamic_envelopes"]["can"]
-    assert gripper["conservative"] is False
-    assert gripper["observed_required_radius_m"] > 0.2
-    assert gripper["observed_required_radius_m"] > gripper["pinned_radius_m"]
+    dynamic = report["dynamic_envelopes"]
+    gripper = dynamic["gripper"]
+    can = dynamic["can"]
+    assert gripper["conservative"] is True
+    assert gripper["frame"] == "front"
+    assert gripper["ee_to_front_translation_m"] == [0.0, 0.0, 0.1741]
+    assert gripper["pinned_radius_m"] == 0.1
+    assert gripper["frame_correct_required_radius_m"] == pytest.approx(0.065875008915307)
+    assert gripper["wrong_frame_required_radius_m"] == pytest.approx(0.23651330651909497)
+    assert gripper["runtime_literal_required_radius_m"] == pytest.approx(0.192581759418895)
+    assert gripper["wrong_frame_required_radius_m"] > gripper["pinned_radius_m"]
+    assert gripper["runtime_literal_required_radius_m"] > gripper["pinned_radius_m"]
     assert can["static_geometry_matches_pinned"] is True
     assert can["attachment_state"] == "unknown"
     assert can["release_state"] == "unknown"
     assert can["carried_pose_propagation_proven"] is False
-    assert report["dynamic_envelopes"]["self_collision_pairs"]["coverage_proven"] is False
-    assert report["dynamic_envelopes"]["grasp_contact_exceptions"]["approved"] is False
+
+    lifecycle = dynamic["carried_lifecycle"]["current_assessment"]
+    assert lifecycle["state"] == "ambiguous"
+    assert lifecycle["fail_closed"] is True
+    assert lifecycle["carried_geometry_available"] is False
+    assert lifecycle["contact_claim_allowed"] is False
+
+    self_collision = dynamic["self_collision_pairs"]
+    assert self_collision["counts"]["all_capsule_pairs"] == 171
+    assert self_collision["counts"]["checked_capsule_pairs"] == 171
+    assert self_collision["counts"]["adjacent_capsule_pairs"] == 39
+    assert self_collision["counts"]["non_adjacent_capsule_pairs"] == 117
+    assert self_collision["counts"]["gripper_arm_pairs"] == 19
+    assert self_collision["counts"]["carried_robot_pairs"] == 20
+    assert self_collision["counts"]["uncovered_collision_bodies"] == 42
+    assert self_collision["coverage_proven"] is False
+    assert self_collision["contract_coverage_validated"] is False
+    assert self_collision["adjacency_auto_exempt"] is False
+    assert self_collision["grasp_contact_auto_exempt"] is False
+    assert dynamic["grasp_contact_exceptions"]["approved"] is False
 
 
 def test_arbitrary_floor_orientation_is_rejected():
@@ -155,6 +189,8 @@ def test_safety_bound_is_strict_and_fails_closed_on_every_unknown_term():
         joint_reach_bound_m=1.0,
         geometry_approximation_error_bound_m=0.01,
         registration_uncertainty_bound_m=0.01,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
     assert certified.certified is True
     assert certified.required_margin_m == pytest.approx(0.03)
@@ -169,6 +205,8 @@ def test_safety_bound_is_strict_and_fails_closed_on_every_unknown_term():
         joint_reach_bound_m=1.0,
         geometry_approximation_error_bound_m=0.01,
         registration_uncertainty_bound_m=0.01,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
     assert boundary.certified is False
     assert boundary.residual_m == pytest.approx(0.0)
@@ -185,6 +223,10 @@ def test_safety_bound_is_strict_and_fails_closed_on_every_unknown_term():
     assert missing.certified is False
     assert any("joint displacement" in item for item in missing.blockers)
     assert any("geometry approximation" in item for item in missing.blockers)
+    assert any("numerical error" in item for item in missing.blockers)
+    assert any("transform error" in item for item in missing.blockers)
+    assert missing.required_margin_m is None
+    assert missing.residual_m is None
 
     joint_dominated = evaluate_sweep_safety_bound(
         margin_m=1.0,
@@ -195,6 +237,8 @@ def test_safety_bound_is_strict_and_fails_closed_on_every_unknown_term():
         joint_reach_bound_m=0.5,
         geometry_approximation_error_bound_m=0.0,
         registration_uncertainty_bound_m=0.0,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
     assert joint_dominated.joint_motion_allowance_m == pytest.approx(1.0)
     assert joint_dominated.certified is False  # exact boundary is never a pass
@@ -210,6 +254,16 @@ def test_support_errors_reduce_adaptive_substep_budget_and_can_consume_margin():
     }
     assert required_substeps(**base) == 46
     assert required_substeps(**base, geometry_error_bound_m=0.01) == 92
+    assert (
+        required_substeps(
+            **base,
+            geometry_error_bound_m=0.001,
+            registration_uncertainty_bound_m=0.004952867331749651,
+            numerical_error_bound_m=0.0005,
+            transform_error_bound_m=0.0005,
+        )
+        == 70
+    )
     with pytest.raises(Exception, match="consume the collision margin"):
         required_substeps(**base, geometry_error_bound_m=0.02)
 
@@ -239,6 +293,12 @@ def test_preserved_sweep_analysis_reports_fail_closed_with_real_numbers():
     assert sweep["independent_reference_max_one_pose_aabb_undercoverage_m"] == pytest.approx(
         0.0010469683238133465
     )
+    assert bound["numerical_error_bound_m"] is None
+    assert bound["transform_error_bound_m"] is None
+    assert bound["required_margin_m"] is None
+    assert bound["residual_m"] is None
     assert sweep["reference_is_global_bound"] is False
     assert bound["certified"] is False
     assert sweep["verdict"] == "FAIL_CLOSED"
+    assert any("numerical error" in item for item in bound["blockers"])
+    assert any("transform error" in item for item in bound["blockers"])

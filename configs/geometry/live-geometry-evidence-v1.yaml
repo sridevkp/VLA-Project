@@ -22,6 +22,9 @@ evidence:
   reference_collision_geometry:
     path: ../../docs/evidence/collision-geometry-source-corrected.json
     sha256: bb82a75c4b406cd23a5621e3e58185ee220c5f83bf20a00737a54f3f1268bd4f
+  reference_safety_cases:
+    path: ../../tests/fixtures/motion-readiness-reference-cases-v1.json
+    sha256: b5e3d1f6de9a1c3da896a2da961dff95a2713b25c8f31b42102b3ecfa236a188
 
 pinned:
   world: ../../worlds/factory.wbt
@@ -72,8 +75,11 @@ sweep:
   dt_s: 0.032
   configured_substeps: 8
   adaptive_substeps: 46
-  # No finite independent joint-displacement or global containment-error bound is pinned.
+  # No finite independent joint-displacement, global containment, numerical or transform bound
+  # is pinned. Nulls are evidence gaps, never implicit zeros.
   max_joint_displacement_bound_rad: null
   geometry_approximation_error_bound_m: null
+  numerical_error_bound_m: null
+  transform_error_bound_m: null
   observed_one_pose_aabb_undercoverage_m: 0.0010469683238133465
   observed_one_pose_aabb_undercoverage_is_global_bound: false

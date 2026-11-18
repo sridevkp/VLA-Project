@@ -29,7 +29,7 @@ geometry:
   # Pinned diagnostic source catalogs. They do not approve motion; unresolved forwarded
   # PROTO geometry remains hard-blocked and no owner certificate is supplied below.
   scene_catalog: "geometry/scene-collision-v1.yaml"
-  scene_catalog_sha256: "68397a05106ca39b9d233c692081583652ad57f76049b6d288ebc2b6c7b9f313"
+  scene_catalog_sha256: "c0ba359b25c9163ee3b6c95b86baa36152e2d852d00460d2b86203e3ca63d035"
   proto_manifest: "geometry/webots-proto-sources-v1.yaml"
   proto_manifest_sha256: "2d6f84e260b36ff4b754793813216a6ef0c38d8d76aa225ebc534ed4eb0a7362"
 

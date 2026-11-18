@@ -2144,7 +2144,9 @@ claims fail closed; it does not approve the robot for motion.
   matched/conservative, observed/not conservative, missing from live export, unsupported, and
   irrelevant with justification. The result is `diagnostic_not_certified`, `motion_allowed=false`,
   `motion_readiness=NOT_READY`, with one matched, four observed/not conservative, two missing,
-  one unsupported and one justified-irrelevant component.
+  one unsupported and one justified-irrelevant component. Seven evidence entries are pinned after
+  ADR-0057; the current config SHA-256 is
+  `d4577fec440dcb804c7cee171fc3daea045fbe742523b3e426990a20cee0b3e2`.
 - **Concrete collision findings:** only the two observed pinned horizontal floor planes are
   matched; arbitrary plane orientations and unrecognized plane geometry are rejected. `Table.proto`
   has zero root `boundingObject` declarations and at least three nested `SolidBox` instances with
@@ -2155,24 +2157,24 @@ claims fail closed; it does not approve the robot for motion.
   is traced; all seven live cylinders match pinned instances and produce seven review-only capsule
   envelopes, but the catalog remains blocked on unresolved forwarding. `StraightStairsRail` is
   absent from the live export and remains blocked by JavaScript-computed transforms and
-  `TexturedParallelepiped` forwarding. The observed gripper finger boxes require about `0.2365 m`
-  of tool-frame radius versus the pinned `0.1 m`, so the static envelope is not conservative.
-  Static CAN radius `0.03175 m` and height `0.1222 m` match the pinned envelope and the tool-frame
+  `TexturedParallelepiped` forwarding. The apparent `0.2365 m` gripper requirement was a
+  wrong-frame interpretation; ADR-0057 supersedes this finding with frame-correct `front` evidence
+  that fits the unchanged `0.1 m` pinned radius. Static CAN radius `0.03175 m` and height `0.1222 m`
+  match the pinned envelope and the tool-frame
   distance is about `0.8087 m`, but attachment, release and carried-pose propagation are unknown;
   static geometry is not dynamic safety proof. Self-collision is disabled, self-collision pair
   coverage is unproven, and no grasp-contact exception is approved.
 - **Swept-bound repair:** `SweptArmCheck` now pads the full uncertain motion interval
-  (`speed*dt`) plus explicit geometry-error and registration-uncertainty terms instead of the
-  unprovable half-interval term. `required_substeps()` subtracts those support errors from the
-  usable margin and fails closed when they consume it. `evaluate_sweep_safety_bound()` requires a
-  strict positive residual for
-  `margin > max(point_speed*dt/substeps, joint_displacement*reach) + geometry_error +
-  registration_error`, and never substitutes zero for an unknown term. The preserved numbers are
-  fixed eight-substep travel `0.1139726680109965 m > 0.02 m`, adaptive 46-substep travel
-  `0.019821333567129826 m`, catalog-derived registration bound `0.004952867331749651 m`, and
-  reference one-pose AABB undercoverage `0.0010469683238133465 m`, which is explicitly not a
-  global bound. Joint-displacement and geometry-approximation bounds are absent, so the verdict is
-  `FAIL_CLOSED` and the hard veto stays in force.
+  (`speed*dt`) plus explicit support-error terms instead of the unprovable half-interval term.
+  `required_substeps()` subtracts those support errors from the usable margin and fails closed when
+  they consume it. ADR-0057 supersedes the original three-error expression with the exact
+  five-term inequality and strict positive-residual gate; no unknown term is ever replaced by
+  zero. The preserved numbers are fixed eight-substep travel `0.1139726680109965 m > 0.02 m`,
+  adaptive 46-substep travel `0.019821333567129826 m`, catalog-derived registration bound
+  `0.004952867331749651 m`, and reference one-pose AABB undercoverage
+  `0.0010469683238133465 m`, which is explicitly not a global bound. Joint-displacement,
+  global-geometry, numerical and transform bounds are absent, so the verdict is `FAIL_CLOSED` and
+  the hard veto stays in force.
 - **Unchanged gate:** production still has `check_transition=None`, blocked sweep status, no
   certificate, the `unverified-arm-sweep` veto and `unresolved_forwarded_geometry` blocker.
   Another live Webots inspection is not required to establish these local gaps: the preserved
@@ -2189,3 +2191,98 @@ claims fail closed; it does not approve the robot for motion.
   frozen-helper hash mismatch, which was not repaired by editing frozen evidence. Windows and
   live Webots execution remain unverified in this environment. No new dependency, public
   `core/` interface, frozen pin, seed, split or motion threshold changed.
+
+## ADR-0057 — Fail-closed swept-collision residual, frame-aware envelopes and non-approving motion-readiness dossier (2026-11-18)
+
+**Status:** Accepted for local diagnostic implementation and inert verification only. Motion stays
+`NO-GO` / `NOT_READY`. The dossier is `approved: false`, `motion_allowed: false` and
+`status: diagnostic_not_certified`; it is not and cannot become an owner safety certificate. No
+Webots retry, launch, actuation, real IK solve, calibration, scored campaign, TEST/TRAIN access,
+frozen-evidence edit, push, merge or PR #2 update occurred.
+
+- **Exact swept inequality and residual:** the certified transition condition is
+  `margin > max(point_speed*dt/substeps, joint_displacement*reach) + geometry_approximation_error +
+  registration_uncertainty + numerical_error + transform_error`. A bound is accepted only when
+  finite, nonnegative and traceable. `required_substeps()` uses `ceil` to keep discrete substeps at
+  least as conservative as the continuous bound; `evaluate_sweep_safety_bound()` computes the
+  strict residual and certifies only `residual_m > 0`. Missing joint-displacement, global-geometry,
+  numerical or transform bounds leave `required_margin_m` and `residual_m` as `None`; the result is
+  `FAIL_CLOSED`, never a zero-filled pass. With the pinned `0.02 m` margin, speed
+  `28.49316700274912 m/s` and `0.032 s` tick, the eight-substep travel is
+  `0.1139726680109965 m` and the adaptive 46-substep travel is `0.019821333567129826 m`; the
+  registration bound is `0.004952867331749651 m`. The one-pose AABB undercoverage
+  `0.0010469683238133465 m` is explicitly not a global geometry bound.
+- **Frame-aware gripper resolution:** `ee_pose` is the finger-pad tool frame while the URDF
+  collision frame is `front`, with `ee_to_front_translation_m = [0.0, 0.0, 0.1741]` and the pinned
+  front-frame segment `[0,0,0] -> [0,0,-0.21875]`. In the correct frame the finger boxes need
+  `0.03908115001161714 m`, the static gripper body needs `0.06587500891530741 m`, and the combined
+  requirement `0.06587500891530741 m` fits the unchanged pinned `radius_m: 0.1`. The earlier
+  `0.23651330651909497 m` came from reading the front-frame segment in wrist coordinates; the
+  runtime-literal diagnostic gives `0.19258175941889452 m`. Both are documented frame-mixing
+  artifacts, not a reason to silently enlarge the safety bound. Dynamic gripper motion remains
+  blocked by the swept certificate and self-collision gates.
+- **CAN lifecycle:** `world_model/carried_object.py` bounds the six states
+  `independent_pre_grasp`, `attached`, `carried`, `released`, `independent_post_release` and
+  `ambiguous`. Missing attachment evidence, unsupported or ambiguous states, missing release
+  evidence and unverified pose propagation all fail closed. Contact safety is never asserted
+  without an explicit owner-reviewed grasp-contact exception. The preserved evidence supports only
+  static CAN geometry (`radius 0.03175 m`, `height 0.1222 m`); current state is `ambiguous`, so
+  `carried_geometry_available=false` and `contact_claim_allowed=false`.
+- **Self-collision coverage:** the pinned URDF has 59 links, 58 joints, 30 links with collision and
+  61 collision bodies. The nine required arm links give 19 capsules and every one of the
+  `C(19,2) = 171` pairs is checked: 39 adjacent-link, 117 non-adjacent and 15 same-link pairs,
+  plus 19 gripper/arm and 20 carried/robot pairs. Adjacent and grasp contacts are never
+  auto-exempt; `adjacent_pairs` and `permitted_contact_objects` remain empty. The 42 URDF
+  collision bodies outside the pinned arm capsules stay uncovered, so full-body coverage is
+  `UNVERIFIED`.
+- **Table and obstacle trace:** `_trace_table_source()` expands five source-derived `Table` /
+  `SolidBox` boxes from the pinned world, `Table.proto` (`d7f2a20f3f6c3f515ce96ae10665941813b226c16442abf92d17e62259379bdb`)
+  and `SolidBox.proto` (`f9e18612ce325bc7abfd2d94cbd1c391a244f54ce5a2789a97fd1f901dc0dfba`).
+  The coarse catalog proxy contains all five boxes, but the status remains
+  `source_derived_unverified` with `runtime_collision_tree_grounded=false`. The exact missing
+  observation is a read-only Webots expansion of the five nested nodes with resolved PROTO hashes,
+  evaluated `translation`/`rotation`/`size`/`enableBoundingObject`, resulting `boundingObject
+  Box.size`, and world/base poses. `PipeSection` remains catalog-blocked; `StraightStairsRail` is
+  catalog-blocked and absent from the live export.
+- **Independent cases and dossier:** `tests/fixtures/motion-readiness-reference-cases-v1.json`
+  (SHA-256 `b5e3d1f6de9a1c3da896a2da961dff95a2713b25c8f31b42102b3ecfa236a188`) contains 12
+  independent inert cases covering swept bounds, substep rounding, self-collision, CAN lifecycle,
+  gripper/table reports and checker fail-closure; all 12 replay with their expected outcomes.
+  `worldmind-motion-readiness-dossier` writes the artifact to the caller's `--output` path and
+  intentionally exits 1 because authorization fails. No generated dossier is committed; each run is
+  reproducible from the pinned evidence. Gate statuses are `PASS frozen_evidence`,
+  `UNVERIFIED swept_residual`, `PASS gripper_envelope`, `UNVERIFIED can_lifecycle`,
+  `UNVERIFIED self_collision`, `UNVERIFIED table_transform`, `PASS reference_cases`,
+  `PASS production_binding` and `FAIL motion_authorization`, giving
+  `PASS=4, FAIL=1, UNVERIFIED=4` and `overall_gate=FAIL`.
+- **Pins:** `configs/geometry/live-geometry-evidence-v1.yaml` SHA-256
+  `d4577fec440dcb804c7cee171fc3daea045fbe742523b3e426990a20cee0b3e2`;
+  `configs/geometry/scene-collision-v1.yaml` SHA-256
+  `c0ba359b25c9163ee3b6c95b86baa36152e2d852d00460d2b86203e3ca63d035`;
+  `configs/worldmind_arm_sweep.yaml` SHA-256
+  `d1f75347fc9b13d48e8ab400caf1466c0f33758d531e2850f64a114d721ade7f`;
+  `configs/worldmind_webots_geometry_inspection.yaml` SHA-256
+  `e2fe42dfa20b879c26097b59b238b6464447a5c7542412cfb8089198a070297c`. Frozen live artifacts are
+  unchanged: `geometry.json` `034061c296abcada98b32fb2f22d7b421354a3a90bebf58e5feb6cea8b1a69d9`,
+  `diagnostic.json` `4f2e8cca63a3914c595fc13a6ae635625bf4e946084dbb958c91c4099e30156b`,
+  `state.json` `2b970678a27a784a5860500e95ca9e31b00bc4a20466e05e519090dfe07bc7b1`,
+  `provenance.json` `769fe70f2a03ff6c54ad23362113facf37afc9438fcacc2d1f4d9efbf2eb66d3`, and the
+  inspection log `4e9c1a965f0bdb6544926f559d0344eef3b4bc4a0be2f8d5f4a458308e9c4ac6`.
+- **Smallest remaining experiment:** read-only Webots expansion of the five nested Table SolidBox
+  nodes with resolved PROTO hashes, evaluated translation/rotation/size/enableBoundingObject,
+  resulting `boundingObject Box.size`, and world/base poses; it closes the table-transform gap
+  without motion or IK. The separate owner decisions still required are finite independent joint,
+  global-geometry, numerical and transform bounds; gripper-frame approval; a grasp-contact
+  exception; reviewed adjacent-pair exclusions; the runtime table observation; and an independent
+  safety-owner certificate.
+- **Verification:** 85 focused inert WorldMind tests pass; `ruff check .`, `ruff format --check .`,
+  `ty check src` and `compileall` pass. Frozen-evidence verification reports
+  `report_sha256_ok=true`, 12 locked baseline sources, 225 campaign manifest entries, 12 pinned and
+  12 frozen planning sources, and `test_split_accessed=false`. The CLI dossier command writes the
+  JSON and exits 1 with `overall=FAIL`, `motion_readiness=NOT_READY`, `approved=False`,
+  `webots_launch=0 apply=0 step=0 scored_evaluation_allowed=False`. The full non-Webots suite is
+  `1 failed, 687 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch, which was not repaired. Windows and live Webots execution remain
+  unverified. No dependency, public `core/` interface, frozen live-artifact byte, seed, split or
+  production safety threshold changed.

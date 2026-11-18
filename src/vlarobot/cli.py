@@ -881,6 +881,40 @@ def worldmind_geometry_diagnostic(
         raise typer.Exit(code=1)
 
 
+@app.command("worldmind-motion-readiness-dossier")
+def worldmind_motion_readiness_dossier(
+    output: Annotated[
+        Path,
+        typer.Option(help="New JSON dossier path; the command never approves motion."),
+    ],
+) -> None:
+    """Write the inert PASS/FAIL/UNVERIFIED dossier. Never launch Webots, move or score."""
+    from vlarobot.eval.worldmind_motion_readiness_dossier import build_motion_readiness_dossier
+
+    try:
+        report = build_motion_readiness_dossier()
+        resolved = output.expanduser().resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
+        )
+    except Exception as error:  # noqa: BLE001 - dossier generation must fail closed with one error
+        typer.echo(
+            f"worldmind-motion-readiness-dossier failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+    typer.echo(
+        f"worldmind-motion-readiness-dossier overall={report['overall_gate']} "
+        f"motion_readiness={report['motion_readiness']} approved=False "
+        f"webots_launch=0 apply=0 step=0 scored_evaluation_allowed=False"
+    )
+    for gate in report["gates"]:
+        typer.echo(f"  {gate['status']}: {gate['id']} - {gate['summary']}")
+    typer.echo(f"  out={resolved}")
+    raise typer.Exit(code=1)
+
+
 @app.command("worldmind-calibration-proposal")
 def worldmind_calibration_proposal(
     draft: Annotated[Path, typer.Option(help="Unapproved, reviewable calibration draft JSON.")],

@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "status": "independent_inert_reference_cases",
+  "purpose": "Independent expected outcomes for fail-closed motion-readiness gates; no Webots, IK, scoring or split access.",
+  "cases": [
+    {
+      "id": "clear_with_all_bounds",
+      "kind": "swept_bound",
+      "input": {
+        "margin_m": 0.1,
+        "point_speed_bound_m_s": 1.0,
+        "dt_s": 0.1,
+        "substeps": 10,
+        "max_joint_displacement_bound_rad": 0.01,
+        "joint_reach_bound_m": 1.0,
+        "geometry_approximation_error_bound_m": 0.01,
+        "registration_uncertainty_bound_m": 0.01,
+        "numerical_error_bound_m": 0.0,
+        "transform_error_bound_m": 0.0
+      },
+      "expected": {
+        "certified": true,
+        "required_margin_m": 0.03,
+        "residual_m": 0.07,
+        "point_motion_allowance_m": 0.01,
+        "joint_motion_allowance_m": 0.01
+      }
+    },
+    {
+      "id": "near_boundary_strict_inequality",
+      "kind": "swept_bound",
+      "input": {
+        "margin_m": 0.03,
+        "point_speed_bound_m_s": 1.0,
+        "dt_s": 0.1,
+        "substeps": 10,
+        "max_joint_displacement_bound_rad": 0.01,
+        "joint_reach_bound_m": 1.0,
+        "geometry_approximation_error_bound_m": 0.01,
+        "registration_uncertainty_bound_m": 0.01,
+        "numerical_error_bound_m": 0.0,
+        "transform_error_bound_m": 0.0
+      },
+      "expected": {
+        "certified": false,
+        "required_margin_m": 0.03,
+        "residual_m": 0.0
+      }
+    },
+    {
+      "id": "joint_dominated_motion_bound",
+      "kind": "swept_bound",
+      "input": {
+        "margin_m": 0.2,
+        "point_speed_bound_m_s": 1.0,
+        "dt_s": 1.0,
+        "substeps": 2,
+        "max_joint_displacement_bound_rad": 0.2,
+        "joint_reach_bound_m": 1.0,
+        "geometry_approximation_error_bound_m": 0.0,
+        "registration_uncertainty_bound_m": 0.0,
+        "numerical_error_bound_m": 0.0,
+        "transform_error_bound_m": 0.0
+      },
+      "expected": {
+        "certified": false,
+        "required_margin_m": 0.5,
+        "residual_m": -0.3,
+        "point_motion_allowance_m": 0.5,
+        "joint_motion_allowance_m": 0.2
+      }
+    },
+    {
+      "id": "missing_support_error_bound",
+      "kind": "swept_bound",
+      "input": {
+        "margin_m": 1.0,
+        "point_speed_bound_m_s": 1.0,
+        "dt_s": 0.1,
+        "substeps": 10,
+        "max_joint_displacement_bound_rad": 0.01,
+        "joint_reach_bound_m": 1.0,
+        "geometry_approximation_error_bound_m": 0.01,
+        "registration_uncertainty_bound_m": 0.01,
+        "numerical_error_bound_m": null,
+        "transform_error_bound_m": 0.0
+      },
+      "expected": {
+        "certified": false,
+        "required_margin_m": null,
+        "residual_m": null
+      }
+    },
+    {
+      "id": "intermediate_swept_support_errors",
+      "kind": "required_substeps",
+      "input": {
+        "speed_bound_m_s": 28.49316700274912,
+        "dt_s": 0.032,
+        "margin_m": 0.02,
+        "minimum": 8,
+        "maximum": 4096,
+        "geometry_error_bound_m": 0.001,
+        "registration_uncertainty_bound_m": 0.004952867331749651,
+        "numerical_error_bound_m": 0.0005,
+        "transform_error_bound_m": 0.0005
+      },
+      "expected": {
+        "substeps": 70
+      }
+    },
+    {
+      "id": "self_collision_full_pair_coverage",
+      "kind": "self_collision",
+      "input": {
+        "required_links": ["a", "b", "c"],
+        "capsule_names": ["a:0", "a:1", "b:0", "c:0"],
+        "adjacent_link_pairs": [["a", "b"]],
+        "adjacent_capsule_pairs": [["a:0", "b:0"], ["a:1", "b:0"]],
+        "non_adjacent_capsule_pairs": [["a:0", "c:0"], ["a:1", "c:0"], ["b:0", "c:0"]],
+        "same_link_capsule_pairs": [["a:0", "a:1"]],
+        "gripper_arm_pairs": [["a:0", "gripper"], ["a:1", "gripper"], ["b:0", "gripper"], ["c:0", "gripper"]],
+        "carried_robot_pairs": [["can", "a:0"]],
+        "excluded_pairs": [],
+        "uncovered_collision_bodies": []
+      },
+      "expected": {
+        "coverage_proven": true,
+        "contract_coverage": true,
+        "all_capsule_pairs": 6,
+        "checked_capsule_pairs": 6,
+        "gripper_arm_pairs": 4
+      }
+    },
+    {
+      "id": "adjacent_pair_is_never_auto_exempt",
+      "kind": "self_collision",
+      "input": {
+        "required_links": ["a", "b"],
+        "capsule_names": ["a:0", "a:1", "b:0"],
+        "adjacent_link_pairs": [["a", "b"]],
+        "adjacent_capsule_pairs": [["a:0", "b:0"], ["a:1", "b:0"]],
+        "non_adjacent_capsule_pairs": [],
+        "same_link_capsule_pairs": [["a:0", "a:1"]],
+        "gripper_arm_pairs": [],
+        "carried_robot_pairs": [],
+        "excluded_pairs": [["a:0", "b:0"]],
+        "uncovered_collision_bodies": []
+      },
+      "expected": {
+        "coverage_proven": false,
+        "contract_coverage": false,
+        "all_capsule_pairs": 3,
+        "checked_capsule_pairs": 2
+      }
+    },
+    {
+      "id": "carried_attachment_evidence_missing",
+      "kind": "carried_lifecycle",
+      "input": {
+        "state": "attached",
+        "static_geometry_verified": true,
+        "attachment_evidence_sha256": null,
+        "release_evidence_sha256": null,
+        "tool_to_object_transform": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        "pose_propagation_verified": false,
+        "grasp_contact_exception_approved": false
+      },
+      "expected": {
+        "fail_closed": true,
+        "carried_geometry_available": false,
+        "contact_claim_allowed": false
+      }
+    },
+    {
+      "id": "carried_pose_evidence_complete",
+      "kind": "carried_lifecycle",
+      "input": {
+        "state": "carried",
+        "static_geometry_verified": true,
+        "attachment_evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "release_evidence_sha256": null,
+        "tool_to_object_transform": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        "pose_propagation_verified": true,
+        "grasp_contact_exception_approved": true
+      },
+      "expected": {
+        "fail_closed": false,
+        "carried_geometry_available": true,
+        "contact_claim_allowed": true
+      }
+    },
+    {
+      "id": "gripper_frame_resolution",
+      "kind": "gripper_report",
+      "input": {
+        "frame": "front",
+        "ee_to_front_translation_m": [0.0, 0.0, 0.1741],
+        "pinned_radius_m": 0.1,
+        "frame_correct_required_radius_m": 0.065875008915307,
+        "wrong_frame_radius_m": 0.23651330651909497,
+        "runtime_literal_required_radius_m": 0.192581759418895
+      },
+      "expected": {
+        "static_conservative": true,
+        "radius_unchanged": true,
+        "mismatch_is_frame_artifact": true
+      }
+    },
+    {
+      "id": "table_source_not_runtime_grounded",
+      "kind": "table_report",
+      "input": {
+        "status": "source_derived_unverified",
+        "box_count": 5,
+        "runtime_collision_tree_grounded": false
+      },
+      "expected": {
+        "conservative_source_cross_check": true,
+        "runtime_certified": false
+      }
+    },
+    {
+      "id": "unsupported_geometry_missing_transform_gate",
+      "kind": "checker_gate",
+      "input": {
+        "required_links": ["arm"],
+        "required_objects": ["CAN"],
+        "dt_s": 0.032,
+        "margin_m": 0.01,
+        "substeps": 4,
+        "missing_bounds": true,
+        "geometry_provider": "raises"
+      },
+      "expected": {
+        "result": null
+      }
+    }
+  ]
+}

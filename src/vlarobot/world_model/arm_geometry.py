@@ -45,7 +45,13 @@ class FloorHalfSpace:
 
 @dataclass(frozen=True)
 class GripperEnvelope:
-    """Tool-frame capsule covering the finger/body boundingObject solids."""
+    """Conservative capsule for gripper finger/body solids in a declared frame.
+
+    ``frame`` identifies the coordinate system of ``start_tool``/``end_tool``. For
+    ``front``, ``ee_to_front_translation_m`` recovers the URDF ``front`` origin from the
+    runtime ``ee_pose`` (which is the finger-pad tool frame). The legacy
+    ``wrist_ft_tool_link`` frame keeps a zero offset and remains available for diagnostics.
+    """
 
     name: str
     start_tool: tuple[float, float, float]
@@ -53,6 +59,8 @@ class GripperEnvelope:
     radius_m: float
     max_point_speed_m_s: float
     source: str
+    frame: str = "wrist_ft_tool_link"
+    ee_to_front_translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -102,6 +110,8 @@ class SweptArmCheck:
         expected_base_pose_world: Pose3D | None = None,
         geometry_error_bound_m: float = 0.0,
         registration_uncertainty_bound_m: float = 0.0,
+        numerical_error_bound_m: float = 0.0,
+        transform_error_bound_m: float = 0.0,
     ) -> None:
         if (
             not required_links
@@ -121,11 +131,15 @@ class SweptArmCheck:
         for value, name in (
             (geometry_error_bound_m, "geometry error bound"),
             (registration_uncertainty_bound_m, "registration uncertainty bound"),
+            (numerical_error_bound_m, "numerical error bound"),
+            (transform_error_bound_m, "transform error bound"),
         ):
             if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
                 raise ValueError(f"{name} must be finite and nonnegative")
         self.geometry_error_bound_m = float(geometry_error_bound_m)
         self.registration_uncertainty_bound_m = float(registration_uncertainty_bound_m)
+        self.numerical_error_bound_m = float(numerical_error_bound_m)
+        self.transform_error_bound_m = float(transform_error_bound_m)
         if scene is not None:
             self._validate_scene(scene)
 
@@ -161,6 +175,10 @@ class SweptArmCheck:
                 raise ValueError("invalid gripper envelope")
             if scene.gripper.max_point_speed_m_s <= 0:
                 raise ValueError("gripper speed certificate must be positive")
+            if scene.gripper.frame not in {"front", "wrist_ft_tool_link"}:
+                raise ValueError("unsupported gripper envelope frame")
+            if not np.isfinite(np.asarray(scene.gripper.ee_to_front_translation_m)).all():
+                raise ValueError("invalid gripper ee-to-front translation")
         if len({item.name for item in scene.carried_objects}) != len(scene.carried_objects):
             raise ValueError("carried-object names must be unique")
         for item in scene.carried_objects:
@@ -200,6 +218,11 @@ class SweptArmCheck:
         if values is None or not math.isclose(float(q @ q), 1.0, abs_tol=1e-8):
             raise ValueError("invalid tool transform for gripper envelope")
         origin = pose.position.as_array()
+        if gripper.frame == "front":
+            offset = np.asarray(gripper.ee_to_front_translation_m, dtype=np.float64)
+            if offset.shape != (3,) or not np.isfinite(offset).all():
+                raise ValueError("invalid gripper ee-to-front translation")
+            origin = rotate(q, offset) + origin
         points: list[tuple[float, float, float]] = []
         for point in (gripper.start_tool, gripper.end_tool):
             vector = np.asarray(point, dtype=float)
@@ -291,6 +314,8 @@ class SweptArmCheck:
                 + a.max_point_speed_m_s * self.dt
                 + self.geometry_error_bound_m
                 + self.registration_uncertainty_bound_m
+                + self.numerical_error_bound_m
+                + self.transform_error_bound_m
             )
             swept[name] = (points.min(axis=0) - padding, points.max(axis=0) + padding)
         for i, name in enumerate(sorted(swept)):

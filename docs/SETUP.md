@@ -282,6 +282,20 @@ TEST/TRAIN evidence or permits motion; every result records `motion_allowed=fals
 `motion_readiness="NOT_READY"`. A prior connectivity-only Webots PASS is not collision-safety
 approval. See `DECISIONS.md` ADR-0055.
 
+The preserved live geometry inspection can be reconciled into a deterministic, non-approving
+readiness dossier without launching Webots. From the project root, choose a new output path:
+
+```text
+uv run python -m vlarobot.cli worldmind-motion-readiness-dossier --output /tmp/opencode/motion-readiness-dossier.json
+```
+
+It reads only hash-pinned evidence, replays 12 independent inert reference cases, and writes PASS /
+FAIL / UNVERIFIED gates. The command intentionally exits with code 1 because the dossier is
+`approved: false` and `motion_allowed: false`; no motion, IK, scoring, TEST/TRAIN access or Webots
+execution occurs. The shipped gate table currently ends in `overall=FAIL` and
+`motion_readiness=NOT_READY`. See `DECISIONS.md` ADR-0057. No generated dossier is committed;
+regenerate it whenever the pinned evidence changes.
+
 Inert FakeBackend verification without Webots:
 
 ```text

@@ -315,6 +315,12 @@ class ArmSweepConfig:
     proto_manifest_sha256: str | None = None
     adaptive_speed_bound_m_s: float | None = None
     max_adaptive_substeps: int = 4096
+    max_joint_displacement_bound_rad: float | None = None
+    joint_reach_bound_m: float | None = None
+    geometry_error_bound_m: float | None = None
+    registration_uncertainty_bound_m: float | None = None
+    numerical_error_bound_m: float | None = None
+    transform_error_bound_m: float | None = None
 
 
 _SWEEP_TOP_KEYS = frozenset({"schema_version", "status", "geometry", "contract", "certificate"})
@@ -367,7 +373,18 @@ _SWEEP_OPTIONAL_GEOMETRY_KEYS = frozenset(
         "proto_manifest_sha256",
     }
 )
-_SWEEP_OPTIONAL_CONTRACT_KEYS = frozenset({"adaptive_speed_bound_m_s", "max_adaptive_substeps"})
+_SWEEP_OPTIONAL_CONTRACT_KEYS = frozenset(
+    {
+        "adaptive_speed_bound_m_s",
+        "max_adaptive_substeps",
+        "max_joint_displacement_bound_rad",
+        "joint_reach_bound_m",
+        "geometry_error_bound_m",
+        "registration_uncertainty_bound_m",
+        "numerical_error_bound_m",
+        "transform_error_bound_m",
+    }
+)
 _SWEEP_CERTIFICATE_KEYS = frozenset(
     {
         "id",
@@ -446,6 +463,17 @@ def _sweep_optional_float(value: object, name: str) -> float | None:
     number = float(value)
     if not math.isfinite(number) or number <= 0.0:
         raise SweepGeometryError(f"{name} must be a finite positive number")
+    return number
+
+
+def _sweep_optional_nonnegative_float(value: object, name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SweepGeometryError(f"{name} must be a finite nonnegative number")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0:
+        raise SweepGeometryError(f"{name} must be a finite nonnegative number")
     return number
 
 
@@ -580,6 +608,17 @@ def _sweep_contract_sha256(config: ArmSweepConfig) -> str:
     if config.adaptive_speed_bound_m_s is not None:
         contract_payload["adaptive_speed_bound_m_s"] = config.adaptive_speed_bound_m_s
     contract_payload["max_adaptive_substeps"] = config.max_adaptive_substeps
+    for name in (
+        "max_joint_displacement_bound_rad",
+        "joint_reach_bound_m",
+        "geometry_error_bound_m",
+        "registration_uncertainty_bound_m",
+        "numerical_error_bound_m",
+        "transform_error_bound_m",
+    ):
+        value = getattr(config, name)
+        if value is not None:
+            contract_payload[name] = value
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -799,6 +838,26 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
     max_adaptive = _sweep_optional_int(
         contract.get("max_adaptive_substeps"), "contract.max_adaptive_substeps", 4096
     )
+    joint_displacement = _sweep_optional_nonnegative_float(
+        contract.get("max_joint_displacement_bound_rad"),
+        "contract.max_joint_displacement_bound_rad",
+    )
+    joint_reach = _sweep_optional_nonnegative_float(
+        contract.get("joint_reach_bound_m"), "contract.joint_reach_bound_m"
+    )
+    geometry_error = _sweep_optional_nonnegative_float(
+        contract.get("geometry_error_bound_m"), "contract.geometry_error_bound_m"
+    )
+    registration_error = _sweep_optional_nonnegative_float(
+        contract.get("registration_uncertainty_bound_m"),
+        "contract.registration_uncertainty_bound_m",
+    )
+    numerical_error = _sweep_optional_nonnegative_float(
+        contract.get("numerical_error_bound_m"), "contract.numerical_error_bound_m"
+    )
+    transform_error = _sweep_optional_nonnegative_float(
+        contract.get("transform_error_bound_m"), "contract.transform_error_bound_m"
+    )
     speed = _urdf_reach_speed_bound(urdf_path, links)
     if adaptive_speed is not None and not math.isclose(
         adaptive_speed, speed, rel_tol=1e-12, abs_tol=0.0
@@ -832,6 +891,12 @@ def load_arm_sweep_config(path: Path) -> ArmSweepConfig:
         proto_manifest_sha256=proto_sha,
         adaptive_speed_bound_m_s=adaptive_speed,
         max_adaptive_substeps=max_adaptive,
+        max_joint_displacement_bound_rad=joint_displacement,
+        joint_reach_bound_m=joint_reach,
+        geometry_error_bound_m=geometry_error,
+        registration_uncertainty_bound_m=registration_error,
+        numerical_error_bound_m=numerical_error,
+        transform_error_bound_m=transform_error,
     )
     certificate = _load_sweep_certificate(
         _sweep_mapping(root["certificate"], "certificate"),
@@ -927,6 +992,12 @@ def _build_configured_sweep_check(config: ArmSweepConfig) -> IntermediateSweptAr
         permitted_contact_objects=config.permitted_contact_objects,
         adaptive_speed_bound_m_s=config.adaptive_speed_bound_m_s,
         max_adaptive_substeps=config.max_adaptive_substeps,
+        max_joint_displacement_bound_rad=config.max_joint_displacement_bound_rad,
+        joint_reach_bound_m=config.joint_reach_bound_m,
+        geometry_error_bound_m=config.geometry_error_bound_m,
+        registration_uncertainty_bound_m=config.registration_uncertainty_bound_m,
+        numerical_error_bound_m=config.numerical_error_bound_m,
+        transform_error_bound_m=config.transform_error_bound_m,
     )
     return IntermediateSweptArmCheck(
         geometry,

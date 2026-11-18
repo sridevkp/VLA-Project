@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+import xml.etree.ElementTree as ET
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,14 +28,23 @@ from vlarobot.backends.webots.proto_sources import (
 )
 from vlarobot.eval.worldmind_webots_geometry_inspection import normalize_webots_sfbool
 from vlarobot.world_model.arm_sweep import (
+    _rpy_axes,
     evaluate_sweep_safety_bound,
     required_substeps,
     urdf_collision_capsules,
+)
+from vlarobot.world_model.carried_object import (
+    assess_carried_object_state,
+    carried_lifecycle_report,
 )
 from vlarobot.world_model.scene_geometry import (
     SceneCollisionCatalog,
     axis_angle_matrix,
     load_scene_collision_catalog,
+)
+from vlarobot.world_model.self_collision import (
+    build_self_collision_coverage,
+    validate_contract_pair_coverage,
 )
 
 LIVE_GEOMETRY_RECONCILIATION_SCHEMA_VERSION = 1
@@ -176,6 +186,7 @@ def load_live_reconciliation_config(
             "provenance",
             "log",
             "reference_collision_geometry",
+            "reference_safety_cases",
         }
     )
     _keys(evidence_raw, evidence_names, "evidence")
@@ -267,6 +278,8 @@ def load_live_reconciliation_config(
             "adaptive_substeps",
             "max_joint_displacement_bound_rad",
             "geometry_approximation_error_bound_m",
+            "numerical_error_bound_m",
+            "transform_error_bound_m",
             "observed_one_pose_aabb_undercoverage_m",
             "observed_one_pose_aabb_undercoverage_is_global_bound",
         }
@@ -285,6 +298,12 @@ def load_live_reconciliation_config(
         "geometry_approximation_error_bound_m": _nonnegative_optional(
             sweep_raw["geometry_approximation_error_bound_m"],
             "sweep.geometry_approximation_error_bound_m",
+        ),
+        "numerical_error_bound_m": _nonnegative_optional(
+            sweep_raw["numerical_error_bound_m"], "sweep.numerical_error_bound_m"
+        ),
+        "transform_error_bound_m": _nonnegative_optional(
+            sweep_raw["transform_error_bound_m"], "sweep.transform_error_bound_m"
         ),
         "observed_one_pose_aabb_undercoverage_m": _finite(
             sweep_raw["observed_one_pose_aabb_undercoverage_m"],
@@ -578,10 +597,138 @@ def _field_string(block: str, field: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _table_source_expansion(
+    cfg: LiveReconciliationConfig,
+    manifest: ProtoSourceManifest,
+    catalog: Any,
+    reach_bound_m: float,
+    geometry_error_available: bool,
+) -> tuple[dict[str, object], list[str]]:
+    """Expand pinned Table/SolidBox sources without claiming runtime grounding."""
+    blockers: list[str] = []
+    sources = {item.name: item for item in (*manifest.external, *manifest.nested)}
+    table_source, solid_source = sources["Table"], sources["SolidBox"]
+    table_text = table_source.path.read_text(encoding="utf-8")
+    solid_text = solid_source.path.read_text(encoding="utf-8")
+    root_bounding_objects = len(re.findall(r"\bboundingObject\b", table_text))
+    nested_solid_boxes = len(re.findall(r"\bSolidBox\s*\{", table_text))
+    solidbox_bounding_box = bool(re.search(r"boundingObject\s+Box\s*\{", solid_text))
+    if root_bounding_objects != 0 or nested_solid_boxes < 3 or not solidbox_bounding_box:
+        blockers.append("pinned Table/SolidBox nested collision structure is not as expected")
+
+    table_block = _world_block(cfg.pinned["world"].read_text(encoding="utf-8"), "Table")
+    translation_values = _field_values(table_block, "translation")
+    size_values = _field_values(table_block, "size")
+    if translation_values is None or len(translation_values) != 3:
+        blockers.append("pinned world Table translation is incomplete")
+        translation_values = ("0", "0", "0")
+    if size_values is None or len(size_values) != 3:
+        blockers.append("pinned world Table size is incomplete")
+        size_values = ("1", "1.8", "0.74")
+    translation = np.asarray([float(value) for value in translation_values])
+    size = np.asarray([float(value) for value in size_values])
+
+    interface = _proto_interface_block(table_text, "Table")
+    rotation_default = tuple(
+        float(value) for value in _proto_default(interface, "rotation", "SFRotation")
+    )
+    feet_size = np.asarray(
+        [float(value) for value in _proto_default(interface, "feetSize", "SFVec2f")]
+    )
+    feet_padding = float(_proto_default(interface, "feetPadding", "SFFloat")[0])
+    frame_thickness = float(_proto_default(interface, "frameThickness", "SFFloat")[0])
+    rotation_values = _field_values(table_block, "rotation")
+    if (
+        rotation_values is not None
+        and tuple(float(value) for value in rotation_values[:4]) != rotation_default
+    ):
+        blockers.append("pinned world Table rotation override is not supported by source expansion")
+    root_rotation = axis_angle_matrix(rotation_default)
+    R_base_world = catalog.T_base_world[:3, :3]
+
+    main_size = np.asarray((size[0], size[1], frame_thickness))
+    main_local = np.asarray((0.0, 0.0, size[2] - 0.5 * frame_thickness))
+    foot_local_x = 0.5 * size[0] - feet_padding - 0.5 * feet_size[0]
+    foot_local_y = 0.5 * size[1] - feet_padding - 0.5 * feet_size[1]
+    foot_local_z = 0.5 * (size[2] - frame_thickness)
+    foot_size = np.asarray((feet_size[0], feet_size[1], size[2] - frame_thickness))
+    definitions = (
+        ("main frame", main_local, main_size),
+        ("foot 1", (foot_local_x, foot_local_y, foot_local_z), foot_size),
+        ("foot 2", (-foot_local_x, foot_local_y, foot_local_z), foot_size),
+        ("foot 3", (foot_local_x, -foot_local_y, foot_local_z), foot_size),
+        ("foot 4", (-foot_local_x, -foot_local_y, foot_local_z), foot_size),
+    )
+
+    boxes: list[dict[str, object]] = []
+    for name, local, box_size in definitions:
+        local_array = np.asarray(local)
+        world_center = translation + root_rotation @ local_array
+        base_center = R_base_world @ world_center + catalog.T_base_world[:3, 3]
+        base_rotation = R_base_world @ root_rotation
+        base_half = np.abs(base_rotation) @ (box_size / 2.0)
+        closest_point = np.maximum(np.abs(base_center) - base_half, 0.0)
+        distance = float(np.linalg.norm(closest_point))
+        if distance > reach_bound_m and geometry_error_available:
+            reachability = "outside_conservative_workspace"
+        elif distance > reach_bound_m:
+            reachability = "outside_nominal_workspace_unproven"
+        else:
+            reachability = "within_conservative_workspace"
+        boxes.append(
+            {
+                "name": name,
+                "world_translation_m": world_center.tolist(),
+                "world_rotation_axis_angle": list(rotation_default),
+                "size_m": box_size.tolist(),
+                "base_translation_m": base_center.tolist(),
+                "base_half_extents_m": base_half.tolist(),
+                "distance_to_base_origin_m": distance,
+                "reachability": reachability,
+            }
+        )
+
+    coarse = catalog.geometry.boxes[0]
+    coarse_center = np.asarray(coarse.center_base)
+    coarse_half = np.asarray(coarse.half_base)
+    contained = all(
+        bool(
+            np.all(
+                np.abs(np.asarray(item["base_translation_m"]) - coarse_center)
+                <= coarse_half - np.asarray(item["base_half_extents_m"]) + 1e-8
+            )
+        )
+        for item in boxes
+    )
+    if not contained:
+        blockers.append("source-derived table boxes are not contained by the pinned coarse proxy")
+    return (
+        {
+            "boxes": boxes,
+            "source_hashes": {
+                "world_sha256": str(cfg.expected["world_sha256"]),
+                "table_proto_sha256": table_source.sha256,
+                "solid_box_proto_sha256": solid_source.sha256,
+                "scene_catalog_sha256": catalog.geometry.catalog_sha256,
+            },
+            "root_rotation_axis_angle": list(rotation_default),
+            "reach_bound_m": reach_bound_m,
+            "coarse_catalog_proxy_contains_all_boxes": contained,
+            "cross_check": (
+                "source arithmetic and coarse-proxy containment are independent of the live "
+                "export, but neither grounds a runtime transform"
+            ),
+        },
+        blockers,
+    )
+
+
 def _trace_table(
     cfg: LiveReconciliationConfig,
     manifest: ProtoSourceManifest,
     objects: Sequence[Mapping[str, object]],
+    catalog: Any,
+    sweep_detail: Mapping[str, object],
 ) -> tuple[dict[str, object], list[str]]:
     blockers: list[str] = []
     by_def, by_name = _object_index(objects)
@@ -614,6 +761,18 @@ def _trace_table(
             "translation": [float(value) for value in translation],
             "size": [float(value) for value in size],
         }
+    safety = _mapping(sweep_detail["safety_bound"], "swept_collision_validation.safety_bound")
+    reach_bound = float(cast(float, sweep_detail["max_urdf_reach_m"])) + float(
+        cast(float, safety["margin_m"])
+    )
+    registration = safety.get("registration_uncertainty_bound_m")
+    if registration is not None:
+        reach_bound += float(cast(float, registration))
+    geometry_available = safety.get("geometry_approximation_error_bound_m") is not None
+    source_expansion, source_blockers = _table_source_expansion(
+        cfg, manifest, catalog, reach_bound, geometry_available
+    )
+    blockers.extend(source_blockers)
     detail = {
         "live_export_count": len(table_hits),
         "root_proto_bounding_object_count": root_bounding_objects,
@@ -625,7 +784,14 @@ def _trace_table(
             "Solid has none, and its nested SolidBox internals are not exposed through children "
             "without device ancestry. The table has no device ancestry, so it is absent."
         ),
+        "status": "source_derived_unverified",
         "runtime_collision_tree_grounded": False,
+        "source_expansion": source_expansion,
+        "missing_runtime_observation": (
+            "A read-only Webots expansion of the five nested Table SolidBox nodes is absent: "
+            "resolved PROTO hashes, evaluated translation/rotation/size/enableBoundingObject, "
+            "resulting boundingObject Box.size, and each node's world/base pose."
+        ),
     }
     return detail, blockers
 
@@ -848,6 +1014,92 @@ def _point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarra
     return float(np.linalg.norm(point - (start + alpha * axis)))
 
 
+_BOX_CORNERS = np.asarray([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+
+
+def _urdf_origin_transform(node: ET.Element, name: str) -> np.ndarray:
+    origin = node.find("origin")
+    if origin is None:
+        raise ValueError(f"URDF {name} has no origin")
+    xyz = tuple(float(value) for value in origin.attrib.get("xyz", "0 0 0").split())
+    rpy = tuple(float(value) for value in origin.attrib.get("rpy", "0 0 0").split())
+    if len(xyz) != 3 or len(rpy) != 3:
+        raise ValueError(f"URDF {name} origin is incomplete")
+    transform = np.eye(4)
+    transform[:3, :3] = _rpy_axes(rpy)
+    transform[:3, 3] = xyz
+    return transform
+
+
+def _urdf_fixed_joint_transform(urdf_path: Path, name: str, parent: str, child: str) -> np.ndarray:
+    root = ET.parse(Path(urdf_path)).getroot()
+    joint = root.find(f'./joint[@name="{name}"]')
+    if joint is None or joint.attrib.get("type") != "fixed":
+        raise ValueError(f"pinned URDF fixed joint {name} is missing")
+    actual_parent = joint.find("parent")
+    actual_child = joint.find("child")
+    if (
+        actual_parent is None
+        or actual_child is None
+        or actual_parent.attrib.get("link") != parent
+        or actual_child.attrib.get("link") != child
+    ):
+        raise ValueError(f"pinned URDF joint {name} parent/child chain changed")
+    return _urdf_origin_transform(joint, f"joint {name}")
+
+
+def _urdf_front_body_radius(
+    urdf_path: Path, start: np.ndarray, end: np.ndarray
+) -> tuple[float, list[dict[str, object]]]:
+    """Conservatively bound the static `front` gripper body collisions in the front frame."""
+    root = ET.parse(Path(urdf_path)).getroot()
+    link = root.find('./link[@name="front"]')
+    if link is None:
+        raise ValueError("pinned URDF front gripper body link is missing")
+    details: list[dict[str, object]] = []
+    for index, collision in enumerate(link.findall("collision")):
+        geometry = collision.find("geometry")
+        if geometry is None or len(geometry) != 1:
+            raise ValueError(f"front collision {index} has no single geometry")
+        kind, shape_node = next(iter([(item.tag, item) for item in geometry]))
+        if kind == "box":
+            size = np.asarray([float(value) for value in shape_node.attrib.get("size", "").split()])
+            if size.shape != (3,) or np.any(size <= 0):
+                raise ValueError(f"front box {index} has an invalid size")
+            half = size / 2.0
+        elif kind == "cylinder":
+            radius = float(shape_node.attrib["radius"])
+            length = float(shape_node.attrib["length"])
+            if radius <= 0 or length <= 0:
+                raise ValueError(f"front cylinder {index} has invalid dimensions")
+            half = np.asarray((radius, radius, length / 2.0))
+        elif kind == "sphere":
+            radius = float(shape_node.attrib["radius"])
+            if radius <= 0:
+                raise ValueError(f"front sphere {index} has an invalid radius")
+            half = np.full(3, radius)
+        else:
+            raise ValueError(f"unsupported front gripper body geometry: {kind}")
+        transform = _urdf_origin_transform(collision, f"front collision {index}")
+        required = max(
+            _point_segment_distance(
+                transform[:3, :3] @ (signs * half) + transform[:3, 3], start, end
+            )
+            for signs in _BOX_CORNERS
+        )
+        details.append(
+            {
+                "index": index,
+                "geometry": kind,
+                "half_extents_m": half.tolist(),
+                "required_radius_m": required,
+            }
+        )
+    if not details:
+        raise ValueError("pinned URDF front gripper body has no collision primitives")
+    return max(float(cast(float, item["required_radius_m"])) for item in details), details
+
+
 def _gripper_radius(
     cfg: LiveReconciliationConfig,
     catalog: SceneCollisionCatalog,
@@ -861,48 +1113,117 @@ def _gripper_radius(
         blockers.append("tool frame or pinned gripper envelope is missing")
         return {"envelope_validation_available": False}, blockers
     atol = cfg.tolerances["rigid_matrix_atol"]
-    T_base_tool = _matrix(tool.get("T_base_owner"), "WRIST_CONNECTOR base transform", atol)
-    T_tool_base = np.linalg.inv(T_base_tool)
+    T_base_wrist = _matrix(tool.get("T_base_owner"), "WRIST_CONNECTOR base transform", atol)
+    T_wrist_front = _urdf_fixed_joint_transform(
+        cfg.pinned["urdf"],
+        "wrist_ft_tool_link_front_joint",
+        "wrist_ft_tool_link",
+        "front",
+    )
+    T_base_front = T_base_wrist @ T_wrist_front
     start = np.asarray(gripper.start_tool, dtype=np.float64)
     end = np.asarray(gripper.end_tool, dtype=np.float64)
-    observed_radius = 0.0
-    finger_details: list[dict[str, object]] = []
-    expected_defs = list(cast(Sequence[str], cfg.expected["gripper_defs"]))
-    for marker in expected_defs:
-        finger = by_def.get(marker)
-        if finger is None:
-            blockers.append(f"live export is missing gripper {marker}")
-            continue
-        shapes = cast(Sequence[Mapping[str, object]], finger.get("shapes", ()))
-        if len(shapes) != 3 or any(shape.get("type") != "Box" for shape in shapes):
-            blockers.append(f"gripper {marker} does not have three live Box shapes")
-            continue
-        T_base_owner = _matrix(finger.get("T_base_owner"), f"{marker} base transform", atol)
-        finger_max = 0.0
-        for index, shape in enumerate(shapes):
-            T_owner_shape = _matrix(
-                shape.get("T_owner_shape"), f"{marker} shape {index} transform", atol
-            )
-            size = np.asarray(_shape_parameters(shape).get("size"), dtype=np.float64)
-            if size.shape != (3,) or not np.isfinite(size).all() or np.any(size <= 0):
-                blockers.append(f"gripper {marker} shape {index} has invalid Box size")
+    shift = np.asarray(gripper.ee_to_front_translation_m, dtype=np.float64)
+    if gripper.frame == "front" and (shift.shape != (3,) or not np.isfinite(shift).all()):
+        blockers.append("gripper ee-to-front translation is invalid")
+        return {"envelope_validation_available": False}, blockers
+    if gripper.frame == "wrist_ft_tool_link" and np.any(shift != 0.0):
+        blockers.append("legacy wrist-frame gripper envelope cannot carry an ee-to-front offset")
+
+    def measure_fingers(
+        segment_start: np.ndarray,
+        segment_end: np.ndarray,
+        T_base_segment: np.ndarray,
+    ) -> tuple[float, list[dict[str, object]]]:
+        T_segment_base = np.linalg.inv(T_base_segment)
+        required = 0.0
+        rows: list[dict[str, object]] = []
+        for marker in list(cast(Sequence[str], cfg.expected["gripper_defs"])):
+            finger = by_def.get(marker)
+            if finger is None:
+                blockers.append(f"live export is missing gripper {marker}")
                 continue
-            T_tool_shape = T_tool_base @ T_base_owner @ T_owner_shape
-            for signs in np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]):
-                corner = T_tool_shape[:3, :3] @ (signs * size / 2.0) + T_tool_shape[:3, 3]
-                finger_max = max(finger_max, _point_segment_distance(corner, start, end))
-        observed_radius = max(observed_radius, finger_max)
-        finger_details.append({"name": marker, "required_capsule_radius_m": finger_max})
+            shapes = cast(Sequence[Mapping[str, object]], finger.get("shapes", ()))
+            if len(shapes) != 3 or any(shape.get("type") != "Box" for shape in shapes):
+                blockers.append(f"gripper {marker} does not have three live Box shapes")
+                continue
+            T_base_owner = _matrix(finger.get("T_base_owner"), f"{marker} base transform", atol)
+            finger_max = 0.0
+            for index, shape in enumerate(shapes):
+                T_owner_shape = _matrix(
+                    shape.get("T_owner_shape"), f"{marker} shape {index} transform", atol
+                )
+                size = np.asarray(_shape_parameters(shape).get("size"), dtype=np.float64)
+                if size.shape != (3,) or not np.isfinite(size).all() or np.any(size <= 0):
+                    blockers.append(f"gripper {marker} shape {index} has invalid Box size")
+                    continue
+                T_segment_shape = T_segment_base @ T_base_owner @ T_owner_shape
+                finger_max = max(
+                    finger_max,
+                    max(
+                        _point_segment_distance(
+                            T_segment_shape[:3, :3] @ (signs * size / 2.0) + T_segment_shape[:3, 3],
+                            segment_start,
+                            segment_end,
+                        )
+                        for signs in _BOX_CORNERS
+                    ),
+                )
+            required = max(required, finger_max)
+            rows.append({"name": marker, "required_capsule_radius_m": finger_max})
+        return required, rows
+
+    if gripper.frame == "front":
+        reference_base = T_base_front
+    elif gripper.frame == "wrist_ft_tool_link":
+        reference_base = T_base_wrist
+    else:
+        blockers.append(f"unsupported gripper envelope frame: {gripper.frame}")
+        return {"envelope_validation_available": False}, blockers
+
+    frame_fingers, finger_rows = measure_fingers(start, end, reference_base)
+    wrong_frame_fingers, _ = measure_fingers(start, end, T_base_wrist)
+    # Runtime-literal diagnostic: ee_pose is the finger-pad frame, which is -shift from URDF
+    # front. Express that tool-frame segment back in front coordinates for comparison only.
+    runtime_start, runtime_end = start - shift, end - shift
+    runtime_fingers, _ = measure_fingers(runtime_start, runtime_end, T_base_front)
+    try:
+        frame_body, body_rows = _urdf_front_body_radius(cfg.pinned["urdf"], start, end)
+        runtime_body, _ = _urdf_front_body_radius(cfg.pinned["urdf"], runtime_start, runtime_end)
+    except (OSError, ValueError, ET.ParseError) as error:
+        blockers.append(f"static gripper body evidence is unavailable: {error}")
+        frame_body, body_rows, runtime_body = 0.0, [], 0.0
+
+    frame_required = max(frame_fingers, frame_body)
+    runtime_required = max(runtime_fingers, runtime_body)
     pinned_radius = float(gripper.radius_m)
-    conservative = observed_radius <= pinned_radius + cfg.tolerances["primitive_atol"]
+    conservative = frame_required <= pinned_radius + cfg.tolerances["primitive_atol"]
     if not conservative:
-        blockers.append("pinned gripper capsule does not enclose the observed finger boxes")
+        blockers.append(
+            "pinned gripper capsule does not enclose the frame-correct finger/body boxes"
+        )
     return {
         "envelope_validation_available": True,
+        "frame": gripper.frame,
+        "ee_to_front_translation_m": shift.tolist(),
         "pinned_radius_m": pinned_radius,
-        "observed_required_radius_m": observed_radius,
+        "frame_correct_finger_required_radius_m": frame_fingers,
+        "frame_correct_body_required_radius_m": frame_body,
+        "frame_correct_required_radius_m": frame_required,
+        "wrong_frame_required_radius_m": wrong_frame_fingers,
+        "runtime_literal_finger_required_radius_m": runtime_fingers,
+        "runtime_literal_body_required_radius_m": runtime_body,
+        "runtime_literal_required_radius_m": runtime_required,
         "conservative": conservative,
-        "fingers": finger_details,
+        "fingers": finger_rows,
+        "static_body_primitives": body_rows,
+        "mismatch_resolution": (
+            "The apparent 0.2365 m finger requirement came from interpreting the pinned "
+            "front-frame segment in WRIST_CONNECTOR coordinates. Recovering the URDF front "
+            "origin from "
+            "ee_pose + [0,0,0.1741] leaves 0.065875 m including static body boxes, below the "
+            "unchanged 0.1 m radius."
+        ),
         "static_single_pose_only": True,
     }, blockers
 
@@ -1012,6 +1333,12 @@ def _sweep_analysis(
         sweep["geometry_approximation_error_bound_m"],
         "sweep.geometry_approximation_error_bound_m",
     )
+    numerical_error = _nonnegative_optional(
+        sweep["numerical_error_bound_m"], "sweep.numerical_error_bound_m"
+    )
+    transform_error = _nonnegative_optional(
+        sweep["transform_error_bound_m"], "sweep.transform_error_bound_m"
+    )
     is_global = bool(sweep["observed_one_pose_aabb_undercoverage_is_global_bound"])
     if not is_global:
         geometry_error = None
@@ -1027,6 +1354,8 @@ def _sweep_analysis(
         joint_reach_bound_m=max_reach,
         geometry_approximation_error_bound_m=geometry_error,
         registration_uncertainty_bound_m=registration_uncertainty,
+        numerical_error_bound_m=numerical_error,
+        transform_error_bound_m=transform_error,
     )
     if not bound.certified:
         blockers.extend(f"swept bound: {item}" for item in bound.blockers)
@@ -1085,7 +1414,6 @@ def reconcile_preserved_live_geometry(
     sweep_contract = bindings.load_arm_sweep_config(cfg.pinned["arm_sweep_contract"])
 
     floor_detail, floor_blockers = _validate_floors(cfg, catalog, objects)
-    table_detail, table_blockers = _trace_table(cfg, manifest, objects)
     pipe_detail, pipe_blockers = _trace_pipe_sections(
         cfg, manifest, objects, float(cfg.sweep["point_speed_bound_m_s"])
     )
@@ -1093,6 +1421,38 @@ def reconcile_preserved_live_geometry(
     gripper_detail, gripper_blockers = _gripper_radius(cfg, catalog, objects)
     can_detail, can_blockers = _can_envelope(cfg, catalog, objects, state)
     sweep_detail, sweep_blockers = _sweep_analysis(cfg, catalog, sweep_contract, reference)
+    table_detail, table_blockers = _trace_table(cfg, manifest, objects, catalog, sweep_detail)
+
+    coverage = build_self_collision_coverage(
+        cfg.pinned["urdf"],
+        sweep_contract.required_arm_links,
+        max_point_speed_m_s=float(cfg.sweep["point_speed_bound_m_s"]),
+        gripper_name=catalog.geometry.gripper.name if catalog.geometry.gripper else None,
+        carried_object_id=catalog.geometry.carried_objects[0].name
+        if catalog.geometry.carried_objects
+        else None,
+    )
+    excluded = sweep_contract.adjacent_pairs
+    self_collision_detail: dict[str, object] = {
+        **coverage.report(),
+        "contract_excluded_pairs": sorted(sorted(pair) for pair in excluded),
+        "contract_coverage_validated": validate_contract_pair_coverage(coverage, excluded),
+        "adjacency_auto_exempt": False,
+        "grasp_contact_auto_exempt": False,
+    }
+    self_collision_blockers: list[str] = []
+    if excluded:
+        self_collision_blockers.append("contract attempts to exempt adjacent collision pairs")
+    if not coverage.coverage_proven:
+        self_collision_blockers.append("URDF collision-body pair coverage is incomplete")
+    if not self_collision_detail["contract_coverage_validated"]:
+        self_collision_blockers.append("self-collision contract does not check every required pair")
+
+    can_lifecycle = assess_carried_object_state(
+        "ambiguous",
+        static_geometry_verified=bool(can_detail.get("static_geometry_matches_pinned")),
+    )
+    can_detail["lifecycle"] = can_lifecycle.report()
 
     by_def, by_name = _object_index(objects)
     arm_defs = [str(value) for value in cast(Sequence[object], cfg.expected["arm_torso_defs"])]
@@ -1129,6 +1489,7 @@ def reconcile_preserved_live_geometry(
         *rail_blockers,
         *gripper_blockers,
         *can_blockers,
+        *self_collision_blockers,
     ]
     components = [
         _component(
@@ -1147,13 +1508,21 @@ def reconcile_preserved_live_geometry(
         ),
         _component(
             name="gripper_fingers",
-            classification="observed_but_not_conservatively_represented",
+            classification="matched_and_conservatively_represented"
+            if gripper_detail.get("conservative") is True and not gripper_blockers
+            else "observed_but_not_conservatively_represented",
             live=gripper_detail,
             pinned={
-                "radius_m": catalog.geometry.gripper.radius_m if catalog.geometry.gripper else None
+                "radius_m": catalog.geometry.gripper.radius_m if catalog.geometry.gripper else None,
+                "frame": gripper_detail.get("frame"),
             },
-            reason="observed finger boxes exceed the pinned capsule radius in one static pose",
+            reason=(
+                "frame-corrected static finger and body boxes fit the unchanged pinned radius; "
+                "dynamic gripper motion still requires the blocked swept certificate"
+            ),
             blockers=gripper_blockers,
+            conservative_representation=gripper_detail.get("conservative") is True
+            and not gripper_blockers,
         ),
         _component(
             name="CAN",
@@ -1287,9 +1656,11 @@ def reconcile_preserved_live_geometry(
                 "self_collision_enabled": normalize_webots_sfbool(
                     self_collision_raw, field_name="selfCollision"
                 ),
-                "required_arm_links": list(sweep_contract.required_arm_links),
-                "adjacent_pairs": sorted(sorted(pair) for pair in sweep_contract.adjacent_pairs),
-                "coverage_proven": False,
+                **self_collision_detail,
+            },
+            "carried_lifecycle": {
+                **carried_lifecycle_report(),
+                "current_assessment": can_lifecycle.report(),
             },
             "grasp_contact_exceptions": {
                 "permitted_contact_objects": sorted(sweep_contract.permitted_contact_objects),

@@ -94,6 +94,13 @@ def _contract(
         margin_m=margin,
         substeps=substeps,
         permitted_contact_objects=contacts,
+        adaptive_speed_bound_m_s=0.5,
+        max_joint_displacement_bound_rad=0.0,
+        joint_reach_bound_m=0.0,
+        geometry_error_bound_m=0.0,
+        registration_uncertainty_bound_m=0.0,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
 
 
@@ -171,6 +178,13 @@ def _adapter_config(urdf: Path, *, adjacent: frozenset[frozenset[str]] = frozens
         substeps=4,
         speed_bound_m_s=100.0,
         certificate=certificate,
+        adaptive_speed_bound_m_s=0.5,
+        max_joint_displacement_bound_rad=0.0,
+        joint_reach_bound_m=0.0,
+        geometry_error_bound_m=0.0,
+        registration_uncertainty_bound_m=0.0,
+        numerical_error_bound_m=0.0,
+        transform_error_bound_m=0.0,
     )
 
 

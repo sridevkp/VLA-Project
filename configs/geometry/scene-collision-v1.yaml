@@ -73,7 +73,16 @@ floor_planes:
   supported: true
 gripper_envelope:
   name: gripper_fingers_and_body
-  frame: wrist_ft_tool_link
+  # Frame-corrected representation. `ee_pose` is the finger-pad tool frame at
+  # gripper_right_finger_link + [0,0,-0.1741] (configs/robot.yaml:51); the collision segment
+  # is the URDF `front` frame axis (tiago.urdf:944-955), so recover that origin first.
+  # Pinned radius is unchanged. Evidence: live finger boxes require 0.039081150011617 m,
+  # URDF/live gripper body requires 0.065875008915307 m in this frame (ADR-0057).
+  frame: front
+  ee_to_front_translation_m:
+  - 0.0
+  - 0.0
+  - 0.1741
   start_tool:
   - 0.0
   - 0.0
@@ -84,7 +93,7 @@ gripper_envelope:
   - -0.21875
   radius_m: 0.1
   max_point_speed_m_s: 28.49316700274912
-  source: TiagoGripper.proto:378-470,488-584,588-642
+  source: TiagoGripper.proto:378-470,488-584,588-642; tiago.urdf:944-955; configs/robot.yaml:51
   supported: true
 can_envelope:
   name: CAN

@@ -311,6 +311,8 @@ class SceneCollisionCatalog:
             ],
             "gripper_envelope": {
                 "name": self.geometry.gripper.name,
+                "frame": self.geometry.gripper.frame,
+                "ee_to_front_translation_m": list(self.geometry.gripper.ee_to_front_translation_m),
                 "start_tool": list(self.geometry.gripper.start_tool),
                 "end_tool": list(self.geometry.gripper.end_tool),
                 "radius_m": self.geometry.gripper.radius_m,
@@ -500,6 +502,7 @@ def load_scene_collision_catalog(path: Path) -> SceneCollisionCatalog:
     if set(raw_gripper) != {
         "name",
         "frame",
+        "ee_to_front_translation_m",
         "start_tool",
         "end_tool",
         "radius_m",
@@ -508,8 +511,16 @@ def load_scene_collision_catalog(path: Path) -> SceneCollisionCatalog:
         "supported",
     }:
         raise ValueError("gripper_envelope has unexpected keys")
-    if raw_gripper["frame"] != "wrist_ft_tool_link" or raw_gripper["supported"] is not True:
+    gripper_frame = _text(raw_gripper["frame"], "gripper.frame")
+    if gripper_frame not in {"front", "wrist_ft_tool_link"}:
         raise ValueError("gripper envelope is unsupported or uses an unexpected frame")
+    if raw_gripper["supported"] is not True:
+        raise ValueError("gripper envelope is unsupported")
+    ee_to_front = _vector(
+        raw_gripper["ee_to_front_translation_m"], "gripper.ee_to_front_translation_m", 3
+    )
+    if gripper_frame == "wrist_ft_tool_link" and any(abs(value) > 0.0 for value in ee_to_front):
+        raise ValueError("legacy wrist-frame gripper envelope cannot carry an ee-to-front offset")
     gripper = GripperEnvelope(
         _text(raw_gripper["name"], "gripper name"),
         _vector(raw_gripper["start_tool"], "gripper.start_tool", 3),
@@ -517,6 +528,8 @@ def load_scene_collision_catalog(path: Path) -> SceneCollisionCatalog:
         _finite_scalar(raw_gripper["radius_m"], "gripper.radius_m"),
         _finite_scalar(raw_gripper["max_point_speed_m_s"], "gripper.max_point_speed_m_s"),
         _text(raw_gripper["source"], "gripper source"),
+        frame=gripper_frame,
+        ee_to_front_translation_m=ee_to_front,
     )
     if not math.isfinite(gripper.radius_m) or gripper.radius_m <= 0:
         raise ValueError("gripper radius must be positive and finite")

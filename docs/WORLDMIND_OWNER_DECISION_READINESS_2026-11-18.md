@@ -119,3 +119,201 @@ Conclusion: on the measured harness the campaign fits inside the remaining calen
 not the binding constraint; the owner decisions in §1–§5 are.** Actual decision count depends on
 the owner-set `bounds.max_decisions`/`max_steps`, and CPU contention across 3 workers is not
 measured, so the full-system figure stays INFERRED until a real run exists.
+
+## 8. Final decision packet (2026-11-19) — five items, one sitting
+
+Only unresolved choices that need an owner signature appear here. No new framework, no new
+evidence class, no reopened decision. Sources: files in this tree plus the measured canonical
+campaign at `/home/tj330/programs/VLA-Project-analytic/runs/validation-evidence-v2-canonical/`.
+
+### 8.0 What changed since §6–§7
+
+| Change | Evidence | Effect on these decisions |
+|---|---|---|
+| Freshness measured at point of use (`38b7572`) | unit tests pass; v3 evidence stays byte-identical and `FAILED` (`age ≈12.86 s > 5.0`) | **C** is now attemptable once, with a new output path |
+| Full-chain FK for the arm sweep (`d83920f`) | `Kinematics.forward` returns one 4×4 matrix, but both sweep builders indexed it with link indices 4–13 and swallowed the resulting `IndexError` into `None`. Consequence: **an approved certificate could never pass a single transition.** Fixed via `_link_transforms`; the unit-test fake now mirrors the real `forward` / `chain.forward_kinematics` split | **B is now the only structural blocker** for `full_system`; C and D are unaffected |
+| Shipped sweep scope vs the measured expert | 18 episodes / **13,766 control steps**; corrected FK reproduces recorded `ee_xyz` to <0.1 mm (n=117) | **B is unavoidable**: a certificate alone can never admit the expert |
+
+Measured scope result at the shipped contract (`margin 0.02`, 62 substeps, pad `q = 0.03981`).
+"Allowed q" is the largest pad that still reports clear; a step passes iff `q < allowed`.
+
+| Check as currently implemented | Allowed q min / median | Pass at `q=0.03981` | Cause |
+|---|---|---|---|
+| 19 arm capsules vs table box | +0.1481 / +0.1481 | **100 %** | none — 3.7× headroom |
+| arm capsules vs two floor half-spaces | clear on every step | **100 %** | none |
+| gripper envelope (r=0.10 m) vs table box | −0.0969 / +0.0221 | 29.7 % | the 0.1 m radial inflation, not motion: worst raw capsule AABB is only +0.0031 m above the table top |
+| gripper envelope vs CAN envelope | −0.1221 / −0.0425 | 26.8 % | grasping requires contact |
+| self-pairs, mechanically non-adjacent | **−0.0574** / −0.0508 | **0.0 %** | URDF capsule inflation at coincident joint frames (18 of 19 radii ≥ 0.0441 m), e.g. `arm_5_link:2 \| wrist_ft_tool_link:0` = −0.0412 |
+
+So: `full_system` needs **one** decision (B), not a rebuild. Table AABB in base frame is
+`x[0.3005,1.9397] y[−1.9412,2.6204] z[−0.1544,0.72215]`; measured minimum fingertip height is
+`0.7699 m`, i.e. **≈47.7 mm above the tabletop plane**.
+
+### 8.1 Packet A — Eq. 3.8 and Table 5.1 (scientific contract)
+
+Frozen and needing only confirmation, because they are already implemented and already approved in
+substance: the verbal Eq. 3.8 form, hard-veto precedence (no utility term offsets a veto), the
+eight Table 5.1 metric **names and definitions**, and "collision rate" as a labelled proxy.
+
+Needing approval now: the four component formulas and their units. These are engineering choices,
+not report quotations — `configs/report/objectives.proposal.json` says so explicitly.
+
+| Component | Formula (as proposed) | Units | Direction |
+|---|---|---|---|
+| `Jg` | `sqrt((‖p_ee − p_goal‖₂ / s_p)² + (angle(q_ee, q_goal) / s_r)²)` | dimensionless | minimize |
+| `Jl` | `(Σ_k ‖p_{k+1} − p_k‖₂ / s_l) + λ_t · (N_steps · dt_s / s_t)` | dimensionless | minimize |
+| `Jr` | `mean_k clip((m − d_min,k) / m, 0, 1)`; `d_min,k < 0 → 1` | dimensionless ∈ [0,1] | minimize |
+| `Ju` | `mean_k (‖e_p,k‖ / s_p + e_θ,k / s_r)` | dimensionless | minimize |
+
+Missing any input raises `MissingObjectiveInput`; nothing is imputed. `Jr` never substitutes for a
+hard check. Symbols `s_p (m)`, `s_r (rad)`, `s_l (m)`, `s_t (s)`, `λ_t`, `m (m)` and the weights
+`(wg, wl, wr, wu)` stay **VALIDATION-selected through the registered evaluator**, exactly as the
+proposal and §7 of the plan already state; approving A does not fix their numeric values.
+
+Table 5.1: only unit/taxonomy choices remain — ratios for success/collision/rejection, `m` for path
+length, `s` for execution time and planning latency (sim vs wall kept separate), SI-per-quantity for
+prediction error, counts+categories for reliability.
+
+```
+Owner signature (A):
+  [ ] approve the four formulas + dimensionless units + minimize direction as written
+  [ ] approve, with the amendments written here: ______________________________________
+  [ ] reject (state which component and why): _________________________________________
+  [ ] Table 5.1 units: [ ] accept the proposed units  [ ] substitute: __________________
+  Calibration evaluator binding `registered_calibration_evaluator_v1`: [ ] authorize
+  Name: ______________________  Date: __________
+```
+
+### 8.2 Packet B — the one safety-scope amendment (`full_system` only)
+
+This is an **applicability** amendment, not a weakening of the veto. `unverified-arm-sweep` stays
+hard and fail-closed for every claim outside the list below, and for every transition where the
+catalog, base pose, or required object is missing.
+
+| Element | Amended scope |
+|---|---|
+| checked bodies | the 19 arm-link capsules from the pinned URDF (unchanged) |
+| checked statics | table box + two floor half-spaces (unchanged) |
+| gripper vs table box | **exempt**; replaced by the tool-point support predicate below |
+| self-pairs (arm–arm, arm–gripper, gripper–gripper) | **exempt**, all pairs |
+| CAN | `permitted_contact_objects: ["CAN"]` — required for grasping. Note this exempts CAN for *every* checked capsule, not just the fingertips |
+| tool-point support predicate | fingertip point (gripper capsule end, `front + R·(0,0,−0.21875)`) must satisfy `p_tip.z − table_top_z ≥ margin_m` on every substep; `table_top_z` derived from the pinned catalog (0.72215 m), `margin_m` = the existing contract value |
+| base-pose gate | unchanged (`0.003 m`, `0.005 rad`) |
+| certificate bounds | `max_joint_displacement_bound_rad = 2.35 × 0.032 = 0.0752` (URDF joint limit), `joint_reach_bound_m = 1.13913` (URDF chain length), `geometry_error_bound_m = 0.0`, `registration_uncertainty_bound_m = 0.005`, `numerical_error_bound_m = 1e-6`, `transform_error_bound_m = 1e-4` |
+
+Residual risk carried by B, to appear in the paper verbatim: (1) gripper finger/body geometry other
+than the tip may approach the tabletop without being checked; (2) arm-link contact with CAN is
+exempt; (3) no self-collision claim is made for any configuration; (4) 42 non-arm collision bodies
+remain uncovered. The measured mitigation for (1) is the ≥47.7 mm tip clearance over 13,766 expert
+steps.
+
+What B costs: one bounded code change (~1 commit, 1 test file). It cannot be expressed in the current
+YAML because `permitted_contact_objects` only exempts scene objects and `adjacent_pairs` only exempts
+capsule pairs, so both new elements need named contract fields; I will add ADR-0061 and keep the
+shipped config `status: blocked` until the signature exists.
+
+Acceptance test for the implementation, offline and Webots-free: the amended checker must return
+`True` on all **13,766** recorded expert transitions, and must still return `False` when the tip is
+lowered below `table_top + margin` or when an arm capsule is moved into the table box. That converts
+B from a promise into a measurable gate.
+
+```
+Owner signature (B):
+  [ ] approve the amended scope exactly as tabled above (arm+floor+tool-point+CAN-contact)
+  [ ] approve only these subsets: [ ] self-pair exemption  [ ] gripper/table exemption
+                                  [ ] CAN contact  [ ] certificate bounds
+  [ ] reject (state the required alternative): ________________________________________
+  Name: ______________________  Date: __________
+```
+
+### 8.3 Packet C — one read-only, runtime-grounding inspection (v4)
+
+Single attempt, no retry, no actuation, no stepping, no reset, no IK, no scoring. Launches a
+read-only Webots session only to export `boundingObject` geometry and re-check table grounding with
+the repaired freshness measurement.
+
+```
+cd /home/tj330/programs/VLA-Project-week3
+WEBOTS_HOME=/home/tj330/.local/opt/webots uv run python -m vlarobot.cli \
+  worldmind-webots-geometry-inspection \
+  --config configs/worldmind_webots_geometry_inspection.yaml \
+  --out runs/worldmind/geometry-inspection-v4-2026-11-19
+```
+
+Acceptance (all required): `outcome=PASS`; `observation_valid=true`;
+`observation_age_s <= 5.0` measured at consumption; 5/5 table targets within `0.0001 m / 0.0001 rad`;
+`backend_apply_calls=0`; no `step`, `reset`, IK, or actuation recorded. If it fails, the evidence is
+kept byte-identical and nothing is re-run.
+
+```
+Owner signature (C):  [ ] authorize one attempt at the command above, output path as written
+  Name: ______________________  Date: __________
+```
+
+### 8.4 Packet D — scored VALIDATION run (after A, B, C)
+
+```
+uv run python -m vlarobot.cli eval-worldmind \
+  --config <ready-config> --out runs/worldmind/<new-authorized-dir> \
+  --backend webots --state-source oracle --split validation
+```
+
+Frozen contract it must satisfy: 18 episodes, seeds `[0,1,2]`, unique (scene, seed) pairs,
+`K=32`, `H=50`, `dt=0.032`, `scripted_chunk_adapter`, five arms. It connects to an **already
+running** `sim-server`; it never launches Webots. TEST and TRAIN stay sealed.
+
+Preconditions, all fail-closed in `run_worldmind_preflight` (§4): `split`, `state_source`,
+`fresh_output`, `config` (`status: ready`), `backend_declaration`, `report_definitions`,
+`bindings` (currently `components={}` and `calibration_evaluators={}`), `calibration`,
+`frozen_plan`, `runtime_geometry`, `calibration_evidence`. Today the first blocked gate is `config`.
+
+Stop conditions: any unhandled exception, any episode ending `NO_SAFE_SET` where the frozen contract
+requires a decision, or any output collision aborts the run with no retry.
+
+Budget (INFERRED): 5 arms × 18 = 90 episodes; ≈885 s/episode full-system → ≈4.4 h with 3 workers,
+≈22 h serial. OBSERVED serial equivalent is 528 s/episode without prediction work.
+
+```
+Owner signature (D):  [ ] authorize the VALIDATION run above once preflight is green
+  Arms: [ ] all five   [ ] only: ____________________________________________
+  Name: ______________________  Date: __________
+```
+
+### 8.5 Packet E — earliest realistic schedule
+
+| Day | Work | Gate |
+|---|---|---|
+| Thu 11-19 | FK defect repaired (`d83920f`); this packet issued | done |
+| Fri 11-20 | owner signs A, B, C | signatures |
+| Fri 11-20 → Mon 11-23 | implement + test B (amended checker, 13,766-transition acceptance), ADR-0061, no activation | B signed |
+| Mon 11-23 | run C once; if PASS, register the amended contract as a *candidate*, still `blocked` pending the certificate record | C signed + PASS |
+| Mon 11-23 → Wed 11-25 | owner reviews the amended contract + certificate record; I wire A's evaluator and the ready config | A signed + evidence |
+| Wed 11-25 → Thu 11-26 | preflight green; scored VALIDATION (≈4.4 h, INFERRED) | D signed |
+| Thu 11-26 → Fri 11-27 | calibration selection under the 4-stage workflow; freeze the approved candidate | calibration approval |
+| Fri 11-27 → Wed 12-02 | analysis, tables, figures from measured artifacts | — |
+| 12-05 → 12-07 | TEST window, ≈12.3 h for 150 episodes (INFERRED) | separate authorization, sealed until then |
+| 12-08 → 12-11 | write-up, buffer | — |
+
+Slack is 4 working days before 2026-12-12 if A/B/C are signed by 11-20. Every later signature day
+consumes buffer one-for-one; if B slips past 11-27, the defensible fallback is to report the four
+non-`full_system` arms as measured and `full_system` as `unverified-arm-sweep`-blocked — which is a
+result, not a plan.
+
+### 8.6 What is measured, what is inferred, what is unknown
+
+| Quantity | Status |
+|---|---|
+| Control/physics steps per episode (166–1059, mean 764.8, n=18) | OBSERVED |
+| WorldMind decisions per episode | INFERRED `≈` steps: `execute_first` applies one control action per decision and re-observes; not instrumented in the canonical evidence |
+| Candidate-evaluation latency, K=32/H=50 | NOMINAL-KERNEL-PROFILED: p50 0.4677 s; not full-system |
+| Per-episode wall time without prediction work | OBSERVED: 528 s serial, 20.46 ep/h at 3 workers |
+| Full-system wall time, incl. 3-worker contention | UNKNOWN — no run exists |
+| Expert admission under the amended scope | INFERRED from 13,766 measured steps; becomes OBSERVED when the B acceptance test runs |
+| Windows execution of any of the above | UNKNOWN — never run |
+
+### 8.7 What happens on receipt
+
+A signature on A + B + C produces, in one working session: the amended checker and its
+13,766-transition test, ADR-0061, one v4 inspection attempt, and a ready-to-run preflight report.
+Nothing in this packet removes a hard veto, changes a frozen threshold, touches TEST/TRAIN, or
+authorizes actuation. The shipped sweep config stays `status: blocked` in every case.

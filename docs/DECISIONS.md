@@ -2110,3 +2110,82 @@ or frozen-evidence change is included. The prior read-only Webots PASS remains c
   frozen-helper hash mismatch, which must not be repaired by editing frozen evidence. Windows
   execution and live Webots geometry inspection remain unverified in this environment. No new
   dependency, public `core/` interface, frozen pin, seed, split or threshold changed.
+
+## ADR-0056 — Preserved live Webots geometry evidence reconciliation and conservative swept-bound repair (2026-11-18)
+
+**Status:** Accepted for local diagnostic implementation and inert verification only. The single
+preserved live Webots geometry inspection is accepted as valid evidence with outcome `FAILED`; no
+retry, Webots launch, controller/brain process, motion, real IK, calibration, scoring, TEST/TRAIN
+access, owner certificate activation, push, merge or PR #2 update occurred. Motion remains
+`NO-GO` / `NOT_READY`. This decision repairs collision-coverage diagnostics and makes unsupported
+claims fail closed; it does not approve the robot for motion.
+
+- **Frozen evidence acceptance:** the artifacts under
+  `runs/worldmind/validation-s0-webots-geometry-live-v1/` were re-hashed before use and remain
+  unchanged: `geometry.json` `034061c296abcada98b32fb2f22d7b421354a3a90bebf58e5feb6cea8b1a69d9`,
+  `diagnostic.json` `4f2e8cca63a3914c595fc13a6ae635625bf4e946084dbb958c91c4099e30156b`,
+  `state.json` `2b970678a27a784a5860500e95ca9e31b00bc4a20466e05e519090dfe07bc7b1`,
+  `provenance.json` `769fe70f2a03ff6c54ad23362113facf37afc9438fcacc2d1f4d9efbf2eb66d3`, and the
+  inspection log `4e9c1a965f0bdb6544926f559d0344eef3b4bc4a0be2f8d5f4a458308e9c4ac6`. The export
+  records 57 objects, 110 shapes (108 supported and two unsupported `Plane` shapes), zero
+  `apply`/`step`/`reset`/`export_kinematics`/`get_ground_truth`/motor commands/physics steps, and
+  `inspect_geometry=1`. It is an observation only, not a swept certificate.
+- **Strict `SFBool` normalization:** `normalize_webots_sfbool()` accepts exactly `False`, `True`,
+  `0` and `1`, rejecting other integers, strings, `None`, floats and containers. The report
+  preserves `self_collision_enabled` raw, adds `self_collision_enabled_normalized` and
+  `self_collision_enabled_observed_type`. The pinned `Tiago.proto` declares `selfCollision FALSE`;
+  the observed raw integer `0` is therefore valid and normalizes to `False`. A real mismatch or an
+  ambiguous value adds a blocker and fails the inspection closed. No raw observation is erased.
+- **Component reconciliation:** `configs/geometry/live-geometry-evidence-v1.yaml` (SHA-256
+  `91c8e1ed23900e348eb1088d0987d3a8ccd747fcd6f8a2df99185aa80895eb0d`) pins all six diagnostic
+  artifacts, the catalogs/PROTO sources, expected counts and tolerances. Every hash is verified
+  before any JSON is consumed. The pure module `worldmind_live_geometry_reconciliation.py`
+  classifies nine component groups using exactly the five required categories:
+  matched/conservative, observed/not conservative, missing from live export, unsupported, and
+  irrelevant with justification. The result is `diagnostic_not_certified`, `motion_allowed=false`,
+  `motion_readiness=NOT_READY`, with one matched, four observed/not conservative, two missing,
+  one unsupported and one justified-irrelevant component.
+- **Concrete collision findings:** only the two observed pinned horizontal floor planes are
+  matched; arbitrary plane orientations and unrecognized plane geometry are rejected. `Table.proto`
+  has zero root `boundingObject` declarations and at least three nested `SolidBox` instances with
+  `boundingObject Box`; the pinned world translation `[-0.23882837, -4.8402928, 0.0]` and size
+  `[4.5, 1.5, 0.75]` are recorded, but the table is absent from the live export and its runtime
+  collision transform is ungrounded, so table geometry is not approved. `PipeSection` forwarding
+  (`boundingObject USE PIPE` → `DEF PIPE Cylinder`, with `height IS height` and `radius IS radius`)
+  is traced; all seven live cylinders match pinned instances and produce seven review-only capsule
+  envelopes, but the catalog remains blocked on unresolved forwarding. `StraightStairsRail` is
+  absent from the live export and remains blocked by JavaScript-computed transforms and
+  `TexturedParallelepiped` forwarding. The observed gripper finger boxes require about `0.2365 m`
+  of tool-frame radius versus the pinned `0.1 m`, so the static envelope is not conservative.
+  Static CAN radius `0.03175 m` and height `0.1222 m` match the pinned envelope and the tool-frame
+  distance is about `0.8087 m`, but attachment, release and carried-pose propagation are unknown;
+  static geometry is not dynamic safety proof. Self-collision is disabled, self-collision pair
+  coverage is unproven, and no grasp-contact exception is approved.
+- **Swept-bound repair:** `SweptArmCheck` now pads the full uncertain motion interval
+  (`speed*dt`) plus explicit geometry-error and registration-uncertainty terms instead of the
+  unprovable half-interval term. `required_substeps()` subtracts those support errors from the
+  usable margin and fails closed when they consume it. `evaluate_sweep_safety_bound()` requires a
+  strict positive residual for
+  `margin > max(point_speed*dt/substeps, joint_displacement*reach) + geometry_error +
+  registration_error`, and never substitutes zero for an unknown term. The preserved numbers are
+  fixed eight-substep travel `0.1139726680109965 m > 0.02 m`, adaptive 46-substep travel
+  `0.019821333567129826 m`, catalog-derived registration bound `0.004952867331749651 m`, and
+  reference one-pose AABB undercoverage `0.0010469683238133465 m`, which is explicitly not a
+  global bound. Joint-displacement and geometry-approximation bounds are absent, so the verdict is
+  `FAIL_CLOSED` and the hard veto stays in force.
+- **Unchanged gate:** production still has `check_transition=None`, blocked sweep status, no
+  certificate, the `unverified-arm-sweep` veto and `unresolved_forwarded_geometry` blocker.
+  Another live Webots inspection is not required to establish these local gaps: the preserved
+  export already grounds them. The smallest useful future motion-readiness experiment is an
+  owner-reviewed full-arm swept certificate with finite joint-displacement and global geometry
+  approximation bounds, reviewed self-collision/gripper/CAN dynamic envelopes, and a grounded
+  runtime table transform; it is outside this task.
+- **Verification:** the 73 focused inert tests pass; `ruff check .`, `ruff format --check .`,
+  `ty check src` and `compileall` pass. The accepted frozen-evidence preflight prints
+  `report_sha256_ok=true`, 12 locked baseline sources, 225 VLA campaign manifest entries, 12
+  pinned and 12 frozen planning sources, and `test_split_accessed=false`. The full non-Webots
+  suite is `1 failed, 675 passed, 3 skipped`; the only failure is the pre-existing
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  frozen-helper hash mismatch, which was not repaired by editing frozen evidence. Windows and
+  live Webots execution remain unverified in this environment. No new dependency, public
+  `core/` interface, frozen pin, seed, split or motion threshold changed.

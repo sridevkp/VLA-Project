@@ -59,6 +59,23 @@ _GEOMETRY_STATUS_MARKER = "MEASURED live expanded boundingObject export"
 _NO_SPLIT_MARKER = "no TRAIN/VALIDATION/TEST task rollout"
 
 
+def normalize_webots_sfbool(value: object, *, field_name: str = "SFBool") -> bool:
+    """Normalize the documented Webots ``SFBool`` representations strictly.
+
+    Webots R2025a may expose ``SFBool`` as a Python ``bool`` or as the documented integer
+    ``0``/``1``. Only ``False``, ``True``, ``0`` and ``1`` are accepted; every other integer,
+    numeric type, string, ``None`` or container is an ambiguous observation and raises. The raw
+    value remains available in the exported evidence, so normalization never erases provenance.
+    """
+    if type(value) is bool:
+        return value
+    if type(value) is int and value in (0, 1):
+        return bool(value)
+    raise ValueError(
+        f"ambiguous Webots {field_name} value {value!r} of type {type(value).__name__}"
+    )
+
+
 @dataclass(frozen=True)
 class GeometryInspectionConfig:
     """Reviewed read-only geometry contract nested inside the Webots diagnostic contract."""
@@ -207,8 +224,15 @@ def _geometry_blockers(
         blockers.append("geometry export status is not a measured read-only export")
     if geometry.get("motor_commands_sent") != 0:
         blockers.append("geometry export reports motor commands")
-    if geometry.get("self_collision_enabled") is not False:
-        blockers.append("live selfCollision setting differs from the pinned PROTO")
+    try:
+        self_collision = normalize_webots_sfbool(
+            geometry.get("self_collision_enabled"), field_name="selfCollision"
+        )
+    except ValueError:
+        blockers.append("live selfCollision value is not a documented Webots SFBool")
+    else:
+        if self_collision is not False:
+            blockers.append("live selfCollision setting differs from the pinned PROTO")
     sim_time = _finite_number(geometry.get("sim_time_s"))
     if sim_time is None or sim_time < 0.0:
         blockers.append("geometry export simulation time is invalid")
@@ -265,6 +289,13 @@ def finalize_geometry_inspection(
     ready = not blockers
     objects = snapshot.geometry.get("objects", ())
     unsupported = snapshot.geometry.get("unsupported_shapes", ())
+    raw_self_collision = snapshot.geometry.get("self_collision_enabled")
+    try:
+        normalized_self_collision: bool | None = normalize_webots_sfbool(
+            raw_self_collision, field_name="selfCollision"
+        )
+    except ValueError:
+        normalized_self_collision = None
     report: dict[str, object] = {
         "schema_version": GEOMETRY_INSPECTION_SCHEMA_VERSION,
         "outcome": "PASS" if ready else "FAILED",
@@ -303,7 +334,9 @@ def finalize_geometry_inspection(
         "geometry_object_count": len(objects) if isinstance(objects, Sequence) else None,
         "unsupported_shape_count": len(unsupported) if isinstance(unsupported, Sequence) else None,
         "unsupported_shapes": list(unsupported) if isinstance(unsupported, Sequence) else [],
-        "self_collision_enabled": snapshot.geometry.get("self_collision_enabled"),
+        "self_collision_enabled": raw_self_collision,
+        "self_collision_enabled_normalized": normalized_self_collision,
+        "self_collision_enabled_observed_type": type(raw_self_collision).__name__,
         "motor_commands_sent": snapshot.geometry.get("motor_commands_sent"),
         "physics_step_count": snapshot.identity.get("physics_step_count"),
         "geometry_export_valid": not geometry_blockers,
@@ -442,6 +475,7 @@ __all__ = [
     "failed_geometry_inspection",
     "finalize_geometry_inspection",
     "load_geometry_inspection_config",
+    "normalize_webots_sfbool",
     "preflight_geometry_inspection",
     "write_geometry_inspection_evidence",
 ]

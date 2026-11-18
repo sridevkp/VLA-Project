@@ -100,6 +100,8 @@ class SweptArmCheck:
         permitted_contact_objects: frozenset[str] = frozenset(),
         scene: StaticSceneGeometry | None = None,
         expected_base_pose_world: Pose3D | None = None,
+        geometry_error_bound_m: float = 0.0,
+        registration_uncertainty_bound_m: float = 0.0,
     ) -> None:
         if (
             not required_links
@@ -116,6 +118,14 @@ class SweptArmCheck:
         self.adjacent, self.contacts = adjacent_pairs, permitted_contact_objects
         self.scene = scene
         self.expected_base_pose_world = expected_base_pose_world
+        for value, name in (
+            (geometry_error_bound_m, "geometry error bound"),
+            (registration_uncertainty_bound_m, "registration uncertainty bound"),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and nonnegative")
+        self.geometry_error_bound_m = float(geometry_error_bound_m)
+        self.registration_uncertainty_bound_m = float(registration_uncertainty_bound_m)
         if scene is not None:
             self._validate_scene(scene)
 
@@ -272,7 +282,16 @@ class SweptArmCheck:
                 for x, y in ((a.start, b.start), (a.end, b.end))
             ):
                 return None
-            padding = a.radius_m + self.margin + a.max_point_speed_m_s * self.dt / 2
+            # A point-speed bound alone does not justify half-interval padding: an uncertain
+            # path may move up to speed * dt from either endpoint. Add explicit support-error
+            # bounds instead of assuming straight, constant-speed motion.
+            padding = (
+                a.radius_m
+                + self.margin
+                + a.max_point_speed_m_s * self.dt
+                + self.geometry_error_bound_m
+                + self.registration_uncertainty_bound_m
+            )
             swept[name] = (points.min(axis=0) - padding, points.max(axis=0) + padding)
         for i, name in enumerate(sorted(swept)):
             for other in sorted(swept)[i + 1 :]:

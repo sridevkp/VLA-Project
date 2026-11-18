@@ -293,7 +293,7 @@ def _checker(scene: StaticSceneGeometry, *, links: tuple[str, ...] = ("arm",)) -
 def _scene(
     *,
     box_center: tuple[float, float, float] = (1.0, 0.0, 0.45),
-    floor_point: tuple[float, float, float] = (0.0, 0.0, 0.2),
+    floor_point: tuple[float, float, float] = (0.0, 0.0, 0.0),
     floor_normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
     gripper: bool = False,
     expected_pose: Pose3D | None = None,
@@ -326,7 +326,9 @@ def test_static_scene_cases_cover_table_floor_gripper_and_fail_closed_paths():
     assert _checker(_scene(box_center=(0.1, 0.0, 0.45)))(before, after) is False
     assert _checker(_scene(floor_point=(0.0, 0.0, 0.48)))(before, after) is False
     assert (
-        _checker(_scene(gripper=True, floor_point=(0.0, 0.0, 0.0)), links=("arm", "gripper"))(
+        # Full-interval conservative padding extends the synthetic gripper sweep slightly below
+        # z=0, so this case places the test-only floor beneath that explicit bound.
+        _checker(_scene(gripper=True, floor_point=(0.0, 0.0, -0.05)), links=("arm", "gripper"))(
             _world(), _world(x=0.1)
         )
         is True

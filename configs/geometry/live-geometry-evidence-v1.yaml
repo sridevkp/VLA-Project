@@ -1,0 +1,79 @@
+# Hash-pinned inputs for the accepted, FAILED live Webots geometry inspection.
+# This config is diagnostic evidence only. It never authorizes motion and never re-runs Webots.
+schema_version: 1
+status: diagnostic_not_certified
+
+evidence:
+  geometry:
+    path: ../../runs/worldmind/validation-s0-webots-geometry-live-v1/geometry.json
+    sha256: 034061c296abcada98b32fb2f22d7b421354a3a90bebf58e5feb6cea8b1a69d9
+  diagnostic:
+    path: ../../runs/worldmind/validation-s0-webots-geometry-live-v1/diagnostic.json
+    sha256: 4f2e8cca63a3914c595fc13a6ae635625bf4e946084dbb958c91c4099e30156b
+  state:
+    path: ../../runs/worldmind/validation-s0-webots-geometry-live-v1/state.json
+    sha256: 2b970678a27a784a5860500e95ca9e31b00bc4a20466e05e519090dfe07bc7b1
+  provenance:
+    path: ../../runs/worldmind/validation-s0-webots-geometry-live-v1/provenance.json
+    sha256: 769fe70f2a03ff6c54ad23362113facf37afc9438fcacc2d1f4d9efbf2eb66d3
+  log:
+    path: ../../runs/worldmind/validation-s0-webots-geometry-live-v1/worldmind-webots-geometry-inspection.log
+    sha256: 4e9c1a965f0bdb6544926f559d0344eef3b4bc4a0be2f8d5f4a458308e9c4ac6
+  reference_collision_geometry:
+    path: ../../docs/evidence/collision-geometry-source-corrected.json
+    sha256: bb82a75c4b406cd23a5621e3e58185ee220c5f83bf20a00737a54f3f1268bd4f
+
+pinned:
+  world: ../../worlds/factory.wbt
+  urdf: ../../src/vlarobot/backends/webots/tiago.urdf
+  scene_catalog: scene-collision-v1.yaml
+  proto_manifest: webots-proto-sources-v1.yaml
+  arm_sweep_contract: ../../configs/worldmind_arm_sweep.yaml
+
+expected:
+  world_sha256: 35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706
+  diagnostic_outcome: FAILED
+  robot_def: TIAGO_ROBOT
+  self_collision_enabled: false
+  object_count: 57
+  supported_shape_count: 108
+  unsupported_shape_count: 2
+  floor_owners: [floor(1), floor]
+  pipe_section_count: 7
+  straight_stairs_rail_count: 0
+  table_export_count: 0
+  can_def: CAN
+  gripper_defs: [LEFT_GRIPPER, RIGHT_GRIPPER]
+  arm_torso_defs:
+    - TIAGO_ROBOT
+    - TORSO_LIFT
+    - NECK
+    - HEAD
+    - Torso
+    - ARM_1
+    - ARM_2
+    - ARM_3
+    - ARM_4
+    - ARM_5
+    - ARM_6
+    - WRIST
+    - WRIST_CONNECTOR
+
+tolerances:
+  rigid_matrix_atol: 0.000001
+  normal_dot_min: 0.999999
+  plane_offset_m: 0.001
+  primitive_rtol: 0.000001
+  primitive_atol: 0.000001
+
+sweep:
+  margin_m: 0.02
+  point_speed_bound_m_s: 28.49316700274912
+  dt_s: 0.032
+  configured_substeps: 8
+  adaptive_substeps: 46
+  # No finite independent joint-displacement or global containment-error bound is pinned.
+  max_joint_displacement_bound_rad: null
+  geometry_approximation_error_bound_m: null
+  observed_one_pose_aabb_undercoverage_m: 0.0010469683238133465
+  observed_one_pose_aabb_undercoverage_is_global_bound: false

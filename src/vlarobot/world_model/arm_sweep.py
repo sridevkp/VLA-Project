@@ -37,13 +37,16 @@ def required_substeps(
     margin_m: float,
     minimum: int = 1,
     maximum: int = 4096,
+    geometry_error_bound_m: float = 0.0,
+    registration_uncertainty_bound_m: float = 0.0,
 ) -> int:
-    """Conservative count keeping maximum certified centreline travel below the margin.
+    """Conservative count keeping bounded motion plus support error below the margin.
 
     Eight fixed substeps at the pinned 28.49 m/s point-speed bound and 32 ms tick allow
     0.114 m of travel per sub-interval, which is larger than the 0.02 m margin. The count
-    returned here is ``ceil(speed * dt / margin)`` so each sub-interval travel is at most the
-    margin; it never lowers an explicitly configured minimum and fails closed above ``maximum``.
+    returned here is ``ceil(speed * dt / usable_margin)``, where ``usable_margin`` subtracts
+    explicit geometry/registration error bounds. Missing error bounds must fail closed at the
+    caller's certificate layer; passing zero is only valid for synthetic exact geometry.
     """
     if (
         isinstance(speed_bound_m_s, bool)
@@ -61,12 +64,141 @@ def required_substeps(
         or maximum < 1
     ):
         raise SweepGeometryError("adaptive subdivision requires finite positive inputs")
-    required = max(minimum, int(math.ceil(speed_bound_m_s * dt_s / margin_m)))
+    for value, name in (
+        (geometry_error_bound_m, "geometry error bound"),
+        (registration_uncertainty_bound_m, "registration uncertainty bound"),
+    ):
+        if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+            raise SweepGeometryError(f"{name} must be finite and nonnegative")
+    usable_margin = margin_m - geometry_error_bound_m - registration_uncertainty_bound_m
+    if usable_margin <= 0.0:
+        raise SweepGeometryError("geometry and registration error consume the collision margin")
+    required = max(minimum, int(math.ceil(speed_bound_m_s * dt_s / usable_margin)))
     if required > maximum:
         raise SweepGeometryError(
             f"required {required} substeps exceeds the conservative cap {maximum}"
         )
     return required
+
+
+@dataclass(frozen=True)
+class SweepSafetyBound:
+    """Explicit no-false-clear inequality for one certified transition contract."""
+
+    margin_m: float
+    point_speed_bound_m_s: float
+    dt_s: float
+    substeps: int
+    point_motion_allowance_m: float
+    joint_motion_allowance_m: float | None
+    geometry_approximation_error_bound_m: float | None
+    registration_uncertainty_bound_m: float | None
+    required_margin_m: float | None
+    residual_m: float | None
+    certified: bool
+    blockers: tuple[str, ...]
+
+    def report(self) -> dict[str, object]:
+        return {
+            "margin_m": self.margin_m,
+            "point_speed_bound_m_s": self.point_speed_bound_m_s,
+            "dt_s": self.dt_s,
+            "substeps": self.substeps,
+            "point_motion_allowance_m": self.point_motion_allowance_m,
+            "joint_motion_allowance_m": self.joint_motion_allowance_m,
+            "geometry_approximation_error_bound_m": self.geometry_approximation_error_bound_m,
+            "registration_uncertainty_bound_m": self.registration_uncertainty_bound_m,
+            "required_margin_m": self.required_margin_m,
+            "residual_m": self.residual_m,
+            "inequality": (
+                "margin > max(point_speed*dt/substeps, joint_displacement*reach) "
+                "+ geometry_error + registration_error"
+            ),
+            "certified": self.certified,
+            "blockers": list(self.blockers),
+        }
+
+
+def evaluate_sweep_safety_bound(
+    *,
+    margin_m: float,
+    point_speed_bound_m_s: float,
+    dt_s: float,
+    substeps: int,
+    max_joint_displacement_bound_rad: float | None = None,
+    joint_reach_bound_m: float | None = None,
+    geometry_approximation_error_bound_m: float | None = None,
+    registration_uncertainty_bound_m: float | None = None,
+) -> SweepSafetyBound:
+    """Return a fail-closed bound; ``certified`` is true only for a strict positive residual.
+
+    A false-clear is impossible only when every term is bounded and the collision margin
+    strictly exceeds motion, geometry-approximation and registration uncertainty. Unknown terms
+    are never replaced by zero. Joint displacement is converted to a point bound only when both
+    the displacement and a finite reach are supplied.
+    """
+    if (
+        isinstance(margin_m, bool)
+        or not math.isfinite(margin_m)
+        or margin_m <= 0
+        or isinstance(point_speed_bound_m_s, bool)
+        or not math.isfinite(point_speed_bound_m_s)
+        or point_speed_bound_m_s <= 0
+        or isinstance(dt_s, bool)
+        or not math.isfinite(dt_s)
+        or dt_s <= 0
+        or isinstance(substeps, bool)
+        or not isinstance(substeps, int)
+        or substeps < 1
+    ):
+        raise SweepGeometryError("safety bound requires finite positive motion inputs")
+    blockers: list[str] = []
+    point_allowance = point_speed_bound_m_s * dt_s / substeps
+    joint_allowance: float | None = None
+    if max_joint_displacement_bound_rad is None or joint_reach_bound_m is None:
+        blockers.append("joint displacement/reach bound is missing")
+    else:
+        for value, name in (
+            (max_joint_displacement_bound_rad, "joint displacement bound"),
+            (joint_reach_bound_m, "joint reach bound"),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise SweepGeometryError(f"{name} must be finite and nonnegative")
+        joint_allowance = max_joint_displacement_bound_rad * joint_reach_bound_m
+    motion_allowance = max(point_allowance, joint_allowance or 0.0)
+    error_terms: dict[str, float | None] = {
+        "geometry approximation error": geometry_approximation_error_bound_m,
+        "registration uncertainty": registration_uncertainty_bound_m,
+    }
+    for name, value in error_terms.items():
+        if value is None:
+            blockers.append(f"{name} bound is missing")
+        elif isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+            raise SweepGeometryError(f"{name} bound must be finite and nonnegative")
+    required = (
+        motion_allowance
+        + (geometry_approximation_error_bound_m or 0.0)
+        + (registration_uncertainty_bound_m or 0.0)
+        if not blockers
+        else None
+    )
+    residual = margin_m - required if required is not None else None
+    if residual is not None and residual <= 0.0:
+        blockers.append("collision margin does not strictly dominate all bounded error terms")
+    return SweepSafetyBound(
+        margin_m=margin_m,
+        point_speed_bound_m_s=point_speed_bound_m_s,
+        dt_s=dt_s,
+        substeps=substeps,
+        point_motion_allowance_m=point_allowance,
+        joint_motion_allowance_m=joint_allowance,
+        geometry_approximation_error_bound_m=geometry_approximation_error_bound_m,
+        registration_uncertainty_bound_m=registration_uncertainty_bound_m,
+        required_margin_m=required,
+        residual_m=residual,
+        certified=not blockers,
+        blockers=tuple(blockers),
+    )
 
 
 @dataclass(frozen=True)

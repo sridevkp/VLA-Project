@@ -49,6 +49,7 @@ from vlarobot.eval.worldmind_webots_geometry_inspection import (
     failed_geometry_inspection,
     finalize_geometry_inspection,
     load_geometry_inspection_config,
+    normalize_webots_sfbool,
     preflight_geometry_inspection,
 )
 
@@ -364,6 +365,55 @@ def test_geometry_config_loader_is_strict(tmp_path, mutate, message):
     _write_raw(path, blocked)
     with pytest.raises(ValueError, match=message):
         load_geometry_inspection_config(path)
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected"),
+    [(False, False), (True, True), (0, False), (1, True)],
+)
+def test_webots_sfbool_normalization_accepts_only_documented_representations(observed, expected):
+    assert normalize_webots_sfbool(observed, field_name="selfCollision") is expected
+
+
+@pytest.mark.parametrize(
+    "observed",
+    [-1, 2, -99, "0", "1", "false", "true", None, 0.0, 1.0, float("nan"), [], {}, (0,)],
+)
+def test_webots_sfbool_normalization_rejects_ambiguous_values(observed):
+    with pytest.raises(ValueError, match="ambiguous Webots selfCollision"):
+        normalize_webots_sfbool(observed, field_name="selfCollision")
+
+
+def test_self_collision_integer_zero_passes_with_distinct_raw_and_normalized_report_fields(
+    tmp_path,
+):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    geometry = _geometry_export()
+    geometry["self_collision_enabled"] = 0
+    snapshot = _snapshot(config, geometry=geometry)
+    report, _, _, geometry_artifact = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), snapshot
+    )
+    assert report["outcome"] == "PASS"
+    assert report["self_collision_enabled"] == 0
+    assert report["self_collision_enabled_normalized"] is False
+    assert report["self_collision_enabled_observed_type"] == "int"
+    assert geometry_artifact["export"]["self_collision_enabled"] == 0
+
+
+@pytest.mark.parametrize("observed", [1, True, -1, 2, "0", None, 0.0])
+def test_self_collision_mismatch_or_ambiguity_fails_closed(tmp_path, observed):
+    path, _ = _write_config(tmp_path)
+    config = load_geometry_inspection_config(path)
+    geometry = _geometry_export()
+    geometry["self_collision_enabled"] = observed
+    snapshot = _snapshot(config, geometry=geometry)
+    report, _, _, _ = finalize_geometry_inspection(
+        config, preflight_geometry_inspection(config), snapshot
+    )
+    assert report["outcome"] == "FAILED"
+    assert any("selfCollision" in item for item in report["geometry_blockers"])
 
 
 def test_geometry_client_forbids_every_state_or_oracle_changing_call():

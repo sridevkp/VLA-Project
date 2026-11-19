@@ -7,7 +7,12 @@ import numpy as np
 import pytest
 
 from vlarobot.backends.fake import FakeBackend
-from vlarobot.backends.zmq.client import ZmqBackendClient
+from vlarobot.backends.zmq.client import (
+    INSPECT_GEOMETRY_TIMEOUT_ENV,
+    REQUEST_TIMEOUTS_MS,
+    ZmqBackendClient,
+    inspect_geometry_timeout_override,
+)
 from vlarobot.backends.zmq.server import SimServer
 from vlarobot.core.types import GripperCmd, ScenarioSpec
 
@@ -219,3 +224,33 @@ def test_zmq_client_rejects_session_identity_mismatch() -> None:
     finally:
         server_thread.join(timeout=5.0)
         assert not server_thread.is_alive()
+
+
+def test_inspect_geometry_timeout_override_default_is_unchanged(monkeypatch) -> None:
+    monkeypatch.delenv(INSPECT_GEOMETRY_TIMEOUT_ENV, raising=False)
+    client = ZmqBackendClient("tcp://127.0.0.1:1", timeout_ms=5_000)
+    try:
+        assert inspect_geometry_timeout_override() is None
+        default_ms = REQUEST_TIMEOUTS_MS["inspect_geometry"]
+        assert client._timeout_for("inspect_geometry", None) == default_ms
+        assert client._timeout_for("ping", None) == REQUEST_TIMEOUTS_MS["ping"]
+    finally:
+        client.close()
+
+
+def test_inspect_geometry_timeout_override_is_scoped_and_validated(monkeypatch) -> None:
+    monkeypatch.setenv(INSPECT_GEOMETRY_TIMEOUT_ENV, "90000")
+    client = ZmqBackendClient("tcp://127.0.0.1:1", timeout_ms=5_000)
+    try:
+        assert inspect_geometry_timeout_override() == 90_000
+        assert client._timeout_for("inspect_geometry", None) == 90_000
+        # Explicit per-call timeouts and every other operation stay untouched.
+        assert client._timeout_for("inspect_geometry", 1234) == 1234
+        assert client._timeout_for("ping", None) == REQUEST_TIMEOUTS_MS["ping"]
+        assert client._timeout_for("step", None) == REQUEST_TIMEOUTS_MS["step"]
+    finally:
+        client.close()
+    for invalid in ("0", "-1", "not-a-number", "1.5"):
+        monkeypatch.setenv(INSPECT_GEOMETRY_TIMEOUT_ENV, invalid)
+        with pytest.raises(ValueError, match="positive integer"):
+            inspect_geometry_timeout_override()

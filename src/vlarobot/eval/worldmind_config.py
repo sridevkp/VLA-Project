@@ -247,6 +247,10 @@ class WorldMindBindings:
     """
 
     components: Mapping[str, Any] = field(default_factory=dict)
+    # Parameterized factories for the approved component implementations. Registration here does
+    # NOT populate `components`: each factory still requires validated owner parameters at
+    # instantiation, so a ready config with empty `components` continues to fail closed.
+    component_factories: Mapping[str, Any] = field(default_factory=dict)
     hard_checks: Mapping[str, Any] = field(default_factory=dict)
     surrogates: Mapping[str, Any] = field(default_factory=dict)
     safety: Mapping[str, Any] = field(default_factory=dict)

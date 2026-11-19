@@ -44,6 +44,29 @@ def _client_timings_enabled() -> bool:
     return os.environ.get("VLAROBOT_BACKEND_TIMINGS") == "1"
 
 
+# Bounded read-only diagnostic override: the default 30 s inspect_geometry ceiling is close to the
+# ~13 s measured export time (Packet C timed out at 30 s). A separately authorized diagnostic may
+# raise ONLY this operation's deadline, with strict validation and no change to the shipped default.
+INSPECT_GEOMETRY_TIMEOUT_ENV = "VLAROBOT_INSPECT_GEOMETRY_TIMEOUT_MS"
+
+
+def inspect_geometry_timeout_override() -> int | None:
+    """Return the validated env override for inspect_geometry, or None when unset.
+
+    Invalid values fail loudly instead of silently falling back to the default.
+    """
+    raw = os.environ.get(INSPECT_GEOMETRY_TIMEOUT_ENV)
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{INSPECT_GEOMETRY_TIMEOUT_ENV} must be a positive integer") from exc
+    if value <= 0:
+        raise ValueError(f"{INSPECT_GEOMETRY_TIMEOUT_ENV} must be a positive integer")
+    return value
+
+
 class ZmqBackendClient:
     """Synchronous request/reply client; each call completes before the next is sent."""
 
@@ -208,6 +231,10 @@ class ZmqBackendClient:
     def _timeout_for(self, operation: str, timeout_ms: int | None) -> int:
         if timeout_ms is not None:
             return int(timeout_ms)
+        if operation == "inspect_geometry":
+            override = inspect_geometry_timeout_override()
+            if override is not None:
+                return override
         return int(self._request_timeouts_ms.get(operation, self._default_timeout_ms))
 
     def _request(

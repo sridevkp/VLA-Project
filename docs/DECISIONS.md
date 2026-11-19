@@ -2661,3 +2661,46 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   `calibration_stage: 1`, no components/weights/calibration). It remains fail-closed on owner-supplied
   values (backend declaration, task, bounds, authoritative PDF, approved definitions, safety config,
   verification/adapter numerics). No simulation was run and no parameter was selected.
+
+## ADR-0067 — Session provenance, bounded diagnostic preparation and parameterized component factories (2026-11-19)
+
+- **Session provenance (evidence only, no cross-session inference):** the preserved Packet C
+  `diagnostic.json` blocker names endpoint `tcp://127.0.0.1:60455`; the status file
+  `runs/campaign-2026-11-11/sim-status-60455.json` records the same endpoint. Its session start
+  `1795092812.9244719` is `2026-11-19T12:53:32.924472+00:00` and its stop/`updated_at`
+  `1795092856.3539882` is `2026-11-19T12:54:16.353988+00:00` (43.43 s span); the Packet C Webots
+  log mtime is `12:54:16.338608+00:00` and `diagnostic.json` mtime is `12:54:17.169849+00:00`.
+  This strongly associates the status file with the Packet C session, **but** the status path is a
+  fixed legacy path keyed only by port (`Path.cwd()/runs/campaign-2026-11-11/sim-status-{port}.json`)
+  and Packet C artifacts carry no independent copy of the session `pid`/`start_time`/`nonce`.
+  Therefore the association is well-supported inference, not a cryptographic identity proof.
+  Regardless of identity, `last_completed={"op":"shutdown","seq":2,...,"ok":true}` is written by
+  `SimServer.handle()` **before** the reply is sent, and `event=stopped` is written in
+  `serve_forever()`'s `finally`; neither proves the **client** received the shutdown reply. The
+  Packet C report that the client-side shutdown timed out is not contradicted, and no successful
+  Packet C shutdown is inferred.
+- **Bounded diagnostic preparation (not executed):** `VLAROBOT_INSPECT_GEOMETRY_TIMEOUT_MS` is a new
+  strict-validated, opt-in override for the `inspect_geometry` deadline only. Unset, the shipped
+  default remains `REQUEST_TIMEOUTS_MS["inspect_geometry"] = 30_000` ms; invalid values raise.
+  It exists so a separately authorized read-only diagnostic can use a 90 000 ms ceiling (≈7× the
+  13 s measured export, 3× the Packet C ceiling) without changing any default or other operation.
+  No Webots session, request or state change was made; Packet C evidence hashes are unchanged.
+- **Parameterized component factories:** the existing `WorldMindBindings` registry supports factory
+  groups (`surrogates`, `safety`, `verification`, `waypoint_factories`), but `components` holds direct
+  callables. A new `component_factories` group in that same bindings object (not a separate registry)
+  registers factories for the four owner-approved implementations in `worldmind_objectives.py`.
+  Each factory requires a frozen parameter object with **all fields mandatory** (no defaults,
+  strict validation in `__post_init__`), including explicit ee/goal/tool-path providers so no
+  extraction semantics are invented; it returns the pipeline-signature callable and never swallows
+  `MissingObjectiveInput`. No scale, margin, radius, weight, ranking direction or calibration
+  candidate is chosen. `production_worldmind_bindings()` still returns `components={}`,
+  `calibration_evaluators={}`, `waypoint_sets={}` and the config stays `blocked`; a ready config
+  naming a component still fails closed.
+- **Stage 1:** every owner placeholder in `configs/worldmind_diagnostic.yaml` is listed in the final
+  report with its known authoritative source and required phase. No placeholder was filled from a
+  guess; inert preflight still fails with `backend.declaration is still a blocked template
+  placeholder` and creates no output directory.
+- **Constraints held:** Packet A is an experimental specification only; Packet B stays blocked
+  (pinned `speed_bound_m_s = 28.49316700274912`, `full_system` hard veto, no `workspace_separated`
+  exclusions); Packet D is unauthorized; TEST is sealed; no scored run, parameter selection or
+  geometry-checker activation. No push or merge.

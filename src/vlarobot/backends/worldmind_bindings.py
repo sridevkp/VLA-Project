@@ -44,6 +44,7 @@ from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
 from vlarobot.backends.webots.proto_sources import load_proto_source_manifest
 from vlarobot.backends.webots.urdf_registration import load_registration
+from vlarobot.backends.worldmind_component_factories import COMPONENT_FACTORY_BINDINGS
 from vlarobot.core.types import (
     GripperCmd,
     JointTarget,
@@ -2162,11 +2163,14 @@ def packet_b_narrowed_sweep_check(
 def production_worldmind_bindings() -> WorldMindBindings:
     """Return every concrete binding that exists without inventing a scientific component.
 
-    Eq. 3.8 component registrations, weights, ranking direction, risk thresholds and calibration
-    evaluators are absent. A ready config referencing them therefore still fails closed.
+    The approved component implementations are registered only as parameterized factories under
+    ``component_factories``; each requires validated owner parameters at instantiation. No Eq. 3.8
+    component instance, weight, ranking direction, risk threshold or calibration evaluator is
+    registered, so a ready config still fails closed while the production config stays blocked.
     """
     return WorldMindBindings(
         components={},
+        component_factories=dict(COMPONENT_FACTORY_BINDINGS),
         hard_checks={FINITE_CHUNK_CHECK: finite_chunk_check},
         surrogates={ANALYTIC_SURROGATE_BINDING: analytic_surrogate_factory},
         safety={RUNTIME_SAFETY_BINDING: runtime_safety_factory},

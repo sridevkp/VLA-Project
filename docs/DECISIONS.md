@@ -2704,3 +2704,51 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   (pinned `speed_bound_m_s = 28.49316700274912`, `full_system` hard veto, no `workspace_separated`
   exclusions); Packet D is unauthorized; TEST is sealed; no scored run, parameter selection or
   geometry-checker activation. No push or merge.
+
+## ADR-0068 — v5 read-only geometry PASS and Stage 1 source reconciliation (2026-11-19)
+
+- **Authorization and scope:** exactly one separately authorized v5 read-only Webots geometry
+  inspection ran with the strict `VLAROBOT_INSPECT_GEOMETRY_TIMEOUT_MS=90000` override. It used
+  only `runs/worldmind/geometry-inspection-v5-2026-11-19`; no retry, reset, step, IK, actuation,
+  scoring, Packet D run, TRAIN/TEST access or Packet C artifact modification occurred.
+- **RPC classification:** the `inspect_geometry` request reached the controller and completed
+  server-side; its response was received by the client and contained a valid result. Controller
+  stderr records `request_start op=inspect_geometry seq=2` and `request_end op=inspect_geometry
+  seq=2 duration_s=47.2952`, followed by `slow_request ... duration_s=47.2952`. This is the
+  successful-RPC case, not a never-delivered request, a server-side stall, or a completed request
+  whose reply was lost. The two 5 s `ping` warnings in CLI stdout were startup probes; stderr shows
+  both pings completed in under 1 ms. The 90 s override applies only to `inspect_geometry`; the
+  shipped default remains `30_000` ms.
+- **Geometry and freshness:** `outcome=PASS`, `geometry_export_valid=true`, `geometry_blockers=[]`,
+  `observation_valid=true`, `observation_age_s=1.0791707038879395`,
+  `observation_freshness_limit_s=5.0`, `table_target_inspection.status=runtime_grounded`, and
+  `summary` `Matched=5 Mismatched=0 Missing=0 Unsupported=0`. Endpoint was
+  `tcp://127.0.0.1:33819`. Read-only counters were
+  `backend_apply_calls=0`, `backend_step_calls=0`, `backend_reset_calls=0`,
+  `backend_inspect_calls=0`, `backend_inspect_geometry_calls=1`, `backend_export_calls=0`,
+  `backend_ground_truth_calls=0`, `motor_commands_sent=0`, `physics_step_count=0`,
+  `scored_results_written=false`, `frozen_campaign_modified=false`, `test_split_accessed=false`
+  and `train_split_accessed=false`.
+- **Motion remains blocked:** `motion_readiness=NOT_READY` with blockers
+  `diagnostic_no_actuation_mode`, `unverified-arm-sweep`, `unresolved_forwarded_geometry`.
+  `safety_check_readiness=true` is an evidence gate only; it does not authorize motion. Packet B
+  stays blocked with the pinned `speed_bound_m_s = 28.49316700274912` and the `full_system` hard
+  veto.
+- **Preserved evidence:** Packet C v4 remains `FAILED` and byte-identical; its diagnostic hash is
+  `319e6c038d7a2d02e4b8a537c19412b98f0f24bbbb61fb18bd7eb36e13f45fc9` and its log hash is
+  `1229887d267b8387ff9cc341022ac7d80ae17194edbd4e505c82378d6bb335e4`. v5 changed neither file.
+- **Stage 1 reconciliation:** source-backed FROZEN values were filled from ADR-0004
+  (`destination_world`), ADR-0016 (placement criteria) and the v5 declaration
+  (`webots_factory_world_supervisor_geometry_export_v1`). Registered identities/inputs were filled
+  from the explicit binding registries: `finite_chunk_v1`, `analytic_surrogate_corrected_v1`,
+  `runtime_safety_monitor_v1`, `placement_verifier_v1`,
+  `corrected_bounded_pose_solver_v1`, `corrected_scripted_waypoints_v1`, and surrogate/safety
+  input names `forward`, `inverse`, `validate`, `tracking`, `monitor`. `task.target=CAN` is also
+  frozen from the approved robot/scenario definition. All instruction/destination, bound,
+  report-definition, safety-config, verification-numeric and adapter solve/jitter owner values
+  remain blocked placeholders. This supersedes the earlier Stage 1 sentence in ADR-0067: inert
+  preflight now fails at `task.instruction is still a blocked template placeholder` and creates
+  no output directory.
+- **Constraints held:** no weight, scale, ranking direction, threshold, calibration candidate,
+  task geometry or component instance was invented; the config remains `diagnostic_uncalibrated`
+  and non-scored. No push or merge.

@@ -53,9 +53,24 @@ is **not ready**; it short-circuits at the first gate. Downstream blockers, conf
   `calibration.evaluator_binding=registered_calibration_evaluator_v1` have no registered object.
 - **calibration:** no approved calibration candidate/evidence and no selected weights, scales,
   margin or ranking direction; the four-stage VALIDATION procedure has not been run.
-- **runtime geometry:** `inspect_geometry` did not answer (§0.1), so backend runtime grounding is
-  absent.
+- **runtime geometry:** the v4 `inspect_geometry` did not answer (§0.1); the separately authorized
+  v5 inspection then passed with valid, fresh geometry (§0.3). This closes the read-only grounding
+  evidence question only; it does not authorize motion, Packet B or a scored run.
 - **authorization:** Packet D (scored VALIDATION) not authorized; TRAIN/TEST remain sealed.
+
+### 0.3 v5 bounded read-only geometry inspection (single attempt, 2026-11-19)
+
+A separately authorized v5 inspection ran exactly once with a 90 000 ms `inspect_geometry`
+override and output `runs/worldmind/geometry-inspection-v5-2026-11-19/`. It returned `PASS`: the
+controller stderr shows `request_start`/`request_end` for `inspect_geometry seq=2` with
+`duration_s=47.2952`, so the request reached the server, completed there, and the reply was
+received with valid geometry. `geometry_export_valid=true`, `geometry_blockers=[]`,
+`observation_valid=true`, `observation_age_s=1.0791707038879395` (limit `5.0`), and table grounding
+was `Matched=5 Mismatched=0 Missing=0 Unsupported=0`. Read-only counters stayed at zero for
+apply/step/reset/inspect/export/ground-truth, actuation, physics steps, scoring, split access and
+campaign modification; `backend_inspect_geometry_calls=1`. Motion remains `NOT_READY`;
+`safety_check_readiness=true` is not motion authorization. Packet C v4 evidence stayed
+byte-identical and no retry or further Webots diagnostic is authorized. See ADR-0068.
 
 ## 1. Eq. 3.8 objectives (`configs/report/objectives.proposal.json`)
 

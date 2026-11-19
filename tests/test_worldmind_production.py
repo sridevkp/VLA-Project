@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -1190,6 +1191,22 @@ def test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed():
     assert "weights" not in raw["assessment"] and "maximize" not in raw["assessment"]
     assert raw["pipeline"]["arm"] == "full_system"
     assert raw["backend"]["state_source"] == "oracle"
-    # Owner-supplied values are unresolved placeholders; the template cannot become ready.
-    with pytest.raises(ValueError, match="placeholder"):
+    # Source-backed FROZEN values and registered identities are reconciled, but no owner value
+    # has been invented and the template still cannot become ready.
+    assert raw["backend"]["declaration"] == "webots_factory_world_supervisor_geometry_export_v1"
+    assert raw["task"]["target"] == "CAN"
+    assert raw["verification"]["destination_world"] == [-1.0, -4.3, 0.821]
+    assert raw["verification"]["distance_tolerance_m"] == 0.10
+    assert raw["verification"]["height_tolerance_m"] == 0.02
+    assert raw["verification"]["tilt_limit_rad"] == pytest.approx(math.radians(15.0))
+    assert raw["assessment"]["hard_checks"] == ["finite_chunk_v1"]
+    assert raw["assessment"]["required_constraints"] == ["finite_chunk_v1"]
+    assert raw["surrogate"]["binding"] == "analytic_surrogate_corrected_v1"
+    assert raw["safety"]["binding"] == "runtime_safety_monitor_v1"
+    assert raw["verification"]["binding"] == "placement_verifier_v1"
+    assert raw["adapter"]["waypoints_binding"] == "corrected_scripted_waypoints_v1"
+    assert raw["adapter"]["pose_solver_binding"] == "corrected_bounded_pose_solver_v1"
+    with pytest.raises(
+        ValueError, match="task.instruction is still a blocked template placeholder"
+    ):
         load_worldmind_diagnostic_config(path)

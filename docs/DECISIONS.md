@@ -2627,6 +2627,37 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   `runs/worldmind/geometry-inspection-v4-2026-11-19/` is preserved byte-identical. The read-only
   attestation held (no apply/step/reset/inspect-geometry calls, no scoring, no TEST/TRAIN access).
 - **Production preflight still blocked:** `configs/worldmind_production.yaml` is `blocked` with
-  `<OWNER_DECISION>` placeholders; components/calibration-evaluator/waypoint registries are empty;
-  no approved calibration candidate/evidence or selected numeric parameters; runtime geometry
-  unverified; no Packet D authorization. Scored VALIDATION remains unauthorized.
+  `<OWNER_DECISION>` placeholders; `components`, `calibration_evaluators` and `waypoint_sets` are
+  empty (the reviewed state-derived `corrected_scripted_waypoints_v1` remains registered under
+  `waypoint_factories`); no approved calibration candidate/evidence or selected numeric parameters;
+  runtime geometry unverified; no Packet D authorization. Scored VALIDATION remains unauthorized.
+
+## ADR-0066 — Offline Packet C communication diagnosis and launch-mode forensics (2026-11-19)
+
+- **Scope:** read-only analysis of preserved evidence and code only. No Webots session, live request,
+  retry, reset, actuation, scoring or geometry conclusion was produced. Packet C stays `FAILED`;
+  its authorization is expired and not reusable.
+- **Best-supported cause:** an isolated `inspect_geometry` RPC failure, not a startup/endpoint/
+  controller-registration fault. The launch-mode client dialled the reserved free port
+  `tcp://127.0.0.1:60455`, and the preserved sim-status file for that session records the same
+  endpoint with `last_completed={"op":"shutdown","seq":2,...,"ok":true}` and `event=stopped`.
+  Startup `ping` (`seq=0`) and the capture `ping` (`seq=1`) succeeded; `inspect_geometry` (`seq=2`)
+  timed out at 30 s; the shutdown request reused `seq=2` because the client does not increment the
+  sequence on timeout. This rules out a persistent REQ/REP desync and a stale controller answering
+  on another socket. The identical config/world hashes completed the same export in ~13 s in the
+  earlier v2 run, so a slow export near the 30 s ceiling and a lost request/reply remain
+  distinguishable only with server-side request logs, which were not captured for this session.
+- **Decision — smallest offline fix:** `launch_webots_session()` now sets
+  `VLAROBOT_CONTROLLER_STDERR_PATH` per session (overridable via `extra_env`) so the server's existing
+  `request_start`/`request_end` timing lines are preserved. This is launch-mode forensics only; it
+  changes no simulation state and needs no live authorization. Focused tests cover the default path
+  and the override.
+- **Not authorized / not done:** no new Webots test, no change to the world file, controller
+  registration, endpoint mode, pinned speed bound, `full_system` veto, or scientific registries.
+  A larger `inspect_geometry` timeout would require a separately authorized bounded non-actuating
+  live diagnostic and cannot be validated offline.
+- **Stage 1:** `configs/worldmind_diagnostic.yaml` is correct inert scaffolding (frozen 18-episode /
+  3-seed VALIDATION plan, `evidence_collection_only`, `scored_evaluation_allowed: false`,
+  `calibration_stage: 1`, no components/weights/calibration). It remains fail-closed on owner-supplied
+  values (backend declaration, task, bounds, authoritative PDF, approved definitions, safety config,
+  verification/adapter numerics). No simulation was run and no parameter was selected.

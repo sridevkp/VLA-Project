@@ -768,6 +768,15 @@ def launch_webots_session(
         if extra_env:
             env.update(extra_env)
         env["VLAROBOT_ZMQ_PORT"] = str(port)
+        # Launch-mode timeout forensics (Packet C diagnosis): the sim server already logs
+        # request_start/request_end with durations, but those lines were previously discarded in
+        # launch sessions. Capture them per session so a future authorized attempt can distinguish
+        # "request never reached the server" from "export exceeded the request deadline".
+        # setdefault keeps an explicit extra_env override intact.
+        env.setdefault(
+            "VLAROBOT_CONTROLLER_STDERR_PATH",
+            str(trace_dir / f"{trace_prefix}.controller-stderr.log"),
+        )
         attestation = WebotsRuntimeAttestation()
         if runtime_attestation_required:
             attestation = attest_webots_executable(resolved, env)

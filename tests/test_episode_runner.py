@@ -208,8 +208,11 @@ def test_launch_attestation_uses_identical_probe_and_launch_executable(
         probe_calls.append(executable)
         return attestation
 
+    popen_env: list[dict[str, str]] = []
+
     def fake_popen(command: list[str], env: object, log_file: object) -> object:
         popen_calls.append(list(command))
+        popen_env.append(dict(env))
         return process
 
     def fake_attach(
@@ -236,6 +239,40 @@ def test_launch_attestation_uses_identical_probe_and_launch_executable(
     assert probe_calls == [resolved]
     assert popen_calls[0][0] == resolved
     assert attached_processes == [process]
+    assert popen_env[0]["VLAROBOT_CONTROLLER_STDERR_PATH"] == str(
+        tmp_path / "session.controller-stderr.log"
+    )
+
+
+def test_launch_webots_session_stderr_capture_respects_extra_env(tmp_path: Path, monkeypatch):
+    """Launch-mode timeout forensics: controller stderr path is set but overridable."""
+    resolved = "/webots/bin/webots"
+    process = SimpleNamespace(pid=4242, poll=lambda: 0, returncode=0)
+    captured: list[dict[str, str]] = []
+    override = str(tmp_path / "caller.controller.log")
+
+    monkeypatch.setattr(episode_runner, "resolve_webots", lambda webots=None: resolved)
+    monkeypatch.setattr(episode_runner, "_reserve_free_port", lambda: 5555)
+    monkeypatch.setattr(episode_runner, "wait_for_simulator", lambda *args: object())
+    monkeypatch.setattr(episode_runner, "_stop_client", lambda client: None)
+
+    def fake_popen(command: list[str], env: object, log_file: object) -> object:
+        captured.append(dict(env))
+        return process
+
+    monkeypatch.setattr(episode_runner, "_popen", fake_popen)
+    with episode_runner.launch_webots_session(
+        webots="webots",
+        world=WORLD,
+        trace_dir=tmp_path,
+        trace_prefix="inspect",
+        grace_s=0.0,
+        extra_env={"VLAROBOT_CONTROLLER_STDERR_PATH": override},
+    ):
+        pass
+
+    assert captured[0]["VLAROBOT_CONTROLLER_STDERR_PATH"] == override
+    assert captured[0]["VLAROBOT_ZMQ_PORT"] == "5555"
 
 
 def test_format_summary_table_renders_rows_and_summary(tmp_path: Path) -> None:

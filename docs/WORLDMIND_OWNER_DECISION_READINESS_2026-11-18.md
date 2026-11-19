@@ -29,8 +29,11 @@ and the evidence directory `runs/worldmind/geometry-inspection-v4-2026-11-19/` i
 byte-identical (`diagnostic.json`, `worldmind-webots-geometry-inspection.log`).
 
 - Root blocker: `TimeoutError: Simulator did not reply to 'inspect_geometry' within 30000 ms`
-  after two unanswered `ping`s (5000 ms each); `shutdown` also timed out. Runtime geometry remains
-  **unverified**.
+  after two unanswered `ping`s (5000 ms each); the client stderr also reported a `shutdown`
+  timeout. The preserved sim-status file, however, records server-side `shutdown` as completed
+  (`ok: true`) on the same endpoint, so the two observations are not contradictory about session
+  identity; the reply-path/timing detail cannot be reconciled offline. Runtime geometry remains
+  **unverified**. See ADR-0066.
 - Read-only attestation held: `outcome=FAILED`, `motion_allowed=false`, `motion_readiness=NOT_READY`,
   `backend_apply_calls=0`, `backend_step_calls=0`, `backend_reset_calls=0`,
   `backend_inspect_geometry_calls=0`, `scored_results_written=false`, `test_split_accessed=false`,

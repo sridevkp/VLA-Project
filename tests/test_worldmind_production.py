@@ -1169,3 +1169,27 @@ def test_calibration_bootstrap_separates_collection_selection_and_approval(tmp_p
     bad_path.write_text(json.dumps(bad, sort_keys=True), encoding="utf-8")
     with pytest.raises(ValueError, match="unexpected"):
         load_calibration_draft(bad_path)
+
+
+def test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed():
+    """The Stage 1 config is approved scaffolding, never a ready or scoring artifact."""
+    root = Path(__file__).resolve().parents[1]
+    path = root / "configs" / "worldmind_diagnostic.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert raw["status"] == "diagnostic_uncalibrated"
+    assert raw["split"] == "validation"
+    assert raw["seeds"] == [0, 1, 2] and raw["episodes"] == 18
+    assert raw["report"]["sha256"] == worldmind_config.AUTHORITATIVE_REPORT_SHA256
+    assert raw["diagnostic"] == {
+        "mode": "evidence_collection_only",
+        "scored_evaluation_allowed": False,
+        "calibration_stage": 1,
+        "evidence_collection_split": "validation",
+    }
+    assert "components" not in raw and "calibration" not in raw
+    assert "weights" not in raw["assessment"] and "maximize" not in raw["assessment"]
+    assert raw["pipeline"]["arm"] == "full_system"
+    assert raw["backend"]["state_source"] == "oracle"
+    # Owner-supplied values are unresolved placeholders; the template cannot become ready.
+    with pytest.raises(ValueError, match="placeholder"):
+        load_worldmind_diagnostic_config(path)

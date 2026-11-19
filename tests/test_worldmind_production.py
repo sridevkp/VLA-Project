@@ -1206,7 +1206,28 @@ def test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed():
     assert raw["verification"]["binding"] == "placement_verifier_v1"
     assert raw["adapter"]["waypoints_binding"] == "corrected_scripted_waypoints_v1"
     assert raw["adapter"]["pose_solver_binding"] == "corrected_bounded_pose_solver_v1"
+    # ADR-0069: only exact, reviewed sources were populated.
+    assert raw["task"]["instruction"] == "Pick up the can and place it at the target location."
+    assert raw["report"]["pdf"] == "~/Downloads/Project_Report.pdf"
+    assert raw["safety"]["config_path"] == "safety.yaml"
+    assert raw["verification"]["rest_center_world"] == [-0.799879, -4.38998, 0.810949]
+    assert raw["verification"]["object_dimensions_m"] == [0.0635, 0.0635, 0.1222]
+    assert raw["verification"]["home_tolerance_rad"] == 0.02
+    assert raw["adapter"]["ik_position_tolerance_m"] == 0.005
+    assert raw["adapter"]["ik_orientation_tolerance_rad"] == pytest.approx(math.radians(5.0))
+    for blocked in (
+        raw["task"]["destination"],
+        raw["bounds"]["max_decisions"],
+        raw["bounds"]["max_steps"],
+        raw["report"]["definitions"],
+        raw["verification"]["up_axis_base"][0],
+        next(iter(raw["verification"]["home_joints"])),
+        raw["adapter"]["jitter"]["joint_std_rad"],
+        raw["adapter"]["jitter"]["joint_limit_rad"],
+        raw["adapter"]["jitter"]["max_attempts"],
+    ):
+        assert str(blocked).startswith("<"), blocked
     with pytest.raises(
-        ValueError, match="task.instruction is still a blocked template placeholder"
+        ValueError, match="task.destination is still a blocked template placeholder"
     ):
         load_worldmind_diagnostic_config(path)

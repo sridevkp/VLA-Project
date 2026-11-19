@@ -2752,3 +2752,61 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
 - **Constraints held:** no weight, scale, ranking direction, threshold, calibration candidate,
   task geometry or component instance was invented; the config remains `diagnostic_uncalibrated`
   and non-scored. No push or merge.
+
+## ADR-0069 — Stage 1 source completion, owner decision set and bounded execution request (2026-11-20)
+
+- **Scope:** read-only reconciliation after the owner accepted v5. The v4/v5 communication
+  investigation is closed; both evidence sets remain unchanged. No Webots process, geometry
+  diagnostic, retry, reset, step, IK solve, actuation, scoring, TEST/TRAIN access, calibration
+  selection or production component activation occurred. This ADR supersedes only the remaining
+  placeholder sentence in ADR-0068; all other v5 findings stand.
+- **Exact sources used for newly populated Stage 1 values:**
+  - `task.instruction` = `Pick up the can and place it at the target location.` from
+    `src/vlarobot/eval/demos.py::DEFAULT_INSTRUCTION` (also the literal used by
+    `src/vlarobot/cli.py` and `src/vlarobot/execution/vla_campaign.py`).
+  - `report.pdf` = `~/Downloads/Project_Report.pdf`; bytes SHA-256
+    `23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`.
+  - `safety.config_path` = `safety.yaml`, resolved relative to `configs/` as
+    `configs/safety.yaml`. This is the same file loaded by
+    `src/vlarobot/backends/webots/config.py`; its effective profile remains `original_envelope`.
+  - `verification.rest_center_world` = `[-0.799879, -4.38998, 0.810949]`, the frozen
+    `world.can_xyz` in `configs/scenarios.yaml`. Only that source was used; no new scene geometry
+    was inferred from the accepted v5 table inspection.
+  - `verification.object_dimensions_m` = `[0.0635, 0.0635, 0.1222]`, derived exactly as
+    `2 * configs/robot.yaml:can_radius_m (0.03175)` for X/Y and
+    `2 * configs/robot.yaml:can_half_height_m (0.0611)` for Z.
+  - `verification.home_tolerance_rad` = `0.02` from
+    `configs/robot.yaml:home_settle_tolerance_rad`.
+  - `adapter.ik_position_tolerance_m` = `0.005` and
+    `adapter.ik_orientation_tolerance_rad` = `0.08726646259971647` from
+    `configs/vla.yaml:ik_position_tolerance_m` and `ik_orientation_tolerance_rad`.
+- **Still blocked, with reasons:** `report.definitions` has no approved artifact;
+  `configs/report/definitions.candidate.json` is `review_status=candidate`, carries extra keys and
+  marks units `[PROPOSED; OWNER DECISION]`, so `ReportDefinitions.load` cannot accept it. The
+  destination ID has no approved source distinct from the free-text "target location" and
+  `destination_world`. Bounds have no reviewed values. `up_axis_base` has no owner-approved
+  base-frame vector. Fixed `home_joints` have no source: the existing controller records the
+  current joint vector at reset rather than a frozen HOME map. Jitter values have no approved
+  source; test-only literals are not evidence. The loader now fails closed at
+  `task.destination is still a blocked template placeholder` and creates no output directory.
+- **Smallest owner decision set:** (1) approved `definitions.json` with
+  `review_status=approved`, bound report SHA and exactly the eight Table 5.1
+  `{definition, unit}` entries; (2) `task.destination` string; (3) `bounds.max_decisions` and
+  `bounds.max_steps` positive integers; (4) `verification.up_axis_base` as an explicit finite
+  unit vector in the base frame; (5) `verification.home_joints` as an explicit joint-name to
+  radian map with its source; (6) the three `adapter.jitter` values with their reviewed source.
+  No weight, scale, ranking direction, threshold or calibration candidate is requested.
+- **Blocker classification:** `unresolved_forwarded_geometry` is a distinct scene/PROTO
+  geometry-coverage requirement, not another name for table grounding or `unverified-arm-sweep`.
+  `configs/geometry/webots-proto-sources-v1.yaml` names `PipeSection` and `StraightStairsRail`
+  as external PROTOs with forwarded `boundingObject` geometry. The v5 `table_target_inspection`
+  PASS closes only live table grounding and observation freshness. All three motion blockers
+  (`diagnostic_no_actuation_mode`, `unverified-arm-sweep`,
+  `unresolved_forwarded_geometry`) remain; `safety_check_readiness=true` is not motion
+  authorization. `full_system` stays blocked with `speed_bound_m_s = 28.49316700274912` unchanged.
+  Packet B and Packet D remain unauthorized and TEST remains sealed.
+- **Execution request:** prepared in
+  `docs/WORLDMIND_STAGE1_EXECUTION_REQUEST_2026-11-20.md`; not executed. There is currently no
+  execution-capable Stage 1 CLI command, so no measured Webots evidence collection was started.
+  `worldmind-diagnostic` only preflights and `eval-worldmind` requires a ready scored production
+  config with calibration and weights. No push or merge.

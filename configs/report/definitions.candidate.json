@@ -12,36 +12,68 @@
   "table51": {
     "Task success rate": {
       "definition": "Successful trials divided by total trials",
+      "denominator": "all planned (scene, seed) trials for the arm and split; successes use the frozen final_can_outcome criteria",
       "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
     },
     "Prediction error": {
       "definition": "RMSE, MAE or task-appropriate metric",
+      "denominator": "number of valid paired prediction steps per quantity (truthful truncated pairing, allow_truncated=True); unexecuted horizon steps excluded",
       "unit": "SI per quantity (m, rad) / steps [PROPOSED; OWNER DECISION]"
     },
     "Collision rate": {
-      "definition": "Trials with collisions divided by total trials",
+      "definition": "Trials with collisions divided by total trials; proxy hits are labelled, never silently promoted to verified contacts",
+      "denominator": "all planned (scene, seed) trials for the arm and split; numerator is episodes with a labelled proxy hit and/or a backend-recorded contact",
       "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
     },
     "Path length": {
       "definition": "Sum of distances along the executed trajectory",
+      "denominator": "not a ratio; summed over recorded executed EE/tool trajectory segments only",
       "unit": "m [PROPOSED; OWNER DECISION]"
     },
     "Execution time": {
-      "definition": "Recorded simulation or wall-clock duration, clearly identified",
+      "definition": "Recorded simulation or wall-clock duration, clearly identified; sim and wall kept as separate channels",
+      "denominator": "not a ratio; per-episode clock, aggregated over trials by mean/std with n reported",
       "unit": "s [PROPOSED; OWNER DECISION]"
     },
     "Planning latency": {
-      "definition": "Time required to generate and evaluate candidates",
+      "definition": "Time required to generate and evaluate candidates, measured from decision-sidecar phase timings; full-system latency remains UNVERIFIED until a real run exists",
+      "denominator": "not a ratio; per-decision perf_counter_ns windows, aggregated by p50/p95 with the number of timed decisions reported",
       "unit": "s [PROPOSED; OWNER DECISION]"
     },
     "Risk rejection rate": {
       "definition": "Rejected candidates divided by evaluated candidates",
+      "denominator": "all evaluated candidates across recorded decisions (candidate dispositions); hard-check vetoes counted separately from Eq. 3.8 ranking",
       "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
     },
     "Reliability": {
       "definition": "Successful runs and documented failure categories",
+      "denominator": "all planned (scene, seed) trials; categories from evaluation_failure_category with raw failure_state preserved separately",
       "unit": "counts / categories [PROPOSED; OWNER DECISION]"
     }
+  },
+  "failure_taxonomy": {
+    "source": "eval/metrics.py::derive_evaluation_failure_category; raw failure_state/failure_reason preserved separately",
+    "categories": [
+      "success",
+      "EXCEPTION",
+      "NO_SAFE_SET",
+      "SAFETY_ABORT",
+      "VERIFICATION_ABORT",
+      "VERIFICATION_RETRY",
+      "completed_unsuccessful:<final_state>+home_not_reached+place_distance+can_height+can_tilt+task_unsuccessful"
+    ],
+    "note": "Proposal only; category granularity is an owner decision. Proxy hits and unverified-arm-sweep vetoes are channels, not silently merged into a single risk number."
+  },
+  "measurement_instrumentation": {
+    "source": "worldmind-sidecars/instrumentation.json surfaced as summary.json.worldmind_instrumentation",
+    "fields": [
+      "decisions_total",
+      "decisions_per_episode",
+      "candidate_evaluations_total",
+      "gate_select_calls",
+      "phase_latency"
+    ],
+    "note": "Measured from recorded decisions; no decision count inferred from control steps, no latency taken from a nominal kernel profile."
   },
   "evidence_sources": {
     "Task success rate": "eval/metrics.py success aggregation and Wilson interval",

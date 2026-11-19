@@ -63,6 +63,25 @@
   },
   "note": "Eq. 3.8 supplies verbal meanings only. All formulas, units, normalisations, ranking direction and weights below are engineering choices requiring owner approval; they are NOT report quotations.",
   "report_sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b",
+  "calibration_evaluator": {
+    "status": "engineering_choice_not_report_quotation",
+    "authoritative": false,
+    "binding_identity": "registered_calibration_evaluator_v1",
+    "contract": "Callable[[Mapping[str, Any], CalibrationEvidence], float] injected through an explicit owner-reviewed binding; no dynamic config imports; not registered in production until owner approval",
+    "inputs": [
+      "one reviewable stage-3 draft with >=1 candidate parameter set (weights + maximize) and all four explicit component bindings",
+      "one hash-pinned, owner-approved VALIDATION-only evidence artifact: schema_version=1, split=validation, approved=true, 18 unique episode_ids, explicit source_hashes, measurement_class",
+      "an evaluator callable registered under registered_calibration_evaluator_v1"
+    ],
+    "outputs": [
+      "one finite scalar score per candidate",
+      "recommended_candidate_id and recommended_parameters under registered_evaluator_max_score_then_candidate_id (max score, then candidate_id tie-break)",
+      "a CalibrationProposal explicitly labelled selection_statistic_not_independent_evaluation with provenance recording independent_evaluation=false"
+    ],
+    "evidence": "the frozen 18-episode VALIDATION outcomes referenced by the evidence artifact; collection and approval are separate decisions, and the proposal never writes or approves parameters",
+    "fail_closed": "rejects unapproved evidence, tampered source hashes, TEST/TRAIN paths, non-finite scores, unpermitted parameter keys, empty candidate grids and any missing binding",
+    "prohibition": "the selection statistic is not an independent estimate of post-calibration performance and does not fix the numeric weights; weights and ranking direction stay VALIDATION-selected and owner-approved"
+  },
   "review_status": "engineering_proposal_not_approved",
   "scored_execution_enabled": false,
   "selection_rule": "registered_evaluator_max_score_then_candidate_id"

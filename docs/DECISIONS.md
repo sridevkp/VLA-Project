@@ -2524,3 +2524,52 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   fingertip-just-below-allowance rejection, a raised-table arm-capsule rejection, permitted and
   forbidden CAN contact, `SafetyMonitor` joint-limit and velocity rejection, `None` for malformed
   input, and the shipped blocked contract with empty production bindings.
+
+## ADR-0062 — Geometry investigation hard stop; `full_system` blocked (2026-11-19)
+
+- **Decision:** the geometric investigation is closed. Commit `77cefd4` (eight-pair
+  classification, speed-bound verdict, check-verdict) is accepted as **diagnostic evidence only**,
+  not as authorization to activate `ExactSweptArmCheck` / `packet_b_narrowed_sweep_check`.
+- **Unchanged by decision:** `configs/worldmind_arm_sweep.yaml` remains `status: blocked`; the
+  proposed `workspace_separated` exclusions are not activated; the pinned
+  `speed_bound_m_s = 28.49316700274912` is not replaced by the derived full-chain (`≈5.37`) or
+  repo-URDF (`≈2.677`) candidates. No exploratory search is started.
+- **Rationale:** a sampled positive separation is not proof of separation throughout the joint
+  workspace. §9.3 records `0 / 13,766` passing expert steps, no recorded positive control, `8`
+  retained narrow-clearance pairs that still veto recorded steps, and `42 of 61` URDF collision
+  bodies with no arm capsule. No limited operating-domain contract can be justified from this
+  evidence.
+- **Consequence:** `full_system` is `blocked` pending the safety decision in
+  `docs/WORLDMIND_OWNER_DECISION_READINESS_2026-11-18.md` (Packet B / §9). It keeps vetoing every
+  prediction with `unverified-arm-sweep` and recording `NO_SAFE_SET`. `production_worldmind_bindings()`
+  keeps `components={}` and `calibration_evaluators={}`. Engineering on the other four arms is not
+  blocked by this decision.
+
+## ADR-0063 — Measured WorldMind instrumentation and implementation-ready scientific contract proposals (2026-11-19)
+
+- **Decision:** surface measured decision counts and phase latencies in the canonical report, and
+  make the Eq. 3.8 / Table 5.1 / calibration contract implementation-ready for approval, without
+  selecting any numeric parameter.
+- **Instrumentation:** `build_instrumentation()` in `eval/worldmind_evidence.py` aggregates real
+  recorded decisions into `decisions_total`, `decisions_per_episode`, `candidate_evaluations_total`,
+  `gate_select_calls` and per-phase p50/p95 latency. It is written to
+  `worldmind-sidecars/instrumentation.json` and, additively, to
+  `summary.json.worldmind_instrumentation`. `measurement_class` is `measured` only for a real
+  Webots backend, otherwise `synthetic`. Effective `max_decisions` / `max_steps` /
+  `timings_enabled` are recorded in sidecar provenance. No decision count is inferred from
+  control-step counts and no latency is taken from a nominal kernel profile.
+- **Scientific contract:** `configs/report/objectives.proposal.json` adds a `calibration_evaluator`
+  block (inputs, outputs, evidence, fail-closed, `selection_statistic_not_independent_evaluation`);
+  `configs/report/definitions.candidate.json` adds per-metric denominators, a derived failure
+  taxonomy and a measurement-instrumentation pointer. All values stay
+  `engineering_proposal_not_approved` / `[PROPOSED; OWNER DECISION]`; weights and ranking direction
+  remain VALIDATION-selected by the owner. `Ju` stays a prediction-discrepancy proxy, not
+  calibrated uncertainty; frozen thresholds are untouched.
+- **Authorization:** ADR-0030 is scenario design only and grants no scored-run authorization. No
+  scored run is authorized until a new Packet D signature exists; any partial campaign needs its
+  own explicit approval and is reported as partial; TEST stays sealed to `2026-12-05..07` with a
+  separate authorization.
+- **Verification:** `tests/test_worldmind_production.py` asserts the new sidecar, the summary
+  block, the Webots/fake `measurement_class` distinction and the bounds in provenance;
+  `tests/test_worldmind_objectives.py` still asserts no proposal component or evaluator is
+  registered in scored bindings.

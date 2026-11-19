@@ -50,6 +50,7 @@ from vlarobot.eval.decision_adapters import (
 )
 from vlarobot.eval.decision_evidence import PhaseTimings, VerificationEvidence
 from vlarobot.eval.decision_metrics import pair_executed_prediction
+from vlarobot.eval.metrics import write_json
 from vlarobot.eval.runner import EvalReport, EvalRunConfig, run_evaluation
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.eval.worldmind_config import (
@@ -58,7 +59,7 @@ from vlarobot.eval.worldmind_config import (
     WorldMindBindings,
     WorldMindConfig,
 )
-from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter
+from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter, build_instrumentation
 from vlarobot.execution.scripted_chunk_adapter import (
     JointJitter,
     ScriptedChunkAdapter,
@@ -278,6 +279,9 @@ def _provenance(config: WorldMindConfig, plan: Sequence[Any]) -> dict[str, str]:
         "candidate_count": str(config.pipeline.candidate_count),
         "horizon_steps": str(config.pipeline.horizon_steps),
         "control_dt_s": str(config.pipeline.control_dt_s),
+        "max_decisions": str(config.bounds.max_decisions),
+        "max_steps": str(config.bounds.max_steps),
+        "timings_enabled": str(config.bounds.timings_enabled),
         "component_bindings": json.dumps(
             {name: spec.binding for name, spec in config.components.items()}, sort_keys=True
         ),
@@ -891,4 +895,13 @@ def run_worldmind_evaluation(
         )
     finally:
         sidecars = factory.finish()
+    # Additive, measured instrumentation only: surface the decision counts and phase
+    # latencies already recorded in the sidecars in the canonical summary.json so that
+    # Table 5.1 no longer has to infer decisions per episode from control-step counts.
+    instrumentation = build_instrumentation(
+        factory.writer.decisions,
+        measurement_class="measured" if config.backend.kind == "webots" else "synthetic",
+    )
+    report.summary["worldmind_instrumentation"] = instrumentation
+    write_json(report.summary, report.summary_json)
     return report, sidecars

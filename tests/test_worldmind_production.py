@@ -585,6 +585,28 @@ def test_full_composition_records_k32_nplus1_gate_execution_pairing_and_recordin
     assert report.summary["n_episodes"] == 1
     assert report.summary["backend"] == "fake"
     assert report.summary["state_source"] == "oracle"
+
+    # Decision counts and latency are measured from the decision sidecars, never inferred
+    # from control-step counts or a nominal kernel profile (§8.6 of the readiness packet).
+    instrumentation = report.summary["worldmind_instrumentation"]
+    assert instrumentation["measurement_class"] == "synthetic"  # fake backend never claims measured
+    assert instrumentation["decisions_total"] == len(records["decisions"])
+    assert (
+        sum(instrumentation["decisions_per_episode"].values()) == instrumentation["decisions_total"]
+    )
+    gates = instrumentation["gate_select_calls"]
+    assert gates["total"] == gates["expected_total"]
+    assert gates["all_decisions_expected"] is True
+    assert instrumentation["candidate_evaluations_total"] == 32 * instrumentation["decisions_total"]
+    sidecar_instrumentation = json.loads(sidecars["instrumentation"].read_text(encoding="utf-8"))
+    assert sidecar_instrumentation == instrumentation
+    on_disk_summary = json.loads(report.summary_json.read_text(encoding="utf-8"))
+    assert on_disk_summary["worldmind_instrumentation"] == instrumentation
+    provenance = json.loads(sidecars["provenance"].read_text(encoding="utf-8"))
+    assert provenance["max_decisions"] == str(fixture.config.bounds.max_decisions)
+    assert provenance["max_steps"] == str(fixture.config.bounds.max_steps)
+    assert provenance["timings_enabled"] == str(fixture.config.bounds.timings_enabled)
+
     assert (sidecars["decisions"].parent / "episode-00.meta.json").exists() is False
     assert report.episodes_csv.is_file()
     assert report.summary_json.is_file()
@@ -595,6 +617,7 @@ def test_full_composition_records_k32_nplus1_gate_execution_pairing_and_recordin
         "risk_rejection.json",
         "phase_latency.json",
         "verification_recovery.json",
+        "instrumentation.json",
         "provenance.json",
     }
     assert sidecars["errors"].read_text(encoding="utf-8").strip() == ""

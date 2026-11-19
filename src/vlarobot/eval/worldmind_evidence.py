@@ -34,6 +34,53 @@ def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
         stream.write("\n")
 
 
+def build_instrumentation(
+    decisions: Sequence[DecisionEvidence],
+    *,
+    measurement_class: str,
+) -> dict[str, Any]:
+    """Aggregate real, recorded decision evidence into Table 5.1 instrumentation.
+
+    Every count and latency comes from the additive decision sidecars. No decision count is
+    inferred from control-step counts and no latency is substituted from a nominal kernel
+    profile; a phase that was not measured stays absent with its recorded reason.
+    """
+    gate_values = [
+        int(value)
+        for evidence in decisions
+        if (value := evidence.provenance.get("gate_select_calls")) is not None
+    ]
+    expected_gate_calls = [evidence.candidate_count + 1 for evidence in decisions]
+    latency = summarize_phase_latencies(
+        [evidence.timings for evidence in decisions if evidence.timings is not None]
+    )
+    per_episode: dict[str, int] = {}
+    for evidence in decisions:
+        per_episode[evidence.episode_id] = per_episode.get(evidence.episode_id, 0) + 1
+    return {
+        "schema_version": 1,
+        "measurement_class": measurement_class,
+        "decisions_total": len(decisions),
+        "decisions_per_episode": dict(sorted(per_episode.items())),
+        "candidate_evaluations_total": sum(e.candidate_count for e in decisions),
+        "gate_select_calls": {
+            "policy": GATE_CALL_POLICY,
+            "recorded_decisions": len(gate_values),
+            "total": sum(gate_values),
+            "expected_total": sum(expected_gate_calls),
+            "all_decisions_expected": (
+                gate_values == expected_gate_calls if len(gate_values) == len(decisions) else False
+            ),
+        },
+        "phase_latency": {name: asdict(summary) for name, summary in sorted(latency.items())},
+        "note": (
+            "Decision counts, candidate evaluations and phase latencies are measured from real "
+            "WorldMind decision sidecars; no count is inferred from control steps and no latency "
+            "is taken from a nominal kernel profile."
+        ),
+    }
+
+
 @dataclass
 class WorldMindEvidenceWriter:
     """Create a fresh sidecar directory and append only measured decision evidence."""
@@ -42,12 +89,17 @@ class WorldMindEvidenceWriter:
     folder_name: str = "worldmind-sidecars"
     decisions: list[DecisionEvidence] = field(default_factory=list, init=False)
     pairings: list[PredictionPairingEvidence] = field(default_factory=list, init=False)
+    measurement_class: str = field(default="synthetic", init=False)
 
     @property
     def folder(self) -> Path:
         return self.out_dir / self.folder_name
 
     def start(self, provenance: Mapping[str, str]) -> None:
+        # Never claim a measured class unless a real Webots backend was declared.
+        self.measurement_class = (
+            "measured" if provenance.get("backend") == "webots" else "synthetic"
+        )
         self.folder.mkdir(parents=True, exist_ok=False)
         _write_json(self.folder / "provenance.json", dict(provenance))
         for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
@@ -140,6 +192,9 @@ class WorldMindEvidenceWriter:
             "verification_transitions": dict(sorted(transitions.items())),
             "no_safe_recovery_events": dict(sorted(recovery_events.items())),
         }
+        instrumentation_payload = build_instrumentation(
+            decisions, measurement_class=self.measurement_class
+        )
         paths = {
             "decisions": self.folder / "decisions.jsonl",
             "prediction_pairing": self.folder / "prediction_pairing.jsonl",
@@ -147,13 +202,15 @@ class WorldMindEvidenceWriter:
             "risk_rejection": self.folder / "risk_rejection.json",
             "phase_latency": self.folder / "phase_latency.json",
             "verification_recovery": self.folder / "verification_recovery.json",
+            "instrumentation": self.folder / "instrumentation.json",
             "provenance": self.folder / "provenance.json",
         }
-        for name in ("risk_rejection", "phase_latency", "verification_recovery"):
+        for name in ("risk_rejection", "phase_latency", "verification_recovery", "instrumentation"):
             payload = {
                 "risk_rejection": rejection_payload,
                 "phase_latency": latency_payload,
                 "verification_recovery": recovery_payload,
+                "instrumentation": instrumentation_payload,
             }[name]
             _write_json(paths[name], payload)
         return paths

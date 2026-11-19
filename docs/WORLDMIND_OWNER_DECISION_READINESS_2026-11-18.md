@@ -308,7 +308,7 @@ result, not a plan.
 | Quantity | Status |
 |---|---|
 | Control/physics steps per episode (166–1059, mean 764.8, n=18) | OBSERVED |
-| WorldMind decisions per episode | INFERRED `≈` steps: `execute_first` applies one control action per decision and re-observes; not instrumented in the canonical evidence |
+| WorldMind decisions per episode | MEASURED from decision sidecars: `worldmind-sidecars/instrumentation.json` (`decisions_total`, `decisions_per_episode`, `candidate_evaluations_total`, `gate_select_calls`) is surfaced as `summary.json.worldmind_instrumentation`; no count inferred from control steps |
 | Candidate-evaluation latency, K=32/H=50 | NOMINAL-KERNEL-PROFILED: p50 0.4677 s; not full-system |
 | Per-episode wall time without prediction work | OBSERVED: 528 s serial, 20.46 ep/h at 3 workers |
 | Full-system wall time, incl. 3-worker contention | UNKNOWN — no run exists |
@@ -414,6 +414,13 @@ checker, and it is why this remains a diagnostic proposal rather than a certific
 6. Whether `full_system` execution requires an approval of this narrowed scope at all, or whether
    `unverified-arm-sweep` should stay a hard veto for the whole arm.
 
+Items 1–4 now have implementation-ready proposals in `configs/report/objectives.proposal.json`
+(and `configs/report/definitions.candidate.json`): formulas, units, normalization, calibration
+evaluator inputs/outputs/evidence, Table 5.1 denominators and failure taxonomy. They are ready
+for approval, not approved; no weight or scale is selected here. Item 5 is **not** being changed:
+the pinned `28.49316700274912 m/s` is retained and the derived candidates stay unapplied (§9.7).
+Item 6 resolves to `full_system` remaining `blocked` pending the safety decision (§9.7).
+
 Explicitly **not** claimed: a calibrated uncertainty model (the implemented quantity is a
 prediction-discrepancy proxy), zero geometric error, a certified displacement bound, or full-body
 safety certification (`42` of `61` URDF collision bodies have no arm capsule and are unchecked).
@@ -447,3 +454,79 @@ stay at `2026-11-25` only if that is signed on `2026-11-20`, otherwise later. `f
 gated by `unverified-arm-sweep` and has no earliest date until Packet B or the narrower fallback is
 signed. The full five-arm VALIDATION block needs the approved config; the TEST window is
 `2026-12-05..07` and remains sealed.
+
+### 9.7 Geometry investigation hard stop and `full_system` status (2026-11-19)
+
+The geometric investigation is **closed**. Commit `77cefd4` and its eight-pair classification,
+speed-bound verdict and check-verdict are accepted as **diagnostic evidence only**, not as
+authorization to activate the proposed checker. In particular:
+
+- `configs/worldmind_arm_sweep.yaml` stays `status: blocked`; no `workspace_separated` exclusions
+  are activated and the pinned `speed_bound_m_s = 28.49316700274912 m/s` is not replaced. The
+  derived full-chain candidate (`≈5.37 m/s`) and the repo-URDF bound (`≈2.677 m/s`) remain
+  unapplied proposals.
+- A sampled positive separation is **not** proof of separation throughout the joint workspace.
+  §9.3 records `0 / 13,766` passing expert steps, no positive control in the recorded data, `8`
+  retained narrow-clearance pairs that still veto recorded configurations, and `42 of 61` URDF
+  collision bodies with no arm capsule. An operating-domain contract cannot be justified from
+  this evidence, so no limited-domain boundary is asserted here and no exploratory search is
+  started.
+- **`full_system` is `blocked` pending the safety decision in this packet** (Packet B / §9).
+  `production_worldmind_bindings()` keeps `components={}` and `calibration_evaluators={}`, and
+  `full_system` continues to veto every predicted candidate with `unverified-arm-sweep` and record
+  `NO_SAFE_SET`. This does not block engineering on the other four arms.
+
+### 9.8 Scientific contract — implementation-ready proposal (not approved)
+
+The scientific contract is now concrete and ready for owner approval, without fixing any numeric
+parameter and without modifying a frozen threshold:
+
+- `configs/report/objectives.proposal.json` gives Eq. 3.8 component formulas, units,
+  normalization, ranking direction (`minimize`) and the `missing_data` / `safety_precedence`
+  contracts for `Jg`, `Jl`, `Jr`, `Ju`. `Ju` is a **prediction-discrepancy proxy**, explicitly not
+  calibrated uncertainty. Every component is `authoritative: false`; the file is
+  `engineering_proposal_not_approved` with `scored_execution_enabled: false`. A new
+  `calibration_evaluator` block specifies inputs (draft + hash-pinned approved VALIDATION
+  evidence + registered callable), outputs (finite per-candidate scores, recommendation under
+  `registered_evaluator_max_score_then_candidate_id`, labelled
+  `selection_statistic_not_independent_evaluation`) and fail-closed conditions.
+- `configs/report/definitions.candidate.json` gives all eight Table 5.1 metrics with explicit
+  **denominators**, units marked `[PROPOSED; OWNER DECISION]`, a `failure_taxonomy` derived from
+  `eval/metrics.py::derive_evaluation_failure_category`, and a `measurement_instrumentation`
+  pointer to the sidecar fields. Proxy hits, contacts and unverified-arm-sweep remain separate
+  channels; they are not merged into one risk number.
+- Weights, scales/margins and ranking direction remain **VALIDATION-selected by the owner** and
+  are not chosen here. The calibration proposal is a selection statistic, not an independent
+  evaluation of post-calibration performance.
+
+### 9.9 Bounded VALIDATION run plan and authorization scope
+
+Frozen plan (unchanged): `validation` split, `base_seed=0`, seeds `[0,1,2]`, 18 unique `(scene,
+seed)` episodes, `K=32`, `H=50`, `dt=0.032`, `scripted_chunk_adapter`, five arms. Bounds
+`max_decisions`/`max_steps` stay owner-set placeholders in the ready config; the actual effective
+bounds and per-decision timing enable flag are now recorded in `worldmind-sidecars/provenance.json`.
+
+Run command (only after the ready config, green preflight and Packet D signature exist; connects
+to an already-running `sim-server`, never launches Webots):
+
+```
+cd /home/tj330/programs/VLA-Project-week3
+uv run python -m vlarobot.cli eval-worldmind \
+  --config configs/worldmind_production.yaml --out runs/worldmind/<new-authorized-dir> \
+  --backend webots --state-source oracle --split validation
+```
+
+Per-episode decisions, candidate evaluations, K+1 gate calls and phase latencies are measured by
+`build_instrumentation()` and written to `worldmind-sidecars/instrumentation.json` and to
+`summary.json.worldmind_instrumentation`; `measurement_class` is `measured` only for a real Webots
+backend and `synthetic` otherwise. This makes the five-arm throughput figures checkable against a
+real run instead of the nominal-kernel inference in §7. Stop conditions, proxy labelling and
+fail-closed preflight are unchanged (§8.4).
+
+Authorization: **ADR-0030 is scenario design only and grants no scored-run authorization.** No
+scored run is authorized by any existing signature. The only execution currently requestable is
+the bounded read-only v4 inspection of §8.3 (Packet C), with its exact command and acceptance
+criteria. Any scored VALIDATION requires a new, explicit Packet D signature (all five arms or a
+named subset). A partial campaign requires its own explicit approval and **must be reported as a
+partial campaign**, preserving the five-arm design as the reference protocol. TEST stays sealed
+until `2026-12-05..07` and requires a separate authorization; no combination of A/B/C/D grants it.

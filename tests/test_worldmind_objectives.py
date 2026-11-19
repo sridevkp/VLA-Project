@@ -17,7 +17,10 @@ import pytest
 
 from vlarobot.core.types import (
     ActionChunk,
+    BaseGoal,
     EEDelta,
+    EEPoseTarget,
+    GripperCmd,
     JointTarget,
     ObjectState,
     Pose2D,
@@ -30,7 +33,9 @@ from vlarobot.core.types import (
 from vlarobot.eval import worldmind_objectives as objectives
 from vlarobot.eval.worldmind_objectives import (
     AMENDMENT_STATUS,
+    CAN_CONTACT_POLICY,
     COMPONENT_NAMES,
+    JU_ALIGNMENT_POLICY,
     PROPOSAL_STATUS,
     PROPOSED_OBJECTIVES,
     HardVetoPrecedesUtility,
@@ -176,6 +181,37 @@ def test_soft_risk_uses_uncertified_tool_clearance_and_fails_closed():
         )
 
 
+def test_intentional_can_contact_is_not_exempted_from_soft_risk():
+    current = _state(0.0, object_x=0.5)
+    contact_chunk = _delta_chunk(0.5, 0.0)
+    contact_state = _state(0.5, object_x=0.5)
+    trajectory = _trajectory(current, contact_state)
+    clearances = tool_envelope_clearances(
+        current, contact_chunk, trajectory, tool_radius_m=0.02, scene_complete=True
+    )
+    assert clearances[0] < 0.0
+    assert soft_geometric_risk(
+        current,
+        contact_chunk,
+        trajectory,
+        tool_radius_m=0.02,
+        margin_m=0.1,
+        scene_complete=True,
+    ) == pytest.approx(1.0)
+
+    assert "no exemption" in CAN_CONTACT_POLICY.lower()
+    records = {record["name"]: record for record in proposal_records()}
+    assert CAN_CONTACT_POLICY in records["Jr"]["missing_data"]
+    assert "veto" in records["Jr"]["safety_precedence"]
+    with pytest.raises(HardVetoPrecedesUtility):
+        combine(
+            {"Jg": 0.0, "Jl": 0.0, "Jr": 1.0, "Ju": 0.0},
+            {name: 1.0 for name in COMPONENT_NAMES},
+            maximize=False,
+            hard_veto=True,
+        )
+
+
 def test_prediction_consistency_is_decision_time_only_and_fails_closed():
     current = _state(0.0, object_x=0.5)
     chunk = _delta_chunk(0.2, 0.01)
@@ -209,6 +245,70 @@ def test_prediction_consistency_is_decision_time_only_and_fails_closed():
         )
     with pytest.raises(MissingObjectiveInput, match="scale"):
         prediction_consistency(current, chunk, trajectory, **{**scales, "position_scale_m": 0.0})
+
+
+def test_prediction_consistency_enforces_alignment_ordering_and_gripper_accounting():
+    current = _state(0.0, object_x=0.5)
+    predicted = _state(0.19, object_x=0.5)
+    scales = {
+        "position_scale_m": 0.1,
+        "orientation_scale_rad": 0.5,
+        "joint_scale_rad": 0.1,
+        "gripper_scale_m": 0.05,
+    }
+    trajectory = _trajectory(current, predicted)
+
+    assert "sorted joint names" in JU_ALIGNMENT_POLICY
+    records = {record["name"]: record for record in proposal_records()}
+    assert JU_ALIGNMENT_POLICY in records["Ju"]["missing_data"]
+
+    # Command dict insertion order is irrelevant; both sides are sorted by joint name.
+    joint_chunk = ActionChunk(
+        [JointTarget({"arm_2_joint": 0.3, "arm_1_joint": 0.2})], 0.032, "test"
+    )
+    joint_state = replace(
+        predicted,
+        robot=replace(predicted.robot, joint_pos={"arm_2_joint": 0.35, "arm_1_joint": 0.1}),
+    )
+    assert prediction_consistency(
+        current, joint_chunk, _trajectory(current, joint_state), **scales
+    ) == pytest.approx(math.hypot(0.05, 0.1) / 0.1)
+
+    gripper_chunk = ActionChunk([GripperCmd(0.02)], 0.032, "test")
+    gripper_state = replace(predicted, robot=replace(predicted.robot, gripper_opening=0.03))
+    assert prediction_consistency(
+        current, gripper_chunk, _trajectory(current, gripper_state), **scales
+    ) == pytest.approx(0.2)
+
+    pose_chunk = ActionChunk(
+        [EEPoseTarget(Pose3D(Vec3(0.19, 0.0, 0.5), IDENTITY), 0.045, 0.032)], 0.032, "test"
+    )
+    pose_state = replace(predicted, robot=replace(predicted.robot, gripper_opening=0.04))
+    assert prediction_consistency(
+        current, pose_chunk, _trajectory(current, pose_state), **scales
+    ) == pytest.approx((0.005 / 0.05) / 3.0)
+
+    with pytest.raises(MissingObjectiveInput, match="nonempty candidate"):
+        prediction_consistency(current, ActionChunk([], 0.032, "test"), trajectory, **scales)
+    with pytest.raises(MissingObjectiveInput, match="no comparable command field"):
+        prediction_consistency(
+            current,
+            ActionChunk([BaseGoal(Pose2D(0.0, 0.0, 0.0))], 0.032, "test"),
+            trajectory,
+            **scales,
+        )
+    with pytest.raises(MissingObjectiveInput, match="no commanded joints"):
+        prediction_consistency(
+            current,
+            ActionChunk([JointTarget({})], 0.032, "test"),
+            trajectory,
+            **scales,
+        )
+    misaligned_first = replace(predicted, scene=SceneState([]))
+    with pytest.raises(MissingObjectiveInput, match="not aligned"):
+        prediction_consistency(
+            current, gripper_chunk, _trajectory(misaligned_first, gripper_state), **scales
+        )
 
 
 def test_all_components_are_available_from_decision_time_inputs():
@@ -335,6 +435,9 @@ def test_proposal_artifact_is_not_owner_approved_and_not_scorable():
     assert "uncertified" in payload["components"]["Jr"]["formula"].lower()
     assert "command-following" in payload["components"]["Ju"]["units"].lower()
     assert payload["decision_time_amendment"]["owner_approval_required"] is True
+    assert "no silent exemption" in payload["clarifications"]["jr_can_contact"].lower()
+    assert "sorted jointtarget joint ordering" in payload["clarifications"]["ju_alignment"].lower()
+    assert "not calibrated uncertainty" in payload["clarifications"]["ju_alignment"].lower()
 
 
 def test_no_proposal_component_is_registered_in_scored_bindings():

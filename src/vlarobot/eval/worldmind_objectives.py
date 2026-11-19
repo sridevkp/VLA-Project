@@ -52,6 +52,20 @@ MISSING_DATA_BEHAVIOUR = (
     "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an "
     "unmeasured clearance, a wall-clock duration or an invented uncertainty."
 )
+CAN_CONTACT_POLICY = (
+    "Intentional CAN contact during grasping receives no exemption in Jr_soft. The CAN remains an "
+    "observed object box; tool-envelope overlap or negative clearance contributes the maximum soft "
+    "deficit. This is a ranking cost only: hard contact/grasp policy and safety vetoes are "
+    "unchanged."
+)
+JU_ALIGNMENT_POLICY = (
+    "Ju requires exactly len(actions)+1 predicted states and matching current/predicted object "
+    "identities. JointTarget residuals use sorted joint names for command and prediction. Gripper "
+    "fields are accounted for EEDelta, EEPoseTarget and GripperCmd. Empty or unsupported "
+    "comparisons fail closed with MissingObjectiveInput. Ju measures predicted command-following "
+    "consistency, "
+    "not calibrated uncertainty."
+)
 WEIGHT_SELECTION = (
     "Weights (wg, wl, wr, wu) and ranking direction are selected by the owner on the frozen "
     "VALIDATION evidence through a registered evaluator and recorded in an approved calibration "
@@ -136,7 +150,8 @@ PROPOSED_OBJECTIVES: Mapping[str, ObjectiveProposal] = {
         ),
         MISSING_DATA_BEHAVIOUR
         + " Incomplete scene, absent object geometry, truncated prediction or missing r_tool/m "
-        "raises MissingObjectiveInput. This soft score is not a safety certificate.",
+        "raises MissingObjectiveInput. This soft score is not a safety certificate. "
+        + CAN_CONTACT_POLICY,
         SAFETY_PRECEDENCE
         + " Hard vetoes (SafetyMonitor.validate, RiskGate, unverified-arm-sweep) are evaluated "
         "separately and still veto independently of Jr.",
@@ -158,7 +173,7 @@ PROPOSED_OBJECTIVES: Mapping[str, ObjectiveProposal] = {
         ),
         MISSING_DATA_BEHAVIOUR
         + " No future observed state, ObjectWorldModel.correct residual, fabricated uncertainty "
-        "or ensemble is accepted.",
+        "or ensemble is accepted. " + JU_ALIGNMENT_POLICY,
         SAFETY_PRECEDENCE,
         AMENDMENT_STATUS,
     ),
@@ -253,7 +268,8 @@ def tool_envelope_clearances(
 
     Uses only the current observed object geometry and the predicted tool path. It is an exact
     segment/AABB distance minus a declared tool radius; full-arm, self-collision and contact
-    certification are explicitly outside this proxy.
+    certification are explicitly outside this proxy. The CAN is never exempted: intentional CAN
+    contact contributes a negative clearance and therefore the maximum soft deficit.
     """
     radius = _positive(tool_radius_m, "tool_radius_m")
     if not isinstance(current, WorldState):
@@ -401,6 +417,8 @@ def prediction_consistency(
 
     The only observation used is the current state (identity alignment). Later observed states,
     corrections, uncertainty estimates and ensembles are not inputs and cannot leak into a score.
+    Action/state alignment, sorted joint names, gripper accounting and fail-closed behaviour follow
+    JU_ALIGNMENT_POLICY. This is command-following consistency, not calibrated uncertainty.
     """
     s_p = _positive(position_scale_m, "position_scale_m")
     s_r = _positive(orientation_scale_rad, "orientation_scale_rad")

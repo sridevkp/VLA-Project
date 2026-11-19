@@ -2589,10 +2589,19 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   declared tool-envelope radius. It is explicitly **uncertified** and is not a full-arm, contact or
   self-collision certificate. Hard vetoes remain a separate, precedent gate; the proxy never vetoes
   or offsets one and fails closed on incomplete scenes, absent geometry or truncated predictions.
+- **`Jr` CAN contact clarification:** intentional CAN contact during grasping is **not exempted**.
+  The CAN remains in the current observed object set; tool-envelope overlap or negative clearance
+  contributes the maximum soft deficit. This is only a ranking cost. Hard contact/grasp policy and
+  the hard veto are unchanged; the soft proxy remains uncertified.
 - **`Ju` contract change:** the old correction-residual formula required future observed states and
   would leak them into candidate ranking. The amended score is a deterministic command-following
   residual between candidate command fields and the predicted trajectory, aligned to the current
   observation by object identity. It is not calibrated uncertainty and claims no ensemble.
+- **`Ju` alignment clarification:** scores require exactly `len(actions)+1` predicted states and
+  current/predicted object-identity equality; `JointTarget` residuals use sorted joint names;
+  gripper fields are accounted for `EEDelta`, `EEPoseTarget` and `GripperCmd`; empty or unsupported
+  comparisons fail closed with `MissingObjectiveInput`. `Ju` measures predicted command-following
+  consistency, not calibrated uncertainty.
 - **Verification:** `tests/test_worldmind_objectives.py` checks decision-time availability of all
   four components, fail-closed missing inputs, hard-veto precedence, and that future observations
   cannot alter a candidate score. The geometric investigation is not reopened; no scored execution

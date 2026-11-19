@@ -33,7 +33,7 @@
     "Jr": {
       "authoritative": false,
       "formula": "Jr_soft = mean_{k=1..K} clip((m - tilde_d_k) / m, 0, 1); tilde_d_k < 0 maps to 1; tilde_d_k = min_o segmentBoxClearance(p_{k-1}, p_k, AABB_o(current), r_tool); UNCERTIFIED proxy",
-      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. Incomplete scene, absent object geometry, truncated prediction or missing r_tool/m raises MissingObjectiveInput. This soft score is not a safety certificate.",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. Incomplete scene, absent object geometry, truncated prediction or missing r_tool/m raises MissingObjectiveInput. This soft score is not a safety certificate. Intentional CAN contact during grasping receives no exemption in Jr_soft. The CAN remains an observed object box; tool-envelope overlap or negative clearance contributes the maximum soft deficit. This is a ranking cost only: hard contact/grasp policy and safety vetoes are unchanged.",
       "normalization": "m in m > 0 and r_tool in m > 0 are owner-selected; tilde_d_k is an UNCERTIFIED tool-envelope segment/AABB clearance proxy (m), not certified full-arm clearance",
       "ranking_direction": "minimize",
       "required_inputs": [
@@ -50,7 +50,7 @@
     "Ju": {
       "authoritative": false,
       "formula": "Ju_consistency = mean_{i in C} r_i; r_i = ||p_hat_{i+1} - p_cmd_i||/s_p + angle(q_hat_{i+1}, q_cmd_i)/s_r for EE commands; ||q_hat_{i+1} - q_cmd_i||/s_q for JointTarget; |g_hat_{i+1} - g_cmd_i|/s_g for gripper components",
-      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. No future observed state, ObjectWorldModel.correct residual, fabricated uncertainty or ensemble is accepted.",
+      "missing_data": "Fail closed with MissingObjectiveInput. Never impute zero error, a synthetic goal, an unmeasured clearance, a wall-clock duration or an invented uncertainty. No future observed state, ObjectWorldModel.correct residual, fabricated uncertainty or ensemble is accepted. Ju requires exactly len(actions)+1 predicted states and matching current/predicted object identities. JointTarget residuals use sorted joint names for command and prediction. Gripper fields are accounted for EEDelta, EEPoseTarget and GripperCmd. Empty or unsupported comparisons fail closed with MissingObjectiveInput. Ju measures predicted command-following consistency, not calibrated uncertainty.",
       "normalization": "s_p in m > 0; s_r in rad > 0; s_q in rad > 0; s_g in m > 0; owner-selected on VALIDATION",
       "ranking_direction": "minimize",
       "required_inputs": [
@@ -74,6 +74,10 @@
     "jr": "Hard safety veto remains separate and precedent. Jr_soft is an uncertified tool-envelope segment/AABB clearance proxy, not certified full-arm clearance.",
     "ju": "Ju_consistency is a deterministic command-following residual from current observation, candidate chunk and predicted trajectory; no future observed state or calibrated uncertainty is claimed.",
     "activation": "No binding, weight, threshold or scored evaluation is activated by this proposal."
+  },
+  "clarifications": {
+    "jr_can_contact": "No silent exemption. The CAN stays in the observed object set for Jr_soft; intentional contact during grasping yields negative tool-envelope clearance and the maximum soft deficit. Hard contact/grasp policy and vetoes are unchanged.",
+    "ju_alignment": "Strict len(actions)+1 action-to-prediction alignment, current/predicted object identity match, sorted JointTarget joint ordering, explicit gripper accounting for EEDelta/EEPoseTarget/GripperCmd, and MissingObjectiveInput on empty or unsupported comparisons. Ju measures predicted command-following consistency, not calibrated uncertainty."
   },
   "report_sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b",
   "calibration_evaluator": {

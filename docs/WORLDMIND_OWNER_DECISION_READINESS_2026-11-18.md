@@ -201,7 +201,14 @@ following minimal amendment is in `configs/report/objectives.proposal.json` and 
   for EE position/orientation/gripper, `JointTarget` joints, or `GripperCmd` opening. Inputs are only
   the current observation (identity alignment), the candidate `ActionChunk` and the predicted
   `Trajectory`. No future observed state, correction residual, fabricated uncertainty or ensemble
-  is accepted; this is not calibrated uncertainty.
+  is accepted; this is not calibrated uncertainty. Scores require exactly `len(actions)+1`
+  predicted states and current/predicted object-identity equality; `JointTarget` residuals use
+  sorted joint names; gripper fields are accounted for `EEDelta`, `EEPoseTarget` and `GripperCmd`;
+  empty or unsupported comparisons fail closed with `MissingObjectiveInput`. `Ju` measures predicted
+  command-following consistency, not calibrated uncertainty.
+- Intentional CAN contact during grasping is not silently exempted from `Jr_soft`: the CAN remains
+  an observed object box, so tool-envelope overlap or negative clearance contributes the maximum
+  soft deficit. This is only a ranking cost; hard contact/grasp policy and vetoes are unchanged.
 - Nothing is activated: scientific registries stay empty, no weight/scale/threshold is selected,
   `full_system` stays `blocked`, scored evaluation stays disabled, and approved VALIDATION
   calibration still precedes any weight choice. ADR-0064 records this pending contract change.

@@ -1,0 +1,1262 @@
+# Generated offline by /tmp/opencode/gen_packet_b_manifest.py; do not hand-edit pairs.
+# Diagnostic proposal only. The shipped sweep contract stays status: blocked.
+schema_version: 1
+status: diagnostic_proposal
+source_urdf: ../../src/vlarobot/backends/webots/tiago.urdf
+source_urdf_sha256: 1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b
+witness_sampling:
+  joint_limits:
+    arm_1_joint:
+    - 0.07
+    - 2.68
+    arm_2_joint:
+    - -1.5
+    - 1.02
+    arm_3_joint:
+    - -3.46
+    - 1.5
+    arm_4_joint:
+    - -0.32
+    - 2.29
+    arm_5_joint:
+    - -2.07
+    - 2.07
+    arm_6_joint:
+    - -1.39
+    - 1.39
+    arm_7_joint:
+    - -2.07
+    - 2.07
+  grid_points: 2187
+  random_points: 2000
+  seed: 20261119
+allowance:
+  margin_m: 0.02
+  motion_m: 0.014706151
+  error_m: 0.0051010000000000005
+  substeps: 62
+  speed_bound_m_s: 28.49316700274912
+  dt_s: 0.032
+counts:
+  capsules: 19
+  pairs: 171
+  same_rigid_body: 15
+  directly_jointed: 39
+  urdf_volumes_intersect: 8
+  retained: 109
+  retained_compatible_with_all_steps: 101
+  retained_rejected_at_some_step: 8
+  gripper_mount: 16
+campaign:
+  episodes: 18
+  steps: 13766
+  evidence_dir: /home/tj330/programs/VLA-Project-analytic/runs/validation-evidence-v2-canonical
+exclusions:
+- first: TIAGo front arm:0
+  second: TIAGo front arm:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm; rigid self-contact is not a collision
+- first: TIAGo front arm:0
+  second: TIAGo front arm:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm; rigid self-contact is not a collision
+- first: TIAGo front arm:1
+  second: TIAGo front arm:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm; rigid self-contact is not a collision
+- first: TIAGo front arm_3:0
+  second: TIAGo front arm_3:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: TIAGo front arm_3:0
+  second: TIAGo front arm_3:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: TIAGo front arm_3:0
+  second: TIAGo front arm_3:3
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: TIAGo front arm_3:1
+  second: TIAGo front arm_3:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: TIAGo front arm_3:1
+  second: TIAGo front arm_3:3
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: TIAGo front arm_3:2
+  second: TIAGo front arm_3:3
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link TIAGo front arm_3; rigid self-contact is not a collision
+- first: arm_2_link:0
+  second: arm_2_link:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_2_link; rigid self-contact is not a collision
+- first: arm_3_link:0
+  second: arm_3_link:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_3_link; rigid self-contact is not a collision
+- first: arm_4_link:0
+  second: arm_4_link:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_4_link; rigid self-contact is not a collision
+- first: arm_5_link:0
+  second: arm_5_link:1
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_5_link; rigid self-contact is not a collision
+- first: arm_5_link:0
+  second: arm_5_link:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_5_link; rigid self-contact is not a collision
+- first: arm_5_link:1
+  second: arm_5_link:2
+  reason: same_rigid_body
+  evidence: both primitives belong to URDF link arm_5_link; rigid self-contact is not a collision
+- first: TIAGo front arm:0
+  second: TIAGo front arm_3:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:0
+  second: TIAGo front arm_3:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:0
+  second: TIAGo front arm_3:2
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:0
+  second: TIAGo front arm_3:3
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:1
+  second: TIAGo front arm_3:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:1
+  second: TIAGo front arm_3:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:1
+  second: TIAGo front arm_3:2
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:1
+  second: TIAGo front arm_3:3
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:2
+  second: TIAGo front arm_3:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:2
+  second: TIAGo front arm_3:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:2
+  second: TIAGo front arm_3:2
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm:2
+  second: TIAGo front arm_3:3
+  reason: directly_jointed
+  evidence: links TIAGo front arm and TIAGo front arm_3 are joined by arm_1_joint; the joint frame is
+    shared
+- first: TIAGo front arm_3:0
+  second: arm_2_link:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:0
+  second: arm_2_link:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:1
+  second: arm_2_link:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:1
+  second: arm_2_link:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:2
+  second: arm_2_link:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:2
+  second: arm_2_link:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:3
+  second: arm_2_link:0
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: TIAGo front arm_3:3
+  second: arm_2_link:1
+  reason: directly_jointed
+  evidence: links TIAGo front arm_3 and arm_2_link are joined by arm_2_joint; the joint frame is shared
+- first: arm_2_link:0
+  second: arm_3_link:0
+  reason: directly_jointed
+  evidence: links arm_2_link and arm_3_link are joined by arm_3_joint; the joint frame is shared
+- first: arm_2_link:0
+  second: arm_3_link:1
+  reason: directly_jointed
+  evidence: links arm_2_link and arm_3_link are joined by arm_3_joint; the joint frame is shared
+- first: arm_2_link:1
+  second: arm_3_link:0
+  reason: directly_jointed
+  evidence: links arm_2_link and arm_3_link are joined by arm_3_joint; the joint frame is shared
+- first: arm_2_link:1
+  second: arm_3_link:1
+  reason: directly_jointed
+  evidence: links arm_2_link and arm_3_link are joined by arm_3_joint; the joint frame is shared
+- first: arm_3_link:0
+  second: arm_4_link:0
+  reason: directly_jointed
+  evidence: links arm_3_link and arm_4_link are joined by arm_4_joint; the joint frame is shared
+- first: arm_3_link:0
+  second: arm_4_link:1
+  reason: directly_jointed
+  evidence: links arm_3_link and arm_4_link are joined by arm_4_joint; the joint frame is shared
+- first: arm_3_link:1
+  second: arm_4_link:0
+  reason: directly_jointed
+  evidence: links arm_3_link and arm_4_link are joined by arm_4_joint; the joint frame is shared
+- first: arm_3_link:1
+  second: arm_4_link:1
+  reason: directly_jointed
+  evidence: links arm_3_link and arm_4_link are joined by arm_4_joint; the joint frame is shared
+- first: arm_4_link:0
+  second: arm_5_link:0
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_4_link:0
+  second: arm_5_link:1
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_4_link:0
+  second: arm_5_link:2
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_4_link:1
+  second: arm_5_link:0
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_4_link:1
+  second: arm_5_link:1
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_4_link:1
+  second: arm_5_link:2
+  reason: directly_jointed
+  evidence: links arm_4_link and arm_5_link are joined by arm_5_joint; the joint frame is shared
+- first: arm_5_link:0
+  second: arm_6_link:0
+  reason: directly_jointed
+  evidence: links arm_5_link and arm_6_link are joined by arm_6_joint; the joint frame is shared
+- first: arm_5_link:1
+  second: arm_6_link:0
+  reason: directly_jointed
+  evidence: links arm_5_link and arm_6_link are joined by arm_6_joint; the joint frame is shared
+- first: arm_5_link:2
+  second: arm_6_link:0
+  reason: directly_jointed
+  evidence: links arm_5_link and arm_6_link are joined by arm_6_joint; the joint frame is shared
+- first: arm_6_link:0
+  second: arm_7_link:0
+  reason: directly_jointed
+  evidence: links arm_6_link and arm_7_link are joined by arm_7_joint; the joint frame is shared
+- first: arm_7_link:0
+  second: wrist_ft_tool_link:0
+  reason: directly_jointed
+  evidence: links arm_7_link and wrist_ft_tool_link are joined by arm_7_link_wrist_ft_tool_link_joint;
+    the joint frame is shared
+- first: TIAGo front arm:0
+  second: arm_2_link:1
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.01548 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: TIAGo front arm:0
+  second: wrist_ft_tool_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.03987 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: TIAGo front arm_3:3
+  second: arm_3_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.02780 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: arm_5_link:0
+  second: wrist_ft_tool_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.00707 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: arm_5_link:1
+  second: arm_7_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.02454 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: arm_5_link:1
+  second: wrist_ft_tool_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.01030 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: arm_5_link:2
+  second: arm_7_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.06435 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+- first: arm_5_link:2
+  second: wrist_ft_tool_link:0
+  reason: urdf_volumes_intersect
+  evidence: minimum separation over the declared joint range is -0.03125 m (3^7 grid + 2000 seeded samples,
+    seed 20261119); the pinned collision volumes overlap somewhere in the legal workspace
+retained_pairs:
+- pair:
+  - TIAGo front arm_3:2
+  - arm_3_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: -0.031549
+  compatible_with_all_steps: false
+- pair:
+  - arm_6_link:0
+  - wrist_ft_tool_link:0
+  links:
+  - arm_6_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: -0.030749
+  compatible_with_all_steps: false
+- pair:
+  - arm_5_link:0
+  - arm_7_link:0
+  links:
+  - arm_5_link
+  - arm_7_link
+  worst_campaign_slack_m: -0.026294
+  compatible_with_all_steps: false
+- pair:
+  - TIAGo front arm:2
+  - arm_2_link:1
+  links:
+  - TIAGo front arm
+  - arm_2_link
+  worst_campaign_slack_m: -0.021381
+  compatible_with_all_steps: false
+- pair:
+  - arm_4_link:1
+  - wrist_ft_tool_link:0
+  links:
+  - arm_4_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: -0.010295
+  compatible_with_all_steps: false
+- pair:
+  - TIAGo front arm:1
+  - arm_2_link:1
+  links:
+  - TIAGo front arm
+  - arm_2_link
+  worst_campaign_slack_m: -0.008455
+  compatible_with_all_steps: false
+- pair:
+  - TIAGo front arm_3:1
+  - arm_3_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: -0.004354
+  compatible_with_all_steps: false
+- pair:
+  - TIAGo front arm:0
+  - arm_2_link:0
+  links:
+  - TIAGo front arm
+  - arm_2_link
+  worst_campaign_slack_m: -0.002406
+  compatible_with_all_steps: false
+- pair:
+  - TIAGo front arm:2
+  - arm_2_link:0
+  links:
+  - TIAGo front arm
+  - arm_2_link
+  worst_campaign_slack_m: 0.000504
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - arm_5_link:0
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.014033
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - arm_5_link:0
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.016193
+  compatible_with_all_steps: true
+- pair:
+  - arm_4_link:1
+  - arm_6_link:0
+  links:
+  - arm_4_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.019372
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_3_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: 0.022162
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_2_link:0
+  links:
+  - TIAGo front arm
+  - arm_2_link
+  worst_campaign_slack_m: 0.02479
+  compatible_with_all_steps: true
+- pair:
+  - arm_4_link:1
+  - arm_7_link:0
+  links:
+  - arm_4_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.025256
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_3_link:0
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.029831
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_3_link:0
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.035721
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_3_link:0
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.066076
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - arm_5_link:1
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.079816
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - arm_5_link:1
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.082193
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_4_link:1
+  links:
+  - arm_2_link
+  - arm_4_link
+  worst_campaign_slack_m: 0.082896
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_4_link:0
+  links:
+  - arm_2_link
+  - arm_4_link
+  worst_campaign_slack_m: 0.084184
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_5_link:0
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.119275
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - arm_5_link:2
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.140694
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - arm_5_link:2
+  links:
+  - arm_3_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.143193
+  compatible_with_all_steps: true
+- pair:
+  - arm_4_link:0
+  - wrist_ft_tool_link:0
+  links:
+  - arm_4_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.152747
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_5_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.154111
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - wrist_ft_tool_link:0
+  links:
+  - arm_3_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.156082
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_5_link:1
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.156929
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_3_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: 0.159392
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_4_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.160915
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_4_link:1
+  links:
+  - arm_2_link
+  - arm_4_link
+  worst_campaign_slack_m: 0.161896
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_4_link:0
+  links:
+  - arm_2_link
+  - arm_4_link
+  worst_campaign_slack_m: 0.162974
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_4_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.162976
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_5_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.174204
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - wrist_ft_tool_link:0
+  links:
+  - arm_3_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.174876
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_3_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: 0.180005
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_5_link:0
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.181487
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_3_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: 0.181892
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_3_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_3_link
+  worst_campaign_slack_m: 0.1854
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_4_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.190129
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_5_link:2
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.198092
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_4_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.199494
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_5_link:2
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.200803
+  compatible_with_all_steps: true
+- pair:
+  - arm_4_link:0
+  - arm_6_link:0
+  links:
+  - arm_4_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.201908
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - arm_6_link:0
+  links:
+  - arm_3_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.203287
+  compatible_with_all_steps: true
+- pair:
+  - arm_4_link:0
+  - arm_7_link:0
+  links:
+  - arm_4_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.204751
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_5_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.205232
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:1
+  - arm_7_link:0
+  links:
+  - arm_3_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.206493
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_4_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.206706
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_4_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.206941
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_5_link:1
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.210013
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_4_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.218412
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - arm_6_link:0
+  links:
+  - arm_3_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.220983
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_3_link:1
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.221701
+  compatible_with_all_steps: true
+- pair:
+  - arm_3_link:0
+  - arm_7_link:0
+  links:
+  - arm_3_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.224529
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_4_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_4_link
+  worst_campaign_slack_m: 0.224634
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_5_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.228721
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_5_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.236779
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_7_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_7_link
+  worst_campaign_slack_m: 0.2374
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_4_link:0
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.237445
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - arm_6_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_6_link
+  worst_campaign_slack_m: 0.237677
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - wrist_ft_tool_link:0
+  links:
+  - arm_2_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.240196
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_5_link:2
+  links:
+  - arm_2_link
+  - arm_5_link
+  worst_campaign_slack_m: 0.242854
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:3
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm_3
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.244776
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_4_link:0
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.246201
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_6_link:0
+  links:
+  - arm_2_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.246927
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:0
+  - arm_7_link:0
+  links:
+  - arm_2_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.248313
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_3_link:1
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.250707
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_4_link:1
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.253689
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_4_link:1
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.256207
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_5_link:2
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.257155
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_5_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.264625
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_5_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.273264
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_3_link:1
+  links:
+  - TIAGo front arm
+  - arm_3_link
+  worst_campaign_slack_m: 0.281507
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_7_link:0
+  links:
+  - arm_2_link
+  - arm_7_link
+  worst_campaign_slack_m: 0.282223
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - arm_6_link:0
+  links:
+  - arm_2_link
+  - arm_6_link
+  worst_campaign_slack_m: 0.282457
+  compatible_with_all_steps: true
+- pair:
+  - arm_2_link:1
+  - wrist_ft_tool_link:0
+  links:
+  - arm_2_link
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.283532
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_4_link:0
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.28924
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_5_link:0
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.289459
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_4_link:1
+  links:
+  - TIAGo front arm
+  - arm_4_link
+  worst_campaign_slack_m: 0.291624
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_5_link:2
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.295757
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_6_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_6_link
+  worst_campaign_slack_m: 0.297344
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - arm_7_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_7_link
+  worst_campaign_slack_m: 0.297452
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:2
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm_3
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.300025
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_5_link:1
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.309238
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_5_link:1
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.319276
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_5_link:0
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.320066
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_5_link:0
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.330404
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm_3
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.336957
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_7_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_7_link
+  worst_campaign_slack_m: 0.338899
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:1
+  - arm_6_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_6_link
+  worst_campaign_slack_m: 0.338904
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_5_link:1
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.343929
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_5_link:2
+  links:
+  - TIAGo front arm_3
+  - arm_5_link
+  worst_campaign_slack_m: 0.345435
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_5_link:2
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.351581
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_5_link:1
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.361585
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_5_link:2
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.370815
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm_3
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.383935
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_6_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_6_link
+  worst_campaign_slack_m: 0.390591
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm_3:0
+  - arm_7_link:0
+  links:
+  - TIAGo front arm_3
+  - arm_7_link
+  worst_campaign_slack_m: 0.390717
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.392558
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_6_link:0
+  links:
+  - TIAGo front arm
+  - arm_6_link
+  worst_campaign_slack_m: 0.393355
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:2
+  - arm_7_link:0
+  links:
+  - TIAGo front arm
+  - arm_7_link
+  worst_campaign_slack_m: 0.393459
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_5_link:2
+  links:
+  - TIAGo front arm
+  - arm_5_link
+  worst_campaign_slack_m: 0.394629
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_7_link:0
+  links:
+  - TIAGo front arm
+  - arm_7_link
+  worst_campaign_slack_m: 0.399944
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - arm_6_link:0
+  links:
+  - TIAGo front arm
+  - arm_6_link
+  worst_campaign_slack_m: 0.402241
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:1
+  - wrist_ft_tool_link:0
+  links:
+  - TIAGo front arm
+  - wrist_ft_tool_link
+  worst_campaign_slack_m: 0.415027
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_7_link:0
+  links:
+  - TIAGo front arm
+  - arm_7_link
+  worst_campaign_slack_m: 0.431561
+  compatible_with_all_steps: true
+- pair:
+  - TIAGo front arm:0
+  - arm_6_link:0
+  links:
+  - TIAGo front arm
+  - arm_6_link
+  worst_campaign_slack_m: 0.432545
+  compatible_with_all_steps: true
+
+gripper_mount_pairs:
+- first: front:0
+  second: arm_5_link:1
+  max_campaign_clearance_m: 0.033725
+  max_campaign_clearance_step: episode-00:2
+- first: front:0
+  second: arm_5_link:2
+  max_campaign_clearance_m: 0.011507
+  max_campaign_clearance_step: episode-05:211
+- first: front:1
+  second: arm_5_link:2
+  max_campaign_clearance_m: 0.026906
+  max_campaign_clearance_step: episode-07:518
+- first: front:2
+  second: arm_5_link:2
+  max_campaign_clearance_m: 0.026906
+  max_campaign_clearance_step: episode-09:470
+- first: front:3
+  second: arm_5_link:2
+  max_campaign_clearance_m: 0.019400
+  max_campaign_clearance_step: episode-10:421
+- first: front:4
+  second: arm_5_link:2
+  max_campaign_clearance_m: 0.019184
+  max_campaign_clearance_step: episode-05:211
+- first: front:0
+  second: arm_6_link:0
+  max_campaign_clearance_m: 0.000000
+  max_campaign_clearance_step: episode-00:0
+- first: front:1
+  second: arm_6_link:0
+  max_campaign_clearance_m: 0.013605
+  max_campaign_clearance_step: episode-12:257
+- first: front:2
+  second: arm_6_link:0
+  max_campaign_clearance_m: 0.013604
+  max_campaign_clearance_step: episode-04:266
+- first: front:3
+  second: arm_6_link:0
+  max_campaign_clearance_m: 0.006725
+  max_campaign_clearance_step: episode-17:333
+- first: front:4
+  second: arm_6_link:0
+  max_campaign_clearance_m: 0.006725
+  max_campaign_clearance_step: episode-17:333
+- first: front:0
+  second: arm_7_link:0
+  max_campaign_clearance_m: 0.000000
+  max_campaign_clearance_step: episode-00:0
+- first: front:1
+  second: arm_7_link:0
+  max_campaign_clearance_m: 0.002558
+  max_campaign_clearance_step: episode-17:333
+- first: front:2
+  second: arm_7_link:0
+  max_campaign_clearance_m: 0.002557
+  max_campaign_clearance_step: episode-11:221
+- first: front:3
+  second: arm_7_link:0
+  max_campaign_clearance_m: 0.000000
+  max_campaign_clearance_step: episode-00:0
+- first: front:4
+  second: arm_7_link:0
+  max_campaign_clearance_m: 0.000000
+  max_campaign_clearance_step: episode-00:0

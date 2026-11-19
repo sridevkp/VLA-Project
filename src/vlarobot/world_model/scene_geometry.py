@@ -296,6 +296,10 @@ class SceneCollisionCatalog:
                     "name": box.name,
                     "center_base": list(box.center_base),
                     "half_base": list(box.half_base),
+                    "axes_base": (
+                        None if box.axes_base is None else [list(row) for row in box.axes_base]
+                    ),
+                    "half_extents": (None if box.half_extents is None else list(box.half_extents)),
                     "source": box.source,
                 }
                 for box in self.geometry.boxes
@@ -463,6 +467,10 @@ def load_scene_collision_catalog(path: Path) -> SceneCollisionCatalog:
                 _array3(center_base, "static box center_base"),
                 _array3(half_base, "static box half_base"),
                 _text(box["source"], "static box source"),
+                axes_base=tuple(
+                    _array3(rotation_base[:, index], "static box axis") for index in range(3)
+                ),
+                half_extents=_array3(size / 2.0, "static box half_extents"),
             )
         )
     if not boxes:

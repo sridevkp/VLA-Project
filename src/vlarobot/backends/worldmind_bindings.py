@@ -17,7 +17,7 @@ import json
 import math
 import os
 import xml.etree.ElementTree as ET
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
@@ -70,16 +70,31 @@ from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 from vlarobot.execution.scripted_chunk_adapter import ScriptedWaypoint
 from vlarobot.planning.verification import PlacementVerifier
 from vlarobot.vla.action_adapter import PoseSolution
-from vlarobot.world_model.arm_geometry import Capsule, StaticSceneGeometry
+from vlarobot.world_model.arm_geometry import (
+    BoxPrimitive,
+    Capsule,
+    ExactSweptArmCheck,
+    StaticSceneGeometry,
+)
 from vlarobot.world_model.arm_sweep import (
     ArmSweepContract,
     IntermediateSweptArmCheck,
     SweepGeometryError,
+    _rpy_axes,
+    interpolate_world_states,
+    urdf_collision_boxes,
     urdf_collision_capsules,
 )
 from vlarobot.world_model.kinematic import MemoizedForward, VelocityLimitedKinematics
 from vlarobot.world_model.rollout import AnalyticSurrogate, compose, rotate
 from vlarobot.world_model.scene_geometry import load_scene_collision_catalog
+from vlarobot.world_model.self_collision import (
+    GripperMountExclusion,
+    NarrowedSelfCollisionManifest,
+    SelfCollisionExclusion,
+    build_self_collision_coverage,
+    validate_narrowed_manifest,
+)
 
 CORRECTED_REGISTRATION_RELATIVE = Path("calibration") / "urdf-base-train-v1.yaml"
 CORRECTED_REGISTRATION_SHA256 = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
@@ -1241,7 +1256,10 @@ UNVERIFIED_LINK_FRAMES: Mapping[str, str] = {
     "arm_5_link": "arm_5_joint",
     "arm_6_link": "arm_6_joint",
     "arm_7_link": "arm_7_joint",
-    "wrist_ft_tool_link": "wrist_ft_tool_link_front_joint",
+    # The URDF link ``wrist_ft_tool_link`` is placed by ``arm_7_link_wrist_ft_tool_link_joint``.
+    # ``wrist_ft_tool_link_front_joint`` is the *child* fixed joint that adds the +16 mm
+    # ``front`` origin; using it here double-counted that offset (ADR-0061).
+    "wrist_ft_tool_link": "arm_7_link_wrist_ft_tool_link_joint",
 }
 
 
@@ -1326,6 +1344,818 @@ def unverified_urdf_sweep_check(
             substeps=substeps,
             permitted_contact_objects=frozenset(permitted_contact_objects),
         ),
+    )
+
+
+"""Narrowed Packet-B diagnostic scope: pinned exclusion manifest and exact swept check.
+
+Everything below is **diagnostic**. It loads a pinned, owner-reviewable partition of the
+enumerated arm capsule pairs and builds a checker that measures exact separations with one
+application of each bound term. It never certifies motion, never changes the shipped
+``status: blocked`` contract, and is not reachable from ``production_worldmind_bindings()``.
+"""
+
+PACKET_B_MANIFEST_SCHEMA_VERSION = 1
+PACKET_B_MANIFEST_PATH = (
+    SETTINGS_PATH.parent / "geometry" / "packet-b-exclusions-v1.yaml"
+).resolve()
+PACKET_B_GRIPPER_LINKS = (
+    "front",
+    "gripper_right_finger_link",
+    "gripper_left_finger_link",
+)
+
+
+def _packet_b_count(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SweepGeometryError(f"{name} must be a nonnegative integer")
+    return value
+
+
+def _packet_b_positive_int(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SweepGeometryError(f"{name} must be a positive integer")
+    return value
+
+
+def _packet_b_finite(value: object, name: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SweepGeometryError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number) or (positive and number <= 0.0):
+        raise SweepGeometryError(f"{name} must be finite" + (" and positive" if positive else ""))
+    return number
+
+
+@dataclass(frozen=True)
+class PacketBManifest:
+    """Verified contents of ``packet-b-exclusions-v1.yaml``; a proposal, not a certificate."""
+
+    source_path: Path
+    source_sha256: str
+    urdf_path: Path
+    urdf_sha256: str
+    margin_m: float
+    motion_m: float
+    error_m: float
+    substeps: int
+    speed_bound_m_s: float
+    dt_s: float
+    episodes: int
+    steps: int
+    evidence_dir: str
+    manifest: NarrowedSelfCollisionManifest
+    gripper_mount_pairs: tuple[GripperMountExclusion, ...]
+    counts: Mapping[str, int]
+    uncovered_collision_bodies: tuple[str, ...]
+    joint_limits: Mapping[str, tuple[float, float]]
+
+    @property
+    def required_separation_m(self) -> float:
+        return self.margin_m + self.motion_m + self.error_m
+
+    @property
+    def compatible_pairs(self) -> tuple[tuple[str, str], ...]:
+        return self.manifest.compatible_pairs
+
+    @property
+    def rejected_pairs(self) -> tuple[tuple[str, str], ...]:
+        return self.manifest.rejected_pairs
+
+    @property
+    def exclusions(self) -> tuple[SelfCollisionExclusion, ...]:
+        return self.manifest.exclusions
+
+    def report(self) -> dict[str, object]:
+        return {
+            "schema_version": PACKET_B_MANIFEST_SCHEMA_VERSION,
+            "status": "diagnostic_proposal",
+            "classification": "not_a_motion_certificate",
+            "manifest": str(self.source_path),
+            "manifest_sha256": self.source_sha256,
+            "source_urdf": str(self.urdf_path),
+            "source_urdf_sha256": self.urdf_sha256,
+            "required_separation_m": self.required_separation_m,
+            "allowance": {
+                "margin_m": self.margin_m,
+                "motion_m": self.motion_m,
+                "error_m": self.error_m,
+                "substeps": self.substeps,
+                "speed_bound_m_s": self.speed_bound_m_s,
+                "dt_s": self.dt_s,
+            },
+            "counts": dict(self.counts),
+            "campaign": {
+                "episodes": self.episodes,
+                "steps": self.steps,
+                "evidence_dir": self.evidence_dir,
+            },
+            "compatible_pairs": [list(pair) for pair in self.compatible_pairs],
+            "rejected_pairs": [list(pair) for pair in self.rejected_pairs],
+            "exclusions": [
+                {
+                    "first": item.first,
+                    "second": item.second,
+                    "reason": item.reason,
+                    "evidence": item.evidence,
+                }
+                for item in self.exclusions
+            ],
+            "gripper_mount_pairs": [
+                {
+                    "first": item.first,
+                    "second": item.second,
+                    "max_campaign_clearance_m": item.max_campaign_clearance_m,
+                    "max_campaign_clearance_step": item.max_campaign_clearance_step,
+                }
+                for item in self.gripper_mount_pairs
+            ],
+            "uncovered_collision_bodies": list(self.uncovered_collision_bodies),
+            "coverage_statement": (
+                "checks the 109 retained arm capsule pairs, the pinned static boxes, the two "
+                "floor planes and the carried object; does not cover the "
+                f"{len(self.uncovered_collision_bodies)} URDF collision bodies without arm "
+                "capsules, wheel/ground contact or full-body dynamics"
+            ),
+        }
+
+
+def load_packet_b_manifest(path: Path = PACKET_B_MANIFEST_PATH) -> PacketBManifest:
+    """Load and structurally verify the narrowed-exclusion manifest.
+
+    The manifest is accepted only when it is an exact partition of the enumerated arm capsule
+    pairs, every exclusion reason matches the pinned URDF structure, and the recorded counts
+    agree with the data. A malformed or partial manifest raises instead of silently weakening
+    the checked set.
+    """
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"packet B manifest not found: {source}")
+    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
+    root = _sweep_mapping(raw, "packet B manifest")
+    _sweep_keys(
+        root,
+        frozenset(
+            {
+                "schema_version",
+                "status",
+                "source_urdf",
+                "source_urdf_sha256",
+                "witness_sampling",
+                "allowance",
+                "counts",
+                "campaign",
+                "exclusions",
+                "retained_pairs",
+                "gripper_mount_pairs",
+            }
+        ),
+        "packet B manifest",
+    )
+    if root["schema_version"] != PACKET_B_MANIFEST_SCHEMA_VERSION:
+        raise SweepGeometryError("unsupported packet B manifest schema_version")
+    if _sweep_text(root["status"], "status") != "diagnostic_proposal":
+        raise SweepGeometryError("packet B manifest must stay a diagnostic_proposal")
+
+    urdf_path = _sweep_path(root["source_urdf"], "source_urdf", source)
+    if not urdf_path.is_file():
+        raise SweepGeometryError("packet B source URDF is missing")
+    urdf_sha = _sweep_sha(root["source_urdf_sha256"], "source_urdf_sha256")
+    if _sha256_file(urdf_path) != urdf_sha:
+        raise SweepGeometryError("packet B source URDF hash does not match the manifest")
+
+    witness = _sweep_mapping(root["witness_sampling"], "witness_sampling")
+    _sweep_keys(
+        witness,
+        frozenset({"joint_limits", "grid_points", "random_points", "seed"}),
+        "witness_sampling",
+    )
+    raw_limits = _sweep_mapping(witness["joint_limits"], "witness_sampling.joint_limits")
+    if set(raw_limits) != set(ARM_JOINTS):
+        raise SweepGeometryError("witness joint limits must cover exactly the seven arm joints")
+    joint_limits: dict[str, tuple[float, float]] = {}
+    for name in ARM_JOINTS:
+        bounds = raw_limits[name]
+        if not isinstance(bounds, Sequence) or isinstance(bounds, (str, bytes)) or len(bounds) != 2:
+            raise SweepGeometryError(f"witness joint limits for {name} must be two numbers")
+        lower = _packet_b_finite(bounds[0], f"witness_sampling.{name}[0]")
+        upper = _packet_b_finite(bounds[1], f"witness_sampling.{name}[1]")
+        if lower >= upper:
+            raise SweepGeometryError(f"witness joint limits for {name} are not increasing")
+        joint_limits[name] = (lower, upper)
+    _packet_b_positive_int(witness["grid_points"], "witness_sampling.grid_points")
+    _packet_b_positive_int(witness["random_points"], "witness_sampling.random_points")
+    if isinstance(witness["seed"], bool) or not isinstance(witness["seed"], int):
+        raise SweepGeometryError("witness_sampling.seed must be an integer")
+
+    allowance = _sweep_mapping(root["allowance"], "allowance")
+    _sweep_keys(
+        allowance,
+        frozenset({"margin_m", "motion_m", "error_m", "substeps", "speed_bound_m_s", "dt_s"}),
+        "allowance",
+    )
+    margin = _packet_b_finite(allowance["margin_m"], "allowance.margin_m", positive=True)
+    motion = _packet_b_finite(allowance["motion_m"], "allowance.motion_m", positive=True)
+    error = _packet_b_finite(allowance["error_m"], "allowance.error_m", positive=True)
+    speed = _packet_b_finite(
+        allowance["speed_bound_m_s"], "allowance.speed_bound_m_s", positive=True
+    )
+    dt_s = _packet_b_finite(allowance["dt_s"], "allowance.dt_s", positive=True)
+    substeps = _packet_b_positive_int(allowance["substeps"], "allowance.substeps")
+    expected_motion = speed * dt_s / substeps
+    if not math.isclose(motion, expected_motion, rel_tol=0.0, abs_tol=1e-9):
+        raise SweepGeometryError("allowance.motion_m does not equal speed_bound_m_s*dt_s/substeps")
+
+    campaign = _sweep_mapping(root["campaign"], "campaign")
+    _sweep_keys(campaign, frozenset({"episodes", "steps", "evidence_dir"}), "campaign")
+    episodes = _packet_b_positive_int(campaign["episodes"], "campaign.episodes")
+    steps = _packet_b_positive_int(campaign["steps"], "campaign.steps")
+    evidence_dir = _sweep_text(campaign["evidence_dir"], "campaign.evidence_dir")
+
+    raw_exclusions = root["exclusions"]
+    if not isinstance(raw_exclusions, Sequence) or isinstance(raw_exclusions, (str, bytes)):
+        raise SweepGeometryError("exclusions must be a list")
+    exclusions: list[SelfCollisionExclusion] = []
+    for index, value in enumerate(raw_exclusions):
+        row = _sweep_mapping(value, f"exclusions[{index}]")
+        _sweep_keys(
+            row,
+            frozenset({"first", "second", "reason", "evidence"}),
+            f"exclusions[{index}]",
+        )
+        exclusions.append(
+            SelfCollisionExclusion(
+                _sweep_text(row["first"], "exclusion.first"),
+                _sweep_text(row["second"], "exclusion.second"),
+                _sweep_text(row["reason"], "exclusion.reason"),
+                _sweep_text(row["evidence"], "exclusion.evidence"),
+            )
+        )
+
+    coverage = build_self_collision_coverage(
+        urdf_path, UNVERIFIED_ARM_LINKS, max_point_speed_m_s=speed
+    )
+    same_link = {frozenset(pair) for pair in coverage.same_link_capsule_pairs}
+    adjacent = {frozenset(pair) for pair in coverage.adjacent_capsule_pairs}
+    non_adjacent = {frozenset(pair) for pair in coverage.non_adjacent_capsule_pairs}
+    for item in exclusions:
+        if item.reason == "same_rigid_body" and item.pair not in same_link:
+            raise SweepGeometryError(f"exclusion {item.first}|{item.second} is not same-body")
+        if item.reason == "directly_jointed" and item.pair not in adjacent:
+            raise SweepGeometryError(f"exclusion {item.first}|{item.second} is not adjacent")
+        if item.reason in {"urdf_volumes_intersect", "parallel_linkage"}:
+            if item.pair not in non_adjacent:
+                raise SweepGeometryError(
+                    f"exclusion {item.first}|{item.second} is not a non-adjacent pair"
+                )
+
+    raw_retained = root["retained_pairs"]
+    if not isinstance(raw_retained, Sequence) or isinstance(raw_retained, (str, bytes)):
+        raise SweepGeometryError("retained_pairs must be a list")
+    capsule_link = {
+        primitive.capsule.name: link
+        for link, primitives in urdf_collision_capsules(
+            urdf_path, UNVERIFIED_ARM_LINKS, max_point_speed_m_s=speed
+        ).items()
+        for primitive in primitives
+    }
+    retained: list[tuple[str, str]] = []
+    compatible: list[tuple[str, str]] = []
+    rejected: list[tuple[str, str]] = []
+    for index, value in enumerate(raw_retained):
+        row = _sweep_mapping(value, f"retained_pairs[{index}]")
+        _sweep_keys(
+            row,
+            frozenset({"pair", "links", "worst_campaign_slack_m", "compatible_with_all_steps"}),
+            f"retained_pairs[{index}]",
+        )
+        pair = row["pair"]
+        links = row["links"]
+        if (
+            not isinstance(pair, Sequence)
+            or isinstance(pair, (str, bytes))
+            or len(pair) != 2
+            or not isinstance(links, Sequence)
+            or isinstance(links, (str, bytes))
+            or len(links) != 2
+        ):
+            raise SweepGeometryError(f"retained_pairs[{index}] must name a pair and two links")
+        first = _sweep_text(pair[0], "retained pair")
+        second = _sweep_text(pair[1], "retained pair")
+        if {capsule_link.get(first), capsule_link.get(second)} != {
+            _sweep_text(links[0], "retained link"),
+            _sweep_text(links[1], "retained link"),
+        }:
+            raise SweepGeometryError(f"retained_pairs[{index}] links do not match the capsules")
+        _packet_b_finite(row["worst_campaign_slack_m"], "worst_campaign_slack_m")
+        if not isinstance(row["compatible_with_all_steps"], bool):
+            raise SweepGeometryError("compatible_with_all_steps must be a boolean")
+        retained.append((first, second))
+        (compatible if row["compatible_with_all_steps"] else rejected).append((first, second))
+
+    required_separation = margin + motion + error
+    front_solids = {
+        box.name
+        for box in urdf_collision_boxes(
+            urdf_path,
+            ("front",),
+            max_point_speed_m_s=speed,
+            clearance_by_link={"front": margin},
+        )["front"]
+    }
+    raw_mounts = root["gripper_mount_pairs"]
+    if not isinstance(raw_mounts, Sequence) or isinstance(raw_mounts, (str, bytes)):
+        raise SweepGeometryError("gripper_mount_pairs must be a list")
+    mount_exclusions: list[GripperMountExclusion] = []
+    seen_mounts: set[frozenset[str]] = set()
+    for index, value in enumerate(raw_mounts):
+        row = _sweep_mapping(value, f"gripper_mount_pairs[{index}]")
+        _sweep_keys(
+            row,
+            frozenset(
+                {
+                    "first",
+                    "second",
+                    "max_campaign_clearance_m",
+                    "max_campaign_clearance_step",
+                }
+            ),
+            f"gripper_mount_pairs[{index}]",
+        )
+        item = GripperMountExclusion(
+            _sweep_text(row["first"], "gripper mount first"),
+            _sweep_text(row["second"], "gripper mount second"),
+            _packet_b_finite(row["max_campaign_clearance_m"], "max_campaign_clearance_m"),
+            _sweep_text(row["max_campaign_clearance_step"], "max_campaign_clearance_step"),
+        )
+        if item.pair in seen_mounts:
+            raise SweepGeometryError(
+                f"duplicate gripper-mount exclusion {item.first}|{item.second}"
+            )
+        seen_mounts.add(item.pair)
+        if item.first not in front_solids:
+            raise SweepGeometryError(f"{item.first} is not an enumerated front solid")
+        if capsule_link.get(item.second) is None:
+            raise SweepGeometryError(f"{item.second} is not an enumerated arm capsule")
+        if float(item.max_campaign_clearance_m) >= required_separation:
+            raise SweepGeometryError(
+                f"gripper-mount exclusion {item.first}|{item.second} is satisfiable in the "
+                "recorded campaign and must stay retained"
+            )
+        witness = _sweep_text(row["max_campaign_clearance_step"], "max step")
+        try:
+            episode_name, step_text = witness.split(":")
+            step_value = int(step_text)
+        except ValueError:
+            raise SweepGeometryError(
+                f"gripper-mount witness {witness!r} must be 'episode-NN:step'"
+            ) from None
+        if not episode_name.startswith("episode-") or step_value < 0:
+            raise SweepGeometryError(f"gripper-mount witness {witness!r} is malformed")
+        suffix = episode_name[len("episode-") :]
+        if not suffix.isdigit() or int(suffix) >= episodes:
+            raise SweepGeometryError(
+                f"gripper-mount witness {witness!r} is outside the pinned "
+                f"{episodes}-episode campaign"
+            )
+        if step_value >= steps:
+            raise SweepGeometryError(
+                f"gripper-mount witness {witness!r} exceeds the pinned {steps} recorded steps"
+            )
+        mount_exclusions.append(item)
+    if not mount_exclusions:
+        raise SweepGeometryError("gripper_mount_pairs may not be empty")
+
+    narrowed = NarrowedSelfCollisionManifest(
+        source_sha256=urdf_sha,
+        exclusions=tuple(exclusions),
+        retained_pairs=tuple(retained),
+        compatible_pairs=tuple(compatible),
+        rejected_pairs=tuple(rejected),
+    )
+    validate_narrowed_manifest(coverage, narrowed)
+
+    raw_counts = _sweep_mapping(root["counts"], "counts")
+    _sweep_keys(
+        raw_counts,
+        frozenset(
+            {
+                "capsules",
+                "pairs",
+                "same_rigid_body",
+                "directly_jointed",
+                "urdf_volumes_intersect",
+                "retained",
+                "retained_compatible_with_all_steps",
+                "retained_rejected_at_some_step",
+                "gripper_mount",
+            }
+        ),
+        "counts",
+    )
+    counts = {name: _packet_b_count(raw_counts[name], f"counts.{name}") for name in raw_counts}
+    expected_counts = {
+        "capsules": len(coverage.capsule_names),
+        "pairs": len(coverage.all_capsule_pairs),
+        "same_rigid_body": sum(1 for item in exclusions if item.reason == "same_rigid_body"),
+        "directly_jointed": sum(1 for item in exclusions if item.reason == "directly_jointed"),
+        "urdf_volumes_intersect": sum(
+            1 for item in exclusions if item.reason == "urdf_volumes_intersect"
+        ),
+        "retained": len(retained),
+        "retained_compatible_with_all_steps": len(compatible),
+        "retained_rejected_at_some_step": len(rejected),
+        "gripper_mount": len(mount_exclusions),
+    }
+    if counts != expected_counts:
+        raise SweepGeometryError(
+            f"manifest counts do not match the verified partition: {counts} != {expected_counts}"
+        )
+    if counts["retained"] != counts["capsules"] * (counts["capsules"] - 1) // 2 - len(exclusions):
+        raise SweepGeometryError("retained count is inconsistent with the capsule-pair total")
+
+    return PacketBManifest(
+        source_path=source,
+        source_sha256=_sha256_file(source),
+        urdf_path=urdf_path,
+        urdf_sha256=urdf_sha,
+        margin_m=margin,
+        motion_m=motion,
+        error_m=error,
+        substeps=substeps,
+        speed_bound_m_s=speed,
+        dt_s=dt_s,
+        episodes=episodes,
+        steps=steps,
+        evidence_dir=evidence_dir,
+        manifest=narrowed,
+        gripper_mount_pairs=tuple(mount_exclusions),
+        counts=MappingProxyType(counts),
+        uncovered_collision_bodies=coverage.uncovered_collision_bodies,
+        joint_limits=MappingProxyType(joint_limits),
+    )
+
+
+def _quaternion_rotation(quaternion: object) -> np.ndarray:
+    values = np.asarray(quaternion, dtype=float)
+    if values.shape != (4,) or not np.isfinite(values).all():
+        raise SweepGeometryError("invalid end-effector quaternion")
+    if not math.isclose(float(values @ values), 1.0, abs_tol=1e-8):
+        raise SweepGeometryError("end-effector quaternion is not unit length")
+    return np.column_stack([rotate(values, axis) for axis in np.eye(3)])
+
+
+@lru_cache(maxsize=1)
+def _packet_b_finger_specs() -> Mapping[str, tuple[np.ndarray, np.ndarray]]:
+    """Return ``link -> (joint-origin rotation, unit slide axis)`` from the pinned URDF."""
+    root = ET.parse(URDF_PATH).getroot()
+    wanted = {
+        "gripper_right_finger_joint": "gripper_right_finger_link",
+        "gripper_left_finger_joint": "gripper_left_finger_link",
+    }
+    specs: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for joint in root.findall("joint"):
+        name = joint.attrib.get("name")
+        if name not in wanted:
+            continue
+        parent = joint.find("parent")
+        child = joint.find("child")
+        if parent is None or child is None or parent.attrib.get("link") != "front":
+            raise SweepGeometryError("gripper finger joints must be children of 'front'")
+        if child.attrib.get("link") != wanted[name]:
+            raise SweepGeometryError("gripper finger joint child link does not match")
+        origin = joint.find("origin")
+        rpy = (0.0, 0.0, 0.0)
+        if origin is not None:
+            rpy = tuple(float(value) for value in origin.attrib.get("rpy", "0 0 0").split())
+        axis_element = joint.find("axis")
+        if axis_element is None:
+            raise SweepGeometryError("gripper finger joint is missing its axis")
+        axis = np.asarray([float(value) for value in axis_element.attrib["xyz"].split()])
+        norm = float(np.linalg.norm(axis))
+        if axis.shape != (3,) or not np.isfinite(norm) or norm <= 0.0:
+            raise SweepGeometryError("invalid gripper finger slide axis")
+        specs[wanted[name]] = (_rpy_axes(rpy), axis / norm)
+    if set(specs) != set(PACKET_B_GRIPPER_LINKS) - {"front"}:
+        raise SweepGeometryError("gripper finger joint coverage is incomplete")
+    return MappingProxyType(specs)
+
+
+@lru_cache(maxsize=1)
+def _packet_b_link_adjacency() -> frozenset[frozenset[str]]:
+    """Direct parent/child link pairs among the arm and gripper links."""
+    root = ET.parse(URDF_PATH).getroot()
+    links = set(UNVERIFIED_ARM_LINKS) | set(PACKET_B_GRIPPER_LINKS)
+    pairs: set[frozenset[str]] = set()
+    for joint in root.findall("joint"):
+        parent = joint.find("parent")
+        child = joint.find("child")
+        if parent is None or child is None:
+            continue
+        first, second = parent.attrib.get("link"), child.attrib.get("link")
+        if first in links and second in links:
+            pairs.add(frozenset((first, second)))
+    return frozenset(pairs)
+
+
+def _gripper_box_geometry(
+    boxes: Mapping[str, tuple[BoxPrimitive, ...]],
+) -> tuple[Callable[[WorldState], tuple[BoxPrimitive, ...]], tuple[str, ...]]:
+    """Build the state-dependent gripper box pose function and its primitive names."""
+    specs = _packet_b_finger_specs()
+    front_offset = -np.asarray(SETTINGS.tool_offset, dtype=float)
+
+    def geometry(state: WorldState) -> tuple[BoxPrimitive, ...]:
+        ee = state.robot.ee_pose
+        rotation = _quaternion_rotation(ee.orientation)
+        opening = float(state.robot.gripper_opening)
+        if not math.isfinite(opening):
+            raise SweepGeometryError("nonfinite gripper opening")
+        front_center = ee.position.as_array() + rotation @ front_offset
+        poses: dict[str, tuple[np.ndarray, np.ndarray]] = {
+            "front": (rotation, np.asarray(front_center))
+        }
+        for link, (joint_rotation, axis) in specs.items():
+            link_rotation = rotation @ joint_rotation
+            poses[link] = (
+                link_rotation,
+                np.asarray(front_center) + link_rotation @ (opening * axis),
+            )
+        result: list[BoxPrimitive] = []
+        for link, (link_rotation, center) in poses.items():
+            for box in boxes[link]:
+                shifted = center + link_rotation @ np.asarray(box.center)
+                axes = np.asarray(box.axes) @ link_rotation.T
+                result.append(
+                    BoxPrimitive(
+                        name=box.name,
+                        body=box.body,
+                        center=tuple(float(value) for value in shifted),
+                        axes=tuple(tuple(float(value) for value in row) for row in axes),
+                        half_extents=box.half_extents,
+                        max_point_speed_m_s=box.max_point_speed_m_s,
+                        clearance_m=box.clearance_m,
+                    )
+                )
+        return tuple(result)
+
+    names = tuple(sorted(box.name for group in boxes.values() for box in group))
+    return geometry, names
+
+
+def _packet_b_structural_exclusions(
+    boxes: Mapping[str, tuple[BoxPrimitive, ...]],
+    capsule_links: Mapping[str, str],
+    gripper_mount_pairs: Collection[frozenset[str]] = (),
+) -> tuple[frozenset[frozenset[str]], tuple[SelfCollisionExclusion, ...]]:
+    """Exclude only structurally impossible gripper/arm pairs, with recorded reasons.
+
+    Four reasons are produced, strongest first so a pair is never described by a weaker one:
+
+    ``same_rigid_body``
+        Two collision solids of the same URDF link.
+    ``directly_jointed``
+        One URDF joint between the two links (including a fixed joint).
+    ``parallel_linkage``
+        The two gripper fingers, which are children of ``front`` on parallel prismatic axes.
+    ``gripper_mount``
+        A ``front`` housing solid against an arm capsule that belongs to the same wrist
+        assembly. Only the pairs pinned in ``gripper_mount_pairs`` are removed, and the
+        manifest loader accepts a pair only when its measured maximum clearance over the whole
+        recorded campaign is below the required separation. Every other ``front`` pair stays
+        vetoed.
+    """
+    adjacency = _packet_b_link_adjacency()
+    pinned = frozenset(gripper_mount_pairs)
+    exclusions: dict[frozenset[str], SelfCollisionExclusion] = {}
+    by_link = {link: [box.name for box in group] for link, group in boxes.items()}
+    links = list(by_link)
+
+    def record(first: str, second: str, reason: str, evidence: str) -> None:
+        exclusions.setdefault(
+            frozenset((first, second)), SelfCollisionExclusion(first, second, reason, evidence)
+        )
+
+    for first in links:
+        names = by_link[first]
+        for index, first_name in enumerate(names):
+            for second_name in names[index + 1 :]:
+                record(
+                    first_name,
+                    second_name,
+                    "same_rigid_body",
+                    f"both gripper boxes are collision solids of URDF link {first}",
+                )
+    for index, first in enumerate(links):
+        for second in links[index + 1 :]:
+            if frozenset((first, second)) in adjacency:
+                reason = "directly_jointed"
+                evidence = f"{first} and {second} are connected by one URDF joint"
+            elif {first, second} == {
+                "gripper_right_finger_link",
+                "gripper_left_finger_link",
+            }:
+                reason = "parallel_linkage"
+                evidence = (
+                    "both fingers are children of 'front' and slide on parallel prismatic "
+                    "axes; the closed URDF gap is 0.0004 m, below any usable margin, and their "
+                    "relative motion is one bounded axis"
+                )
+            else:
+                continue
+            for first_name in by_link[first]:
+                for second_name in by_link[second]:
+                    record(first_name, second_name, reason, evidence)
+    for box_name, box_link in ((box.name, link) for link in links for box in boxes[link]):
+        for capsule_name, capsule_link in capsule_links.items():
+            if frozenset((box_link, capsule_link)) in adjacency:
+                record(
+                    box_name,
+                    capsule_name,
+                    "directly_jointed",
+                    f"{box_link} and {capsule_link} are connected by one URDF joint",
+                )
+            elif box_link == "front" and frozenset((box_name, capsule_name)) in pinned:
+                record(
+                    box_name,
+                    capsule_name,
+                    "gripper_mount",
+                    "front housing solid against a capsule of the same wrist assembly, which "
+                    "is bolted to 'front' across two fixed joints; the measured maximum "
+                    "clearance over all 13,766 recorded configurations stays below the "
+                    "required separation, so no recorded expert pose could satisfy the check",
+                )
+    return frozenset(exclusions), tuple(exclusions.values())
+
+
+@dataclass(frozen=True)
+class PacketBNarrowedSweepCheck:
+    """Diagnostic exact swept check over the pinned narrowed pair set.
+
+    ``evaluate`` deliberately does **not** consult the blocked contract's certified inequality.
+    It interpolates like the production path, applies the recorded substep allowance and returns
+    ``True``/``False``/``None`` with the exact checker's semantics. That makes the compatibility
+    regression possible without pretending the motion bound is certified.
+    """
+
+    inner: ExactSweptArmCheck
+    substeps: int
+    manifest: PacketBManifest
+    contact_primitive_names: tuple[str, ...]
+    contact_object_ids: frozenset[str]
+    contact_permitted: Callable[[WorldState], bool] | None
+    structural_exclusions: tuple[SelfCollisionExclusion, ...]
+
+    def _permitted_contact(self, state: WorldState) -> Mapping[str, frozenset[str]]:
+        if self.contact_permitted is None or not self.contact_object_ids:
+            return {}
+        if self.contact_permitted(state) is not True:
+            return {}
+        return {name: self.contact_object_ids for name in self.contact_primitive_names}
+
+    def evaluate(self, before: WorldState, after: WorldState) -> bool | None:
+        """Return clearance verdict for one control interval; never raises on bad geometry."""
+        if not isinstance(before, WorldState) or not isinstance(after, WorldState):
+            return None
+        try:
+            states = interpolate_world_states(before, after, self.substeps)
+        except SweepGeometryError:
+            return None
+        for first, second in zip(states[:-1], states[1:], strict=True):
+            self.inner.permitted_contact = dict(self._permitted_contact(first))
+            value = self.inner(first, second)
+            if value is not True:
+                return value
+        self.inner.permitted_contact = {}
+        return True
+
+    def report(self) -> dict[str, object]:
+        return {
+            "schema_version": PACKET_B_MANIFEST_SCHEMA_VERSION,
+            "status": "diagnostic_proposal",
+            "classification": "not_a_certificate",
+            "manifest": self.manifest.report(),
+            "substeps": self.substeps,
+            "required_separation_m": self.manifest.required_separation_m,
+            "structural_exclusions": [
+                {
+                    "first": item.first,
+                    "second": item.second,
+                    "reason": item.reason,
+                    "evidence": item.evidence,
+                }
+                for item in self.structural_exclusions
+            ],
+            "contact_policy": {
+                "primitive_names": list(self.contact_primitive_names),
+                "object_ids": sorted(self.contact_object_ids),
+                "predicate_present": self.contact_permitted is not None,
+            },
+            "semantics": (
+                "exact separation; required = max(clearance) + max(speed)*dt_sub + error; "
+                "returns None when any required input is missing, False on a violation"
+            ),
+        }
+
+
+def packet_b_narrowed_sweep_check(
+    manifest: PacketBManifest,
+    *,
+    scene: StaticSceneGeometry,
+    expected_base_pose_world: Pose3D | None = None,
+    required_object_ids: frozenset[str] = frozenset(),
+    contact_object_ids: frozenset[str] = frozenset(),
+    contact_permitted: Callable[[WorldState], bool] | None = None,
+) -> PacketBNarrowedSweepCheck:
+    """Build the narrowed diagnostic checker; never used by the scored production path."""
+    if not isinstance(manifest, PacketBManifest):
+        raise SweepGeometryError("packet B builder requires a loaded manifest")
+    if not isinstance(scene, StaticSceneGeometry):
+        raise SweepGeometryError("packet B builder requires pinned scene geometry")
+    if set(contact_object_ids) - set(required_object_ids):
+        raise SweepGeometryError("permitted-contact objects must also be required objects")
+    if set(UNVERIFIED_LINK_FRAMES) != set(UNVERIFIED_ARM_LINKS):
+        raise SweepGeometryError("arm link/frame coverage is incomplete")
+    kinematics = corrected_kinematics()
+    frames: dict[str, int] = {}
+    for link, joint in UNVERIFIED_LINK_FRAMES.items():
+        if joint not in kinematics.idx:
+            raise SweepGeometryError(f"missing IKPy frame for {link}")
+        frames[link] = kinematics.idx[joint]
+    primitives = urdf_collision_capsules(
+        URDF_PATH, UNVERIFIED_ARM_LINKS, max_point_speed_m_s=manifest.speed_bound_m_s
+    )
+    required_links = tuple(
+        sorted(
+            primitive.capsule.name
+            for link in UNVERIFIED_ARM_LINKS
+            for primitive in primitives[link]
+        )
+    )
+    boxes = urdf_collision_boxes(
+        URDF_PATH,
+        PACKET_B_GRIPPER_LINKS,
+        max_point_speed_m_s=manifest.speed_bound_m_s,
+        clearance_by_link={link: manifest.margin_m for link in PACKET_B_GRIPPER_LINKS},
+    )
+    box_geometry, box_names = _gripper_box_geometry(boxes)
+    capsule_link = {
+        primitive.capsule.name: link
+        for link in UNVERIFIED_ARM_LINKS
+        for primitive in primitives[link]
+    }
+    structural_pairs, structural_records = _packet_b_structural_exclusions(
+        boxes,
+        capsule_link,
+        frozenset(item.pair for item in manifest.gripper_mount_pairs),
+    )
+    excluded = frozenset(manifest.manifest.excluded_pairs() | structural_pairs)
+
+    def geometry(state: WorldState) -> tuple[Capsule, ...]:
+        transforms = _link_transforms(kinematics, state.robot.joint_pos)
+        if len(transforms) <= max(frames.values()):
+            raise SweepGeometryError("FK returned incomplete link transforms")
+        result: list[Capsule] = []
+        for link in UNVERIFIED_ARM_LINKS:
+            matrix = transforms[frames[link]]
+            for primitive in primitives[link]:
+                result.append(_transformed_capsule(primitive.capsule, matrix))
+        return tuple(result)
+
+    contact_names = tuple(
+        box_name
+        for group in boxes.values()
+        for box_name in (box.name for box in group)
+        if box_name.startswith(("gripper_left_finger_link:", "gripper_right_finger_link:"))
+    )
+    inner = ExactSweptArmCheck(
+        geometry,
+        box_geometry=box_geometry,
+        excluded_self_pairs=excluded,
+        permitted_contact=None,
+        error_allowance_m=manifest.error_m,
+        required_links=required_links,
+        required_objects=frozenset(required_object_ids),
+        scene_complete=True,
+        dt_s=manifest.dt_s / manifest.substeps,
+        margin_m=manifest.margin_m,
+        adjacent_pairs=frozenset(),
+        permitted_contact_objects=frozenset(),
+        scene=scene,
+        expected_base_pose_world=expected_base_pose_world,
+    )
+    if set(inner.required) != set(required_links):
+        raise SweepGeometryError("capsule coverage does not match the required links")
+    if set(box_names) & set(required_links):
+        raise SweepGeometryError("gripper box names collide with arm capsule names")
+    return PacketBNarrowedSweepCheck(
+        inner=inner,
+        substeps=manifest.substeps,
+        manifest=manifest,
+        contact_primitive_names=contact_names,
+        contact_object_ids=frozenset(contact_object_ids),
+        contact_permitted=contact_permitted,
+        structural_exclusions=structural_records,
     )
 
 

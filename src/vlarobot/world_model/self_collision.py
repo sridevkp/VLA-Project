@@ -212,3 +212,117 @@ __all__ = [
     "urdf_collision_body_names",
     "validate_contract_pair_coverage",
 ]
+
+
+EXCLUSION_REASONS: frozenset[str] = frozenset(
+    {
+        "same_rigid_body",
+        "directly_jointed",
+        "urdf_volumes_intersect",
+        "parallel_linkage",
+        "gripper_mount",
+    }
+)
+
+
+@dataclass(frozen=True)
+class SelfCollisionExclusion:
+    """One pair removed from the hard-checked set, with a reason and recorded evidence."""
+
+    first: str
+    second: str
+    reason: str
+    evidence: str
+
+    def __post_init__(self) -> None:
+        for name in (self.first, self.second):
+            if not isinstance(name, str) or not name or ":" not in name:
+                raise SweepGeometryError("exclusion names must be URDF collision capsule ids")
+        if self.first == self.second:
+            raise SweepGeometryError("an exclusion needs two distinct capsules")
+        if self.reason not in EXCLUSION_REASONS:
+            raise SweepGeometryError(f"unsupported exclusion reason: {self.reason}")
+        if not isinstance(self.evidence, str) or not self.evidence.strip():
+            raise SweepGeometryError("every exclusion needs recorded evidence")
+
+    @property
+    def pair(self) -> frozenset[str]:
+        return frozenset((self.first, self.second))
+
+
+@dataclass(frozen=True)
+class GripperMountExclusion:
+    """A `front` housing solid and an arm capsule that describe one wrist assembly.
+
+    The pair is pinned as excluded only when the measured maximum clearance over the whole
+    recorded campaign is below the required separation: no recorded expert configuration could
+    ever satisfy the check, so the requirement describes the design gap between parts of the
+    same end-effector assembly rather than a collision the arm avoided.
+    """
+
+    first: str
+    second: str
+    max_campaign_clearance_m: float
+    max_campaign_clearance_step: str
+
+    def __post_init__(self) -> None:
+        for name in (self.first, self.second):
+            if not isinstance(name, str) or not name or ":" not in name:
+                raise SweepGeometryError("gripper-mount names must be URDF collision ids")
+        if not self.first.startswith("front:"):
+            raise SweepGeometryError("gripper-mount exclusions must start from a front solid")
+        if self.first == self.second:
+            raise SweepGeometryError("a gripper-mount exclusion needs two distinct solids")
+        if isinstance(self.max_campaign_clearance_m, bool) or not math.isfinite(
+            float(self.max_campaign_clearance_m)
+        ):
+            raise SweepGeometryError("gripper-mount clearance must be a finite measurement")
+        if float(self.max_campaign_clearance_m) < 0.0:
+            raise SweepGeometryError("gripper-mount clearance must be nonnegative")
+        witness = self.max_campaign_clearance_step
+        if not isinstance(witness, str) or not witness.startswith("episode-") or ":" not in witness:
+            raise SweepGeometryError("gripper-mount witness must be 'episode-NN:step'")
+
+    @property
+    def pair(self) -> frozenset[str]:
+        return frozenset((self.first, self.second))
+
+
+@dataclass(frozen=True)
+class NarrowedSelfCollisionManifest:
+    """Pinned partition of every enumerated arm capsule pair into excluded and retained."""
+
+    source_sha256: str
+    exclusions: tuple[SelfCollisionExclusion, ...]
+    retained_pairs: tuple[tuple[str, str], ...]
+    compatible_pairs: tuple[tuple[str, str], ...]
+    rejected_pairs: tuple[tuple[str, str], ...]
+
+    def excluded_pairs(self) -> frozenset[frozenset[str]]:
+        return frozenset(exclusion.pair for exclusion in self.exclusions)
+
+
+def validate_narrowed_manifest(
+    coverage: SelfCollisionCoverage, manifest: NarrowedSelfCollisionManifest
+) -> tuple[tuple[str, str], ...]:
+    """Return the retained pairs, or raise if the manifest is not an exact partition.
+
+    The manifest may only remove pairs that the coverage module already enumerates, and it must
+    account for every pair exactly once. A missing pair is a coverage bug, so it fails closed.
+    """
+    all_pairs = {frozenset(pair) for pair in coverage.all_capsule_pairs}
+    excluded = manifest.excluded_pairs()
+    retained = {frozenset(pair) for pair in manifest.retained_pairs}
+    if len(excluded) != len(manifest.exclusions):
+        raise SweepGeometryError("duplicate exclusion pairs")
+    if excluded & retained:
+        raise SweepGeometryError("a pair cannot be both excluded and retained")
+    if excluded | retained != all_pairs:
+        raise SweepGeometryError("manifest does not partition every enumerated capsule pair")
+    for pair in manifest.compatible_pairs:
+        if frozenset(pair) not in retained:
+            raise SweepGeometryError("compatible pair is not retained")
+    for pair in manifest.rejected_pairs:
+        if frozenset(pair) not in retained:
+            raise SweepGeometryError("rejected pair is not retained")
+    return tuple(sorted(tuple(sorted(pair)) for pair in retained))

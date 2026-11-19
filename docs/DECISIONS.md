@@ -2438,3 +2438,89 @@ byte-identical and `FAILED`; motion remains `NO-GO` / `NOT_READY`.
   `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
   frozen-helper hash mismatch. Live Webots verification of the repaired path still requires a new
   explicit read-only authorization and a single attempt with a new output path.
+
+## ADR-0061 — Narrowed, measured Packet-B collision scope (diagnostic only) (2026-11-19)
+
+**Status:** Diagnostic proposal. Adds an offline, explicitly diagnostic checker and a pinned
+exclusion manifest; it certifies nothing, activates nothing, and does not change the shipped
+`status: blocked` sweep contract, the `full_system` veto, the `0.0001 m/rad` tolerances, the seeds
+or the TEST seal. No Webots launch, actuation, physics step, IK solve, calibration, scoring or
+TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_system` stays gated.
+
+- **Frame defect found while measuring:** `UNVERIFIED_LINK_FRAMES["wrist_ft_tool_link"]` named
+  `wrist_ft_tool_link_front_joint`, which places the *child* `front` link. The URDF places
+  `wrist_ft_tool_link` with `arm_7_link_wrist_ft_tool_link_joint`, so the mapping double-counted the
+  16 mm wrist→front offset in every wrist capsule. Corrected mapping: `wrist_ft_tool_link` →
+  `arm_7_link_wrist_ft_tool_link_joint`. This is a measurement correction inside the diagnostic
+  path; the shipped checker still uses the pinned contract and stays blocked.
+- **Table geometry correction:** the shipped `StaticBox` for the table is a base-frame AABB of a
+  world-axis-aligned table. Its top is `0.722153468 m`; the exact oriented box gives
+  `0.658885820 m` in the base frame, i.e. the AABB is inflated by `63.27 mm` along the base `z`
+  axis. The catalog now carries the exact oriented box (`axes_base`, `half_extents`) alongside the
+  unchanged AABB, so diagnostics can use exact distances without changing shipped behaviour. With
+  the exact box and a full sweep of all 18 episodes / `13,766` steps, the tightest gripper-box/table
+  clearance is `0.053529841 m` at `episode-11:253` (`gripper_right_finger_link:0`), and every arm
+  capsule keeps an AABB lower bound of at least `0.148097 m` from the table (tightest at
+  `episode-06:306`; the exact distance there is `0.317494 m`), against a required separation of
+  `0.039807 m`. The recorded task therefore clears the table by about `13.7 mm` at the fingertip and
+  by more than `108 mm` for every capsule. The earlier "2.82 mm" figure is an AABB *lower bound*
+  on the distance from a gripper box to the exact oriented box, not a measured clearance; the
+  earlier `0.053881 m` / `0.066083 m` pair is withdrawn — both were gripper-box-scale values that
+  this sweep does not reproduce (the same witness steps now measure `0.053986 m` and
+  `0.054121 m`), and neither was a capsule/table distance.
+- **Speed-bound derivation gap (kept, not silently changed):** the pinned
+  `speed_bound_m_s = 28.49316700274912` cannot be reproduced from repository URDF values; the
+  largest joint rate `2.35 rad/s` times the longest measured arm radius of `1.13913 m` gives
+  `≈2.677 m/s`, about `10.6×` smaller. The pinned value is retained because it is the value the
+  contract already declares and because a smaller bound would strengthen the check without an
+  approved derivation. Diagnostics label this term as pinned-but-underived; fixing the derivation
+  is an open owner decision.
+- **Capsule-pair partition (measured, not assumed):** the 19 pinned arm capsules enumerate
+  `171` pairs. Removed: `15` same-rigid-body, `39` directly-jointed (one URDF joint), `8` whose
+  URDF collision volumes already intersect in the zero pose. Retained: `109`. Over all 18 recorded
+  episodes / `13,766` expert steps, `101` retained pairs stay above the required separation at
+  every recorded configuration and `8` do not. The `8` are genuine narrow-clearance pairs, not
+  structural duplicates: the worst is `arm_6_link:0 × wrist_ft_tool_link:0` with a minimum slack of
+  `-0.030749 m`.
+- **No positive control exists in the recorded data.** With the full retained set checked, `0` of
+  the `13,766` recorded steps pass, and `0` of them contain an actual capsule penetration. A search
+  over `15,710` candidates (recorded steps, consecutive midpoints, and four-step convex mixes) found
+  no passing configuration; the best worst-pair slack is `-0.030749 m` at
+  `episode-00` midpoint `192`. The accept path of the narrowed checker therefore can only be
+  exercised by an explicitly relaxed control clone, never by an expert transition. This is reported
+  as a scope limitation: the recorded expert campaign is **not** a positive control for the pinned
+  geometric allowance.
+- **Gripper-mount exclusion rule (measured, per pair):** a `front` housing solid against an arm
+  capsule is removed only when its *maximum* clearance over the whole recorded campaign is below
+  the required separation, i.e. when no recorded expert configuration could ever satisfy the
+  check. Measured over the `25` `front × wrist` pairs, `16` qualify and `9` do not. Removed pairs
+  are `front:0 × arm_5_link:1` (`0.033725 m`), all five `front:{0..4} × arm_5_link:2`
+  (`0.011507`–`0.026906 m`), all five `front:{0..4} × arm_6_link:0` (`0.000000`–`0.013605 m`) and
+  all five `front:{0..4} × arm_7_link:0` (`0.000000`–`0.002558 m`). Retained (still vetoed) are
+  `front:{0..4} × arm_5_link:0` (max `0.085725`–`0.095834 m`) and
+  `front:{1..4} × arm_5_link:1` (max `0.040725`–`0.043886 m`); their recorded minima are
+  `0.016501`–`0.032522 m`, so they continue to reject recorded configurations. Each pinned row
+  stores the witness `episode-NN:step` of its maximum, and a witness recomputed from the recorded
+  NPZ reproduces the pinned value to better than `1e-6 m` for all `16` rows.
+- **Structural exclusion totals:** `62` capsule/capsule + `76` gripper-box/arm-capsule = `138` of
+  the checked pairs, in five explicit reasons (`same_rigid_body` 16, `directly_jointed` 35,
+  `urdf_volumes_intersect` 8, `parallel_linkage` 9, `gripper_mount` 16). The manifest loader
+  rejects any unknown key, tampered count, mismatched URDF hash, re-derived reason, satisfiable
+  mount row, duplicate row, or witness outside the pinned campaign; a dropped mount row is safe by
+  construction (the pair returns to the vetoed set) and there is a test for that direction.
+- **Intentional contact stays phase-scoped:** the diagnostic checker leaves `permitted_contact`
+  as a caller-supplied predicate over `(primitive, object)` pairs. Only fingertip primitives can be
+  exempted from the CAN envelope, and only for the phase the caller declares; `front` and every arm
+  capsule remain vetoed against the CAN and every other object.
+- **Explicit uncovered scope:** `42` of the `61` URDF collision bodies have no arm capsule and are
+  not checked; wheel/ground contact, full-body dynamics, deformable contact and perception error
+  are outside this scope. The manifest report prints the coverage statement verbatim so no run can
+  cite this as full-body certification.
+- **Verification:** `tests/test_worldmind_packet_b_scope.py` pins the manifest partition and
+  tamper failure modes, the oriented-table values, the measured `101/8` campaign regression, the
+  `16` measured gripper-mount witnesses, the pinned table-margin witnesses
+  (`0.053530 m` gripper box, `0.148097 m` capsule lower bound), the strict rejection of a recorded
+  expert configuration, the relaxed control clone as the only observed accept path, a raised-table
+  fingertip-just-below-allowance rejection, a raised-table arm-capsule rejection, permitted and
+  forbidden CAN contact, `SafetyMonitor` joint-limit and velocity rejection, `None` for malformed
+  input, and the shipped blocked contract with empty production bindings.

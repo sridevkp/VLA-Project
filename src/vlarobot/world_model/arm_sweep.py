@@ -15,7 +15,7 @@ from __future__ import annotations
 import copy
 import math
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 
 from vlarobot.core.types import WorldState
-from vlarobot.world_model.arm_geometry import Capsule, SweptArmCheck
+from vlarobot.world_model.arm_geometry import BoxPrimitive, Capsule, SweptArmCheck
 
 
 class SweepGeometryError(ValueError):
@@ -422,6 +422,8 @@ class IntermediateSweptArmCheck:
         *,
         scene: Any = None,
         expected_base_pose_world: Any = None,
+        checker_cls: type = SweptArmCheck,
+        checker_kwargs: Mapping[str, Any] | None = None,
     ) -> None:
         self.contract = contract
         self.geometry = geometry
@@ -432,7 +434,7 @@ class IntermediateSweptArmCheck:
             if certified_substeps is not None and certified_substeps > self.substeps:
                 self.substeps = certified_substeps
                 self.safety_bound = contract.safety_bound(self.substeps)
-        self.inner = SweptArmCheck(
+        self.inner = checker_cls(
             geometry,
             required_links=contract.required_links,
             required_objects=contract.required_objects,
@@ -447,6 +449,7 @@ class IntermediateSweptArmCheck:
             registration_uncertainty_bound_m=contract.registration_uncertainty_bound_m or 0.0,
             numerical_error_bound_m=contract.numerical_error_bound_m or 0.0,
             transform_error_bound_m=contract.transform_error_bound_m or 0.0,
+            **(checker_kwargs or {}),
         )
 
     def safety_bound_report(self) -> dict[str, object]:
@@ -577,6 +580,100 @@ def urdf_collision_capsules(
                 max_point_speed_m_s=speed,
             )
             primitives.append(LinkCollisionPrimitive(capsule, shape.tag))
+        found[name] = tuple(primitives)
+    if set(found) != set(link_names):
+        raise SweepGeometryError("incomplete link geometry coverage")
+    return found
+
+
+def urdf_collision_boxes(
+    urdf_path: Path,
+    link_names: Sequence[str],
+    *,
+    max_point_speed_m_s: float,
+    clearance_by_link: Mapping[str, float],
+) -> dict[str, tuple[BoxPrimitive, ...]]:
+    """Exact oriented-box colliders for every supported URDF collision solid.
+
+    A ``box`` stays an oriented box. A ``cylinder`` becomes the box aligned with the cylinder
+    axis and circumscribing its circular cross-section (``2r x 2r x length``), which contains the
+    cylinder and therefore stays conservative while avoiding the large capsule radius that a
+    flat plate would otherwise carry. A ``sphere`` becomes its bounding cube. Unsupported shapes
+    raise :class:`SweepGeometryError`.
+
+    ``clearance_by_link`` must name every requested link; a missing entry fails closed rather
+    than defaulting to zero clearance.
+    """
+    speed = max_point_speed_m_s
+    if isinstance(speed, bool) or not isinstance(speed, (int, float)):
+        raise SweepGeometryError("point-speed certificate must be an explicit positive number")
+    speed = float(speed)
+    if not math.isfinite(speed) or speed <= 0.0:
+        raise SweepGeometryError("point-speed certificate must be positive and finite")
+    if not link_names:
+        raise SweepGeometryError("complete relevant link list required")
+    if set(clearance_by_link) != set(link_names):
+        raise SweepGeometryError("every box link needs an explicit clearance floor")
+    for name, value in clearance_by_link.items():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise SweepGeometryError(f"invalid clearance floor for {name}")
+    root = ET.parse(Path(urdf_path)).getroot()
+    found: dict[str, tuple[BoxPrimitive, ...]] = {}
+    for name in link_names:
+        link = root.find(f'./link[@name="{name}"]')
+        if link is None or link.findall("collision") == []:
+            raise SweepGeometryError(f"missing collision geometry for box link {name}")
+        primitives: list[BoxPrimitive] = []
+        for index, collision in enumerate(link.findall("collision")):
+            geometry = collision.find("geometry")
+            origin = collision.find("origin")
+            if geometry is None or origin is None:
+                raise SweepGeometryError(f"incomplete collision origin for {name}")
+            center = np.asarray(
+                [float(value) for value in origin.attrib.get("xyz", "0 0 0").split()],
+                dtype=np.float64,
+            )
+            rotation = _rpy_axes(
+                [float(value) for value in origin.attrib.get("rpy", "0 0 0").split()]
+            )
+            shapes = [child for child in geometry if child.tag in {"cylinder", "box", "sphere"}]
+            if len(shapes) != 1 or len(list(geometry)) != 1:
+                raise SweepGeometryError(f"unsupported collision geometry for {name}")
+            shape = shapes[0]
+            if shape.tag == "box":
+                dimensions = np.asarray(
+                    [float(value) for value in shape.attrib["size"].split()], dtype=np.float64
+                )
+                if dimensions.shape != (3,) or not np.all(dimensions > 0.0):
+                    raise SweepGeometryError(f"invalid box geometry for {name}")
+                half_extents = dimensions / 2.0
+            elif shape.tag == "cylinder":
+                radius = float(shape.attrib["radius"])
+                length = float(shape.attrib["length"])
+                if radius <= 0.0 or length <= 0.0:
+                    raise SweepGeometryError(f"invalid cylinder geometry for {name}")
+                half_extents = np.asarray((radius, radius, length / 2.0), dtype=np.float64)
+            else:
+                radius = float(shape.attrib["radius"])
+                if radius <= 0.0:
+                    raise SweepGeometryError(f"invalid sphere geometry for {name}")
+                half_extents = np.asarray((radius, radius, radius), dtype=np.float64)
+            box = BoxPrimitive(
+                name=f"{name}:{index}",
+                body=name,
+                center=tuple(float(value) for value in center),
+                axes=tuple(tuple(float(value) for value in row) for row in rotation.T),
+                half_extents=tuple(float(value) for value in half_extents),
+                max_point_speed_m_s=speed,
+                clearance_m=float(clearance_by_link[name]),
+            )
+            box.validate()
+            primitives.append(box)
         found[name] = tuple(primitives)
     if set(found) != set(link_names):
         raise SweepGeometryError("incomplete link geometry coverage")

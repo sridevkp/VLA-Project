@@ -186,6 +186,10 @@ Owner signature (A):
 
 ### 8.2 Packet B — the one safety-scope amendment (`full_system` only)
 
+> **Superseded as a proposal by §9 (2026-11-19).** The measured revision keeps most of the
+> geometric checks that this section removed and corrects the table top from `0.72215 m` (AABB) to
+> `0.65889 m` (exact). This section is retained for the audit trail only.
+
 This is an **applicability** amendment, not a weakening of the veto. `unverified-arm-sweep` stays
 hard and fail-closed for every claim outside the list below, and for every transition where the
 catalog, base pose, or required object is missing.
@@ -317,3 +321,129 @@ A signature on A + B + C produces, in one working session: the amended checker a
 13,766-transition test, ADR-0061, one v4 inspection attempt, and a ready-to-run preflight report.
 Nothing in this packet removes a hard veto, changes a frozen threshold, touches TEST/TRAIN, or
 authorizes actuation. The shipped sweep config stays `status: blocked` in every case.
+
+## 9. Narrowed Packet B (2026-11-19) — measured revision of §8.2
+
+§8.2 proposed replacing the geometric checks with a fingertip-only support predicate. Measured
+against the recorded expert campaign, that proposal removed checks that the recorded data does not
+support removing, and it mis-stated the table clearance because the shipped table box is an AABB
+of a world-axis-aligned table. This section replaces §8.2 as the Packet-B candidate for approval.
+It is narrower in what it removes, not weaker in what it keeps.
+
+**Status of the implementation:** offline and diagnostic. `ExactSweptArmCheck` and
+`packet_b_narrowed_sweep_check` are not reachable from `production_worldmind_bindings()`, the
+shipped `configs/worldmind_arm_sweep.yaml` stays `status: blocked`, `components={}` and
+`calibration_evaluators={}` stay empty, and `full_system` still vetoes every prediction with
+`unverified-arm-sweep`. ADR-0061 records the numerics.
+
+### 9.1 What is retained, modified and excluded
+
+| Element | §8.2 proposal | Narrowed revision (this section) |
+|---|---|---|
+| checked bodies | 19 arm capsules | **retained**: 19 arm capsules, `109` checked pairs (details below) |
+| checked statics | table box + 2 floor half-spaces | **retained**, but the table is now the exact oriented box (`top 0.658885820 m`, not the AABB `0.722153468 m`) |
+| arm–arm self-pairs | exempt, all pairs | **modified**: `62` structurally impossible pairs removed (`15` same-rigid-body, `39` one-joint adjacency, `8` URDF volumes that already intersect), `109` retained and checked |
+| arm–gripper self-pairs | exempt, all pairs | **modified**: only `16` measured-unsatisfiable `front` housing pairs removed; `9` `front × wrist` pairs and every finger pair stay checked |
+| gripper vs table | exempt, fingertip predicate replaces it | **excluded**: the `0.1 m` gripper envelope is not used; the exact URDF gripper boxes are checked against the exact table box at the same `0.039807 m` separation |
+| CAN | exempt for every capsule | **modified**: finger primitives only, and only while a caller-declared phase predicate permits it; `front` and all arm capsules stay vetoed |
+| base-pose gate | `0.003 m` / `0.005 rad` | unchanged |
+| certificate | new displacement/reach/speed terms | **not proposed**: no certificate is asserted; the pinned speed value is labelled underived |
+
+Pair accounting: `171` enumerated capsule pairs = `15` + `39` + `8` + `109`; gripper boxes add
+`5 × 19 = 95` box/capsule pairs (`76` removed, `19` retained). The manifest is a pinned partition
+and the loader fails closed on any tampering, unknown key, duplicate row, missing witness or
+inconsistent count.
+
+### 9.2 Evidence for each exclusion
+
+| Reason | Count | Evidence (measured, not assumed) |
+|---|---|---|
+| `same_rigid_body` | 15 capsule + 16 box | both primitives belong to one URDF link; rigid self-contact cannot be a collision |
+| `directly_jointed` | 39 capsule + 35 box | exactly one URDF joint between the links, including fixed joints |
+| `urdf_volumes_intersect` | 8 capsule | the two URDF collision volumes intersect in the zero pose |
+| `parallel_linkage` | 9 box | both fingers are children of `front` on parallel prismatic axes; closed gap `0.0004 m` |
+| `gripper_mount` | 16 box | maximum recorded clearance over all `13,766` steps stays below `0.039807 m`, with the argmax witness pinned per row |
+
+The `gripper_mount` rule is deliberately per pair. `front:0 × arm_5_link:1` is removed at a measured
+maximum of `0.033725 m`; `front:{1..4} × arm_5_link:1` reach `0.040725`–`0.043886 m` and are **not**
+removed, and all five `front × arm_5_link:0` pairs reach `0.085725`–`0.095834 m` and stay checked.
+Their campaign minima are `0.016501`–`0.032522 m`, so they still veto recorded configurations.
+
+### 9.3 Positive and negative test results
+
+Positive (accept) path:
+
+- The only observed accept path is an explicitly labelled control clone that removes exactly the
+  pairs a given state violates. The strict checker rejects that same state. No shipped code path
+  contains that relaxation.
+- Recomputing each of the `16` pinned `gripper_mount` witnesses from the recorded NPZ reproduces
+  the pinned maximum to better than `1e-6 m`.
+
+Negative (reject) path, all asserted in `tests/test_worldmind_packet_b_scope.py`:
+
+- tool/gripper below the permitted table clearance — raising the table until the tightest fingertip
+  sits `0.02 m` above it (touching nothing) still rejects, with every arm capsule left above
+  `0.039807 m`; the recorded campaign itself measures `0.053530 m` at the tightest
+  gripper-box/table pair (`episode-11:253`) and an AABB lower bound of at least `0.148097 m` for
+  every capsule/table pair (`episode-06:306`);
+- arm capsule intersecting the table — the raised-table capsule case is rejected;
+- unintended CAN contact at a `1 mm` gap from a fingertip is rejected, and the same state is
+  accepted only when the phase predicate permits fingertips;
+- joint-limit and joint-velocity violations are rejected by `SafetyMonitor` with the effective
+  URDF limits;
+- missing or non-finite input returns `None` (fail-closed), never `True`;
+- a genuine non-adjacent capsule violation is represented by the `8` retained pairs that reject
+  recorded steps, e.g. `arm_6_link:0 × wrist_ft_tool_link:0` at `-0.030749 m` slack.
+
+Not available: a recorded **passing** expert transition. With the pinned allowance, `0 / 13,766`
+steps pass and `0` of them are true penetrations, and no passing configuration exists in the
+`15,710`-candidate searched neighbourhood. The strict checker's accept path is therefore exercised
+only by the labelled control clone. This is a limitation of the evidence, not a property of the
+checker, and it is why this remains a diagnostic proposal rather than a certificate.
+
+### 9.4 Scientific definitions still needing approval
+
+1. The Eq. 3.8 component formulas, units and normalization (verbal form approved; the numeric
+   contract is not).
+2. The weights and ranking direction for those components.
+3. The calibration evaluator and the evidence it must emit.
+4. Table 5.1 units and metric taxonomy.
+5. The derivation of `speed_bound_m_s`: the pinned `28.493167 m/s` is `≈10.6×` larger than the
+   repo-URDF bound `2.35 rad/s × 1.13913 m ≈ 2.677 m/s`. Approval is needed for either keeping the
+   pinned value as a deliberately conservative bound or replacing it with a derived one.
+6. Whether `full_system` execution requires an approval of this narrowed scope at all, or whether
+   `unverified-arm-sweep` should stay a hard veto for the whole arm.
+
+Explicitly **not** claimed: a calibrated uncertainty model (the implemented quantity is a
+prediction-discrepancy proxy), zero geometric error, a certified displacement bound, or full-body
+safety certification (`42` of `61` URDF collision bodies have no arm capsule and are unchecked).
+
+### 9.5 Remaining prerequisites for controlled VALIDATION
+
+1. Owner signs Packet A (in substance) and resolves items 1–4 of §9.4.
+2. Owner signs this narrowed Packet B, or signs the narrower option of keeping every pair checked
+   and reporting `full_system` as blocked.
+3. Packet C read-only inspection runs once and returns `PASS` with
+   `observation_age_s <= 5.0` at consumption, so runtime table grounding is measured rather than
+   inferred.
+4. A `status: ready` config with populated `components` and `calibration_evaluators`, plus the
+   calibration evidence and approved candidate.
+5. `run_worldmind_preflight` green: `split`, `state_source`, `fresh_output`, `config`,
+   `backend_declaration`, `report_definitions`, `bindings`, `calibration`, `frozen_plan`,
+   `runtime_geometry`.
+6. Explicit run authorization for the frozen five-arm VALIDATION (`18` episodes, seeds `[0,1,2]`,
+   `K=32`, `H=50`, `dt=0.032`), with a running `sim-server`.
+7. Separate authorization for the sealed TEST window (`2026-12-05..07`); it is not implied by any
+   of the above.
+
+### 9.6 Earliest realistic first scored episode
+
+Given the measured schedule: if A and B are signed on `2026-11-20`, B's implementation is already
+in place and testable offline, C needs one authorized attempt, and the ready config plus
+calibration evidence need owner review, the earliest realistic *first scored episode* is
+`2026-11-25`. The two non-predicting arms (`scripted_baseline`, `vla_only`) need only items 2–6;
+`vla_risk_veto` and `vla_world_model` additionally need the Eq. 3.8 numeric contract (item 1) and
+stay at `2026-11-25` only if that is signed on `2026-11-20`, otherwise later. `full_system` stays
+gated by `unverified-arm-sweep` and has no earliest date until Packet B or the narrower fallback is
+signed. The full five-arm VALIDATION block needs the approved config; the TEST window is
+`2026-12-05..07` and remains sealed.

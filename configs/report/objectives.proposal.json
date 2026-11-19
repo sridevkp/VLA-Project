@@ -99,7 +99,23 @@
     "fail_closed": "rejects unapproved evidence, tampered source hashes, TEST/TRAIN paths, non-finite scores, unpermitted parameter keys, empty candidate grids and any missing binding",
     "prohibition": "the selection statistic is not an independent estimate of post-calibration performance and does not fix the numeric weights; weights and ranking direction stay VALIDATION-selected and owner-approved"
   },
-  "review_status": "engineering_proposal_not_approved",
+  "owner_decision": {
+    "date": "2026-11-19",
+    "experimental_specification_approved": true,
+    "scope": [
+      "Jg and Jl",
+      "Jr uncertified tool-envelope proxy with CAN contact penalized",
+      "Ju predicted command-following consistency, not calibrated uncertainty",
+      "hard-veto precedence and MissingObjectiveInput fail-closed",
+      "Table 5.1 conventions in definitions.candidate.json",
+      "four-stage VALIDATION calibration procedure"
+    ],
+    "numeric_parameters_selected": false,
+    "calibration_candidate_selected": false,
+    "scored_validation_authorized": false,
+    "note": "Approval is scientific only. Components remain not report quotations; bindings, weights, scales, thresholds and scored execution stay disabled."
+  },
+  "review_status": "owner_approved_experimental_specification_not_report_quotation",
   "scored_execution_enabled": false,
   "selection_rule": "registered_evaluator_max_score_then_candidate_id"
 }

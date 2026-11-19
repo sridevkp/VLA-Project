@@ -4,6 +4,56 @@
 
 **Primary packet:** `docs/WORLDMIND_OWNER_REVIEW_PACKET_2026-11-18.md` (`be8f22a`).
 
+## 0. Owner decision record (2026-11-19)
+
+- **Scientific contract accepted:** commit `b8ee4a0` is accepted as the experimental specification:
+  `Jg` and `Jl` as proposed; `Jr` as an uncertified tool-envelope geometric-risk proxy with
+  intentional CAN contact penalized; `Ju` as predicted command-following consistency, not calibrated
+  uncertainty; hard-veto precedence and fail-closed missing-input behaviour; the proposed Table 5.1
+  metric conventions; and the four-stage VALIDATION calibration procedure.
+- **Numeric parameters remain unselected:** this approval does not select weights, normalization
+  scales, or a calibration candidate. They must follow the approved calibration procedure and
+  evidence requirements. `scored_execution_enabled` stays false and scientific registries stay empty.
+- **Packet B not approved:** the narrowed sweep checker stays diagnostic-only, the pinned
+  `speed_bound_m_s = 28.49316700274912` is unchanged, and `full_system` keeps its hard veto.
+- **Packet C authorized:** exactly one read-only v4 Webots inspection using the §8.3 command and
+  output path. No stepping, reset, IK, actuation, scoring, or retry is authorized. Evidence is
+  preserved on failure.
+- **Packet D not authorized:** no scored VALIDATION run begins without a separate owner signature.
+  TRAIN/TEST stay sealed and the frozen five-arm design is unchanged.
+
+### 0.1 Packet C execution outcome (single attempt, 2026-11-19)
+
+The one authorized §8.3 read-only v4 inspection was executed once and **FAILED**. No retry was made
+and the evidence directory `runs/worldmind/geometry-inspection-v4-2026-11-19/` is preserved
+byte-identical (`diagnostic.json`, `worldmind-webots-geometry-inspection.log`).
+
+- Root blocker: `TimeoutError: Simulator did not reply to 'inspect_geometry' within 30000 ms`
+  after two unanswered `ping`s (5000 ms each); `shutdown` also timed out. Runtime geometry remains
+  **unverified**.
+- Read-only attestation held: `outcome=FAILED`, `motion_allowed=false`, `motion_readiness=NOT_READY`,
+  `backend_apply_calls=0`, `backend_step_calls=0`, `backend_reset_calls=0`,
+  `backend_inspect_geometry_calls=0`, `scored_results_written=false`, `test_split_accessed=false`,
+  `train_split_accessed=false`, `frozen_campaign_modified=false`.
+- No geometry conclusion is drawn from this failed attempt; the geometry investigation is not
+  reopened and no scored VALIDATION is implied.
+
+### 0.2 Remaining production-preflight blockers (enumeration, read-only)
+
+`run_worldmind_preflight` on `configs/worldmind_production.yaml` (`validation`/`webots`/`oracle`)
+is **not ready**; it short-circuits at the first gate. Downstream blockers, confirmed read-only:
+
+- **config:** `worldmind production config is blocked; reviewed status must be 'ready'` — every
+  scientific/owner-decision field is still an `<OWNER_DECISION: ...>` placeholder.
+- **bindings:** `components={}`, `calibration_evaluators={}`, `waypoint_sets={}` in
+  `production_worldmind_bindings()`; `components.*` and
+  `calibration.evaluator_binding=registered_calibration_evaluator_v1` have no registered object.
+- **calibration:** no approved calibration candidate/evidence and no selected weights, scales,
+  margin or ranking direction; the four-stage VALIDATION procedure has not been run.
+- **runtime geometry:** `inspect_geometry` did not answer (§0.1), so backend runtime grounding is
+  absent.
+- **authorization:** Packet D (scored VALIDATION) not authorized; TRAIN/TEST remain sealed.
+
 ## 1. Eq. 3.8 objectives (`configs/report/objectives.proposal.json`)
 
 | Item | Existing evidence/status | Decision readiness |
@@ -216,9 +266,10 @@ following minimal amendment is in `configs/report/objectives.proposal.json` and 
 Owner signature (A amendment):
 
 ```
-  [ ] approve the decision-time Jr/Ju amendment above
+  [x] approve the decision-time Jr/Ju amendment above, together with Jg/Jl,
+      Table 5.1 conventions and the four-stage VALIDATION calibration procedure
   [ ] reject (state which component and why): ______________________________________
-  Name: ______________________  Date: __________
+  Name: Owner  Date: 2026-11-19
 ```
 
 ### 8.2 Packet B — the one safety-scope amendment (`full_system` only)
@@ -287,8 +338,8 @@ Acceptance (all required): `outcome=PASS`; `observation_valid=true`;
 kept byte-identical and nothing is re-run.
 
 ```
-Owner signature (C):  [ ] authorize one attempt at the command above, output path as written
-  Name: ______________________  Date: __________
+Owner signature (C):  [x] authorize one attempt at the command above, output path as written
+  Name: Owner  Date: 2026-11-19
 ```
 
 ### 8.4 Packet D — scored VALIDATION run (after A, B, C)

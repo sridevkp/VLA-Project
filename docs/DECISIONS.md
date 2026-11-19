@@ -2606,3 +2606,27 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   four components, fail-closed missing inputs, hard-veto precedence, and that future observations
   cannot alter a candidate score. The geometric investigation is not reopened; no scored execution
   is authorized.
+
+## ADR-0065 — Owner scientific approval and bounded Packet C authorization (2026-11-19)
+
+- **Scientific approval:** commit `b8ee4a0` is accepted as the experimental specification for Eq. 3.8
+  and the proposed Table 5.1 conventions, including the four-stage VALIDATION calibration
+  procedure. `Jg`/`Jl` are accepted; `Jr` is an uncertified tool-envelope proxy with intentional CAN
+  contact penalized; `Ju` is command-following consistency, not calibrated uncertainty; hard-veto
+  precedence and fail-closed missing inputs remain in force.
+- **Not selected:** no numeric weights, normalization scales, margin, or calibration candidate is
+  approved by this decision. Scientific bindings stay empty, `scored_execution_enabled` stays false,
+  and no scored VALIDATION or TEST access is authorized.
+- **Packet B:** not approved. The narrowed sweep checker stays diagnostic-only, the pinned
+  `speed_bound_m_s = 28.49316700274912` is unchanged, and `full_system` keeps its hard veto.
+- **Packet C:** exactly one read-only v4 Webots inspection is authorized with the §8.3 command and
+  output path. No stepping, reset, IK, actuation, scoring, or retry is authorized; evidence is kept
+  on failure. No push or merge is authorized.
+- **Packet C outcome (2026-11-19):** the single attempt FAILED — Webots did not reply to
+  `inspect_geometry` within 30000 ms; runtime geometry remains unverified. No retry was made and
+  `runs/worldmind/geometry-inspection-v4-2026-11-19/` is preserved byte-identical. The read-only
+  attestation held (no apply/step/reset/inspect-geometry calls, no scoring, no TEST/TRAIN access).
+- **Production preflight still blocked:** `configs/worldmind_production.yaml` is `blocked` with
+  `<OWNER_DECISION>` placeholders; components/calibration-evaluator/waypoint registries are empty;
+  no approved calibration candidate/evidence or selected numeric parameters; runtime geometry
+  unverified; no Packet D authorization. Scored VALIDATION remains unauthorized.

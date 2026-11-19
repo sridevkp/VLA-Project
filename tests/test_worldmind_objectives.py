@@ -426,7 +426,12 @@ def test_combine_respects_safety_precedence_and_ranking_direction():
 def test_proposal_artifact_is_not_owner_approved_and_not_scorable():
     path = Path(__file__).resolve().parents[1] / "configs" / "report" / "objectives.proposal.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["review_status"] == "engineering_proposal_not_approved"
+    approved_status = "owner_approved_experimental_specification_not_report_quotation"
+    assert payload["review_status"] == approved_status
+    assert payload["owner_decision"]["experimental_specification_approved"] is True
+    assert payload["owner_decision"]["numeric_parameters_selected"] is False
+    assert payload["owner_decision"]["calibration_candidate_selected"] is False
+    assert payload["owner_decision"]["scored_validation_authorized"] is False
     assert payload["scored_execution_enabled"] is False
     assert set(payload["components"]) == set(COMPONENT_NAMES)
     assert all(item["authoritative"] is False for item in payload["components"].values())

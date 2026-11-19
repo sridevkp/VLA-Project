@@ -184,6 +184,36 @@ Owner signature (A):
   Name: ______________________  Date: __________
 ```
 
+### 8.1a Packet A decision-time amendment — pending (2026-11-19)
+
+Packet A **as written is not approved**: its `Jr` input requires certified full-arm clearance that
+the shipped surrogate does not compute, and its `Ju` formula needs future observed states. The
+following minimal amendment is in `configs/report/objectives.proposal.json` and `src/vlarobot/eval/worldmind_objectives.py`; `Jg` and `Jl` are unchanged.
+
+- `Jr_soft = mean_k clip((m - tilde_d_k) / m, 0, 1)`, with `tilde_d_k < 0 -> 1`. Here
+  `tilde_d_k = min_o segmentBoxClearance(p_{k-1}, p_k, AABB_o(current), r_tool)`: the minimum exact
+  tool-sphere segment/AABB clearance over current observed object boxes and the predicted tool path.
+  It is an **uncertified geometric proxy**, not full-arm clearance and not a safety certificate.
+  Hard vetoes (`SafetyMonitor.validate`, `RiskGate`, `unverified-arm-sweep`) stay separate and
+  precedent; the soft score fails closed on incomplete scenes, missing geometry or truncated
+  predictions.
+- `Ju_consistency = mean_{i in C} r_i`, where `r_i` is the normalized command-vs-prediction residual
+  for EE position/orientation/gripper, `JointTarget` joints, or `GripperCmd` opening. Inputs are only
+  the current observation (identity alignment), the candidate `ActionChunk` and the predicted
+  `Trajectory`. No future observed state, correction residual, fabricated uncertainty or ensemble
+  is accepted; this is not calibrated uncertainty.
+- Nothing is activated: scientific registries stay empty, no weight/scale/threshold is selected,
+  `full_system` stays `blocked`, scored evaluation stays disabled, and approved VALIDATION
+  calibration still precedes any weight choice. ADR-0064 records this pending contract change.
+
+Owner signature (A amendment):
+
+```
+  [ ] approve the decision-time Jr/Ju amendment above
+  [ ] reject (state which component and why): ______________________________________
+  Name: ______________________  Date: __________
+```
+
 ### 8.2 Packet B — the one safety-scope amendment (`full_system` only)
 
 > **Superseded as a proposal by §9 (2026-11-19).** The measured revision keeps most of the

@@ -2573,3 +2573,27 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   block, the Webots/fake `measurement_class` distinction and the bounds in provenance;
   `tests/test_worldmind_objectives.py` still asserts no proposal component or evaluator is
   registered in scored bindings.
+
+## ADR-0064 — Decision-time amendment to Eq. 3.8 `Jr` and `Ju` (2026-11-19)
+
+- **Status:** proposal only, owner approval required. Packet A is **not** approved unchanged. No
+  component binding, weight, threshold, calibration candidate or scored run is activated.
+- **Unchanged:** `Jg` and `Jl` formulas and implementations are unchanged. Their production
+  availability was confirmed by the call-site audit. `MissingObjectiveInput` fail-closed, hard-veto
+  precedence (`SafetyMonitor.validate` + `RiskGate` + `unverified-arm-sweep`), empty scientific
+  registries, blocked `full_system`, sealed TEST window and frozen five-arm VALIDATION protocol all
+  remain in force. No weight or scale is selected before approved VALIDATION calibration.
+- **`Jr` contract change:** the old `d_min,k` required certified full-arm swept clearance that the
+  shipped surrogate does not produce. The amended soft score uses `tilde_d,k`, the minimum exact
+  segment/AABB distance from the predicted tool path to current observed object boxes minus a
+  declared tool-envelope radius. It is explicitly **uncertified** and is not a full-arm, contact or
+  self-collision certificate. Hard vetoes remain a separate, precedent gate; the proxy never vetoes
+  or offsets one and fails closed on incomplete scenes, absent geometry or truncated predictions.
+- **`Ju` contract change:** the old correction-residual formula required future observed states and
+  would leak them into candidate ranking. The amended score is a deterministic command-following
+  residual between candidate command fields and the predicted trajectory, aligned to the current
+  observation by object identity. It is not calibrated uncertainty and claims no ensemble.
+- **Verification:** `tests/test_worldmind_objectives.py` checks decision-time availability of all
+  four components, fail-closed missing inputs, hard-veto precedence, and that future observations
+  cannot alter a candidate score. The geometric investigation is not reopened; no scored execution
+  is authorized.

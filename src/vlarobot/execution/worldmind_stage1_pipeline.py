@@ -16,12 +16,13 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from pathlib import Path
 from time import perf_counter_ns
 from typing import Any, Literal
 
 from vlarobot.core.types import (
+    Action,
     GroundTruth,
     Observation,
     Pose3D,
@@ -42,9 +43,12 @@ from vlarobot.eval.decision_adapters import (
     wrap_execute_first,
 )
 from vlarobot.eval.decision_evidence import (
+    AppliedActionEvidence,
     CandidateDisposition,
     CandidateEvidence,
+    ChunkExecutionEvidence,
     DecisionEvidence,
+    ExecutionEvidence,
     HardCheckResult,
     PhaseTimings,
     VerificationEvidence,
@@ -86,8 +90,17 @@ from vlarobot.risk.gate import RecoveryState
 from vlarobot.world_model.rollout import Trajectory, compose
 
 Stage1ArmMode = Literal["full_system_veto", "scripted_proposer"]
+Stage1ExecutionMode = Literal["receding_horizon_tick", "diagnostic_open_loop_chunk"]
 
 STAGE1_ARM_MODES: tuple[Stage1ArmMode, ...] = ("full_system_veto", "scripted_proposer")
+STAGE1_EXECUTION_MODES: tuple[Stage1ExecutionMode, ...] = (
+    "receding_horizon_tick",
+    "diagnostic_open_loop_chunk",
+)
+STAGE1_EXECUTION_MODE_LABELS: dict[Stage1ExecutionMode, str] = {
+    "receding_horizon_tick": "legacy one-tick execution; re-observation before the next decision",
+    "diagnostic_open_loop_chunk": "diagnostic open-loop chunk execution",
+}
 STAGE1_GATE_CALL_POLICY = "stage1_no_risk_gate"
 STAGE1_EVIDENCE_CLASS: dict[Stage1ArmMode, str] = {
     "full_system_veto": "full-system blocked/veto diagnostic",
@@ -128,6 +141,16 @@ def validate_stage1_arm_mode(mode: str) -> Stage1ArmMode:
     return mode  # type: ignore[return-value]
 
 
+def validate_stage1_execution_mode(mode: str) -> Stage1ExecutionMode:
+    """Require an explicit execution mode; the open-loop chunk path is never implicit."""
+    if mode not in STAGE1_EXECUTION_MODES:
+        raise ValueError(
+            f"unknown Stage 1 execution mode {mode!r}; "
+            f"choose one of {', '.join(STAGE1_EXECUTION_MODES)}"
+        )
+    return mode  # type: ignore[return-value]
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -143,6 +166,7 @@ def _stage1_provenance(
     config: WorldMindDiagnosticConfig,
     plan: Sequence[EvalEpisode],
     mode: Stage1ArmMode,
+    execution_mode: Stage1ExecutionMode,
     runtime_values: Mapping[str, str],
 ) -> dict[str, str]:
     """Bind the real frozen plan and source hashes without any scored or calibration identity."""
@@ -172,6 +196,8 @@ def _stage1_provenance(
         "arm_mode": mode,
         "effective_arm": STAGE1_EFFECTIVE_ARM[mode],
         "evidence_class": STAGE1_EVIDENCE_CLASS[mode],
+        "execution_mode": execution_mode,
+        "execution_mode_label": STAGE1_EXECUTION_MODE_LABELS[execution_mode],
         "candidate_count": str(config.pipeline.candidate_count),
         "horizon_steps": str(config.pipeline.horizon_steps),
         "control_dt_s": str(config.pipeline.control_dt_s),
@@ -189,8 +215,11 @@ def _stage1_provenance(
         "gate_call_policy": STAGE1_GATE_CALL_POLICY,
         "utility_ranking": "not_performed",
         "prediction_pairing_scope": (
-            "executed candidate only; one receding-horizon tick observed per decision and paired "
-            "with allow_truncated=True over the unexecuted horizon"
+            "executed candidate only; every observed state from the diagnostic open-loop chunk "
+            "is paired with the full prediction, or the available prefix on early termination"
+            if execution_mode == "diagnostic_open_loop_chunk"
+            else "executed candidate only; one receding-horizon tick observed per decision and "
+            "paired with allow_truncated=True over the unexecuted horizon"
         ),
         "oracle_boundary": (
             "privileged get_ground_truth supplies only the target pose; robot fields come from "
@@ -390,6 +419,7 @@ def _decision_evidence(
     *,
     config: WorldMindDiagnosticConfig,
     mode: Stage1ArmMode,
+    execution_mode: Stage1ExecutionMode,
     episode_id: str,
     decision_id: str,
     decision_index: int,
@@ -444,6 +474,8 @@ def _decision_evidence(
         "utility_ranking": "not_performed",
         "evidence_class": STAGE1_EVIDENCE_CLASS[mode],
         "arm_mode": mode,
+        "execution_mode": execution_mode,
+        "execution_mode_label": STAGE1_EXECUTION_MODE_LABELS[execution_mode],
         "full_system_checks_run": str(mode == "full_system_veto").lower(),
         "selection_policy": (
             "no_selection_full_system_blocked"
@@ -472,6 +504,149 @@ def _decision_evidence(
     )
 
 
+@dataclass(frozen=True)
+class _ChunkExecutionResult:
+    observation: Observation
+    ground_truth: GroundTruth
+    evidence: ExecutionEvidence
+    observations: tuple[Observation, ...]
+    observed_states: tuple[WorldState, ...]
+
+
+def _action_payload(action: Action) -> dict[str, Any]:
+    if not is_dataclass(action):
+        raise ValueError(f"action {type(action).__name__} is not serializable evidence")
+    payload = asdict(action)
+    if not isinstance(payload, dict):
+        raise ValueError("action evidence must be a mapping")
+    return payload
+
+
+def _execute_selected_chunk(
+    *,
+    decision_id: str,
+    selection: Selection,
+    config: WorldMindDiagnosticConfig,
+    task: TaskSpec,
+    observation: Observation,
+    state: WorldState,
+    ground_truth: GroundTruth,
+    backend_probe: BackendApplyProbe,
+    monitor_probe: SafetyMonitorProbe,
+) -> _ChunkExecutionResult:
+    """Apply the whole selected chunk in open loop, one reviewed tick at a time."""
+    if selection.chunk is None or not selection.chunk.actions:
+        raise ValueError("diagnostic chunk execution requires a nonempty selected chunk")
+    if selection.index is None:
+        raise ValueError("diagnostic chunk execution requires a selected candidate")
+    selected_id = candidate_id(selection.index)
+    actions = tuple(selection.chunk.actions)
+    records: list[AppliedActionEvidence] = []
+    observations = [observation]
+    observed_states = [state]
+    final_ground_truth = ground_truth
+    safety_calls = safety_ok = safety_rejections = 0
+    apply_ok = apply_rejections = step_count = 0
+    termination = "chunk_complete"
+    error: str | None = None
+
+    for index, action in enumerate(actions):
+        current = observations[-1]
+        record: dict[str, Any] = {
+            "decision_id": decision_id,
+            "action_index": index,
+            "action_type": type(action).__name__,
+            "action": _action_payload(action),
+            "applied": False,
+            "pre_apply_accepted": None,
+            "pre_apply_reason": None,
+            "apply_accepted": None,
+            "apply_reason": None,
+            "backend_stepped": False,
+            "observation_t_s": float(current.t),
+            "action_t_s": None,
+        }
+        try:
+            safety_calls += 1
+            verdict = monitor_probe.validate(action, current.robot)
+            record["pre_apply_accepted"] = bool(verdict.accepted)
+            record["pre_apply_reason"] = verdict.reason
+            if not verdict.accepted:
+                safety_rejections += 1
+                termination = "safety_rejected"
+                break
+            safety_ok += 1
+            applied = backend_probe.apply(action)
+            record["apply_accepted"] = bool(applied.accepted)
+            record["apply_reason"] = applied.reason
+            if not applied.accepted:
+                apply_rejections += 1
+                termination = "backend_apply_rejected"
+                break
+            apply_ok += 1
+            after = backend_probe.step(1)
+            step_count += 1
+            record["backend_stepped"] = True
+            record["applied"] = True
+            record["action_t_s"] = float(after.t)
+            final_ground_truth = backend_probe.get_ground_truth()
+            after_state = _world_state(after, final_ground_truth, config, target=task.target)
+            observations.append(after)
+            observed_states.append(after_state)
+        except Exception as error_:  # noqa: BLE001 - retain measured prefix and fail closed
+            error = f"{type(error_).__name__}: {error_}"
+            termination = "execution_exception"
+            if safety_calls > safety_ok + safety_rejections:
+                safety_rejections += 1
+            if safety_ok > apply_ok + apply_rejections:
+                apply_rejections += 1
+            break
+        finally:
+            records.append(AppliedActionEvidence(**record))
+
+    applied_count = sum(item.applied for item in records)
+    chunk = ChunkExecutionEvidence(
+        decision_id=decision_id,
+        execution_mode="diagnostic_open_loop_chunk",
+        selected_candidate_id=selected_id,
+        chunk_action_count=len(actions),
+        attempted_action_count=len(records),
+        applied_action_count=applied_count,
+        backend_step_count=step_count,
+        observation_count=len(observations),
+        safety_validate_count=safety_calls,
+        safety_accepted_count=safety_ok,
+        safety_rejected_count=safety_rejections,
+        apply_accepted_count=apply_ok,
+        apply_rejected_count=apply_rejections,
+        missing_horizon_steps=tuple(range(applied_count, len(actions))),
+        termination_reason=termination,
+        actions=tuple(records),
+        error=error,
+    )
+    terminal = records[-1] if records else None
+    execution = ExecutionEvidence(
+        decision_id=decision_id,
+        selected_candidate_id=selected_id,
+        executed_candidate_id=selected_id,
+        pre_apply_accepted=None if terminal is None else terminal.pre_apply_accepted,
+        pre_apply_reason=None if terminal is None else terminal.pre_apply_reason,
+        apply_accepted=None if terminal is None else terminal.apply_accepted,
+        apply_reason=None if terminal is None else terminal.apply_reason,
+        backend_stepped=step_count > 0,
+        observation_t_s=float(observation.t),
+        action_t_s=None if step_count == 0 else float(observations[-1].t),
+        chunk=chunk,
+    )
+    return _ChunkExecutionResult(
+        observation=observations[-1],
+        ground_truth=final_ground_truth,
+        evidence=execution,
+        observations=tuple(observations),
+        observed_states=tuple(observed_states),
+    )
+
+
 class Stage1WorldMindEpisodePolicy:
     """One Stage 1 episode under an explicitly selected non-scored diagnostic mode."""
 
@@ -482,12 +657,16 @@ class Stage1WorldMindEpisodePolicy:
         bindings: WorldMindBindings,
         writer: WorldMindEvidenceWriter,
         mode: Stage1ArmMode,
+        execution_mode: Stage1ExecutionMode = "receding_horizon_tick",
     ) -> None:
         self.scenario = scenario
         self.config = config
         self.bindings = bindings
         self.writer = writer
         self.mode = validate_stage1_arm_mode(mode)
+        self.execution_mode = validate_stage1_execution_mode(execution_mode)
+        if self.mode == "full_system_veto" and self.execution_mode != "receding_horizon_tick":
+            raise ValueError("full_system_veto cannot execute an open-loop chunk")
 
     def execute(self, backend: Any, seed: int) -> Mapping[str, Any]:
         episode_id = str(self.scenario.name)
@@ -627,6 +806,7 @@ class Stage1WorldMindEpisodePolicy:
                         _decision_evidence(
                             config=self.config,
                             mode=self.mode,
+                            execution_mode=self.execution_mode,
                             episode_id=episode_id,
                             decision_id=decision_id,
                             decision_index=decision_index,
@@ -649,70 +829,163 @@ class Stage1WorldMindEpisodePolicy:
                 selected_trajectory_index = trajectory_offset + selection.index
                 monitor_probe = SafetyMonitorProbe(monitor)
                 backend_probe = BackendApplyProbe(backend)
-                wrapped, _ = wrap_execute_first(
-                    execute_first,
-                    decision_id=decision_id,
-                    selected_candidate_id=selected_id,
-                )
-                after, apply = wrapped(selection, observation, backend_probe, monitor_probe)
-                execution = build_execution_evidence_from_probes(
-                    decision_id=decision_id,
-                    selected_candidate_id=selected_id,
-                    observation=observation,
-                    result=apply,
-                    monitor_probe=monitor_probe,
-                    backend_probe=backend_probe,
-                    observation_after=after,
-                )
-                if execution.pre_apply_accepted is False or execution.apply_accepted is not True:
-                    boundary = (
-                        "pre_apply_veto"
-                        if execution.pre_apply_accepted is False
-                        else "backend_apply_rejected"
-                    )
-                    failure_state, failure_reason = (
-                        "SAFETY_ABORT",
-                        execution.pre_apply_reason or execution.apply_reason or boundary,
-                    )
-                    pairing = self._pairing(
+                chunk_result: _ChunkExecutionResult | None = None
+                observed_states: Sequence[WorldState] = (before_state,)
+                observed_timestamps: Sequence[float] = (float(before_observation.t),)
+                if self.execution_mode == "diagnostic_open_loop_chunk":
+                    chunk_result = _execute_selected_chunk(
                         decision_id=decision_id,
-                        selected_id=selected_id,
-                        capture=capture,
-                        index=selected_trajectory_index,
-                        before=before_observation,
-                        after=None,
-                        before_state=before_state,
-                        after_state=None,
-                        abort_boundary=boundary,
-                        recovery_boundary=None,
+                        selection=selection,
+                        config=self.config,
+                        task=task,
+                        observation=observation,
+                        state=state,
+                        ground_truth=ground_truth,
+                        backend_probe=backend_probe,
+                        monitor_probe=monitor_probe,
                     )
-                    self.writer.record_decision(
-                        _decision_evidence(
-                            config=self.config,
-                            mode=self.mode,
-                            episode_id=episode_id,
+                    execution = chunk_result.evidence
+                    chunk = execution.chunk
+                    if chunk is None:
+                        raise RuntimeError("open-loop execution did not record chunk evidence")
+                    observed_states = chunk_result.observed_states
+                    observed_timestamps = tuple(item.t for item in chunk_result.observations)
+                    if chunk.termination_reason != "chunk_complete":
+                        boundary = chunk.termination_reason
+                        failure_state = {
+                            "safety_rejected": "SAFETY_ABORT",
+                            "backend_apply_rejected": "BACKEND_ABORT",
+                            "execution_exception": "EXECUTION_EXCEPTION",
+                        }[boundary]
+                        terminal = chunk.actions[-1] if chunk.actions else None
+                        failure_reason = (
+                            chunk.error
+                            or (
+                                terminal.pre_apply_reason
+                                if boundary == "safety_rejected"
+                                else terminal.apply_reason
+                                if boundary == "backend_apply_rejected"
+                                else None
+                            )
+                            or boundary
+                        )
+                        pairing = self._pairing(
                             decision_id=decision_id,
-                            decision_index=decision_index,
-                            generation=generation,
-                            predictions=predictions,
-                            assessments=assessments,
-                            selection=selection,
-                            timings=timing,
-                            execution=execution,
-                            pairing=pairing,
-                            decision_provenance=base_provenance,
-                        ),
-                        pairing,
+                            selected_id=selected_id,
+                            capture=capture,
+                            index=selected_trajectory_index,
+                            before=before_observation,
+                            after=None,
+                            before_state=before_state,
+                            after_state=None,
+                            abort_boundary=boundary,
+                            recovery_boundary=None,
+                            observed_states=observed_states,
+                            observed_timestamps=observed_timestamps,
+                        )
+                        self.writer.record_decision(
+                            _decision_evidence(
+                                config=self.config,
+                                mode=self.mode,
+                                execution_mode=self.execution_mode,
+                                episode_id=episode_id,
+                                decision_id=decision_id,
+                                decision_index=decision_index,
+                                generation=generation,
+                                predictions=predictions,
+                                assessments=assessments,
+                                selection=selection,
+                                timings=timing,
+                                execution=execution,
+                                pairing=pairing,
+                                decision_provenance=base_provenance,
+                            ),
+                            pairing,
+                        )
+                        loop_exited_by_bound = False
+                        break
+                else:
+                    wrapped, _ = wrap_execute_first(
+                        execute_first,
+                        decision_id=decision_id,
+                        selected_candidate_id=selected_id,
                     )
-                    loop_exited_by_bound = False
-                    break
+                    after, apply = wrapped(selection, observation, backend_probe, monitor_probe)
+                    execution = build_execution_evidence_from_probes(
+                        decision_id=decision_id,
+                        selected_candidate_id=selected_id,
+                        observation=observation,
+                        result=apply,
+                        monitor_probe=monitor_probe,
+                        backend_probe=backend_probe,
+                        observation_after=after,
+                    )
+                    if (
+                        execution.pre_apply_accepted is False
+                        or execution.apply_accepted is not True
+                    ):
+                        boundary = (
+                            "pre_apply_veto"
+                            if execution.pre_apply_accepted is False
+                            else "backend_apply_rejected"
+                        )
+                        failure_state, failure_reason = (
+                            "SAFETY_ABORT",
+                            execution.pre_apply_reason or execution.apply_reason or boundary,
+                        )
+                        pairing = self._pairing(
+                            decision_id=decision_id,
+                            selected_id=selected_id,
+                            capture=capture,
+                            index=selected_trajectory_index,
+                            before=before_observation,
+                            after=None,
+                            before_state=before_state,
+                            after_state=None,
+                            abort_boundary=boundary,
+                            recovery_boundary=None,
+                        )
+                        self.writer.record_decision(
+                            _decision_evidence(
+                                config=self.config,
+                                mode=self.mode,
+                                execution_mode=self.execution_mode,
+                                episode_id=episode_id,
+                                decision_id=decision_id,
+                                decision_index=decision_index,
+                                generation=generation,
+                                predictions=predictions,
+                                assessments=assessments,
+                                selection=selection,
+                                timings=timing,
+                                execution=execution,
+                                pairing=pairing,
+                                decision_provenance=base_provenance,
+                            ),
+                            pairing,
+                        )
+                        loop_exited_by_bound = False
+                        break
 
-                steps += 1
-                after_ground_truth = backend.get_ground_truth()
-                after_state = _world_state(
-                    after, after_ground_truth, self.config, target=task.target
-                )
-                ground_truth = after_ground_truth
+                if chunk_result is not None:
+                    chunk = chunk_result.evidence.chunk
+                    if chunk is None:
+                        raise RuntimeError("open-loop execution did not record chunk evidence")
+                    steps += chunk.backend_step_count
+                    after = chunk_result.observation
+                    ground_truth = chunk_result.ground_truth
+                    after_state = chunk_result.observed_states[-1]
+                    observed_states = chunk_result.observed_states
+                    observed_timestamps = tuple(item.t for item in chunk_result.observations)
+                else:
+                    steps += 1
+                    after_ground_truth = backend.get_ground_truth()
+                    after_state = _world_state(
+                        after, after_ground_truth, self.config, target=task.target
+                    )
+                    ground_truth = after_ground_truth
+                    observed_states = (before_state, after_state)
+                    observed_timestamps = (float(before_observation.t), float(after.t))
                 observation, state = after, after_state
                 verification_start = perf_counter_ns()
                 trajectory = self._selected_trajectory(capture, selected_trajectory_index)
@@ -733,6 +1006,8 @@ class Stage1WorldMindEpisodePolicy:
                     after_state=after_state,
                     abort_boundary=None,
                     recovery_boundary=None if transition == "complete" else transition,
+                    observed_states=observed_states,
+                    observed_timestamps=observed_timestamps,
                 )
                 timed = self._with_phases(
                     timing, verification_s=verification_s, recovery_s=recovery_s
@@ -740,6 +1015,7 @@ class Stage1WorldMindEpisodePolicy:
                 evidence = _decision_evidence(
                     config=self.config,
                     mode=self.mode,
+                    execution_mode=self.execution_mode,
                     episode_id=episode_id,
                     decision_id=decision_id,
                     decision_index=decision_index,
@@ -1003,13 +1279,25 @@ class Stage1WorldMindEpisodePolicy:
         after_state: WorldState | None,
         abort_boundary: str | None,
         recovery_boundary: str | None,
+        observed_states: Sequence[WorldState] | None = None,
+        observed_timestamps: Sequence[float] | None = None,
     ) -> Any:
         if index >= len(capture.trajectories):
             return None
         observed = (
-            [before_state] if after is None or after_state is None else [before_state, after_state]
+            list(observed_states)
+            if observed_states is not None
+            else [before_state]
+            if after is None or after_state is None
+            else [before_state, after_state]
         )
-        timestamps = [float(before.t)] if after is None else [float(before.t), float(after.t)]
+        timestamps = (
+            list(observed_timestamps)
+            if observed_timestamps is not None
+            else [float(before.t)]
+            if after is None
+            else [float(before.t), float(after.t)]
+        )
         return pair_executed_prediction(
             decision_id=decision_id,
             executed_candidate_id=selected_id,
@@ -1087,10 +1375,11 @@ class Stage1PolicyFactory:
     bindings: WorldMindBindings
     writer: WorldMindEvidenceWriter
     mode: Stage1ArmMode
+    execution_mode: Stage1ExecutionMode = "receding_horizon_tick"
 
     def __call__(self, scene: Any) -> Stage1WorldMindEpisodePolicy:
         return Stage1WorldMindEpisodePolicy(
-            scene, self.config, self.bindings, self.writer, self.mode
+            scene, self.config, self.bindings, self.writer, self.mode, self.execution_mode
         )
 
     def finish(self) -> dict[str, Path]:
@@ -1149,6 +1438,7 @@ def run_stage1_evidence(
     bindings: WorldMindBindings,
     *,
     arm_mode: Stage1ArmMode,
+    execution_mode: Stage1ExecutionMode = "receding_horizon_tick",
     runtime_values: Mapping[str, str],
     settings: Any = None,
     startup_s: float = 0.0,
@@ -1156,13 +1446,16 @@ def run_stage1_evidence(
 ) -> tuple[EvalReport, dict[str, Path]]:
     """Run the frozen recorder with non-scored Stage 1 evidence and exclusive sidecars."""
     mode = validate_stage1_arm_mode(arm_mode)
-    provenance = _stage1_provenance(config, plan, mode, runtime_values)
+    execution_mode = validate_stage1_execution_mode(execution_mode)
+    if mode == "full_system_veto" and execution_mode != "receding_horizon_tick":
+        raise ValueError("full_system_veto cannot execute an open-loop chunk")
+    provenance = _stage1_provenance(config, plan, mode, execution_mode, runtime_values)
     writer = WorldMindEvidenceWriter(out_dir)
     writer.start(provenance, resume=resume)
     pipeline = STAGE1_RECORDER_PIPELINE[mode]
     if resume:
         _validate_resume_coverage(out_dir, plan, writer, pipeline)
-    factory = Stage1PolicyFactory(config, bindings, writer, mode)
+    factory = Stage1PolicyFactory(config, bindings, writer, mode, execution_mode)
     run_config = EvalRunConfig(
         out_dir=out_dir,
         pipeline=pipeline,
@@ -1195,6 +1488,8 @@ def run_stage1_evidence(
         "configured_arm": config.pipeline.arm,
         "effective_arm": STAGE1_EFFECTIVE_ARM[mode],
         "evidence_class": STAGE1_EVIDENCE_CLASS[mode],
+        "execution_mode": execution_mode,
+        "execution_mode_label": STAGE1_EXECUTION_MODE_LABELS[execution_mode],
         "resumed": resume,
         "sidecars": sorted(sidecars),
     }

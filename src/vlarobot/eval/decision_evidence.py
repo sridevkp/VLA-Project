@@ -431,6 +431,155 @@ class PredictionPairingEvidence:
         return evidence_to_dict(self)
 
 
+CHUNK_EXECUTION_TERMINATION_REASONS = (
+    "chunk_complete",
+    "safety_rejected",
+    "backend_apply_rejected",
+    "execution_exception",
+)
+
+
+@dataclass(frozen=True)
+class AppliedActionEvidence:
+    """One reviewed action attempt inside a diagnostic full-chunk execution."""
+
+    decision_id: str
+    action_index: int
+    action_type: str
+    action: Mapping[str, Any]
+    applied: bool
+    pre_apply_accepted: bool | None
+    pre_apply_reason: str | None
+    apply_accepted: bool | None
+    apply_reason: str | None
+    backend_stepped: bool
+    observation_t_s: float
+    action_t_s: float | None
+
+    def __post_init__(self) -> None:
+        _require_text(self.decision_id, "decision_id")
+        _require_text(self.action_type, "action_type")
+        if isinstance(self.action_index, bool) or self.action_index < 0:
+            raise ValueError("action_index must be a nonnegative integer")
+        if self.applied and (self.apply_accepted is not True or not self.backend_stepped):
+            raise ValueError("an applied action requires an accepted apply and a control step")
+        _require_finite_nonnegative(self.observation_t_s, "observation_t_s")
+        _require_finite_nonnegative(self.action_t_s, "action_t_s")
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> AppliedActionEvidence:
+        return cls(
+            decision_id=payload["decision_id"],
+            action_index=int(payload["action_index"]),
+            action_type=payload["action_type"],
+            action=dict(payload["action"]),
+            applied=bool(payload["applied"]),
+            pre_apply_accepted=payload.get("pre_apply_accepted"),
+            pre_apply_reason=payload.get("pre_apply_reason"),
+            apply_accepted=payload.get("apply_accepted"),
+            apply_reason=payload.get("apply_reason"),
+            backend_stepped=bool(payload["backend_stepped"]),
+            observation_t_s=float(payload["observation_t_s"]),
+            action_t_s=payload.get("action_t_s"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return evidence_to_dict(self)
+
+
+@dataclass(frozen=True)
+class ChunkExecutionEvidence:
+    """Measured counts and termination for an explicit diagnostic open-loop chunk."""
+
+    decision_id: str
+    execution_mode: str
+    selected_candidate_id: str
+    chunk_action_count: int
+    attempted_action_count: int
+    applied_action_count: int
+    backend_step_count: int
+    observation_count: int
+    safety_validate_count: int
+    safety_accepted_count: int
+    safety_rejected_count: int
+    apply_accepted_count: int
+    apply_rejected_count: int
+    missing_horizon_steps: tuple[int, ...]
+    termination_reason: str
+    actions: tuple[AppliedActionEvidence, ...]
+    error: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_text(self.decision_id, "decision_id")
+        _require_text(self.execution_mode, "execution_mode")
+        _require_text(self.selected_candidate_id, "selected_candidate_id")
+        if self.termination_reason not in CHUNK_EXECUTION_TERMINATION_REASONS:
+            raise ValueError(f"unknown chunk termination reason: {self.termination_reason}")
+        counts = (
+            self.chunk_action_count,
+            self.attempted_action_count,
+            self.applied_action_count,
+            self.backend_step_count,
+            self.observation_count,
+            self.safety_validate_count,
+            self.safety_accepted_count,
+            self.safety_rejected_count,
+            self.apply_accepted_count,
+            self.apply_rejected_count,
+        )
+        if any(isinstance(value, bool) or value < 0 for value in counts):
+            raise ValueError("chunk execution counts must be nonnegative integers")
+        if len(self.actions) != self.attempted_action_count:
+            raise ValueError("one action record is required per attempted action")
+        if self.attempted_action_count > self.chunk_action_count:
+            raise ValueError("attempted actions cannot exceed the selected chunk length")
+        if self.safety_validate_count != self.attempted_action_count:
+            raise ValueError("every attempted action requires one pre-apply validation")
+        if self.safety_accepted_count + self.safety_rejected_count != self.safety_validate_count:
+            raise ValueError("safety outcomes must account for every validation")
+        if self.apply_accepted_count + self.apply_rejected_count != self.safety_accepted_count:
+            raise ValueError("apply outcomes must account for every safety-accepted action")
+        if self.applied_action_count > self.apply_accepted_count:
+            raise ValueError("applied actions cannot exceed accepted applies")
+        if self.backend_step_count != self.applied_action_count:
+            raise ValueError("one control step is required per applied action")
+        if self.missing_horizon_steps != tuple(
+            range(self.applied_action_count, self.chunk_action_count)
+        ):
+            raise ValueError("missing horizon steps must be the unexecuted action indices")
+        if any(action.decision_id != self.decision_id for action in self.actions):
+            raise ValueError("action records must belong to the chunk decision")
+        if [action.action_index for action in self.actions] != list(
+            range(self.attempted_action_count)
+        ):
+            raise ValueError("action records must be indexed sequentially from zero")
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> ChunkExecutionEvidence:
+        return cls(
+            decision_id=payload["decision_id"],
+            execution_mode=payload["execution_mode"],
+            selected_candidate_id=payload["selected_candidate_id"],
+            chunk_action_count=int(payload["chunk_action_count"]),
+            attempted_action_count=int(payload["attempted_action_count"]),
+            applied_action_count=int(payload["applied_action_count"]),
+            backend_step_count=int(payload["backend_step_count"]),
+            observation_count=int(payload["observation_count"]),
+            safety_validate_count=int(payload["safety_validate_count"]),
+            safety_accepted_count=int(payload["safety_accepted_count"]),
+            safety_rejected_count=int(payload["safety_rejected_count"]),
+            apply_accepted_count=int(payload["apply_accepted_count"]),
+            apply_rejected_count=int(payload["apply_rejected_count"]),
+            missing_horizon_steps=tuple(payload["missing_horizon_steps"]),
+            termination_reason=payload["termination_reason"],
+            actions=tuple(AppliedActionEvidence.from_dict(item) for item in payload["actions"]),
+            error=payload.get("error"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return evidence_to_dict(self)
+
+
 @dataclass(frozen=True)
 class ExecutionEvidence:
     """Selection-to-apply outcome; pre-apply vetoes require the optional monitor probe."""
@@ -445,20 +594,29 @@ class ExecutionEvidence:
     backend_stepped: bool = False
     observation_t_s: float | None = None
     action_t_s: float | None = None
+    chunk: ChunkExecutionEvidence | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.decision_id, "decision_id")
         if self.executed_candidate_id != self.selected_candidate_id:
             raise ValueError("executed candidate must be the selected candidate")
-        if self.pre_apply_accepted is False and (
-            self.apply_accepted is not None or self.backend_stepped
+        if (
+            self.chunk is None
+            and self.pre_apply_accepted is False
+            and (self.apply_accepted is not None or self.backend_stepped)
         ):
             raise ValueError("a pre-apply veto must not apply or step the backend")
+        if self.chunk is not None:
+            if self.chunk.decision_id != self.decision_id:
+                raise ValueError("chunk evidence must belong to the execution decision")
+            if self.chunk.selected_candidate_id != self.selected_candidate_id:
+                raise ValueError("chunk evidence must match the selected candidate")
         _require_finite_nonnegative(self.observation_t_s, "observation_t_s")
         _require_finite_nonnegative(self.action_t_s, "action_t_s")
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> ExecutionEvidence:
+        chunk = payload.get("chunk")
         return cls(
             decision_id=payload["decision_id"],
             selected_candidate_id=payload.get("selected_candidate_id"),
@@ -470,6 +628,7 @@ class ExecutionEvidence:
             backend_stepped=bool(payload.get("backend_stepped", False)),
             observation_t_s=payload.get("observation_t_s"),
             action_t_s=payload.get("action_t_s"),
+            chunk=None if chunk is None else ChunkExecutionEvidence.from_dict(chunk),
         )
 
     def to_dict(self) -> dict[str, Any]:

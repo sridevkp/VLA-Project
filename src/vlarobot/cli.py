@@ -642,6 +642,10 @@ def worldmind_stage1_evidence(
         Literal["full_system_veto", "scripted_proposer"],
         typer.Option(help="Explicit owner-authorized diagnostic mode; there is no default."),
     ],
+    execution_mode: Annotated[
+        Literal["receding_horizon_tick", "diagnostic_open_loop_chunk"],
+        typer.Option(help="Explicit diagnostic execution path; open-loop chunk never replans."),
+    ] = "receding_horizon_tick",
     backend: Annotated[Literal["fake", "webots"], typer.Option()] = "webots",
     state_source: Annotated[str, typer.Option()] = "oracle",
     split: Annotated[str, typer.Option()] = "validation",
@@ -657,6 +661,7 @@ def worldmind_stage1_evidence(
     from vlarobot.eval.worldmind_preflight import run_worldmind_diagnostic_preflight
     from vlarobot.execution.worldmind_stage1_pipeline import (
         STAGE1_EVIDENCE_CLASS,
+        STAGE1_EXECUTION_MODE_LABELS,
         run_stage1_evidence,
     )
 
@@ -709,6 +714,7 @@ def worldmind_stage1_evidence(
             out,
             bindings,
             arm_mode=arm_mode,
+            execution_mode=execution_mode,
             runtime_values=runtime_values,
             resume=resume,
         )
@@ -722,6 +728,8 @@ def worldmind_stage1_evidence(
     typer.echo(
         f"worldmind-stage1-evidence arm_mode={arm_mode} "
         f"evidence_class={STAGE1_EVIDENCE_CLASS[arm_mode]} "
+        f"execution_mode={execution_mode} "
+        f"execution_mode_label={STAGE1_EXECUTION_MODE_LABELS[execution_mode]} "
         f"scored_evaluation_allowed=False episodes={report.summary['n_episodes']} "
         f"resume={resume}"
     )

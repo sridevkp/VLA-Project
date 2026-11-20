@@ -3207,3 +3207,93 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   directory and the same frozen inputs; V2 must remain preserved and is not resumable. **NO-GO**
   for scoring, calibration selection, `full_system`, Packet B/D, TRAIN/TEST access or production
   activation until the live diagnostic and independent safety approvals are complete.
+
+## ADR-0076 — Stage 1 V4 offline correction: explicit diagnostic open-loop chunk execution (2026-11-20)
+
+- **Scope and preservation:** this is an offline source-and-test correction only. No Webots
+  process, campaign, rerun, resume, scoring, calibration selection, `full_system`, Packet B/D,
+  TRAIN/TEST access, geometry investigation, push or merge occurred. V1, V2 and V3 evidence was
+  not written. Recomputed aggregates remain V1
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`, V2
+  `b5b4075d8c6db133027ea900cecb5db995f286a52bdeb6d37e96231c07194ccb`, and V3
+  `d4204a6fae79c16988e68f0b7cb61b27c90ba614f55fbfa507d1f666cf3d4d29`. V2 and V3 each ran once;
+  both authorizations are exhausted and neither campaign is retried or resumed. V4 is not
+  authorized by this ADR.
+- **V3 root cause:** the reviewed scripted proposer emitted the complete frozen 50-action chunk
+  (`INIT 0-1`, `PREGRASP 2-11`, `DESCEND 12-17`, `CLOSE 18-20`, `LIFT 21-28`, `TRANSIT 29-36`,
+  `PLACE_DESCEND 37-42`, `RELEASE 43-44`, `RETREAT 45-46`, `HOME 47-49`), but the legacy
+  `execute_first()` path applied only `actions[0]`. Final-task verification therefore observed a
+  one-tick state, failed on distance, and `retry_once` regenerated the same INIT-first chunk
+  because `alternate_waypoints_binding: null`; the second failure aborted. No candidate,
+  selection, safety, verifier or config threshold was proven wrong by that run.
+- **Correction:** `Stage1ExecutionMode` adds two explicit values. The default
+  `receding_horizon_tick` preserves the original one-tick path byte-for-behavior. The opt-in
+  `diagnostic_open_loop_chunk` runs only under `arm_mode=scripted_proposer`; `full_system_veto`
+  rejects it. `_execute_selected_chunk()` applies every selected index in order through
+  `SafetyMonitorProbe` then `BackendApplyProbe`, advances exactly one reviewed `step(1)` per
+  accepted apply, re-observes after every step, and records per-action payload, index, verdict,
+  reasons, step and timestamp. It fail-stops on safety rejection, backend apply rejection or any
+  execution exception, records the measured prefix and termination reason, and defers placement
+  verification until after the complete chunk unless execution terminated early. Success pairs
+  all 51 observed states with the 50-step prediction; early termination pairs the available
+  prefix with an explicit abort boundary.
+- **Invariants preserved:** candidate generation and first-safe selection, absolute joint limits,
+  `0.15`-rad/tick bound, verifier tolerances, `retry_once → abort`, seeds, frozen plan, frozen
+  approved config, all full-system blockers including `unverified-arm-sweep`, and the
+  `scripted diagnostic` / `full-system blocked/veto diagnostic` evidence classes are unchanged.
+  The path is labelled exactly `diagnostic open-loop chunk execution`; it never claims
+  receding-horizon replanning. No new sidecar file was added; chunk evidence is nested in the
+  decision sidecar, with execution mode also recorded in provenance, summary and CLI output.
+- **Frozen inputs:** approved config
+  `configs/worldmind_diagnostic.approved.yaml`
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`; approved definitions
+  `configs/report/definitions.approved.json`
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`; frozen plan hash in V3
+  provenance `013ca8ee314df6ca6b72505761c0ab7bc37caf4ec469f6696db80d7ce428fcb2`; unchanged
+  source hashes `backends/worldmind_bindings.py`
+  `4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae`, `execution/runner.py`
+  (at `src/vlarobot/eval/runner.py`)
+  `7475a13a294b33bdb7ec953882bf56852cabe3de83ac9cc74cd15f5f892e2955`,
+  `execution/worldmind_pipeline.py`
+  `27f3d45165d5e4e34fa4b670e41a709ff25206f2e5400fa441afe1dda887fdf8`,
+  `execution/scripted_chunk_adapter.py`
+  `890e2f5bd3621338db85cb60088f27c091b792ca437d2aeadd744dc7029432f4`, and
+  `execution/safety_monitor.py`
+  `900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a`.
+- **Changed source hashes:** `src/vlarobot/cli.py` changed from
+  `d4185b4d3b6019b9babd9260e4f2e35f805104aa2504293d2056ade44136bb3d` to
+  `bc5ce3527f3a5a2d874c19a06e22dcf21d575515f8c842fd8d9429aee10f93f5`;
+  `src/vlarobot/eval/decision_evidence.py` changed from
+  `e2cb51bf27ab19a3ae17ee2bf2c9fc8ab55932edbb542fa4104bfeee73806813` to
+  `28f74d98b02325fee43778dd3152d9e340bd55b9ea2bde5c04a09cf4ae608339`;
+  `src/vlarobot/execution/worldmind_stage1_pipeline.py` changed from
+  `20ef594be17ed4b65744f878a06ee72f1f0ea1f156669944a5ef71c6fdd468b5` to
+  `b724da5736bde334022a77af97cbc2ff4092a19abb111b9e11b35e0c25ed544f`.
+  Regression hashes: `tests/test_worldmind_stage1_runner.py` changed from
+  `9e49c5d1e1e8eb817a6efac2118d5d9939e562a7ee62a67c8afb9b14c90d1743` to
+  `d402bf5bf25b07cec023c05b77d0bf08f5bff80571e7cdbcb86d9a62ca4cb2c5`;
+  `tests/test_worldmind_v2_postmortem_regression.py` changed from
+  `041d383415123c018093b12e37175ed08206bf98d40952cc513bdcdb6fd97fc0` to
+  `0751bee367b3fdaa926fc0133bec4a6e49d47b2867e97a30665f17096d2a3689`.
+- **Verification:** focused set (`v2_postmortem`, `stage1_runner`, `eval_decision_evidence`,
+  `eval_decision_adapters`) returned `39 passed in 6.24s`, including full 50-action execution
+  with terminal-only verification, intermediate safety fail-stop, backend apply rejection,
+  step-exception fail-stop, preserved cadence, preserved campaign hashes, and unchanged
+  `retry_once → abort`. Relevant regressions (`worldmind_production`, `worldmind_waypoints`,
+  `worldmind_readiness_regression`, `worldmind_endpoint_failstop_regression`) returned
+  `35 passed, 8 warnings in 6.02s`. `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `336 files already formatted`; `git diff --check`
+  passed. The full offline suite returned
+  `1 failed, 832 passed, 3 skipped, 540 warnings in 570.74s`; the only failure is the same
+  pre-existing unrelated notebook helper SHA mismatch recorded in ADR-0075
+  (`tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`,
+  `restore_gate.py` expected `071cf660…`, present `88fd4db9…`), with no diff from `HEAD` in the
+  helper, manifest or test.
+- **Remaining unverified and V4 decision:** no Webots execution, no V4 campaign, no physical
+  settling, contact or swept-arm validation, no Windows run, and no scoring, calibration
+  selection, `full_system` activation or production use was verified. `unverified-arm-sweep`
+  remains a hard full-system rejection. **GO** only for a separately authorized, non-scored
+  VALIDATION18 Stage 1 V4 diagnostic that explicitly selects
+  `--execution-mode diagnostic_open_loop_chunk`, uses the approved config and a new output
+  directory, and preserves V1/V2/V3. **NO-GO** for retrying V2 or V3, scoring, calibration
+  selection, `full_system`, Packet B/D, TRAIN/TEST access or production activation.

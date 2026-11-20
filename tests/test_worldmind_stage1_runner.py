@@ -606,6 +606,7 @@ def test_cli_never_launches_webots_scores_or_calls_calibration(
         bindings: Any,
         *,
         arm_mode: str,
+        execution_mode: str,
         runtime_values: Any,
         resume: bool,
     ) -> Any:
@@ -616,6 +617,7 @@ def test_cli_never_launches_webots_scores_or_calls_calibration(
             "out": out,
             "bindings": bindings,
             "arm_mode": arm_mode,
+            "execution_mode": execution_mode,
             "runtime_values": runtime_values,
             "resume": resume,
         }
@@ -663,9 +665,11 @@ def test_cli_never_launches_webots_scores_or_calls_calibration(
     assert result.exit_code == 0, result.output
     assert calls["preflight"]["allow_existing"] is False
     assert calls["run"]["arm_mode"] == "full_system_veto"
+    assert calls["run"]["execution_mode"] == "receding_horizon_tick"
     assert calls["run"]["runtime_values"] == {"fixture": "probe"}
     assert "scored_evaluation_allowed=False" in result.output
     assert STAGE1_EVIDENCE_CLASS["full_system_veto"] in result.output
+    assert "execution_mode=receding_horizon_tick" in result.output
 
 
 def test_no_riskgate_eq38_calibration_or_scored_metrics_are_invoked(

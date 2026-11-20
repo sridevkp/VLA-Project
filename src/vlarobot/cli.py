@@ -643,8 +643,17 @@ def worldmind_stage1_evidence(
         typer.Option(help="Explicit owner-authorized diagnostic mode; there is no default."),
     ],
     execution_mode: Annotated[
-        Literal["receding_horizon_tick", "diagnostic_open_loop_chunk"],
-        typer.Option(help="Explicit diagnostic execution path; open-loop chunk never replans."),
+        Literal[
+            "receding_horizon_tick",
+            "diagnostic_open_loop_chunk",
+            "diagnostic_observed_state_feedback_chunk",
+        ],
+        typer.Option(
+            help=(
+                "Explicit diagnostic execution path; observed-state feedback requires "
+                "scripted_proposer and emits no prediction pairing."
+            )
+        ),
     ] = "receding_horizon_tick",
     backend: Annotated[Literal["fake", "webots"], typer.Option()] = "webots",
     state_source: Annotated[str, typer.Option()] = "oracle",

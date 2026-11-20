@@ -19,6 +19,10 @@ from vlarobot.eval.decision_metrics import (
     risk_rejection_aggregate,
     summarize_phase_latencies,
 )
+from vlarobot.eval.observed_state_feedback import (
+    FEEDBACK_SIDECAR_NAME,
+    OBSERVED_STATE_FEEDBACK_EXECUTION_MODE,
+)
 from vlarobot.eval.worldmind_config import GATE_CALL_POLICY
 
 
@@ -105,12 +109,18 @@ class WorldMindEvidenceWriter:
     decisions: list[DecisionEvidence] = field(default_factory=list, init=False)
     pairings: list[PredictionPairingEvidence] = field(default_factory=list, init=False)
     errors: list[dict[str, Any]] = field(default_factory=list, init=False)
+    feedback_rows: list[dict[str, Any]] = field(default_factory=list, init=False)
     measurement_class: str = field(default="synthetic", init=False)
     resumed: bool = field(default=False, init=False)
+    feedback_enabled: bool = field(default=False, init=False)
 
     @property
     def folder(self) -> Path:
         return self.out_dir / self.folder_name
+
+    @property
+    def feedback_path(self) -> Path:
+        return self.folder / FEEDBACK_SIDECAR_NAME
 
     @property
     def episode_ids(self) -> set[str]:
@@ -125,12 +135,18 @@ class WorldMindEvidenceWriter:
             "measured" if provenance.get("backend") == "webots" else "synthetic"
         )
         self.resumed = resume
+        self.feedback_enabled = (
+            provenance.get("execution_mode") == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+        )
         if resume:
             self._resume_existing(provenance)
             return
         self.folder.mkdir(parents=True, exist_ok=False)
         _write_json(self.folder / "provenance.json", dict(provenance))
-        for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
+        names = ["decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"]
+        if self.feedback_enabled:
+            names.append(FEEDBACK_SIDECAR_NAME)
+        for name in names:
             with (self.folder / name).open("x", encoding="utf-8"):
                 pass
 
@@ -141,7 +157,10 @@ class WorldMindEvidenceWriter:
         previous = json.loads((self.folder / "provenance.json").read_text(encoding="utf-8"))
         if previous != dict(provenance):
             raise ValueError("resume provenance differs from the existing sidecar provenance")
-        for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
+        names = ["decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"]
+        if self.feedback_enabled:
+            names.append(FEEDBACK_SIDECAR_NAME)
+        for name in names:
             if not (self.folder / name).is_file():
                 raise FileNotFoundError(f"cannot resume without sidecar file: {name}")
         self.decisions.extend(
@@ -152,6 +171,8 @@ class WorldMindEvidenceWriter:
             for row in _read_jsonl(self.folder / "prediction_pairing.jsonl")
         )
         self.errors.extend(_read_jsonl(self.folder / "errors.jsonl"))
+        if self.feedback_enabled:
+            self.feedback_rows.extend(_read_jsonl(self.feedback_path))
 
     def record_decision(
         self,
@@ -166,6 +187,16 @@ class WorldMindEvidenceWriter:
         if pairing is not None:
             _append_jsonl(self.folder / "prediction_pairing.jsonl", pairing.to_dict())
             self.pairings.append(pairing)
+
+    def record_feedback(self, evidence: Any) -> None:
+        """Append versioned observed-state feedback evidence; it is never paired or scored."""
+        if not self.feedback_enabled:
+            raise RuntimeError("feedback evidence cannot be recorded outside the feedback mode")
+        if not self.folder.is_dir():
+            raise RuntimeError("evidence writer must be started before recording feedback")
+        payload = evidence.to_dict()
+        _append_jsonl(self.feedback_path, payload)
+        self.feedback_rows.append(payload)
 
     def record_error(self, episode_id: str, error: BaseException) -> None:
         """Record a real exception; never synthesize missing decision records for it."""
@@ -267,6 +298,8 @@ class WorldMindEvidenceWriter:
             "instrumentation": self.folder / "instrumentation.json",
             "provenance": self.folder / "provenance.json",
         }
+        if self.feedback_enabled:
+            paths["observed_state_feedback"] = self.feedback_path
         for name in ("risk_rejection", "phase_latency", "verification_recovery", "instrumentation"):
             payload = {
                 "risk_rejection": rejection_payload,

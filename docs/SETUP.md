@@ -317,8 +317,19 @@ This uses synthetic fixtures only and does not authorize or produce a scored VAL
 See `WEEK3_DECISION_OBSERVABILITY.md` §10 for the reviewed inert node list.
 
 The V4 postmortem (ADR-0077) is offline-only. Do not retry or resume V4; its evidence is preserved.
-A separate owner authorization is required before changing the reviewed 50-step cadence, one-tick
-simulator contract or candidate/execution behavior needed to address the arm-velocity divergence
-and terminal tracking failures. The C-only bookkeeping correction is covered by
-`tests/test_worldmind_v4_postmortem_regression.py`; current source remains **NO-GO** for another
-live campaign.
+The C-only bookkeeping correction is covered by
+`tests/test_worldmind_v4_postmortem_regression.py`. ADR-0078 adds an owner-approved, offline-only
+A/B correction contract: `diagnostic_observed_state_feedback_chunk` is an explicit CLI mode that
+requires `scripted_proposer`, re-projects immutable selected targets from observed state, applies
+only safety-accepted commands, and writes `observed-state-feedback.jsonl`. It emits no prediction
+pairing and is non-comparable with the frozen H=50 prediction. Verify it without Webots with:
+
+```text
+uv run python -m pytest -q tests/test_worldmind_observed_state_feedback.py
+```
+
+The CLI surface is available as
+`--arm-mode scripted_proposer --execution-mode diagnostic_observed_state_feedback_chunk`, but a
+separate owner authorization and a fresh versioned output directory are still required for any
+diagnostic run. Do not use it for scoring, `full_system`, live actuation, V4 resume, or a campaign.
+Current source remains **NO-GO** for another live campaign.

@@ -3400,3 +3400,104 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   changes. **GO** is reserved for a separately authorized, non-scored VALIDATION18 Stage 1
   diagnostic after that approval and after a fresh output directory is selected; V4 must remain
   preserved and is not resumable.
+
+## ADR-0078 — Offline observed-state feedback execution contract (2026-11-21)
+
+- **Scope and authorization:** owner-approved, offline Stage 1 A/B correction for V4 findings A
+  and B. A new explicit `diagnostic_observed_state_feedback_chunk` execution mode is available
+  only with `scripted_proposer`; `full_system` and the two prior execution modes are unchanged
+  and there is no implicit default. No Webots process, live actuation, campaign, V4 rerun/resume,
+  scoring, calibration selection, `full_system` execution, Packet B/D, TRAIN/TEST access,
+  geometry investigation, push or merge occurred. This ADR defines a diagnostic execution
+  contract, not a scientific result or authorization to run a campaign.
+- **Frozen inputs preserved:** K=32, H=50, `control_dt_s=0.032`, `max_steps=1059`, the frozen
+  scene/seed plan, original selected candidate chunks, scripted waypoint order and cadence,
+  IK/candidate generation, `SafetyMonitor`, `PlacementVerifier`, terminal verification,
+  `retry_once → abort`, `full_system` blocker, scoring/calibration inputs and V1-V4 evidence are
+  unchanged. Candidate chunks are immutable: feedback may take extra simulator ticks and execute
+  projected targets different from the selected targets, but never rewrites the selected action,
+  the original H=50 prediction or its candidate identity. V1-V4 tree aggregates remain V1
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`, V2
+  `b5b4075d8c6db133027ea900cecb5db995f286a52bdeb6d37e96231c07194ccb`, V3
+  `d4204a6fae79c16988e68f0b7cb61b27c90ba614f55fbfa507d1f666cf3d4d29`, and V4
+  `48ce9f020802dac08c3fa065f4b53ef7d0f547160a891f488b081966f4eeba47`. Frozen config
+  `configs/worldmind_diagnostic.approved.yaml`
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`, definitions
+  `configs/report/definitions.approved.json`
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`, and pinned source files
+  remain byte-identical to ADR-0077.
+- **Execution contract:** each `JointTarget` is projected from the latest observed
+  `RobotState.joint_pos` with the existing bound
+  `solver.execution_max_joint_step_rad=0.15 rad`. The projected action, never the selected
+  action, is sent to the unchanged `SafetyMonitor` and then to the backend only when accepted.
+  One simulator tick is taken per accepted command, followed by re-observation; the loop repeats
+  until the selected target converges, a reviewed budget stops it, or the safety/backend path
+  fails closed. No assumption is made that a previous target was reached. Convergence tolerances
+  are diagnostic-only and are read from reviewed `configs/robot.yaml`: `0.01 rad` for non-HOME
+  actions and `0.02 rad` for HOME actions. Reviewed budgets are `joint_stall_steps=10`,
+  `joint_progress_epsilon_rad=0.000001`, `joint_move_timeout_steps=800`,
+  `linear_move_timeout_steps=600`, `gripper_open_timeout_s=4.0` and the global `1059` step
+  ceiling. The 600-step linear timeout has no applicable linear action in the scripted chunk;
+  the gripper timeout has no settling semantics, and `GripperCmd` remains one bounded,
+  safety-validated command event with one observed step. No grasp, contact, release or settling
+  claim is made. Precedence is safety/backend failure, then the global ceiling, then an
+  applicable per-move timeout, then stall, then target convergence. The global ceiling spans all
+  feedback attempts and is never reset between retries; no new numerical parameter or relaxed
+  limit was introduced.
+- **Evidence and non-comparability:** a version-1 `observed-state-feedback.jsonl` sidecar is
+  created only in feedback mode, with versioned provenance in `provenance.json` and a
+  `paths["observed_state_feedback"]` entry only for that mode. Each row records selected and
+  executed actions separately, action indices, projection inputs/outputs and clamped joints,
+  pre/post observations, each safety/apply decision, progress and stall counters, step numbers,
+  per-action and total budget consumption, and termination reason. Feedback decisions emit no
+  `prediction_pairing.jsonl` record and leave `decision.execution.chunk` and
+  `decision.prediction_pairing` absent. Provenance states `comparability="non_comparable"`,
+  `pairing_records_emitted=0`, and that extra ticks and projected targets prevent any one-to-one
+  pairing with the immutable H=50 prediction. No prediction-error or performance claim is
+  supported by this evidence.
+- **Abort and accounting contract:** feedback terminations map to
+  `global_step_ceiling → WORLDMIND_BOUND_EXHAUSTED`, `joint_move_timeout → JOINT_MOVE_TIMEOUT`,
+  `joint_stall → JOINT_STALL`, `safety_rejected → SAFETY_ABORT`,
+  `backend_apply_rejected → BACKEND_ABORT`, and `execution_exception → EXECUTION_EXCEPTION`.
+  Only the global ceiling sets `loop_exited_by_bound=True`; measured feedback steps are added to
+  the episode step count before abort, and sidecar invariants require exactly one observation
+  before and after each applied command, one step per accepted apply, complete outcome counts and
+  `episode_steps_after <= 1059`.
+- **Changed and additive hashes:** `src/vlarobot/execution/worldmind_stage1_pipeline.py`
+  changed from ADR-0077's
+  `01bbd7f73649b9d3096f977fddc3849d5b53adeb40d81f0f0ef5e47deac1c08a` to
+  `ad4401a263b33cc8e2dacb7f5db80c13fa859fdb85079594ca090791570be420`; new
+  `src/vlarobot/eval/observed_state_feedback.py` is
+  `aa7e06236563cbff726f73e6e6f46862c2859dcacf9433acad6334cec8e559a7`; changed
+  `src/vlarobot/eval/worldmind_evidence.py` is
+  `69748ec0615e19f16a1ef2dd987642f42a6df90465c14859efd95aa7cc0e7406`; changed
+  `src/vlarobot/cli.py` is
+  `723bdb1ca9c8ef4cf13a72c12731bdf8f00d7f4ddcff1e1a4295822697bfa5ef`; new
+  `tests/test_worldmind_observed_state_feedback.py` is
+  `3ed91143e68625c5bd0365c64d9a1620005c35353f3c601e6632dc01e095bc1b`. Unchanged regression
+  files are `tests/test_worldmind_v4_postmortem_regression.py`
+  `69ccbf99bf8970a2f806071bfc36523c720006e84060b15b267df1e7b4c3bc9c` and
+  `tests/test_worldmind_stage1_runner.py`
+  `d402bf5bf25b07cec023c05b77d0bf08f5bff80571e7cdbcb86d9a62ca4cb2c5`.
+- **Verification:** the focused feedback file returns `9 passed`; the final combined relevant set
+  (`v4_postmortem`, `stage1_runner`, `observed_state_feedback`) returns
+  `33 passed, 8 warnings in 6.87s`. `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `339 files already formatted`; `git diff --check`
+  passed. The repository-wide offline suite returned
+  `1 failed, 849 passed, 3 skipped, 540 warnings in 602.23s (0:10:02)`; the only failure is the
+  same pre-existing unrelated notebook helper SHA mismatch recorded in ADR-0075/ADR-0077
+  (`tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`,
+  `071cf660…` expected, `88fd4db9…` present), with no diff from `HEAD` in the helper, manifest
+  or test. All nine feedback regressions passed inside the full suite. An additional
+  `uv run ty check src` probe is not clean (43 repository-wide diagnostics in existing
+  type-model patterns, including the Stage 1 `_world_state` config call sites); it is not part of
+  this ADR's offline acceptance workflow and no new sidecar-module diagnostics were reported.
+- **Remaining limitations and recommendation:** the A/B correction was verified only offline with
+  deterministic FakeBackend regressions. No Webots timing, physical joint response, grasp,
+  contact, release, settling, swept-arm certificate, Windows run, V5 campaign, scoring,
+  calibration selection, `full_system` activation or production use was verified. **CONDITIONAL
+  GO** is reserved for a separately authorized, non-scored Stage 1 diagnostic that explicitly
+  selects this mode with `scripted_proposer`, writes only to a fresh versioned output directory,
+  and treats feedback rows as non-comparable diagnostics. **NO-GO** for a live/scored campaign,
+  `full_system`, calibration selection, retrying or resuming V4, or treating these regressions as
+  evidence of physical task success.

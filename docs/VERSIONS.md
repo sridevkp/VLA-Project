@@ -206,3 +206,17 @@ changes. No public `core/` interface, V1-V4 evidence byte or live authorization 
 offline focused and relevant regression tests, Ruff and formatting checks pass; Windows, Webots,
 physical actuation, V5 and scored behavior remain unverified. Current source is **NO-GO** for
 another live campaign.
+
+ADR-0078 adds no dependency or version pin. It reuses Python 3.11 standard library, NumPy, the
+existing pinned corrected URDF registration, reviewed `configs/robot.yaml` values, the pose
+solver's `0.15 rad` execution bound, `SafetyMonitor` and the frozen diagnostic config. The new
+`observed-state-feedback.jsonl` schema is version 1 and is created only for the explicit
+`diagnostic_observed_state_feedback_chunk` mode; it changes no public `core/` interface, config,
+seed, split, candidate, safety threshold, verifier threshold, report definition, scoring,
+calibration, `full_system` path, V1-V4 evidence byte or live authorization. Feedback trajectories
+are non-comparable with the immutable H=50 prediction and emit no prediction pairing. Linux offline
+focused and relevant regression tests, Ruff, formatting and `git diff --check` pass; the full
+offline suite has only the pre-existing unrelated notebook helper SHA mismatch. An additional `ty`
+probe reports repository-wide pre-existing diagnostics and is not an acceptance gate. Windows,
+Webots, physical actuation, V5 campaigns and scored behavior remain unverified. Conditional GO is
+limited to a separately authorized, non-scored diagnostic in a fresh output directory.

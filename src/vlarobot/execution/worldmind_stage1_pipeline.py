@@ -533,6 +533,7 @@ class Stage1WorldMindEpisodePolicy:
             no_safe = RecoveryState()
             use_alternate = False
             decision_index = 0
+            loop_exited_by_bound = True
 
             while (
                 decision_index < self.config.bounds.max_decisions
@@ -637,6 +638,7 @@ class Stage1WorldMindEpisodePolicy:
                     )
                     failure_state, failure_reason = "NO_SAFE_SET", selection.rationale
                     if abort:
+                        loop_exited_by_bound = False
                         break
                     decision_index += 1
                     continue
@@ -700,6 +702,7 @@ class Stage1WorldMindEpisodePolicy:
                         ),
                         pairing,
                     )
+                    loop_exited_by_bound = False
                     break
 
                 steps += 1
@@ -753,17 +756,34 @@ class Stage1WorldMindEpisodePolicy:
                 self.writer.record_decision(evidence, pairing)
                 if verification.success and transition == "complete":
                     verified_success, failure_state, failure_reason = True, "", ""
+                    loop_exited_by_bound = False
                     break
                 if transition == "abort":
                     failure_state, failure_reason = "VERIFICATION_ABORT", verification.reason
+                    loop_exited_by_bound = False
                     break
                 failure_state, failure_reason = "VERIFICATION_RETRY", verification.reason
                 use_alternate = True
                 decision_index += 1
         except Exception as error:  # noqa: BLE001 - runner records a fail-closed failure row
+            loop_exited_by_bound = False
             self.writer.record_error(episode_id, error)
             failure_state = "EXCEPTION"
             failure_reason = f"{type(error).__name__}: {error}"
+
+        if loop_exited_by_bound:
+            reached: list[str] = []
+            if decision_index >= self.config.bounds.max_decisions:
+                reached.append(
+                    f"max_decisions={self.config.bounds.max_decisions} after "
+                    f"{decision_index} decisions"
+                )
+            if steps >= self.config.bounds.max_steps:
+                reached.append(f"max_steps={self.config.bounds.max_steps} after {steps} steps")
+            failure_state = "WORLDMIND_BOUND_EXHAUSTED"
+            failure_reason = "bound exhaustion: " + (
+                "; ".join(reached) if reached else "no progress possible"
+            )
 
         final_pose = initial_world
         if ground_truth is not None:
@@ -1074,10 +1094,25 @@ class Stage1PolicyFactory:
         )
 
 
+STAGE1_QUARANTINE_FILE = "quarantine.json"
+
+
+def _quarantine_path(out_dir: Path) -> Path:
+    return out_dir / "worldmind-sidecars" / STAGE1_QUARANTINE_FILE
+
+
+def _assert_no_resume_quarantine(out_dir: Path) -> None:
+    """Refuse a directory previously marked as containing incomplete episode artifacts."""
+    path = _quarantine_path(out_dir)
+    if path.exists():
+        raise ValueError(f"resume quarantined by {path}; do not use this evidence directory")
+
+
 def _validate_resume_coverage(
     out_dir: Path, plan: Sequence[EvalEpisode], writer: WorldMindEvidenceWriter, pipeline: str
 ) -> None:
     """Refuse resume when completed recorder episodes and sidecar coverage disagree."""
+    _assert_no_resume_quarantine(out_dir)
     completed = {
         entry.scene.name
         for entry in plan
@@ -1085,8 +1120,16 @@ def _validate_resume_coverage(
     }
     recorded = writer.episode_ids
     if completed != recorded:
+        write_json(
+            {
+                "reason": "incomplete episode artifacts; resume refused",
+                "completed_recordings": sorted(completed),
+                "sidecar_episodes": sorted(recorded),
+            },
+            _quarantine_path(out_dir),
+        )
         raise ValueError(
-            "resume coverage mismatch: "
+            "resume quarantined: coverage mismatch: "
             f"completed_recordings={sorted(completed)} sidecar_episodes={sorted(recorded)}"
         )
 

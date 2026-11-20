@@ -2900,3 +2900,28 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   plan; there is no one-scene/one-seed CLI selector. A single-scene live proposal would require a
   scope change to the frozen campaign definition and is therefore not made. The first live command
   can only be the full frozen campaign after all owner approvals.
+
+## ADR-0072 — Stage 1 evidence-integrity safeguards (2026-11-20)
+
+- **Scope:** two additive safeguards in the accepted non-scored Stage 1 runner. No Webots process,
+  live evidence, actuation, scoring, calibration selection, metric/definitions approval, config
+  population, production activation, TEST/TRAIN access, push or merge occurred. The frozen 18-episode
+  VALIDATION plan, exact `--arm-mode scripted_proposer` requirement, finite caps, seeded candidate
+  generation and live safety chain are unchanged.
+- **Bound exhaustion:** the Stage 1 episode policy now distinguishes loop exit by a finite bound
+  from explicit abort/success/exception exits. If `max_decisions` or `max_steps` ends an episode,
+  the outcome is `WORLDMIND_BOUND_EXHAUSTED` with a reason naming the reached bound and observed
+  count. A prior `NO_SAFE_SET` or `VERIFICATION_RETRY` reason cannot masquerade as the termination
+  cause. Explicit safety abort, verification abort, successful completion and exceptions retain
+  their original states.
+- **Interruption and resume:** resume provenance validation is unchanged. A coverage mismatch
+  between completed recorder episodes and WorldMind sidecar episodes now writes
+  `worldmind-sidecars/quarantine.json` and fails closed before rerunning any episode. The marker
+  blocks all later resumes of that directory. Partial recorder files with no committed decision
+  sidecars remain resumable at the episode boundary: `_completed_recording` treats them as
+  incomplete and `open_episode` truncates them on rerun, so no completed-looking duplicate can be
+  produced. Decision, pairing, error and provenance sidecars are not modified by a refused resume.
+- **Verification:** `uv run pytest tests/test_worldmind_stage1_runner.py -m "not webots" -q`
+  passed `16 passed in 9.02s`. `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `333 files already formatted`. No Webots-dependent test
+  was run.

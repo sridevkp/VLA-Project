@@ -465,6 +465,118 @@ def test_resume_rejects_incompatible_mode_config_and_plan(
         assert {name: path.read_bytes() for name, path in sidecars.items()} == original
 
 
+@pytest.mark.parametrize(
+    ("max_decisions", "max_steps", "expected_reason"),
+    (
+        (1, 10, "max_decisions=1 after 1 decisions"),
+        (10, 1, "max_steps=1 after 1 steps"),
+    ),
+)
+def test_bound_exhaustion_has_explicit_truthful_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    max_decisions: int,
+    max_steps: int,
+    expected_reason: str,
+) -> None:
+    fixture, _, config, runtime = _setup(tmp_path, monkeypatch, hard_value=False)
+    config = replace(
+        config, bounds=replace(config.bounds, max_decisions=max_decisions, max_steps=max_steps)
+    )
+    out = tmp_path / f"bound-{max_decisions}-{max_steps}"
+    backend = FakeBackend()
+    report, sidecars = run_stage1_evidence(
+        _one_episode_plan(),
+        backend,
+        config,
+        out,
+        fixture.bindings,
+        arm_mode="scripted_proposer",
+        runtime_values=runtime,
+    )
+    row = report.rows[0]
+    assert row["failure_state"] == "WORLDMIND_BOUND_EXHAUSTED"
+    assert expected_reason in str(row["failure_reason"])
+    assert "NO_SAFE_SET" not in str(row["failure_reason"])
+    assert len(_jsonl(sidecars["decisions"])) == 1
+
+
+def test_mid_episode_sidecars_quarantine_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, _, config, runtime = _setup(tmp_path, monkeypatch)
+    out = tmp_path / "mid-episode-quarantine"
+    kwargs = {
+        "config": config,
+        "out_dir": out,
+        "bindings": fixture.bindings,
+        "arm_mode": "scripted_proposer",
+        "runtime_values": runtime,
+    }
+    _, sidecars = run_stage1_evidence(_one_episode_plan(), FakeBackend(), **kwargs)
+    protected_bytes = {
+        name: path.read_bytes()
+        for name, path in sidecars.items()
+        if name in {"provenance", "decisions", "prediction_pairing", "errors"}
+    }
+    recorded = {row["episode_id"] for row in _jsonl(sidecars["decisions"])}
+    (out / "episode-00.meta.json").unlink()
+
+    resumed_backend = SpyBackend(FakeBackend(), fixture.shared)
+    with pytest.raises(ValueError, match="resume quarantined: coverage mismatch"):
+        run_stage1_evidence(
+            _one_episode_plan(),
+            resumed_backend,
+            **{**kwargs, "resume": True},
+        )
+    assert resumed_backend.events == []
+
+    marker = out / "worldmind-sidecars" / "quarantine.json"
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["reason"] == "incomplete episode artifacts; resume refused"
+    assert payload["completed_recordings"] == []
+    assert set(payload["sidecar_episodes"]) == recorded
+    assert {
+        name: path.read_bytes() for name, path in sidecars.items() if name in protected_bytes
+    } == protected_bytes
+
+    with pytest.raises(ValueError, match="resume quarantined by"):
+        run_stage1_evidence(
+            _one_episode_plan(),
+            FakeBackend(),
+            **{**kwargs, "resume": True},
+        )
+
+
+def test_partial_recorder_files_without_sidecar_decisions_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, _, config, runtime = _setup(tmp_path, monkeypatch)
+    out = tmp_path / "episode-boundary-partial"
+    kwargs = {
+        "config": config,
+        "out_dir": out,
+        "bindings": fixture.bindings,
+        "arm_mode": "scripted_proposer",
+        "runtime_values": runtime,
+    }
+    run_stage1_evidence(_one_episode_plan(), FakeBackend(), **kwargs)
+    (out / "episode-00.meta.json").unlink()
+    for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
+        (out / "worldmind-sidecars" / name).write_text("", encoding="utf-8")
+
+    backend = SpyBackend(FakeBackend(), fixture.shared)
+    report, sidecars = run_stage1_evidence(
+        _one_episode_plan(),
+        backend,
+        **{**kwargs, "resume": True},
+    )
+    assert backend.events == ["reset", "apply", "step"]
+    assert len(report.rows) == 1
+    assert len(_jsonl(sidecars["decisions"])) == 1
+    assert not (out / "worldmind-sidecars" / "quarantine.json").exists()
+
+
 def test_cli_never_launches_webots_scores_or_calls_calibration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

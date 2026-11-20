@@ -3297,3 +3297,106 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   `--execution-mode diagnostic_open_loop_chunk`, uses the approved config and a new output
   directory, and preserves V1/V2/V3. **NO-GO** for retrying V2 or V3, scoring, calibration
   selection, `full_system`, Packet B/D, TRAIN/TEST access or production activation.
+
+## ADR-0077 — Stage 1 V4 postmortem and C-only bookkeeping correction (2026-11-21)
+
+- **Scope and preservation:** offline, read-only investigation of the preserved V4 evidence plus
+  one minimal source-backed bookkeeping correction. No Webots process, campaign, rerun, resume,
+  scoring, calibration selection, `full_system`, Packet B/D, TRAIN/TEST access, geometry
+  investigation, push or merge occurred. V1-V4 were never written. Recomputed tree aggregates
+  remain V1 `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`, V2
+  `b5b4075d8c6db133027ea900cecb5db995f286a52bdeb6d37e96231c07194ccb`, V3
+  `d4204a6fae79c16988e68f0b7cb61b27c90ba614f55fbfa507d1f666cf3d4d29`, and V4
+  `48ce9f020802dac08c3fa065f4b53ef7d0f547160a891f488b081966f4eeba47`. Frozen inputs are
+  unchanged: approved config `configs/worldmind_diagnostic.approved.yaml`
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`, definitions
+  `configs/report/definitions.approved.json`
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`, and frozen plan hash
+  `013ca8ee314df6ca6b72505761c0ab7bc37caf4ec469f6696db80d7ce428fcb2`.
+- **V4 finding A (`arm_7_joint` veto):** runtime evidence records two vetoes, both at decision
+  `d01`, action index `15`, reason `joint target for arm_7_joint violates velocity limits`. The
+  runtime-recorded previous commanded targets were `-1.2686945979476707` and
+  `1.6620230047232916`; the rejected targets were `-1.4186945979476706` and
+  `1.8120230047232915`, giving exact command deltas of `-0.1499999999999999` and
+  `0.1499999999999999` rad. The latest observed states paired to action 15 by preserved
+  `observation_t_s` were `0.44138256595535447` and `-0.048049874615676044` rad, giving
+  observed-state deltas of `-1.8600771639030251` and `1.8600728793389676` rad. Reviewed
+  `SafetyLimits` are `1.76 rad/s` for `arm_7_joint`, `command_horizon=1.0 s`, and
+  `max_joint_step_rad=0.15`; the exact check is `abs(target - current) / command_horizon`.
+  Replaying `SafetyMonitor.validate()` gives `accepted=True` for both targets against the
+  previous **commanded** target (`0.15 rad/s` implied) and `accepted=False` against the latest
+  **observed** state (`1.8600771639030251` and `1.8600728793389676 rad/s` implied). Root cause:
+  `ScriptedChunkAdapter._bounded_joint_actions()` updates its planner-local `current_joints` to
+  each commanded target, while the live monitor validates against fresh observed
+  `RobotState.joint_pos`; the one-tick open-loop execution does not achieve each target, so the
+  two state estimates diverge and the veto is correct fail-closed behavior, not a bad limit.
+- **V4 finding B (terminal placement/HOME):** offline reconstruction from the pinned source and
+  recorded initial oracle state gives the reviewed cadence `INIT 0-1`, `PREGRASP 2-11`,
+  `DESCEND 12-17`, `CLOSE 18-20`, `LIFT 21-28`, `TRANSIT 29-36`, `PLACE_DESCEND 37-42`,
+  `RELEASE 43-44`, `RETREAT 45-46`, `HOME 47-49` with `GRASP_Z=0.02`, `APPROACH_H=0.12`,
+  `PLACE_CLEAR=0.01`, destination `[-1.0, -4.3, 0.821]` m and the frozen HOME targets. For
+  representative full episode `validation-clear-i00-s0`, runtime NPZ evidence shows maximum
+  commanded-versus-observed joint error `1.4137613171101848 rad` (median `0.7820 rad`; 86/86
+  joint actions exceed the `0.02 rad` HOME tolerance), end-effector path `1.3876388902408507 m`,
+  CAN path `9.491110469569001e-06 m`, gripper range `1.4357139981294163e-06` to
+  `0.024252222508518852` (commands close `0.0` and open `0.045`), final CAN distance
+  `0.2531504291422367 m` versus `distance_tolerance_m=0.1`, HOME `False` with maximum error
+  `1.1536445247351717 rad` versus `home_tolerance_rad=0.02`. At phase boundaries after the last
+  applied action, the maximum joint error was `0.955859` rad at PREGRASP, `0.710020` at DESCEND,
+  `0.640640` at LIFT, `0.289666` at TRANSIT, `0.927271` at PLACE_DESCEND, `0.563286` at RETREAT
+  and `0.725871` at HOME. Runtime values come from decisions/sidecars/NPZ; waypoint targets and
+  the one-tick assumption are offline reconstructions. Root cause: the reviewed 50-step chunk
+  plans bounded target increments and assumes each target is reached in one simulator tick, but
+  the diagnostic contract advances one tick per target without feedback or settling; terminal
+  verification correctly consumes observed state and therefore fails closed.
+- **V4 finding C (step accounting):** runtime evidence records `1730` backend steps and
+  `1,748` NPZ states across 18 episodes, but meta `worldmind_control_steps` totals `1700`. The
+  `30`-step gap equals the two `15`-step accepted prefixes in the safety-aborted chunks at
+  `validation-clear-i03-s0-d01` and `validation-reach-limited-i05-s1-d01`. Source cause: the
+  open-loop abort branch in `worldmind_stage1_pipeline.py` broke out before
+  `steps += chunk.backend_step_count`; only complete chunks reached the accumulator.
+- **Approved correction:** only finding C was changed. The accepted chunk's
+  `backend_step_count` is now added immediately after chunk evidence is validated and before
+  any safety/backend/exception early break, and the later unconditional add was removed so a
+  complete chunk is still counted exactly once. This changes bookkeeping only; it does not
+  change the 50-step cadence, one-tick simulator contract, candidate generation, selection,
+  safety checks, motion limits, verifier thresholds, observed-state terminal checks, HOME
+  criteria, scene/seed plan, `retry_once → abort`, fail-closed behavior, full-system swept-arm
+  blocker or V1-V4 evidence. Findings A and B require changing frozen candidate/execution
+  behavior or adding feedback absent from the approved open-loop chunk; no such change was made
+  and separate owner approval is required before attempting one.
+- **Changed hashes:** `src/vlarobot/execution/worldmind_stage1_pipeline.py` changed from
+  `b724da5736bde334022a77af97cbc2ff4092a19abb111b9e11b35e0c25ed544f` to
+  `01bbd7f73649b9d3096f977fddc3849d5b53adeb40d81f0f0ef5e47deac1c08a`. New
+  `tests/test_worldmind_v4_postmortem_regression.py` has SHA-256
+  `69ccbf99bf8970a2f806071bfc36523c720006e84060b15b267df1e7b4c3bc9c`. Unchanged pinned source
+  includes `execution/scripted_chunk_adapter.py`
+  `890e2f5bd3621338db85cb60088f27c091b792ca437d2aeadd744dc7029432f4`,
+  `execution/safety_monitor.py`
+  `900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a`,
+  `execution/worldmind_pipeline.py`
+  `27f3d45165d5e4e34fa4b670e41a709ff25206f2e5400fa441afe1dda887fdf8`, and
+  `backends/worldmind_bindings.py`
+  `4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae`.
+- **Verification:** the new focused file returns `8 passed`; the combined relevant set
+  (`v4_postmortem`, `v2_postmortem`, `stage1_runner`, `eval_decision_evidence`,
+  `eval_decision_adapters`, `worldmind_production`, `worldmind_waypoints`,
+  `worldmind_readiness_regression`, `worldmind_endpoint_failstop_regression`) returns
+  `82 passed, 8 warnings in 10.91s`. These include veto reproduction, unchanged limit enforcement,
+  observed-state HOME/terminal checks, fail-closed unachievable trajectories, complete and
+  safety-aborted step accounting, pairing alignment, and V1-V4 aggregate hashes.
+  `uv run ruff check .` returned `All checks passed!`; `uv run ruff format --check .` returned
+  `337 files already formatted`; `git diff --check` passes. The full offline suite returned
+  `1 failed, 840 passed, 3 skipped, 540 warnings in 599.83s`; the only failure is the pre-existing
+  unrelated notebook helper SHA mismatch in
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  (`071cf660…` expected, `88fd4db9…` present), with no diff from `HEAD` in the helper, manifest
+  or test.
+- **Remaining limitations and V5 decision:** no live Webots execution, no V5 campaign, no
+  physical settling, contact, grasp, gripper or swept-arm validation, no Windows run, and no
+  scoring, calibration selection, `full_system` activation or production use was verified.
+  **NO-GO** for another live campaign with the current source: A and B remain unresolved and any
+  correction needs separate owner approval for frozen cadence/simulator/candidate behavior
+  changes. **GO** is reserved for a separately authorized, non-scored VALIDATION18 Stage 1
+  diagnostic after that approval and after a fresh output directory is selected; V4 must remain
+  preserved and is not resumable.

@@ -850,6 +850,9 @@ class Stage1WorldMindEpisodePolicy:
                         raise RuntimeError("open-loop execution did not record chunk evidence")
                     observed_states = chunk_result.observed_states
                     observed_timestamps = tuple(item.t for item in chunk_result.observations)
+                    # Count every backend step recorded by the chunk before any early abort
+                    # break; safety/backend/exception terminations still executed a prefix.
+                    steps += chunk.backend_step_count
                     if chunk.termination_reason != "chunk_complete":
                         boundary = chunk.termination_reason
                         failure_state = {
@@ -971,7 +974,6 @@ class Stage1WorldMindEpisodePolicy:
                     chunk = chunk_result.evidence.chunk
                     if chunk is None:
                         raise RuntimeError("open-loop execution did not record chunk evidence")
-                    steps += chunk.backend_step_count
                     after = chunk_result.observation
                     ground_truth = chunk_result.ground_truth
                     after_state = chunk_result.observed_states[-1]

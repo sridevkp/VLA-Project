@@ -195,3 +195,14 @@ config, seed, split, safety threshold, report definition, preserved V1/V2 eviden
 authorization changed. Linux offline focused tests, the 32-candidate reconstruction replay,
 Ruff and formatting checks pass; the full offline suite has only the pre-existing unrelated
 notebook helper SHA mismatch. Windows and all Webots/physical paths remain unverified.
+
+ADR-0077 adds no dependency or version pin. It reuses Python 3.11 standard library, NumPy, the
+existing pinned corrected URDF registration, `SafetyMonitor` and the frozen diagnostic config.
+The only source change moves open-loop `backend_step_count` accounting ahead of early abort
+breaks so safety-aborted chunks retain every accepted control step; no cadence, simulator step,
+candidate, safety, verifier, threshold, seed, split, scoring, calibration or full-system behavior
+changed. A and B remain diagnosed but uncorrected pending owner approval for frozen behavior
+changes. No public `core/` interface, V1-V4 evidence byte or live authorization changed. Linux
+offline focused and relevant regression tests, Ruff and formatting checks pass; Windows, Webots,
+physical actuation, V5 and scored behavior remain unverified. Current source is **NO-GO** for
+another live campaign.

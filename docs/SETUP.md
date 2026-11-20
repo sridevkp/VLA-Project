@@ -315,3 +315,10 @@ uv run python -m pytest -q tests/test_worldmind_production.py
 
 This uses synthetic fixtures only and does not authorize or produce a scored VALIDATION result.
 See `WEEK3_DECISION_OBSERVABILITY.md` §10 for the reviewed inert node list.
+
+The V4 postmortem (ADR-0077) is offline-only. Do not retry or resume V4; its evidence is preserved.
+A separate owner authorization is required before changing the reviewed 50-step cadence, one-tick
+simulator contract or candidate/execution behavior needed to address the arm-velocity divergence
+and terminal tracking failures. The C-only bookkeeping correction is covered by
+`tests/test_worldmind_v4_postmortem_regression.py`; current source remains **NO-GO** for another
+live campaign.

@@ -17,7 +17,9 @@
 # confirmation before use in a ready/scored config. Every other owner field stays blocked.
 # Second reconciliation (2026-11-20, ADR-0069): exact source-backed instruction, report path,
 # safety config, rest/object/HOME-tolerance verification inputs and IK tolerances are filled.
-# Definitions, destination, bounds, up-axis, HOME joints and jitter remain owner-blocked.
+# Third reconciliation (2026-11-20, ADR-0070): destination wording, base-frame up-axis and HOME
+# joints are filled from the accepted v5 observation and canonical instruction source.
+# Definitions, bounds and jitter remain owner-blocked.
 schema_version: 1
 status: "diagnostic_uncalibrated"
 split: "validation"
@@ -33,7 +35,7 @@ backend:
 task:
   instruction: "Pick up the can and place it at the target location."
   target: "CAN"
-  destination: "<DESTINATION ID>"
+  destination: "target location"  # src/vlarobot/eval/demos.py::DEFAULT_INSTRUCTION
 
 pipeline:
   proposer: "scripted_chunk_adapter"
@@ -83,13 +85,21 @@ verification:
   destination_world: [-1.0, -4.3, 0.821]
   rest_center_world: [-0.799879, -4.38998, 0.810949]
   object_dimensions_m: [0.0635, 0.0635, 0.1222]
-  up_axis_base: ["<X>", "<Y>", "<Z>"]
+  # Third row of accepted v5 T_world_base_live_observed (world +Z expressed in base frame).
+  up_axis_base: [-0.008464554343786014, 0.028463807918849244, 0.9995589842318061]
   distance_tolerance_m: 0.10
   height_tolerance_m: 0.02
   tilt_limit_rad: 0.2617993877991494
   home_tolerance_rad: 0.02
+  # Accepted v5 reset joint observation; the controller captures this vector at reset.
   home_joints:
-    "<REVIEWED JOINT NAME>": "<REVIEWED RAD>"
+    arm_1_joint: 0.07096462462238605
+    arm_2_joint: -2.2620047855248515e-05
+    arm_3_joint: 2.054103653800303e-05
+    arm_4_joint: 8.787041281495702e-06
+    arm_5_joint: 4.885743745552387e-06
+    arm_6_joint: -1.6051675007634115e-06
+    arm_7_joint: 1.4867396893897092e-06
 
 adapter:
   waypoints_binding: "corrected_scripted_waypoints_v1"

@@ -47,6 +47,7 @@ PIPELINE_ALIASES: dict[str, str] = {
     "baseline": "baseline",
     "scripted": "baseline",
     "scripted_baseline": "baseline",
+    "scripted_chunk_adapter": "scripted_chunk_adapter",
     "vla_only": "vla_only",
     "vla_risk_veto": "vla_risk_veto",
     "vla_world_model": "vla_world_model",

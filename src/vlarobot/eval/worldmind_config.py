@@ -1216,6 +1216,7 @@ def plan_worldmind_diagnostic(
     backend: str,
     state_source: str,
     bindings: WorldMindBindings | None = None,
+    allow_existing: bool = False,
 ) -> tuple[WorldMindDiagnosticConfig, tuple[EvalEpisode, ...]]:
     """Stage-1/2 pure gate: uncalibrated config, frozen plan and every hard binding present.
 
@@ -1225,7 +1226,7 @@ def plan_worldmind_diagnostic(
     """
     if split != FROZEN_SPLIT:
         raise ValueError("TEST and TRAIN are sealed for this command; VALIDATION only")
-    if out_dir.exists():
+    if out_dir.exists() and not allow_existing:
         raise FileExistsError(f"preserve prior evidence; output already exists: {out_dir}")
     if state_source != FROZEN_STATE_SOURCE:
         raise ValueError("WorldMind diagnostic state source must be declared as oracle")

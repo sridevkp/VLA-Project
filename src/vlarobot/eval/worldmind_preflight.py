@@ -241,6 +241,7 @@ def run_worldmind_diagnostic_preflight(
     state_source: str,
     bindings: WorldMindBindings,
     runtime_probe: DiagnosticRuntimeProbe | None = None,
+    allow_existing: bool = False,
 ) -> WorldMindDiagnosticPreflight:
     """Collect stage-1/2 gates; never score, approve parameters or access TEST/TRAIN."""
     checks: list[PreflightCheck] = []
@@ -252,6 +253,7 @@ def run_worldmind_diagnostic_preflight(
             backend=backend,
             state_source=state_source,
             bindings=bindings,
+            allow_existing=allow_existing,
         )
     except Exception as error:  # noqa: BLE001 - report every gate failure without escaping
         checks.append(

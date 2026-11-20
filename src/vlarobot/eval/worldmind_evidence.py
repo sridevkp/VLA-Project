@@ -22,10 +22,16 @@ from vlarobot.eval.decision_metrics import (
 from vlarobot.eval.worldmind_config import GATE_CALL_POLICY
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    with path.open("x", encoding="utf-8") as stream:
+def _write_json(path: Path, payload: Mapping[str, Any], *, overwrite: bool = False) -> None:
+    with path.open("w" if overwrite else "x", encoding="utf-8") as stream:
         json.dump(payload, stream, indent=2, sort_keys=True, allow_nan=False)
         stream.write("\n")
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
 
 
 def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
@@ -38,6 +44,9 @@ def build_instrumentation(
     decisions: Sequence[DecisionEvidence],
     *,
     measurement_class: str,
+    gate_policy: str = GATE_CALL_POLICY,
+    expected_gate_calls_per_decision: int | None = None,
+    latency_note: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate real, recorded decision evidence into Table 5.1 instrumentation.
 
@@ -50,7 +59,12 @@ def build_instrumentation(
         for evidence in decisions
         if (value := evidence.provenance.get("gate_select_calls")) is not None
     ]
-    expected_gate_calls = [evidence.candidate_count + 1 for evidence in decisions]
+    expected_gate_calls = [
+        evidence.candidate_count + 1
+        if expected_gate_calls_per_decision is None
+        else expected_gate_calls_per_decision
+        for evidence in decisions
+    ]
     latency = summarize_phase_latencies(
         [evidence.timings for evidence in decisions if evidence.timings is not None]
     )
@@ -64,7 +78,7 @@ def build_instrumentation(
         "decisions_per_episode": dict(sorted(per_episode.items())),
         "candidate_evaluations_total": sum(e.candidate_count for e in decisions),
         "gate_select_calls": {
-            "policy": GATE_CALL_POLICY,
+            "policy": gate_policy,
             "recorded_decisions": len(gate_values),
             "total": sum(gate_values),
             "expected_total": sum(expected_gate_calls),
@@ -73,7 +87,8 @@ def build_instrumentation(
             ),
         },
         "phase_latency": {name: asdict(summary) for name, summary in sorted(latency.items())},
-        "note": (
+        "note": latency_note
+        or (
             "Decision counts, candidate evaluations and phase latencies are measured from real "
             "WorldMind decision sidecars; no count is inferred from control steps and no latency "
             "is taken from a nominal kernel profile."
@@ -89,22 +104,54 @@ class WorldMindEvidenceWriter:
     folder_name: str = "worldmind-sidecars"
     decisions: list[DecisionEvidence] = field(default_factory=list, init=False)
     pairings: list[PredictionPairingEvidence] = field(default_factory=list, init=False)
+    errors: list[dict[str, Any]] = field(default_factory=list, init=False)
     measurement_class: str = field(default="synthetic", init=False)
+    resumed: bool = field(default=False, init=False)
 
     @property
     def folder(self) -> Path:
         return self.out_dir / self.folder_name
 
-    def start(self, provenance: Mapping[str, str]) -> None:
+    @property
+    def episode_ids(self) -> set[str]:
+        """Episode IDs with existing decision or error evidence, including resumed records."""
+        return {item.episode_id for item in self.decisions} | {
+            str(item["episode_id"]) for item in self.errors
+        }
+
+    def start(self, provenance: Mapping[str, str], *, resume: bool = False) -> None:
         # Never claim a measured class unless a real Webots backend was declared.
         self.measurement_class = (
             "measured" if provenance.get("backend") == "webots" else "synthetic"
         )
+        self.resumed = resume
+        if resume:
+            self._resume_existing(provenance)
+            return
         self.folder.mkdir(parents=True, exist_ok=False)
         _write_json(self.folder / "provenance.json", dict(provenance))
         for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
             with (self.folder / name).open("x", encoding="utf-8"):
                 pass
+
+    def _resume_existing(self, provenance: Mapping[str, str]) -> None:
+        """Reuse an interrupted sidecar set only when its provenance is byte-identical."""
+        if not self.folder.is_dir():
+            raise FileNotFoundError(f"cannot resume without sidecars: {self.folder}")
+        previous = json.loads((self.folder / "provenance.json").read_text(encoding="utf-8"))
+        if previous != dict(provenance):
+            raise ValueError("resume provenance differs from the existing sidecar provenance")
+        for name in ("decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"):
+            if not (self.folder / name).is_file():
+                raise FileNotFoundError(f"cannot resume without sidecar file: {name}")
+        self.decisions.extend(
+            DecisionEvidence.from_dict(row) for row in _read_jsonl(self.folder / "decisions.jsonl")
+        )
+        self.pairings.extend(
+            PredictionPairingEvidence.from_dict(row)
+            for row in _read_jsonl(self.folder / "prediction_pairing.jsonl")
+        )
+        self.errors.extend(_read_jsonl(self.folder / "errors.jsonl"))
 
     def record_decision(
         self,
@@ -124,16 +171,21 @@ class WorldMindEvidenceWriter:
         """Record a real exception; never synthesize missing decision records for it."""
         if not self.folder.is_dir():
             raise RuntimeError("evidence writer must be started before recording errors")
-        _append_jsonl(
-            self.folder / "errors.jsonl",
-            {
-                "episode_id": episode_id,
-                "error_type": type(error).__name__,
-                "error": str(error),
-            },
-        )
+        payload = {
+            "episode_id": episode_id,
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+        _append_jsonl(self.folder / "errors.jsonl", payload)
+        self.errors.append(payload)
 
-    def finish(self) -> dict[str, Path]:
+    def finish(
+        self,
+        *,
+        gate_policy: str = GATE_CALL_POLICY,
+        expected_gate_calls_per_decision: int | None = None,
+        latency_note: str | None = None,
+    ) -> dict[str, Path]:
         """Write risk, latency and recovery summaries from recorded decisions only."""
         decisions: Sequence[DecisionEvidence] = tuple(self.decisions)
         aggregate = risk_rejection_aggregate(decisions)
@@ -145,7 +197,12 @@ class WorldMindEvidenceWriter:
             for evidence in decisions
             if (value := evidence.provenance.get("gate_select_calls")) is not None
         ]
-        expected_gate_calls = [evidence.candidate_count + 1 for evidence in decisions]
+        expected_gate_calls = [
+            evidence.candidate_count + 1
+            if expected_gate_calls_per_decision is None
+            else expected_gate_calls_per_decision
+            for evidence in decisions
+        ]
         rejection_payload = {
             "schema_version": 1,
             "decisions": len(decisions),
@@ -156,7 +213,7 @@ class WorldMindEvidenceWriter:
             "disposition_counts": candidate_disposition_counts(decisions),
             "pairing_records": len(self.pairings),
             "gate_calls": {
-                "policy": GATE_CALL_POLICY,
+                "policy": gate_policy,
                 "recorded_decisions": len(gate_values),
                 "total": sum(gate_values),
                 "expected_total": sum(expected_gate_calls),
@@ -171,7 +228,8 @@ class WorldMindEvidenceWriter:
             "schema_version": 1,
             "decisions_with_timings": sum(evidence.timings is not None for evidence in decisions),
             "phases": {name: asdict(summary) for name, summary in sorted(latency.items())},
-            "note": (
+            "note": latency_note
+            or (
                 "Whole-phase perf_counter_ns durations. Inclusive phases overlap and are never "
                 "added. Hard checks and RiskGate ranking are fused inside ComparisonPlanner; "
                 "K=32 incurs 33 gate calls per decision inside selection_s."
@@ -193,7 +251,11 @@ class WorldMindEvidenceWriter:
             "no_safe_recovery_events": dict(sorted(recovery_events.items())),
         }
         instrumentation_payload = build_instrumentation(
-            decisions, measurement_class=self.measurement_class
+            decisions,
+            measurement_class=self.measurement_class,
+            gate_policy=gate_policy,
+            expected_gate_calls_per_decision=expected_gate_calls_per_decision,
+            latency_note=latency_note,
         )
         paths = {
             "decisions": self.folder / "decisions.jsonl",
@@ -212,5 +274,5 @@ class WorldMindEvidenceWriter:
                 "verification_recovery": recovery_payload,
                 "instrumentation": instrumentation_payload,
             }[name]
-            _write_json(paths[name], payload)
+            _write_json(paths[name], payload, overwrite=self.resumed)
         return paths

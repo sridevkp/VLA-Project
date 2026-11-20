@@ -631,6 +631,103 @@ def worldmind_diagnostic(
     )
 
 
+@app.command("worldmind-stage1-evidence")
+def worldmind_stage1_evidence(
+    config: Annotated[
+        Path,
+        typer.Option(help="Stage-1 uncalibrated VALIDATION diagnostic config."),
+    ],
+    out: Annotated[Path, typer.Option(help="New versioned output directory; never overwritten.")],
+    arm_mode: Annotated[
+        Literal["full_system_veto", "scripted_proposer"],
+        typer.Option(help="Explicit owner-authorized diagnostic mode; there is no default."),
+    ],
+    backend: Annotated[Literal["fake", "webots"], typer.Option()] = "webots",
+    state_source: Annotated[str, typer.Option()] = "oracle",
+    split: Annotated[str, typer.Option()] = "validation",
+    resume: Annotated[
+        bool, typer.Option(help="Resume an interrupted run in the same output directory.")
+    ] = False,
+) -> None:
+    """Collect non-scored Stage 1 evidence; never score, approve or launch Webots."""
+    from vlarobot.backends.worldmind_bindings import (
+        production_worldmind_bindings,
+        runtime_preflight_probe,
+    )
+    from vlarobot.eval.worldmind_preflight import run_worldmind_diagnostic_preflight
+    from vlarobot.execution.worldmind_stage1_pipeline import (
+        STAGE1_EVIDENCE_CLASS,
+        run_stage1_evidence,
+    )
+
+    try:
+        bindings = production_worldmind_bindings()
+    except Exception as error:  # noqa: BLE001 - registration must fail closed with one CLI error
+        typer.echo(
+            f"worldmind-stage1-evidence preflight failed: binding registration: "
+            f"{type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+
+    try:
+        preflight = run_worldmind_diagnostic_preflight(
+            config,
+            out,
+            split=split,
+            backend=backend,
+            state_source=state_source,
+            bindings=bindings,
+            runtime_probe=runtime_preflight_probe,
+            allow_existing=resume,
+        )
+    except Exception as error:  # noqa: BLE001 - surface one CLI error for an invalid command
+        typer.echo(
+            f"worldmind-stage1-evidence preflight failed: {type(error).__name__}: {error}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+    if not preflight.ready or preflight.config is None:
+        typer.echo("worldmind-stage1-evidence preflight failed:", err=True)
+        for blocker in preflight.blockers:
+            typer.echo(f"  - {blocker}", err=True)
+        raise typer.Exit(code=1)
+    if preflight.config.diagnostic.scored_evaluation_allowed:
+        typer.echo("worldmind-stage1-evidence refuses a scored config", err=True)
+        raise typer.Exit(code=1)
+
+    resolved = preflight.config
+    runtime_values = runtime_preflight_probe(resolved, bindings)
+    try:
+        from vlarobot.backends.fake import FakeBackend
+
+        client: Any = FakeBackend() if backend == "fake" else ZmqBackendClient(DEFAULT_ENDPOINT)
+        report, sidecars = run_stage1_evidence(
+            preflight.plan,
+            client,
+            resolved,
+            out,
+            bindings,
+            arm_mode=arm_mode,
+            runtime_values=runtime_values,
+            resume=resume,
+        )
+    except Exception as error:  # noqa: BLE001 - surface one CLI failure after evidence finalize
+        typer.echo(f"worldmind-stage1-evidence failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    finally:
+        close = getattr(locals().get("client"), "close", None)
+        if close is not None:
+            close()
+    typer.echo(
+        f"worldmind-stage1-evidence arm_mode={arm_mode} "
+        f"evidence_class={STAGE1_EVIDENCE_CLASS[arm_mode]} "
+        f"scored_evaluation_allowed=False episodes={report.summary['n_episodes']} "
+        f"resume={resume}"
+    )
+    typer.echo(f"  out={out} sidecars={sidecars['decisions'].parent}")
+
+
 @app.command("worldmind-webots-diagnostic")
 def worldmind_webots_diagnostic(
     config: Annotated[

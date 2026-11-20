@@ -56,10 +56,10 @@ validation-reach-limited-i05-s2 2
 
 ## 3. Command status
 
-### 3.1 Inert preflight only — the only currently executable command
+### 3.1 Inert preflight — required before any live run
 
-After the owner decision set in ADR-0069 is resolved and the approved definitions file exists,
-run only this read-only preflight:
+After the remaining owner decisions (ADR-0069 as narrowed by ADR-0070) are resolved and the
+approved definitions file exists, run only this read-only preflight:
 
 ```text
 cd /home/tj330/programs/VLA-Project-week3
@@ -70,24 +70,64 @@ uv run python -m vlarobot.cli worldmind-diagnostic \
 ```
 
 This command only validates configuration, bindings, frozen plan and scope. It creates no output
-directory, launches no Webots process, records no episode and scores nothing. As of this request it
-still fails closed at `task.destination is still a blocked template placeholder`.
+directory, launches no Webots process, records no episode and scores nothing. After ADR-0070 it
+fails closed at `bounds.max_decisions must be an integer >= 1`; approved definitions, bounds and
+jitter remain owner-blocked.
 
-### 3.2 Evidence-collection command — exact command not available
+### 3.2 Evidence-collection command — implemented, prepared, not authorized
 
-There is no execution-capable Stage 1 CLI command in the current tree:
+An additive, non-scored runner now exists (ADR-0071). It reuses `eval/runner.py`, the frozen
+recorder and WorldMind sidecars; it does not score, calibrate, approve definitions, launch Webots,
+or run a production preflight. `--arm-mode` is required and has no default. The owner must
+authorize the exact mode before any live run.
 
-- `worldmind-diagnostic` is preflight-only.
-- `eval-worldmind` requires a `ready` production config, components, calibration evidence/candidate
-  and selected weights; it must not be used for Stage 1.
-- `eval --pipeline scripted` is the frozen scripted evaluator with bookkeeping/success summary; it
-  does not consume the Stage 1 diagnostic config and must not be substituted.
+Mode A — full-system hard-check evidence, **no actuation**:
 
-Therefore the exact first-episode command cannot be supplied legitimately until the owner either
-authorizes a minimal Stage 1 evidence runner with the flags above or designates an already-approved
-command. Do not infer one from the production command in
-`docs/WORLDMIND_OWNER_DECISION_READINESS_2026-11-18.md §9.9`; that command is for scored VALIDATION,
-not Stage 1.
+```text
+cd /home/tj330/programs/VLA-Project-week3
+uv run python -m vlarobot.cli worldmind-stage1-evidence \
+  --config configs/worldmind_diagnostic.yaml \
+  --out runs/worldmind/stage1-validation-v1-2026-11-20 \
+  --arm-mode full_system_veto \
+  --backend webots --state-source oracle --split validation
+```
+
+This mode runs the configured hard checks plus prediction completeness/constraints, preserves
+`unverified-arm-sweep` when present, adds `stage1_full_system_blocked`, selects no candidate and
+applies no action. Its evidence class is `full-system blocked/veto diagnostic`.
+
+Mode B — scripted proposer, **only if separately authorized**:
+
+```text
+cd /home/tj330/programs/VLA-Project-week3
+uv run python -m vlarobot.cli worldmind-stage1-evidence \
+  --config configs/worldmind_diagnostic.yaml \
+  --out runs/worldmind/stage1-validation-v1-2026-11-20 \
+  --arm-mode scripted_proposer \
+  --backend webots --state-source oracle --split validation
+```
+
+This mode selects the first hard-check-safe seeded scripted candidate in deterministic order, with
+no utility ranking. Every apply still passes the live safety monitor first. Its evidence class is
+`scripted diagnostic`; it must never be reported as `full_system` evidence.
+
+The runner connects to an already-running `sim-server`; Webots must be started separately only
+after owner authorization. `worldmind-diagnostic` remains preflight-only. `eval-worldmind` remains
+a scored production command and must not be used for Stage 1. `eval --pipeline scripted` is the
+frozen scripted evaluator with bookkeeping/success summary; it does not consume the Stage 1
+diagnostic config and must not be substituted. Do not infer a command from
+`docs/WORLDMIND_OWNER_DECISION_READINESS_2026-11-18.md §9.9`; that command is for scored
+VALIDATION, not Stage 1.
+
+The diagnostic runner hard-requires the frozen 18-episode VALIDATION plan and exposes no
+one-scene/one-seed selector. A single-scene live command is therefore not available without
+changing the frozen campaign definition and is not proposed here.
+
+Offline `--backend fake` smoke runs must use a separate throwaway output path; they must never
+touch the reserved live evidence path. For an interrupted collection in the same directory, repeat
+the exact command unchanged and add `--resume`. The runner refuses resume if provenance, frozen
+plan coverage, config, mode, backend, state source or split differ. Resume reuses existing
+sidecars; it is not a fresh collection.
 
 ## 4. Expected evidence artifacts
 
@@ -121,7 +161,9 @@ runs/worldmind/stage1-validation-v1-2026-11-20/
 uncalibrated diagnostic evidence only; their success/gate fields must not be used for calibration
 selection or presented as post-calibration performance. `worldmind-sidecars/provenance.json` must
 record effective bounds, timing flag, backend declaration, state source, frozen plan and source
-hashes, and must not carry calibration identity or selected parameters.
+hashes, and must not carry calibration identity or selected parameters. Stage 1 sidecars record
+`gate_call_policy=stage1_no_risk_gate`, zero gate calls and no utility-ranking window; phase
+latency notes must state that RiskGate was not called.
 
 ## 5. No-scoring and no-TEST restrictions
 
@@ -139,21 +181,28 @@ hashes, and must not carry calibration identity or selected parameters.
 
 Before execution may be authorized:
 
-1. Owner supplies the six decisions in ADR-0069, including an actually approved definitions file
-   with `review_status=approved`.
+1. Owner supplies the remaining ADR-0069 decisions as narrowed by ADR-0070: an actually approved
+   definitions file with `review_status=approved`, `bounds.max_decisions`, `bounds.max_steps` and
+   the three `adapter.jitter` values with their reviewed sources.
 2. The inert `worldmind-diagnostic` command above passes with zero blockers and creates no output.
 3. The exact evidence command, its implementation status, output path, backend, state source,
-   scene list and stop conditions are explicitly approved by the owner.
+   scene list, stop conditions and exact `--arm-mode` are explicitly approved by the owner. There
+   is no implicit or default mode, and `scripted_proposer` cannot substitute for a `full_system`
+   authorization.
 4. A running `sim-server` is confirmed; Stage 1 does not launch Webots itself. Each episode's
    observation validity/freshness must be measured in its own session. The accepted v5 freshness
    result does not transfer to a new session.
 5. Every action reaching a backend continues to pass `safety_monitor.validate()`. No safety
    check, arm-sweep blocker or full-system veto is weakened.
-6. `full_system` remains blocked. `unresolved_forwarded_geometry` (`PipeSection`,
-   `StraightStairsRail`) and `unverified-arm-sweep` remain distinct motion blockers. The accepted
-   v5 table-grounding PASS is not a full-arm safety certificate.
+6. `full_system` remains blocked. Mode A applies no action; Mode B is a `scripted diagnostic`,
+   never `full_system` evidence. `unresolved_forwarded_geometry` (`PipeSection`,
+   `StraightStairsRail`) and `unverified-arm-sweep` remain distinct motion blockers and the latter
+   is never suppressed. The accepted v5 table-grounding PASS is not a full-arm safety certificate.
 7. Packet B stays blocked with `speed_bound_m_s = 28.49316700274912`; Packet D is unauthorized.
 8. No push or merge.
 
-Until all gates are satisfied and the owner explicitly authorizes evidence collection, nothing in
-this request should be run.
+Offline verification only: the runner was exercised with `FakeBackend` in
+`tests/test_worldmind_stage1_runner.py`. No Webots process, live observation, live action, live
+evidence directory or scored result was produced. Until all gates are satisfied and the owner
+explicitly authorizes evidence collection and the exact arm mode, nothing in this request should be
+run.

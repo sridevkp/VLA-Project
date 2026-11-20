@@ -1206,7 +1206,7 @@ def test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed():
     assert raw["verification"]["binding"] == "placement_verifier_v1"
     assert raw["adapter"]["waypoints_binding"] == "corrected_scripted_waypoints_v1"
     assert raw["adapter"]["pose_solver_binding"] == "corrected_bounded_pose_solver_v1"
-    # ADR-0069: only exact, reviewed sources were populated.
+    # ADR-0069 and ADR-0070: only exact, reviewed sources are populated.
     assert raw["task"]["instruction"] == "Pick up the can and place it at the target location."
     assert raw["report"]["pdf"] == "~/Downloads/Project_Report.pdf"
     assert raw["safety"]["config_path"] == "safety.yaml"
@@ -1215,19 +1215,29 @@ def test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed():
     assert raw["verification"]["home_tolerance_rad"] == 0.02
     assert raw["adapter"]["ik_position_tolerance_m"] == 0.005
     assert raw["adapter"]["ik_orientation_tolerance_rad"] == pytest.approx(math.radians(5.0))
+    assert raw["task"]["destination"] == "target location"
+    assert raw["verification"]["up_axis_base"] == [
+        -0.008464554343786014,
+        0.028463807918849244,
+        0.9995589842318061,
+    ]
+    assert raw["verification"]["home_joints"] == {
+        "arm_1_joint": 0.07096462462238605,
+        "arm_2_joint": -2.2620047855248515e-05,
+        "arm_3_joint": 2.054103653800303e-05,
+        "arm_4_joint": 8.787041281495702e-06,
+        "arm_5_joint": 4.885743745552387e-06,
+        "arm_6_joint": -1.6051675007634115e-06,
+        "arm_7_joint": 1.4867396893897092e-06,
+    }
     for blocked in (
-        raw["task"]["destination"],
         raw["bounds"]["max_decisions"],
         raw["bounds"]["max_steps"],
         raw["report"]["definitions"],
-        raw["verification"]["up_axis_base"][0],
-        next(iter(raw["verification"]["home_joints"])),
         raw["adapter"]["jitter"]["joint_std_rad"],
         raw["adapter"]["jitter"]["joint_limit_rad"],
         raw["adapter"]["jitter"]["max_attempts"],
     ):
         assert str(blocked).startswith("<"), blocked
-    with pytest.raises(
-        ValueError, match="task.destination is still a blocked template placeholder"
-    ):
+    with pytest.raises(ValueError, match="bounds.max_decisions must be an integer >= 1"):
         load_worldmind_diagnostic_config(path)

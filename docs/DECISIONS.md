@@ -2810,3 +2810,93 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   execution-capable Stage 1 CLI command, so no measured Webots evidence collection was started.
   `worldmind-diagnostic` only preflights and `eval-worldmind` requires a ready scored production
   config with calibration and weights. No push or merge.
+
+## ADR-0070 — Targeted Stage 1 source completion (2026-11-20)
+
+- **Scope:** targeted lookup and population of only `verification.up_axis_base`,
+  `verification.home_joints` and `task.destination` in
+  `configs/worldmind_diagnostic.yaml`. No Webots process, geometry diagnostic, retry, reset,
+  step, IK solve, actuation, scoring, TEST/TRAIN access, calibration selection, production
+  activation, threshold/weight decision, push or merge occurred. This ADR supersedes only the
+  three blocked-field conclusions in ADR-0069; all other findings stand.
+- **`task.destination`:** `target location`, the exact object of the canonical instruction in
+  `src/vlarobot/eval/demos.py::DEFAULT_INSTRUCTION` (file SHA-256
+  `f25502d4fe5beafc23656a42a923f68333574c1ade0f6422fbed3229c2a2a9ef`). This is a wording
+  source, not a new destination geometry or an independent metric definition.
+- **`verification.up_axis_base`:** `[-0.008464554343786014, 0.028463807918849244,
+  0.9995589842318061]`, the third row of `T_world_base_live_observed` in the accepted v5
+  `runs/worldmind/geometry-inspection-v5-2026-11-19/geometry.json` (SHA-256
+  `9258b376f80309ed074130c61e784b9e0c18c71d48b980102d364dd0e60d66e7`). The third row expresses
+  world +Z in the robot base frame under that matrix convention; its norm is exactly 1.0.
+- **`verification.home_joints`:** the seven accepted v5 reset joint observations in
+  `runs/worldmind/geometry-inspection-v5-2026-11-19/state.json` (SHA-256
+  `9c27698603c2d957b91e30d04c4fdb88024c1ee45b7d3a97132ad5b9d5ca00e9`). This is an observed
+  reset vector, not a factory HOME constant; any later claim must retain that provenance.
+- **Still blocked:** `report.definitions`, `bounds.max_decisions`, `bounds.max_steps` and the
+  three `adapter.jitter` values. The diagnostic loader now fails closed at
+  `bounds.max_decisions must be an integer >= 1`. The config remains
+  `diagnostic_uncalibrated`; no scored evaluation, calibration candidate or production
+  activation is enabled.
+
+## ADR-0071 — Additive non-scored Stage 1 evidence runner (2026-11-20)
+
+- **Scope:** made the prepared Stage 1 evidence collection executable offline without changing
+  the diagnostic config's blocked status. This supersedes only the ADR-0069/ADR-0070 statement
+  that no execution-capable Stage 1 command exists. No Webots process, live evidence collection,
+  actuation authorization, scoring, calibration selection, metric/weight approval, production
+  activation, TEST/TRAIN access, push or merge occurred.
+- **Reuse boundary:** added `src/vlarobot/execution/worldmind_stage1_pipeline.py` and the
+  `worldmind-stage1-evidence` CLI wrapper. They reuse the frozen `eval/runner.py` evaluator,
+  recorder, diagnostic preflight, safety probes, surrogate, verifier and WorldMind sidecar
+  writer. No new evaluation framework, no `RiskGate`, no Eq. 3.8 utility, no calibration
+  evaluator/candidate, no approval artifact and no production preflight was added.
+  `PIPELINE_ALIASES` gained only the existing `scripted_chunk_adapter` identity so the frozen
+  recorder can label the scripted diagnostic pipeline correctly.
+- **Explicit modes:** `--arm-mode` is required and has no default. `full_system_veto` records the
+  configured hard checks plus `prediction_complete`, `prediction_constraints`, an explicit
+  `unverified-arm-sweep` rejection when present, and `stage1_full_system_blocked`; it selects no
+  candidate and sends no action. Its evidence class is `full-system blocked/veto diagnostic`.
+  `scripted_proposer` changes the effective arm to `scripted_chunk_adapter`, selects the first
+  hard-check-safe seeded candidate in deterministic order by live safety only, with no utility
+  ranking, and is labelled `scripted diagnostic` in provenance, sidecars and CLI output. It must
+  never be reported as `full_system` evidence.
+- **Safety and oracle boundary:** every applied scripted action still passes the configured live
+  `safety_monitor.validate()` chain inside `execute_first`; an abort records `SAFETY_ABORT` and
+  applies nothing. `unverified-arm-sweep` is never bypassed or suppressed. `get_ground_truth()`
+  supplies only the privileged target pose; robot state comes from the declared backend
+  observation. No perception-equivalent or independent-evaluation claim is emitted.
+- **Non-scored accounting:** Stage 1 provenance sets `gate_call_policy=stage1_no_risk_gate`,
+  `gate_select_calls=0`, `expected_total=0`, `utility_ranking=not_performed`,
+  `scored_evaluation_allowed=false`, `independent_evaluation=false` and
+  `performance_claim=not_permitted_bookkeeping_only`. Latency sidecars state that RiskGate was
+  not called and that hard-check/selection windows are measured directly without an Eq. 3.8
+  ranking window. Calibration identities, component bindings, weights and selected parameters
+  are excluded from Stage 1 provenance and summary.
+- **Resume semantics:** the first run requires a new output directory. `--resume` requires the
+  same frozen provenance byte-for-byte, loads existing decision/pairing/error sidecars, rejects a
+  mismatch between completed recorder episodes and sidecar episode coverage, and rewrites the
+  aggregate sidecars and recorder summary only for that explicitly resumed directory. It is not a
+  new collection and cannot change mode, config, plan or scope.
+- **Authorization remains unchanged:** the runner connects to an already-running `sim-server`
+  and never launches Webots. Owner authorization is still required for live execution and for
+  the exact `--arm-mode`. `full_system` remains blocked; `speed_bound_m_s = 28.49316700274912`
+  is unchanged; Packet B remains blocked, Packet D unauthorized and TEST sealed.
+- **Offline verification:** the initial `tests/test_worldmind_stage1_runner.py` run passed
+  `9 passed`. Full gates then returned `All checks passed!`, `333 files already formatted`, and
+  `1 failed, 803 passed, 3 skipped, 540 warnings in 571.41s (0:09:31)`. The only failure is the
+  pre-existing, unrelated
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`; all
+  Stage 1 tests and all 22 production tests passed. No Webots process or live evidence collection
+  occurred.
+- **Final focused verification:** three additional offline checks were added to the same test file;
+  it now passes `12 passed in 4.73s`. They prove one permitted scripted decision yields exactly
+  `reset -> apply -> step` with the final `SafetyMonitor.validate()` immediately before apply and
+  `backend_stepped=true`; `full_system_veto` yields resets only, with no apply and no step; a live
+  safety veto yields no apply and no step; resume reuses bytes without re-executing or duplicating
+  episodes and rejects changed mode, config or plan with `resume provenance differs`; and patched
+  `RiskGate`, `ComparisonPlanner`, Eq. 3.8 component evaluators and all calibration entry points
+  are never invoked.
+- **Live scope:** the existing diagnostic runner hard-requires the frozen 18-episode VALIDATION
+  plan; there is no one-scene/one-seed CLI selector. A single-scene live proposal would require a
+  scope change to the frozen campaign definition and is therefore not made. The first live command
+  can only be the full frozen campaign after all owner approvals.

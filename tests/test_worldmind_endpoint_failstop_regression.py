@@ -212,6 +212,7 @@ class _StubSolver:
 class _SpyMonitor:
     def __init__(self, inner: SafetyMonitor) -> None:
         self.inner = inner
+        self.limits = inner.limits
         self.calls: list[Any] = []
 
     def validate(self, action: Any, robot: Any) -> ApplyResult:

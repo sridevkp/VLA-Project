@@ -97,6 +97,8 @@ class _StubSolver:
 
 
 class _AcceptAllMonitor:
+    limits = SimpleNamespace(joint_position={"arm_1_joint": (-2.0, 2.0)})
+
     def validate(self, action: object, robot: object) -> ApplyResult:
         del action, robot
         return ApplyResult(True, "synthetic accept")

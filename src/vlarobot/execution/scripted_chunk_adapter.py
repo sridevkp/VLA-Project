@@ -7,7 +7,10 @@ solver and reviewed safety limits. Every emitted command is validated before it 
 candidate chunk; the live ``SafetyMonitor`` still vetoes again through ``execute_first``.
 
 Jitter is deterministic from the draw seed and bounded by rejection sampling. Out-of-bound
-draws are discarded and redrawn; they are never clipped or silently accepted.
+draws are discarded and redrawn; they are never clipped or silently accepted. The same rule
+applies to reviewed absolute joint limits: an endpoint outside those limits is rejected, and a
+jitter draw that would cross them is redrawn. Every emitted joint target is still validated by
+the injected SafetyMonitor before it enters a candidate chunk.
 """
 
 from __future__ import annotations
@@ -182,19 +185,13 @@ class ScriptedChunkAdapter:
                         residuals[0] > position_limit or residuals[1] > orientation_limit
                     ):
                         raise ValueError("scripted pose residual outside reviewed tolerance")
-                    endpoint = {
-                        str(name): float(value) + self._delta(rng)
-                        for name, value in solution.joints.items()
-                    }
+                    endpoint = self._jittered_endpoint(solution.joints, rng)
                     stepped, current_joints = self._bounded_joint_actions(
                         endpoint, waypoint.hold_steps, state.robot, current_joints
                     )
                     actions.extend(stepped)
                 elif waypoint.joints is not None:
-                    endpoint = {
-                        str(name): float(value) + self._delta(rng)
-                        for name, value in waypoint.joints.items()
-                    }
+                    endpoint = self._jittered_endpoint(waypoint.joints, rng)
                     stepped, current_joints = self._bounded_joint_actions(
                         endpoint, waypoint.hold_steps, state.robot, current_joints
                     )
@@ -218,6 +215,45 @@ class ScriptedChunkAdapter:
 
         return propose
 
+    def _joint_position_limits(self, name: str) -> tuple[float, float]:
+        limits = self.monitor.limits.joint_position.get(name)
+        if (
+            limits is None
+            or len(limits) != 2
+            or not all(math.isfinite(float(value)) for value in limits)
+            or float(limits[0]) > float(limits[1])
+        ):
+            raise ValueError(f"joint {name} has no reviewed absolute position limits")
+        return float(limits[0]), float(limits[1])
+
+    def _jittered_value(
+        self, value: float, lower: float, upper: float, rng: np.random.Generator
+    ) -> float:
+        if self.jitter.std_rad == 0.0:
+            return value
+        for _ in range(self.jitter.max_attempts):
+            delta = float(rng.normal(0.0, self.jitter.std_rad))
+            if abs(delta) > self.jitter.limit_rad:
+                continue
+            candidate = value + delta
+            if lower <= candidate <= upper:
+                return candidate
+        raise ValueError("bounded jitter rejection budget exhausted; no clipped value emitted")
+
+    def _jittered_endpoint(
+        self, joints: Mapping[str, float], rng: np.random.Generator
+    ) -> dict[str, float]:
+        endpoint: dict[str, float] = {}
+        for name, value in joints.items():
+            raw = float(value)
+            if not math.isfinite(raw):
+                raise ValueError(f"endpoint for {name} must be finite")
+            lower, upper = self._joint_position_limits(str(name))
+            if raw < lower or raw > upper:
+                raise ValueError(f"endpoint for {name} violates reviewed absolute position limits")
+            endpoint[str(name)] = self._jittered_value(raw, lower, upper, rng)
+        return endpoint
+
     def _bounded_joint_actions(
         self,
         endpoint: Mapping[str, float],
@@ -226,6 +262,11 @@ class ScriptedChunkAdapter:
         current_joints: dict[str, float],
     ) -> tuple[list[JointTarget], dict[str, float]]:
         """Convert one endpoint into hold_steps executable one-tick joint transitions."""
+        for name, endpoint_value in endpoint.items():
+            lower, upper = self._joint_position_limits(name)
+            value = float(endpoint_value)
+            if not math.isfinite(value) or not lower <= value <= upper:
+                raise ValueError(f"endpoint for {name} violates reviewed absolute position limits")
         current = dict(current_joints)
         actions: list[JointTarget] = []
         for _ in range(int(hold_steps)):
@@ -233,9 +274,15 @@ class ScriptedChunkAdapter:
             for name, endpoint_value in endpoint.items():
                 if name not in current or not math.isfinite(current[name]):
                     raise ValueError(f"no finite current position for bounded joint {name}")
+                lower, upper = self._joint_position_limits(name)
+                if current[name] < lower or current[name] > upper:
+                    raise ValueError(f"current position for {name} violates reviewed joint limits")
                 delta = float(endpoint_value) - current[name]
-                bounded_delta = max(-self.max_joint_step_rad, min(self.max_joint_step_rad, delta))
-                target[name] = current[name] + bounded_delta
+                if abs(delta) <= self.max_joint_step_rad:
+                    target[name] = float(endpoint_value)
+                else:
+                    direction = 1.0 if delta > 0.0 else -1.0
+                    target[name] = current[name] + direction * self.max_joint_step_rad
             action = JointTarget(target)
             verdict = self.monitor.validate(action, replace(robot, joint_pos=dict(current)))
             if not verdict.accepted:
@@ -243,12 +290,3 @@ class ScriptedChunkAdapter:
             actions.append(action)
             current.update(target)
         return actions, current
-
-    def _delta(self, rng: np.random.Generator) -> float:
-        if self.jitter.std_rad == 0.0:
-            return 0.0
-        for _ in range(self.jitter.max_attempts):
-            value = float(rng.normal(0.0, self.jitter.std_rad))
-            if abs(value) <= self.jitter.limit_rad:
-                return value
-        raise ValueError("bounded jitter rejection budget exhausted; no clipped value emitted")

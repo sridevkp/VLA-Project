@@ -3101,3 +3101,109 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   owner authorization is still required before any live diagnostic campaign. Windows, Webots,
   physical settling, contact, swept-arm safety, calibration selection, scoring and live evidence
   collection remain unverified.
+
+## ADR-0075 — Stage 1 V2 offline postmortem: absolute joint targets and partial-campaign finalization (2026-11-20)
+
+- **Scope and preservation:** this ADR records an offline-only correction of the two authorized
+  Stage 1 V2 defects. No Webots process, campaign, rerun, resume, scoring, calibration selection,
+  `full_system`, Packet B/D, TRAIN/TEST access, geometry investigation, push or merge occurred.
+  V1 and V2 evidence was not written. The preserved V1 aggregate remains
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`; the preserved incomplete
+  V2 aggregate remains `b5b4075d8c6db133027ea900cecb5db995f286a52bdeb6d37e96231c07194ccb`.
+  The V2 campaign was executed exactly once at commit
+  `8103a49ea1ef04702e6e9f07914ca9690986cc72` and failed stopped after episode 0; it is not
+  retried or resumed. V2 authorization is exhausted; any V3 needs separate explicit owner
+  authorization.
+- **Runtime-recorded V2 facts:** `episode-00.steps.npz` records one state at `t=0.03200000000000003`.
+  The recorded joint order is `arm_1_joint`, `arm_2_joint`, `arm_3_joint`, `arm_4_joint`,
+  `arm_5_joint`, `arm_6_joint`, `arm_7_joint`, `torso_lift_joint`. The runtime-recorded initial
+  `arm_6_joint` value is `1.8444461957053934e-06`. The primary recorded error is
+  `ValueError: joint target for arm_6_joint violates position limits`; the sidecar error is
+  `joint target for arm_6_joint violates position limits`. The V2 action log is empty, so the
+  rejected target itself is reconstructed, not runtime-recorded.
+- **Reconstructed rejection:** using the preserved episode-00 state, the pinned corrected
+  registration/kinematics, the approved config's waypoints and jitter, decision seed
+  `2968811710` and candidate draw seed `8787345`, candidate 1 reproduces the exact rejection at
+  the first `TRANSIT` interpolation tick. The reconstructed current value at that tick is
+  `arm_6_joint=-1.2534098586703584`; the raw endpoint IK value is `-1.3899999999987871`, which is
+  inside the reviewed interval; the jitter draw is `-0.001213510088701924`; the jittered endpoint
+  is `-1.3912135100874889`; the bounded per-tick delta is `-0.13780365141713058`; and the
+  proposed absolute target is `-1.3912135100874889`, which is `0.0012135100874889 rad` below the
+  lower limit. Endpoint residuals for that solve were `position_error_m=0.0032559632227919695`
+  and `orientation_error_rad=0.0006959086486396269`, both inside reviewed tolerances. These
+  values are explicitly offline reconstructions from preserved data, not new runtime evidence.
+- **Root cause:** endpoint IK and full-horizon interpolation were not the defect. The producing
+  operation was the pre-fix `ScriptedChunkAdapter._bounded_joint_actions` line
+  `target[name] = current[name] + bounded_delta`: it bounded only the delta to
+  `MAX_JOINT_STEP_RAD=0.15`, then wrote the resulting absolute target directly into
+  `JointTarget`. It did not constrain that target to the reviewed absolute joint-position limits
+  before line `self.monitor.validate(action, ...)`. `SafetyMonitor._validate_joint_target`
+  correctly rejected the target through the unchanged comparison
+  `if target < limits[0] or target > limits[1]`, yielding the exact V2 reason. The reviewed
+  `arm_6_joint` limits are `[-1.39, 1.39]` in both runtime safety and corrected kinematics/URDF;
+  velocity is `1.76 rad/s`, `command_horizon=1.0`, and the separate execution step bound is
+  `0.15 rad`. The reconstructed delta was legal; the absolute target was not.
+- **Source correction:** `ScriptedChunkAdapter` now takes absolute position limits from the
+  injected `SafetyMonitor.limits`, fails closed on a non-finite or out-of-limit raw endpoint,
+  redraws jitter values that would cross those limits, and constructs each one-tick target as
+  either the in-limit endpoint or `current ± max_joint_step_rad`. Every generated action still
+  passes through the unchanged `SafetyMonitor.validate()`. No safety threshold, velocity limit,
+  command horizon, endpoint residual tolerance, seed, split, binding identity or waypoint cadence
+  changed.
+- **Secondary root cause and correction:** `eval.runner._build_summary` called the
+  nonempty-only `summarize_success([])` for five planned scenes with no result rows after the
+  first-episode EXCEPTION. `eval.metrics.summarize_success` raises `ValueError("flags must not be
+  empty.")`, so `plan.json`, `episodes.csv`, `summary.json` and `timings.json` were never written
+  and the explicit `CampaignFailStop` message was not reached. The runner now uses a zero-row
+  summary helper that preserves all planned scene/seed records and does not call the
+  nonempty-only aggregator. `run_stage1_evidence` still finalizes sidecars before raising
+  `CampaignFailStop` with the original EXCEPTION reason, and the campaign loop still stops before
+  episode 1.
+- **Preserved provenance hashes:** approved config
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`; shipped blocked template
+  `9d096d4d3206f0a6287239257c57ed56e138843babaeea1c624bf8dea6426c0a`; approved definitions
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`; report PDF
+  `23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`; corrected registration
+  `dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0`; frozen plan hash in V2
+  provenance `013ca8ee314df6ca6b72505761c0ab7bc37caf4ec469f6696db80d7ce428fcb2`.
+- **Source hashes preserved from V2 / changed here:** `backends/worldmind_bindings.py`
+  `4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae` unchanged;
+  `execution/worldmind_pipeline.py`
+  `27f3d45165d5e4e34fa4b670e41a709ff25206f2e5400fa441afe1dda887fdf8` unchanged;
+  `execution/worldmind_stage1_pipeline.py`
+  `20ef594be17ed4b65744f878a06ee72f1f0ea1f156669944a5ef71c6fdd468b5` unchanged;
+  `execution/safety_monitor.py` `900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a`
+  unchanged; `execution/scripted_chunk_adapter.py` changed from
+  `bac8b18276498d41ea84d069f0fbdd08d7e4619cd11ee59bcd070c749b215b52` to
+  `890e2f5bd3621338db85cb60088f27c091b792ca437d2aeadd744dc7029432f4`; `eval/runner.py` changed
+  from `7b64b744d48074c723a8a593b009507cf268aa79c6d02fea01d51d430c25e0c2` to
+  `7475a13a294b33bdb7ec953882bf56852cabe3de83ac9cc74cd15f5f892e2955`.
+- **Regression hashes:** new `tests/test_worldmind_v2_postmortem_regression.py`
+  `041d383415123c018093b12e37175ed08206bf98d40952cc513bdcdb6fd97fc0`; updated
+  `tests/test_worldmind_endpoint_failstop_regression.py`
+  `b93d1f4400f415ead49b3c11ac43d46685066362b6fee5cb1fa38ef7bf037acd`;
+  `tests/test_worldmind_waypoints.py`
+  `9dc5b3e43c6c32e1a64289845290fec4daeebd01c974d892376ed94b756ee0e3`;
+  `tests/test_worldmind_production.py`
+  `f224ff5aa5e84275b786c4a6d33adeecb8dec307eca07186c42cf023b93ddee5`.
+- **Focused verification:** the new V2 postmortem file has six passing tests: reconstructed
+  delta-only rejection, corrected-path elimination, absolute/per-tick bounds without safety
+  bypass, residual tolerance fail-closed, invalid-absolute-endpoint fail-closed, and
+  frozen-shape 18-episode partial Stage 1 finalization with sidecars and original
+  `CampaignFailStop` reason. The focused set
+  (`v2_postmortem`, `endpoint_failstop`, `stage1_runner`, `readiness`, `waypoints`, `production`)
+  returned `57 passed, 8 warnings in 13.40s`. Offline replay of all 32 reconstructed episode-0
+  candidate draws with the corrected adapter returned `replayed_candidates=32 rejected=0
+  actions_per_candidate=50`. `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `336 files already formatted`; `git diff --check` passed.
+  The full offline suite returned `1 failed, 825 passed, 3 skipped, 540 warnings in 575.60s`;
+  the only failure is the pre-existing unrelated notebook helper SHA mismatch in
+  `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  (`071cf660…` expected versus `88fd4db9…` present). It was not changed in this correction.
+- **Remaining unverified and V3 recommendation:** no live Webots execution after the correction,
+  no 18-episode physical campaign, no action application, settling, contact or swept-arm
+  validation, no Windows run, and no scoring or `full_system` behavior was verified. **GO** only
+  for a separately authorized, non-scored VALIDATION18 Stage 1 V3 diagnostic using a new output
+  directory and the same frozen inputs; V2 must remain preserved and is not resumable. **NO-GO**
+  for scoring, calibration selection, `full_system`, Packet B/D, TRAIN/TEST access or production
+  activation until the live diagnostic and independent safety approvals are complete.

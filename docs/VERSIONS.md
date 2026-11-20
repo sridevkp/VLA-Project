@@ -182,3 +182,16 @@ parameters. No public `core/` interface, binding identity, seed, split, `K=32`, 
 threshold, report definition, preserved evidence byte or live authorization changed. Linux
 offline regression, Ruff and formatting checks pass; Windows and all Webots/physical paths remain
 unverified.
+
+ADR-0075 adds no dependency or version pin. It reuses Python 3.11 standard library, NumPy, the
+existing pinned corrected URDF registration and `SafetyMonitor`. The `scripted_chunk_adapter`
+now enforces reviewed absolute joint limits during jittered endpoint construction and one-tick
+target construction while retaining the unchanged `0.15 rad` execution bound, endpoint residual
+tolerances and every `SafetyMonitor.validate()` call. The eval runner can finalize a partial
+18-episode plan without calling the nonempty-only success aggregator on empty scene rows, writes
+all four aggregate files, preserves planned scene/seed records and the original EXCEPTION reason,
+finalizes WorldMind sidecars, and exits through `CampaignFailStop`. No public `core/` interface,
+config, seed, split, safety threshold, report definition, preserved V1/V2 evidence byte or live
+authorization changed. Linux offline focused tests, the 32-candidate reconstruction replay,
+Ruff and formatting checks pass; the full offline suite has only the pre-existing unrelated
+notebook helper SHA mismatch. Windows and all Webots/physical paths remain unverified.

@@ -30,6 +30,7 @@ from vlarobot.core.types import ScenarioSpec
 from vlarobot.eval.metrics import (
     EpisodeMetrics,
     EpisodeRecord,
+    SuccessSummary,
     compute_episode_metrics,
     load_episode,
     mean_std,
@@ -401,6 +402,13 @@ def _completed_recording(out_dir: Path, entry: EvalEpisode, pipeline: str) -> Ep
     return record
 
 
+def _summarize_success_or_empty(flags: Sequence[bool]) -> SuccessSummary:
+    """Preserve planned rows with no results without calling the nonempty-only aggregator."""
+    if not flags:
+        return SuccessSummary(successes=0, total=0, rate=0.0, ci_low=0.0, ci_high=0.0)
+    return summarize_success(flags)
+
+
 def _build_summary(
     rows: Sequence[Mapping[str, object]],
     plan: Sequence[EvalEpisode],
@@ -410,7 +418,7 @@ def _build_summary(
 ) -> dict[str, Any]:
     """Aggregate the episode rows (scene-level variation preserved, no single-run claims)."""
     flags = [bool(row["success"]) for row in rows]
-    success = summarize_success(flags)
+    success = _summarize_success_or_empty(flags)
 
     rows_by_scene: dict[str, list[Mapping[str, object]]] = {}
     for row in rows:
@@ -422,7 +430,7 @@ def _build_summary(
     per_scene: list[dict[str, Any]] = []
     for name, entries in plan_by_scene.items():
         scene_rows = rows_by_scene.get(name, [])
-        scene_success = summarize_success([bool(row["success"]) for row in scene_rows])
+        scene_success = _summarize_success_or_empty([bool(row["success"]) for row in scene_rows])
         per_scene.append(
             {
                 "scene": name,

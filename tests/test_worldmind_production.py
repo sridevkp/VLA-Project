@@ -120,6 +120,7 @@ class RecordingMonitor:
                 joint_velocity={name: 1.0 for name in ARM_JOINTS},
             )
         )
+        self.limits = self.inner.limits
 
     def validate(self, action: Action, robot: Any) -> ApplyResult:
         self.shared.events.append("validate")

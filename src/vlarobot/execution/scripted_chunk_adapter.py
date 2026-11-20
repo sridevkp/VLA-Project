@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, replace
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -30,7 +30,7 @@ class PoseSolution(Protocol):
 
 
 class PoseSolver(Protocol):
-    def solve(self, pose: Pose3D, state: WorldState) -> PoseSolution: ...
+    def solve(self, pose: Pose3D, state: WorldState, *, seed: int = 0) -> PoseSolution: ...
 
 
 @dataclass(frozen=True)
@@ -115,6 +115,7 @@ class ScriptedChunkAdapter:
         horizon_steps: int,
         control_dt_s: float,
         jitter: JointJitter,
+        max_joint_step_rad: float,
         position_tolerance_m: float,
         orientation_tolerance_rad: float,
     ) -> None:
@@ -125,15 +126,23 @@ class ScriptedChunkAdapter:
             raise ValueError(f"waypoint hold_steps sum {total} != horizon {horizon_steps}")
         if not all(
             math.isfinite(value) and value > 0
-            for value in (control_dt_s, position_tolerance_m, orientation_tolerance_rad)
+            for value in (
+                control_dt_s,
+                max_joint_step_rad,
+                position_tolerance_m,
+                orientation_tolerance_rad,
+            )
         ):
-            raise ValueError("explicit positive control tick and IK tolerances required")
+            raise ValueError(
+                "explicit positive control tick, joint step and IK tolerances required"
+            )
         self.waypoints = tuple(waypoints)
         self.solver = solver
         self.monitor = monitor
         self.horizon_steps = int(horizon_steps)
         self.control_dt_s = float(control_dt_s)
         self.jitter = jitter
+        self.max_joint_step_rad = float(max_joint_step_rad)
         self.position_tolerance_m = float(position_tolerance_m)
         self.orientation_tolerance_rad = float(orientation_tolerance_rad)
 
@@ -148,10 +157,13 @@ class ScriptedChunkAdapter:
                 raise ValueError("scripted adapter requires an explicit world-to-base transform")
             rng = np.random.default_rng(int(seed))
             actions: list[JointTarget | GripperCmd] = []
+            current_joints = {
+                str(name): float(value) for name, value in state.robot.joint_pos.items()
+            }
             for waypoint in self.waypoints:
-                action: JointTarget | GripperCmd
                 if waypoint.pose is not None:
-                    solution = self.solver.solve(waypoint.pose, state)
+                    simulated = replace(state, robot=replace(state.robot, joint_pos=current_joints))
+                    solution = self.solver.solve(waypoint.pose, simulated, seed=int(seed))
                     residuals = (
                         float(solution.position_error_m),
                         float(solution.orientation_error_rad),
@@ -170,32 +182,67 @@ class ScriptedChunkAdapter:
                         residuals[0] > position_limit or residuals[1] > orientation_limit
                     ):
                         raise ValueError("scripted pose residual outside reviewed tolerance")
-                    joints = {
+                    endpoint = {
                         str(name): float(value) + self._delta(rng)
                         for name, value in solution.joints.items()
                     }
-                    action = JointTarget(joints)
-                elif waypoint.joints is not None:
-                    action = JointTarget(
-                        {
-                            str(name): float(value) + self._delta(rng)
-                            for name, value in waypoint.joints.items()
-                        }
+                    stepped, current_joints = self._bounded_joint_actions(
+                        endpoint, waypoint.hold_steps, state.robot, current_joints
                     )
+                    actions.extend(stepped)
+                elif waypoint.joints is not None:
+                    endpoint = {
+                        str(name): float(value) + self._delta(rng)
+                        for name, value in waypoint.joints.items()
+                    }
+                    stepped, current_joints = self._bounded_joint_actions(
+                        endpoint, waypoint.hold_steps, state.robot, current_joints
+                    )
+                    actions.extend(stepped)
                 else:
                     opening = waypoint.gripper_opening
                     if opening is None or not math.isfinite(float(opening)):
                         raise ValueError("reviewed gripper opening must be finite")
-                    action = GripperCmd(float(opening))
-                verdict = self.monitor.validate(action, state.robot)
-                if not verdict.accepted:
-                    raise ValueError(verdict.reason or "scripted waypoint failed safety validation")
-                actions.extend([action] * waypoint.hold_steps)
+                    gripper = GripperCmd(float(opening))
+                    verdict = self.monitor.validate(
+                        gripper, replace(state.robot, joint_pos=current_joints)
+                    )
+                    if not verdict.accepted:
+                        raise ValueError(
+                            verdict.reason or "scripted waypoint failed safety validation"
+                        )
+                    actions.extend([gripper] * waypoint.hold_steps)
             if len(actions) != self.horizon_steps:
                 raise ValueError("scripted chunk length contract violated")
             return ActionChunk(list(actions), self.control_dt_s, "scripted")
 
         return propose
+
+    def _bounded_joint_actions(
+        self,
+        endpoint: Mapping[str, float],
+        hold_steps: int,
+        robot: Any,
+        current_joints: dict[str, float],
+    ) -> tuple[list[JointTarget], dict[str, float]]:
+        """Convert one endpoint into hold_steps executable one-tick joint transitions."""
+        current = dict(current_joints)
+        actions: list[JointTarget] = []
+        for _ in range(int(hold_steps)):
+            target: dict[str, float] = {}
+            for name, endpoint_value in endpoint.items():
+                if name not in current or not math.isfinite(current[name]):
+                    raise ValueError(f"no finite current position for bounded joint {name}")
+                delta = float(endpoint_value) - current[name]
+                bounded_delta = max(-self.max_joint_step_rad, min(self.max_joint_step_rad, delta))
+                target[name] = current[name] + bounded_delta
+            action = JointTarget(target)
+            verdict = self.monitor.validate(action, replace(robot, joint_pos=dict(current)))
+            if not verdict.accepted:
+                raise ValueError(verdict.reason or "scripted joint step failed safety validation")
+            actions.append(action)
+            current.update(target)
+        return actions, current
 
     def _delta(self, rng: np.random.Generator) -> float:
         if self.jitter.std_rad == 0.0:

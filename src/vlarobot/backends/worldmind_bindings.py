@@ -41,7 +41,7 @@ from vlarobot.backends.webots.config import (
     URDF_PATH,
 )
 from vlarobot.backends.webots.kinematics import Kinematics
-from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
+from vlarobot.backends.webots.pose_solver import quaternion_matrix
 from vlarobot.backends.webots.proto_sources import load_proto_source_manifest
 from vlarobot.backends.webots.urdf_registration import load_registration
 from vlarobot.backends.worldmind_component_factories import COMPONENT_FACTORY_BINDINGS
@@ -192,37 +192,114 @@ def runtime_safety_factory(config: WorldMindConfig, inputs: Mapping[str, Any]) -
     return SafetyMonitor(runtime_safety_limits())
 
 
+class _FullPoseEndpointSolver:
+    """Solve a full-horizon waypoint endpoint with the reviewed corrected kinematics.
+
+    Endpoint IK is deliberately separated from motion execution. The IK search uses the full
+    registered joint bounds and the reviewed baseline's 20-restart strategy; the adapter, not
+    this solver, converts the endpoint into bounded one-tick commands. No new trust region is
+    introduced here.
+    """
+
+    endpoint_restarts = 20
+
+    def __init__(self, kinematics: Kinematics) -> None:
+        self.kinematics = kinematics
+        self.execution_max_joint_step_rad = float(SETTINGS.max_joint_step_rad)
+
+    def solve(self, pose: Pose3D, robot: RobotState, *, seed: int = 0) -> PoseSolution:
+        kin = self.kinematics
+        current = np.zeros(len(kin.chain.links), dtype=float)
+        for name, value in robot.joint_pos.items():
+            if name in kin.idx:
+                current[kin.idx[name]] = float(value)
+        target_rotation = quaternion_matrix(pose.orientation)
+        target_position = pose.position.as_array()
+        rng = np.random.default_rng(int(seed))
+        seeds = [kin.clip(current)]
+        for _ in range(self.endpoint_restarts):
+            candidate = np.array(seeds[0], dtype=float, copy=True)
+            for name in ARM_JOINTS:
+                lower, upper = kin.bounds(name)
+                candidate[kin.idx[name]] = float(rng.uniform(lower, upper))
+            seeds.append(candidate)
+
+        best: tuple[float, float, float, float, np.ndarray] | None = None
+        for candidate in seeds:
+            try:
+                solved = kin.clip(
+                    kin.chain.inverse_kinematics(
+                        target_position,
+                        target_orientation=target_rotation,
+                        orientation_mode="all",
+                        initial_position=candidate,
+                    )
+                )
+            except (RuntimeError, ValueError, TypeError):
+                continue
+            actual = kin.forward(solved)
+            position_error = float(np.linalg.norm(actual[:3, 3] - target_position))
+            orientation_error = math.acos(
+                float(
+                    np.clip((np.trace(target_rotation @ actual[:3, :3].T) - 1.0) / 2.0, -1.0, 1.0)
+                )
+            )
+            if not math.isfinite(position_error) or not math.isfinite(orientation_error):
+                continue
+            joint_delta = max(
+                abs(float(solved[kin.idx[name]] - current[kin.idx[name]])) for name in ARM_JOINTS
+            )
+            key = (position_error + orientation_error, joint_delta)
+            if best is None or key < best[:2]:
+                best = (key[0], key[1], position_error, orientation_error, solved)
+        if best is None:
+            raise RuntimeError("full-pose endpoint IK produced no finite solution")
+        solved = best[4]
+        return PoseSolution(
+            {name: float(solved[kin.idx[name]]) for name in ARM_JOINTS},
+            best[2],
+            best[3],
+        )
+
+
 class _LazyCorrectedPoseSolver:
     """Defer geometry construction until a reviewed solve is actually requested."""
 
     def __init__(self) -> None:
-        self._inner: BoundedPoseSolver | None = None
+        self._inner: _FullPoseEndpointSolver | None = None
 
     @property
-    def inner(self) -> BoundedPoseSolver:
+    def inner(self) -> _FullPoseEndpointSolver:
         if self._inner is None:
-            kin = corrected_kinematics()
-            self._inner = BoundedPoseSolver(kin, max_joint_step_rad=SETTINGS.max_joint_step_rad)
+            self._inner = _FullPoseEndpointSolver(corrected_kinematics())
         return self._inner
 
-    def solve(self, pose: Pose3D, state: RobotState) -> PoseSolution:
-        return self.inner.solve(pose, state)
+    @property
+    def execution_max_joint_step_rad(self) -> float:
+        return self.inner.execution_max_joint_step_rad
+
+    def solve(self, pose: Pose3D, robot: RobotState, *, seed: int = 0) -> PoseSolution:
+        return self.inner.solve(pose, robot, seed=seed)
 
 
 class WorldStatePoseSolver:
-    """Adapt the existing BoundedPoseSolver to the WorldState adapter protocol."""
+    """Adapt the corrected full-pose endpoint solver to the WorldState adapter protocol."""
 
     def __init__(self, inner: Any) -> None:
         self.inner = inner
 
-    def solve(self, pose: Pose3D, state: WorldState) -> PoseSolution:
+    @property
+    def execution_max_joint_step_rad(self) -> float:
+        return float(self.inner.execution_max_joint_step_rad)
+
+    def solve(self, pose: Pose3D, state: WorldState, *, seed: int = 0) -> PoseSolution:
         if not isinstance(state, WorldState):
             raise TypeError("corrected solver requires a WorldState")
-        return self.inner.solve(pose, state.robot)
+        return self.inner.solve(pose, state.robot, seed=seed)
 
 
 def corrected_pose_solver() -> WorldStatePoseSolver:
-    """Return the existing bounded IK solver with corrected URDF registration."""
+    """Return the corrected full-pose endpoint solver with pinned registration."""
     return WorldStatePoseSolver(_LazyCorrectedPoseSolver())
 
 

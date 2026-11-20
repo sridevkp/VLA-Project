@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -51,6 +52,7 @@ from vlarobot.eval.decision_evidence import (
 from vlarobot.eval.decision_metrics import pair_executed_prediction
 from vlarobot.eval.metrics import write_json
 from vlarobot.eval.runner import (
+    CampaignFailStop,
     EvalEpisode,
     EvalReport,
     EvalRunConfig,
@@ -942,10 +944,15 @@ class Stage1WorldMindEpisodePolicy:
         monitor = self.bindings.safety[self.config.safety.binding](
             self.config, self.bindings.inputs.get("safety", {})
         )
+        solver = self.bindings.pose_solvers[self.config.adapter.pose_solver_binding]
+        max_joint_step_rad = getattr(solver, "execution_max_joint_step_rad", None)
+        if max_joint_step_rad is None or not math.isfinite(float(max_joint_step_rad)):
+            raise ValueError("registered pose solver must expose a finite execution step limit")
         adapter = ScriptedChunkAdapter(
             waypoints,
-            solver=self.bindings.pose_solvers[self.config.adapter.pose_solver_binding],
+            solver=solver,
             monitor=monitor,
+            max_joint_step_rad=float(max_joint_step_rad),
             horizon_steps=self.config.pipeline.horizon_steps,
             control_dt_s=self.config.pipeline.control_dt_s,
             jitter=JointJitter(
@@ -1166,6 +1173,7 @@ def run_stage1_evidence(
         state_source=config.backend.state_source,
         record_frames=False,
         resume=resume,
+        stop_on_exception=True,
     )
     try:
         report = run_evaluation(
@@ -1191,4 +1199,7 @@ def run_stage1_evidence(
         "sidecars": sorted(sidecars),
     }
     write_json(report.summary, report.summary_json)
+    if report.summary.get("campaign_status") == "incomplete_fail_stop":
+        fail_stop = report.summary["fail_stop"]
+        raise CampaignFailStop(str(fail_stop["reason"]))
     return report, sidecars

@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 
 from vlarobot.backends.fake import FakeBackend
 from vlarobot.backends.fake.backend import CAN_WORLD_XYZ
+from vlarobot.backends.webots.config import MAX_JOINT_STEP_RAD
 from vlarobot.cli import app
 from vlarobot.core.types import (
     Action,
@@ -92,9 +93,10 @@ class StaticPoseSolver:
     calls: list[Pose3D] = field(default_factory=list)
     position_error_m: float = 0.0
     orientation_error_rad: float = 0.0
+    execution_max_joint_step_rad: float = MAX_JOINT_STEP_RAD
 
-    def solve(self, pose: Pose3D, state: Any) -> StaticPoseSolver:
-        del state
+    def solve(self, pose: Pose3D, state: Any, *, seed: int = 0) -> StaticPoseSolver:
+        del state, seed
         self.calls.append(pose)
         return self
 
@@ -535,6 +537,7 @@ def test_scripted_adapter_is_seeded_bounded_and_scripted_only(tmp_path, monkeypa
         horizon_steps=config.pipeline.horizon_steps,
         control_dt_s=config.pipeline.control_dt_s,
         jitter=JointJitter(0.001, 0.005, 10),
+        max_joint_step_rad=MAX_JOINT_STEP_RAD,
         position_tolerance_m=config.adapter.ik_position_tolerance_m,
         orientation_tolerance_rad=config.adapter.ik_orientation_tolerance_rad,
     )
@@ -564,6 +567,7 @@ def test_jitter_never_clips_or_silently_accepts_out_of_bound_draws(tmp_path, mon
         horizon_steps=config.pipeline.horizon_steps,
         control_dt_s=config.pipeline.control_dt_s,
         jitter=JointJitter(1.0e9, 1.0e-9, 1),
+        max_joint_step_rad=MAX_JOINT_STEP_RAD,
         position_tolerance_m=config.adapter.ik_position_tolerance_m,
         orientation_tolerance_rad=config.adapter.ik_orientation_tolerance_rad,
     )

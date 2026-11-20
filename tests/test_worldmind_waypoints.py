@@ -12,6 +12,7 @@ from vlarobot.backends.webots.config import (
     IK_TOL,
     IK_TOL_GRASP,
     IK_TOL_TRANSIT,
+    MAX_JOINT_STEP_RAD,
     PLACE_CLEAR,
     SETTINGS,
 )
@@ -85,11 +86,11 @@ class _StubSolver:
         self.residual_m = residual_m
         self.calls = 0
 
-    def solve(self, pose: Pose3D, state: WorldState) -> SimpleNamespace:
-        del state
+    def solve(self, pose: Pose3D, state: WorldState, *, seed: int = 0) -> SimpleNamespace:
+        del state, seed, pose
         self.calls += 1
         return SimpleNamespace(
-            joints={"arm_1_joint": 0.25},
+            joints={"arm_1_joint": 0.0},
             position_error_m=self.residual_m,
             orientation_error_rad=0.0,
         )
@@ -109,6 +110,7 @@ def _adapter(waypoints: tuple[ScriptedWaypoint, ...], solver: _StubSolver) -> Sc
         horizon_steps=sum(item.hold_steps for item in waypoints),
         control_dt_s=0.032,
         jitter=SimpleNamespace(std_rad=0.0, limit_rad=0.0, max_attempts=1),  # type: ignore[arg-type]
+        max_joint_step_rad=MAX_JOINT_STEP_RAD,
         position_tolerance_m=0.01,
         orientation_tolerance_rad=0.01,
     )

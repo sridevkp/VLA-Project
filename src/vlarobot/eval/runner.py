@@ -145,6 +145,7 @@ class EvalRunConfig:
     record_frames: bool = False
     frame_hz: float = 1.0
     resume: bool = False
+    stop_on_exception: bool = False
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,14 @@ class EvalReport:
     summary_json: Path
     timings_json: Path
     total_wall_s: float
+
+
+class CampaignFailStop(Exception):
+    """Raised after evidence finalization when a campaign stopped on a recorded EXCEPTION."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"campaign fail-stop: {reason}")
+        self.reason = reason
 
 
 def run_evaluation(
@@ -202,6 +211,7 @@ def run_evaluation(
 
     rows: list[dict[str, object]] = []
     timings: list[EpisodeTiming] = []
+    fail_stop: dict[str, object] | None = None
     run_started = perf_counter()
     for entry in plan:
         key = _plan_scene_id(entry)
@@ -235,6 +245,19 @@ def run_evaluation(
                 resumed=resumed,
             )
         )
+        if config.stop_on_exception and row.get("failure_state") == "EXCEPTION":
+            fail_stop = {
+                "reason": (
+                    f"episode {entry.index} recorded EXCEPTION: {row.get('failure_reason', '')}"
+                ),
+                "episode_index": entry.index,
+                "episode_scene": key,
+                "failure_state": "EXCEPTION",
+                "failure_reason": str(row.get("failure_reason", "")),
+                "completed_episodes": len(rows),
+                "planned_episodes": len(plan),
+            }
+            break
     total_wall_s = perf_counter() - run_started
 
     plan_json = out_dir / "plan.json"
@@ -242,6 +265,10 @@ def run_evaluation(
     summary_json = out_dir / "summary.json"
     timings_json = out_dir / "timings.json"
     summary = _build_summary(rows, plan, config, resolved, pipeline)
+    summary["campaign_status"] = "incomplete_fail_stop" if fail_stop else "complete"
+    summary["planned_episodes"] = len(plan)
+    if fail_stop is not None:
+        summary["fail_stop"] = fail_stop
     write_json(
         {
             "pipeline": pipeline,

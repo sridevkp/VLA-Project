@@ -163,3 +163,10 @@ names. Linux inert checks, Ruff, `ty`, `compileall` and frozen-evidence verifica
 and live Webots execution remain unverified. Motion stays `NOT_READY` and the new
 `unverified-runtime-table-transform` blocker remains until one authorized read-only Webots
 observation grounds all five boxes.
+
+ADR-0073 adds no dependency or version pin. It reuses Python 3.11 standard library, NumPy, SciPy,
+IKPy and the existing pinned corrected registration. Endpoint solving now uses full registered
+bounds with 20 draw-seeded restarts; execution still uses the unchanged `0.15 rad` per-tick limit
+from `configs/robot.yaml`. No public `core/` interface, config, seed, split, safety threshold,
+frozen evidence byte or live authorization changed. Linux offline regression, Ruff and formatting
+checks pass; Windows and all Webots/physical paths remain unverified.

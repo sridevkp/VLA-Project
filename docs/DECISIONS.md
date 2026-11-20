@@ -2925,3 +2925,111 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   passed `16 passed in 9.02s`. `uv run ruff check .` returned `All checks passed!`;
   `uv run ruff format --check .` returned `333 files already formatted`. No Webots-dependent test
   was run.
+
+## ADR-0073 — Bounded offline correction for Stage 1 endpoint failure and fail-stop (2026-11-20)
+
+- **Scope:** exactly two behavioural corrections after the accepted diagnosis of the preserved
+  18-episode Stage 1 campaign: solve full-horizon waypoint endpoints with the already-reviewed
+  corrected kinematics and full registered bounds, and stop a campaign at the first recorded
+  episode-level `EXCEPTION`. Necessary wiring in the two existing WorldMind pipeline generators and
+  existing test stubs is included. No Webots process was launched; the failed campaign was not
+  modified, resumed, rerun or superseded. No live campaign is requested. No config, approved
+  definitions, report PDF, tolerance, seed, `K=32`, `H=50`, frozen VALIDATION plan, core
+  interface, scoring rule, `full_system` behaviour, Packet B/D, TEST/TRAIN access, safety limit,
+  push or merge was changed.
+- **Root cause retained:** the preserved run failed at the first `PREGRASP` inside
+  `ScriptedChunkAdapter.draw().propose()` because the one-tick
+  `BoundedPoseSolver(max_joint_step_rad=0.15)` was applied to a full-horizon endpoint. All 18
+  planned episodes were recorded as `EXCEPTION`, with zero decisions, candidates, predictions or
+  backend actions. The campaign's CLI exit was `0`, which hid the early termination.
+- **Endpoint correction:** `src/vlarobot/backends/worldmind_bindings.py` now registers a
+  `_FullPoseEndpointSolver` through `corrected_pose_solver()`. It solves the full position and
+  full orientation with the pinned corrected FK/IK, full registered joint bounds, the reviewed
+  20-restart strategy and an explicit draw-seeded `numpy` RNG. It exposes only the execution
+  limit `execution_max_joint_step_rad = SETTINGS.max_joint_step_rad = 0.15`; no `10 rad` trust
+  region or other new constant was adopted. The endpoint selection uses the reviewed residual
+  formulas and rejects non-finite solves.
+- **Bounded execution retained:** `ScriptedChunkAdapter` now seeds each endpoint solve, requires
+  a finite residual within the per-waypoint reviewed tolerance (`0.015 m` transit /
+  `0.005 m` grasp; `0.08726646259971647 rad` orientation), and converts one endpoint into
+  `hold_steps` explicit `JointTarget`s clipped to `0.15 rad` per tick from a simulated current
+  joint state. It fails closed on a missing/non-finite current joint or a safety rejection.
+  Every emitted joint and gripper action passes the injected `SafetyMonitor.validate()` before it
+  enters a candidate chunk; the live `execute_first` veto remains unchanged. The endpoint may be
+  farther than one tick from the current configuration, but each emitted tick is executable and
+  bounded.
+- **Rejected alternative:** constraining endpoint IK to `hold_steps x 0.15 rad` cannot solve
+  preserved episodes 11 and 17 even with 100 restarts. Minimal path-length prototypes require
+  9.95–11.20 rad across the scripted chain versus `50 x 0.15 = 7.5 rad`, so endpoint feasibility
+  and per-tick executability must be separate decisions.
+- **Fail-stop:** `EvalRunConfig.stop_on_exception` defaults to `False`; Stage 1 sets it to `True`.
+  `run_evaluation` detects the first recorded `EXCEPTION` row, stops before the next episode, and
+  writes `campaign_status="incomplete_fail_stop"`, `planned_episodes`, and a `fail_stop` object
+  carrying the episode index, scene, state and actual recorded reason. `run_stage1_evidence`
+  finalizes sidecars in the existing `finally` block, writes the updated summary, then raises
+  `CampaignFailStop` through the CLI's existing nonzero-exception path. A partial campaign is
+  never described as completed or scored.
+- **Offline endpoint evidence:** all 18 preserved first observations were reconstructed read-only
+  from the pinned v5 registration and the preserved `.npz` files using the exact first candidate
+  draw seeds. All full-pose `PREGRASP` endpoints passed the reviewed residual gate; worst
+  endpoint joint delta was `2.05520891543 rad` (episode 14), while the largest residuals were
+  `0.00982120514033 m` and `0.00208532571287 rad` (episode 02). Episodes 11 and 17, the known
+  hard cases, solved with residuals below `1e-13` and deltas `1.67690353702` and
+  `1.96569235228 rad`. No file in the preserved campaign was written.
+- **Documentation:** this ADR records the exact source hashes and evidence boundary;
+  `docs/VERSIONS.md` records that no dependency, version pin, `core/` interface or frozen evidence
+  byte changed.
+- **Preservation hashes:** diagnostic config
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`, approved definitions
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`, report PDF
+  `23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`, v5 geometry
+  `9258b376f80309ed074130c61e784b9e0c18c71d48b980102d364dd0e60d66e7`, and aggregate SHA-256 of
+  all files in the preserved campaign
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712` were unchanged.
+  The owner-approved uncommitted config population and untracked definitions remain outside this
+  commit.
+- **Source hashes (HEAD SHA-256 -> current SHA-256):**
+  `src/vlarobot/backends/worldmind_bindings.py`
+  `b35551e60e6c25836f6d71a51cb78913e53bc28a2e8f048044a67e6973447ece` ->
+  `4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae`;
+  `src/vlarobot/execution/scripted_chunk_adapter.py`
+  `45ed185554723317747657697b1eed8f4e6b0b5c7b486c5607569cd0375a4470` ->
+  `bac8b18276498d41ea84d069f0fbdd08d7e4619cd11ee59bcd070c749b215b52`;
+  `src/vlarobot/execution/worldmind_pipeline.py`
+  `3455d99d81140f77235be47e8ba9bfcf77226908363a481d3b473f12719347c5` ->
+  `27f3d45165d5e4e34fa4b670e41a709ff25206f2e5400fa441afe1dda887fdf8`;
+  `src/vlarobot/execution/worldmind_stage1_pipeline.py`
+  `c674c6056f7a78eb0702570358ef9539a8fc5a531b1d8e979f094f806db1d812` ->
+  `20ef594be17ed4b65744f878a06ee72f1f0ea1f156669944a5ef71c6fdd468b5`;
+  `src/vlarobot/eval/runner.py`
+  `b1e3f8d9a3f7c9e20ea00b0d2a64d42b172645a5568c5f61913843f782cb2b12` ->
+  `7b64b744d48074c723a8a593b009507cf268aa79c6d02fea01d51d430c25e0c2`.
+  New focused regression file
+  `tests/test_worldmind_endpoint_failstop_regression.py`:
+  `b7126bde13972929c325b232b936737f2bd0f1efd1f39b79d8035ea7ac3a84f2`.
+  Existing test stubs changed only for the new solver/adapter signatures:
+  `tests/test_worldmind_waypoints.py`
+  `89028e771410e5b914b1134e60dd12ea04de9fe1eb802ea7acb6d827db5db560`;
+  `tests/test_worldmind_production.py`
+  `732087650b7f85fc14bf5f9431a87ec1bb7255046f7b1d5d18bec28d69ebcfdf`.
+- **Focused verification:** the new offline regression file passed `6 passed` with no Webots.
+  It covers preserved-episode endpoint generation and reviewed residuals, full bounds, per-tick
+  bounded transitions, mandatory safety validation and fail-closed rejection, one-episode
+  campaign fail-stop, truthful partial summary/CSV/plan evidence, and Stage 1 sidecar finalization
+  before `CampaignFailStop`. The four existing WorldMind/eval test files passed
+  `46 passed, 1 failed`; the only failure is the pre-existing template assertion that conflicts
+  with the owner-approved uncommitted config population (`max_decisions: 1060`), which was
+  intentionally not modified.
+- **Full-suite gate:** `uv run pytest -m "not webots" -q` completed with
+  `2 failed, 815 passed, 3 skipped, 540 warnings in 603.23s (0:10:03)`. The failures are
+  pre-existing and outside this correction: `tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`
+  compares a committed helper manifest SHA `071cf660ee012a432fe51b1314ad7fd53a3cad072e1400c6a6e9867acc849063`
+  against the current helper SHA `88fd4db97c1cb392c182da4379d11a5271b4576244521af783313403ae449137`,
+  and `tests/test_worldmind_production.py::test_shipped_stage1_template_is_frozen_uncalibrated_and_fails_closed`
+  rejects the owner-approved uncommitted config population (`max_decisions: 1060`). Neither was
+  changed: the first is unrelated recovery-helper evidence, and the second is an authorized owner
+  value explicitly excluded from this commit. The focused regression and Ruff/format gates pass.
+- **Remaining unverified:** no Webots execution, physical settling, contact, swept-arm safety,
+  calibration selection, scoring or live evidence collection was performed. The correction is an
+  offline code fix with offline regression only; it is not a claim that a new live campaign would
+  succeed.

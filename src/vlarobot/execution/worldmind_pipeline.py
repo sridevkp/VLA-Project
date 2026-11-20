@@ -724,10 +724,15 @@ class WorldMindEpisodePolicy:
         monitor = self.bindings.safety[self.config.safety.binding](
             self.config, self.bindings.inputs.get("safety", {})
         )
+        solver = self.bindings.pose_solvers[self.config.adapter.pose_solver_binding]
+        max_joint_step_rad = getattr(solver, "execution_max_joint_step_rad", None)
+        if max_joint_step_rad is None or not math.isfinite(float(max_joint_step_rad)):
+            raise ValueError("registered pose solver must expose a finite execution step limit")
         adapter = ScriptedChunkAdapter(
             waypoints,
-            solver=self.bindings.pose_solvers[self.config.adapter.pose_solver_binding],
+            solver=solver,
             monitor=monitor,
+            max_joint_step_rad=float(max_joint_step_rad),
             horizon_steps=self.config.pipeline.horizon_steps,
             control_dt_s=self.config.pipeline.control_dt_s,
             jitter=JointJitter(

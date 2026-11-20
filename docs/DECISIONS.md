@@ -3033,3 +3033,71 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   calibration selection, scoring or live evidence collection was performed. The correction is an
   offline code fix with offline regression only; it is not a claim that a new live campaign would
   succeed.
+
+## ADR-0074 — Offline readiness correction: config split and CLI fail-stop proof (2026-11-20)
+
+- **Scope:** narrowly scoped, read-only-with-respect-to-evidence correction after acceptance
+  review. The tracked `configs/worldmind_diagnostic.yaml` was restored byte-for-byte to its
+  committed frozen placeholder template. A separate approved diagnostic instance
+  `configs/worldmind_diagnostic.approved.yaml` now carries only the six owner-approved
+  substitutions: `bounds.max_decisions=1060`, `bounds.max_steps=1059`,
+  `report.definitions=report/definitions.approved.json`, `adapter.jitter.joint_std_rad=0.001`,
+  `adapter.jitter.joint_limit_rad=0.005` and `adapter.jitter.max_attempts=10`. No other YAML
+  field, candidate definition, authoritative report, seed, split, `K=32`, `H=50`, tolerance,
+  safety limit or binding identity changed. No Webots process, campaign, scoring, calibration
+  selection, `full_system` execution, TRAIN/TEST access, Packet B/D execution, geometry
+  investigation, push or merge occurred.
+- **Provenance clarification:** the byte set recorded in ADR-0073 as the owner-populated
+  diagnostic config hash `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03` is
+  now stored verbatim at `configs/worldmind_diagnostic.approved.yaml`. The restored shipped
+  template has its own hash below. `tests/test_worldmind_endpoint_failstop_regression.py` was
+  updated only to read the approved instance; its new hash supersedes the ADR-0073 value.
+- **Config hashes:** shipped placeholder template `configs/worldmind_diagnostic.yaml`
+  `9d096d4d3206f0a6287239257c57ed56e138843babaeea1c624bf8dea6426c0a`; approved instance
+  `configs/worldmind_diagnostic.approved.yaml`
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`; approved definitions
+  `configs/report/definitions.approved.json`
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`; authoritative report PDF
+  `23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`; aggregate SHA-256 over
+  all preserved failed-campaign files
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`. The preserved campaign,
+  v5 geometry, approved definitions and report PDF were not written.
+- **Corrected solver identity:** this decision record is the versioned provenance for the offline
+  endpoint correction. The implementation identity is
+  `vlarobot.backends.worldmind_bindings._FullPoseEndpointSolver`, exposed through the unchanged
+  public binding identity `corrected_bounded_pose_solver_v1` and the unchanged factory
+  `corrected_pose_solver()`. The corrected source
+  `src/vlarobot/backends/worldmind_bindings.py` remains at SHA-256
+  `4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae`; the other ADR-0073
+  source hashes are unchanged (`scripted_chunk_adapter.py`
+  `bac8b18276498d41ea84d069f0fbdd08d7e4619cd11ee59bcd070c749b215b52`, `worldmind_pipeline.py`
+  `27f3d45165d5e4e34fa4b670e41a709ff25206f2e5400fa441afe1dda887fdf8`,
+  `worldmind_stage1_pipeline.py`
+  `20ef594be17ed4b65744f878a06ee72f1f0ea1f156669944a5ef71c6fdd468b5`, `eval/runner.py`
+  `7b64b744d48074c723a8a593b009507cf268aa79c6d02fea01d51d430c25e0c2`).
+- **Implementation choices, not calibrated parameters:** the 20 draw-seeded full-bound restarts
+  and the deterministic selection key `(position_error + orientation_error, joint_delta)` are
+  recorded as solver implementation choices. They are not Eq. 3.8 weights, component settings,
+  ranking parameters, calibration candidates or approval evidence. No trust region, execution
+  limit, safety threshold or scoring rule was introduced. Binding compatibility is preserved:
+  no new binding identity or config field was added, and the registered factory still exposes the
+  same `solve()` contract with a defaulted seed plus the execution-step property required by the
+  adapter.
+- **New regression hashes:** new readiness regression file
+  `tests/test_worldmind_readiness_regression.py`
+  `c22b498a842d19690bf7ea667f04c18be0629a9eba8b118ba49696cb86dda283`; updated endpoint/fail-stop
+  regression file `tests/test_worldmind_endpoint_failstop_regression.py`
+  `b43593615d6aebd62c432195e9ae34c15dec4bb25e687332eca11df37c5978b1`.
+- **Focused verification:** endpoint/fail-stop regression `6 passed, 8 warnings in 6.02s`;
+  readiness regression `3 passed in 2.88s`, covering the exact six-field YAML diff, independent
+  loader acceptance of the approved instance, fail-closed loading of the restored template, and
+  CLI `CampaignFailStop` exit code `1` with preserved partial evidence, finalized sidecars, two
+  planned episodes, one recorded episode and no second-episode launch; shipped-template contract
+  test `1 passed in 2.39s`; `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `335 files already formatted`; `git diff --check` passed.
+- **Future campaign path:** a fresh non-scored VALIDATION18 campaign should use the approved
+  instance and a new output directory, proposed as
+  `runs/worldmind/stage1-validation-v2-2026-11-20`. That directory was not created. Explicit
+  owner authorization is still required before any live diagnostic campaign. Windows, Webots,
+  physical settling, contact, swept-arm safety, calibration selection, scoring and live evidence
+  collection remain unverified.

@@ -170,3 +170,15 @@ bounds with 20 draw-seeded restarts; execution still uses the unchanged `0.15 ra
 from `configs/robot.yaml`. No public `core/` interface, config, seed, split, safety threshold,
 frozen evidence byte or live authorization changed. Linux offline regression, Ruff and formatting
 checks pass; Windows and all Webots/physical paths remain unverified.
+
+ADR-0074 adds no dependency or version pin. The tracked `configs/worldmind_diagnostic.yaml` is the
+frozen blocked template; `configs/worldmind_diagnostic.approved.yaml` is the separate non-scored
+owner-approved diagnostic instance used by offline endpoint reconstruction and any future
+authorized evidence collection. The unchanged `corrected_bounded_pose_solver_v1` binding now has a
+versioned implementation identity in `docs/DECISIONS.md`: `_FullPoseEndpointSolver` with SHA-256
+`4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae`. The 20 restarts and the
+deterministic residual/joint-delta tie-break are implementation choices, not calibrated
+parameters. No public `core/` interface, binding identity, seed, split, `K=32`, `H=50`, safety
+threshold, report definition, preserved evidence byte or live authorization changed. Linux
+offline regression, Ruff and formatting checks pass; Windows and all Webots/physical paths remain
+unverified.

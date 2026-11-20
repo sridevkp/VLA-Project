@@ -60,7 +60,7 @@ from vlarobot.execution.worldmind_stage1_pipeline import run_stage1_evidence
 from vlarobot.world_model.rollout import compose
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "configs" / "worldmind_diagnostic.yaml"
+CONFIG_PATH = ROOT / "configs" / "worldmind_diagnostic.approved.yaml"
 CAMPAIGN = ROOT / "runs" / "worldmind" / "stage1-validation-v1-2026-11-20"
 GEOMETRY = ROOT / "runs" / "worldmind" / "geometry-inspection-v5-2026-11-19" / "geometry.json"
 IDENTITY = (0.0, 0.0, 0.0, 1.0)

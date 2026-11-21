@@ -20,8 +20,12 @@ from vlarobot.eval.decision_metrics import (
     summarize_phase_latencies,
 )
 from vlarobot.eval.observed_state_feedback import (
+    COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME,
+    DIAGNOSTIC_EVENT_SIDECAR_NAME,
     FEEDBACK_SIDECAR_NAME,
     OBSERVED_STATE_FEEDBACK_EXECUTION_MODE,
+    read_feedback_evidence,
+    validate_feedback_evidence_row,
 )
 from vlarobot.eval.worldmind_config import GATE_CALL_POLICY
 
@@ -110,6 +114,8 @@ class WorldMindEvidenceWriter:
     pairings: list[PredictionPairingEvidence] = field(default_factory=list, init=False)
     errors: list[dict[str, Any]] = field(default_factory=list, init=False)
     feedback_rows: list[dict[str, Any]] = field(default_factory=list, init=False)
+    diagnostic_events: list[dict[str, Any]] = field(default_factory=list, init=False)
+    proxy_rows: list[dict[str, Any]] = field(default_factory=list, init=False)
     measurement_class: str = field(default="synthetic", init=False)
     resumed: bool = field(default=False, init=False)
     feedback_enabled: bool = field(default=False, init=False)
@@ -121,6 +127,26 @@ class WorldMindEvidenceWriter:
     @property
     def feedback_path(self) -> Path:
         return self.folder / FEEDBACK_SIDECAR_NAME
+
+    @property
+    def diagnostic_event_path(self) -> Path:
+        return self.folder / DIAGNOSTIC_EVENT_SIDECAR_NAME
+
+    @property
+    def collision_proxy_path(self) -> Path:
+        return self.folder / COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME
+
+    def _sidecar_names(self) -> list[str]:
+        names = ["decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"]
+        if self.feedback_enabled:
+            names.extend(
+                [
+                    FEEDBACK_SIDECAR_NAME,
+                    DIAGNOSTIC_EVENT_SIDECAR_NAME,
+                    COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME,
+                ]
+            )
+        return names
 
     @property
     def episode_ids(self) -> set[str]:
@@ -143,9 +169,7 @@ class WorldMindEvidenceWriter:
             return
         self.folder.mkdir(parents=True, exist_ok=False)
         _write_json(self.folder / "provenance.json", dict(provenance))
-        names = ["decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"]
-        if self.feedback_enabled:
-            names.append(FEEDBACK_SIDECAR_NAME)
+        names = self._sidecar_names()
         for name in names:
             with (self.folder / name).open("x", encoding="utf-8"):
                 pass
@@ -157,9 +181,7 @@ class WorldMindEvidenceWriter:
         previous = json.loads((self.folder / "provenance.json").read_text(encoding="utf-8"))
         if previous != dict(provenance):
             raise ValueError("resume provenance differs from the existing sidecar provenance")
-        names = ["decisions.jsonl", "prediction_pairing.jsonl", "errors.jsonl"]
-        if self.feedback_enabled:
-            names.append(FEEDBACK_SIDECAR_NAME)
+        names = self._sidecar_names()
         for name in names:
             if not (self.folder / name).is_file():
                 raise FileNotFoundError(f"cannot resume without sidecar file: {name}")
@@ -172,7 +194,9 @@ class WorldMindEvidenceWriter:
         )
         self.errors.extend(_read_jsonl(self.folder / "errors.jsonl"))
         if self.feedback_enabled:
-            self.feedback_rows.extend(_read_jsonl(self.feedback_path))
+            self.feedback_rows.extend(read_feedback_evidence(self.feedback_path))
+            self.diagnostic_events.extend(_read_jsonl(self.diagnostic_event_path))
+            self.proxy_rows.extend(_read_jsonl(self.collision_proxy_path))
 
     def record_decision(
         self,
@@ -194,9 +218,29 @@ class WorldMindEvidenceWriter:
             raise RuntimeError("feedback evidence cannot be recorded outside the feedback mode")
         if not self.folder.is_dir():
             raise RuntimeError("evidence writer must be started before recording feedback")
-        payload = evidence.to_dict()
+        payload = validate_feedback_evidence_row(evidence.to_dict())
         _append_jsonl(self.feedback_path, payload)
         self.feedback_rows.append(payload)
+
+    def record_diagnostic_event(self, payload: Mapping[str, Any]) -> None:
+        """Append one explicitly labelled diagnostic-only event; it is never scored."""
+        if not self.feedback_enabled:
+            raise RuntimeError("diagnostic events belong only to the feedback mode")
+        if not self.folder.is_dir():
+            raise RuntimeError("evidence writer must be started before recording diagnostics")
+        row = dict(payload)
+        _append_jsonl(self.diagnostic_event_path, row)
+        self.diagnostic_events.append(row)
+
+    def record_collision_proxy(self, evidence: Any) -> None:
+        """Append versioned per-object proxy attribution; proxy hits are not contacts."""
+        if not self.feedback_enabled:
+            raise RuntimeError("proxy attribution belongs only to the feedback mode")
+        if not self.folder.is_dir():
+            raise RuntimeError("evidence writer must be started before recording proxy evidence")
+        payload = evidence.to_dict()
+        _append_jsonl(self.collision_proxy_path, payload)
+        self.proxy_rows.append(payload)
 
     def record_error(self, episode_id: str, error: BaseException) -> None:
         """Record a real exception; never synthesize missing decision records for it."""
@@ -300,6 +344,8 @@ class WorldMindEvidenceWriter:
         }
         if self.feedback_enabled:
             paths["observed_state_feedback"] = self.feedback_path
+            paths["diagnostic_events"] = self.diagnostic_event_path
+            paths["collision_proxy_attribution"] = self.collision_proxy_path
         for name in ("risk_rejection", "phase_latency", "verification_recovery", "instrumentation"):
             payload = {
                 "risk_rejection": rejection_payload,

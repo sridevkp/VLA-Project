@@ -60,9 +60,17 @@ class FakeBackend:
         step_duration: float = 0.032,
         *,
         can_world_xyz: tuple[float, float, float] = CAN_WORLD_XYZ,
+        gripper_rate_limited: bool = False,
+        finger_speed_m_s: float | None = None,
     ) -> None:
         if step_duration <= 0.0:
             raise ValueError("step_duration must be positive.")
+        if gripper_rate_limited and (
+            finger_speed_m_s is None
+            or not math.isfinite(float(finger_speed_m_s))
+            or float(finger_speed_m_s) <= 0.0
+        ):
+            raise ValueError("rate-limited gripper requires a positive finite finger speed")
         self.safety_monitor = safety_monitor or SafetyMonitor(
             SafetyLimits(
                 joint_position={name: (-3.14, 3.14) for name in _ARM_JOINTS},
@@ -71,6 +79,9 @@ class FakeBackend:
         )
         self.step_duration = step_duration
         self.can_world_xyz = tuple(float(value) for value in can_world_xyz)
+        self.gripper_rate_limited = bool(gripper_rate_limited)
+        self.finger_speed_m_s = None if finger_speed_m_s is None else float(finger_speed_m_s)
+        self._gripper_target: float | None = None
         self._time = 0.0
         self._seq = 0
         self._stopped = False
@@ -78,6 +89,7 @@ class FakeBackend:
         self._rgb = np.zeros((48, 64, 3), dtype=np.uint8)
         self._depth = np.zeros((48, 64), dtype=np.float32)
         self._robot_state = self._initial_robot_state()
+        self._gripper_target = self._robot_state.gripper_opening
 
     def reset(self, scenario: ScenarioSpec, seed: int) -> Observation:
         if not isinstance(seed, int):
@@ -90,6 +102,7 @@ class FakeBackend:
         self._rgb.fill(0)
         self._depth.fill(0.0)
         self._robot_state = self._initial_robot_state()
+        self._gripper_target = self._robot_state.gripper_opening
         return self._observation()
 
     def step(self, n_steps: int = 1) -> Observation:
@@ -100,6 +113,14 @@ class FakeBackend:
         self._time += n_steps * self.step_duration
         self._seq += n_steps
         self._robot_state.joint_vel = {name: 0.0 for name in self._robot_state.joint_pos}
+        if self.gripper_rate_limited and self._gripper_target is not None:
+            current = float(self._robot_state.gripper_opening)
+            target = float(self._gripper_target)
+            travel = float(self.finger_speed_m_s) * self.step_duration * n_steps
+            if current < target:
+                self._robot_state.gripper_opening = min(target, current + travel)
+            elif current > target:
+                self._robot_state.gripper_opening = max(target, current - travel)
         return self._observation()
 
     def apply(self, action: Action) -> ApplyResult:
@@ -128,7 +149,11 @@ class FakeBackend:
         elif isinstance(action, BaseGoal):
             self._robot_state.base_pose = action.pose
         elif isinstance(action, GripperCmd):
-            self._robot_state.gripper_opening = action.opening
+            if self.gripper_rate_limited:
+                self._gripper_target = float(action.opening)
+            else:
+                self._robot_state.gripper_opening = action.opening
+                self._gripper_target = float(action.opening)
         else:
             return ApplyResult(False, f"unsupported action type: {type(action).__name__}")
         return ApplyResult(True)

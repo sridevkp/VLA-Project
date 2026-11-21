@@ -333,3 +333,19 @@ The CLI surface is available as
 separate owner authorization and a fresh versioned output directory are still required for any
 diagnostic run. Do not use it for scoring, `full_system`, live actuation, V4 resume, or a campaign.
 Current source remains **NO-GO** for another live campaign.
+
+The V5b postmortem corrections (ADR-0079 and
+`WORLDMIND_V5B_POSTMORTEM_IMPLEMENTATION_PLAN_ADDENDUM_V1.md`) are also offline-only. They add a
+pre-candidate reachability precheck, a separately labelled configured-HOME completion phase,
+explicit convergence classification, per-object collision-proxy attribution with reviewed gripper
+completion, and full observed base-pose evidence. The feedback sidecar is now schema 2 while still
+reading schema 1 rows; `diagnostic-events.jsonl` and `collision-proxy-attribution.jsonl` are
+additional diagnostic-only channels. V5b evidence is read-only and is not resumable. Verify the
+corrections without Webots with:
+
+```text
+uv run python -m pytest -q tests/test_worldmind_v5b_postmortem_regression.py tests/test_worldmind_observed_state_feedback.py
+```
+
+**NO-GO** for a V5c live or scored campaign. A separately authorized, non-scored VALIDATION
+diagnostic may be considered only in a fresh output directory under the explicit feedback mode.

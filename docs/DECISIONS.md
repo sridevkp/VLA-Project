@@ -3501,3 +3501,102 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   and treats feedback rows as non-comparable diagnostics. **NO-GO** for a live/scored campaign,
   `full_system`, calibration selection, retrying or resuming V4, or treating these regressions as
   evidence of physical task success.
+
+## ADR-0079 — Offline V5b postmortem corrections A-E (2026-11-21)
+
+- **Scope and authorization:** owner-approved, offline implementation of the read-only V5b
+  postmortem findings A-E. The implementation plan is
+  `docs/WORLDMIND_V5B_POSTMORTEM_IMPLEMENTATION_PLAN_ADDENDUM_V1.md`. No Webots process, live
+  campaign, V5c execution, scoring, calibration selection, `full_system`, Packet B/D, TRAIN/TEST
+  access, geometry change, push or merge occurred. V1-V5b evidence is read-only and was not
+  resumed or rewritten. This ADR adds diagnostic bookkeeping only; it is not a scientific result,
+  performance claim or live authorization.
+- **Frozen inputs preserved:** K=32, H=50, `control_dt_s=0.032`, `max_steps=1059`, the frozen
+  scene/seed plan, candidate generation, selected candidates and waypoint order, IK/verifier
+  thresholds, `SafetyMonitor`, `PlacementVerifier`, report definitions and `retry_once → abort`
+  are unchanged. Recomputed V1-V5b tree aggregates match their approved values: V1
+  `08258083104715443ebbbe0c77e095bd489b0ca2ffd1899c6173cea63ec1f712`, V2
+  `b5b4075d8c6db133027ea900cecb5db995f286a52bdeb6d37e96231c07194ccb`, V3
+  `d4204a6fae79c16988e68f0b7cb61b27c90ba614f55fbfa507d1f666cf3d4d29`, V4
+  `48ce9f020802dac08c3fa065f4b53ef7d0f547160a891f488b081966f4eeba47`, V5
+  `96d9540750257cd49bf0d3e01a9a4fd68d9e015d096e1187cc1979eebfe8df1e` and V5b
+  `1946ff3ab5ce461ad92f3a354df4d292ecf469af2d6e7a77bd1322c530eae828`. Frozen config
+  `configs/worldmind_diagnostic.approved.yaml`
+  `9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03`, definitions
+  `configs/report/definitions.approved.json`
+  `457617762e8952796cd1f2fcfb0f3cf649735c727e91f7f1f179a103750dde14`, `configs/robot.yaml`
+  `1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d`, `configs/eval.yaml`
+  `79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f`, and the frozen plan
+  provenance hash `013ca8ee314df6ca6b72505761c0ab7bc37caf4ec469f6696db80d7ce428fcb2` in all six
+  run trees remain unchanged. `scripted_chunk_adapter.py`, `worldmind_bindings.py`,
+  `safety_monitor.py`, `worldmind_pipeline.py` and `planning/verification.py` remain byte-identical.
+- **Correction A:** feedback mode now runs a deterministic, fixed-seed-`0`, read-only solver
+  residual precheck over re-anchored observed waypoints before candidate generation. It uses the
+  reviewed per-waypoint IK tolerances exactly, never clamps, substitutes or repairs an endpoint,
+  and emits a structured `unreachable_observed_target` diagnostic event with measured residual,
+  exact tolerances, `candidate_generation_performed=false` and `backend_actions_applied=0`. A true
+  solver exception or non-finite residual still fails closed with the original exception.
+- **Correction B:** a separately labelled `diagnostic_home_completion` phase runs only after
+  selected-chunk convergence and targets the approved `verification.home_joints` vector with
+  `home_tolerance_rad=0.02`. Selected HOME payloads and their reviewed `robot.yaml` error tolerance
+  are preserved; every diagnostic HOME intermediate is sourced from observation, safety validated,
+  apply validated, step counted in the same 1059-step ledger and separately reported. HOME
+  completion errors and terminal reasons are never mixed into selected-action errors and create no
+  prediction pairing.
+- **Correction C:** final selected-action errors are preserved. Per-action and episode termination
+  distinguish `target_converged`, `global_step_ceiling`, timeout, stall, safety rejection, backend
+  rejection and execution exception. The convergence summary excludes non-converged actions from
+  converged tolerance statistics while retaining their indices, reason counts and final errors.
+- **Correction D:** version-1 `collision-proxy-attribution.jsonl` attributes the existing
+  displacement/tilt proxy per object, records threshold source and backend-observed contact steps,
+  and never promotes a proxy to contact, grasp, release or a swept-arm certificate. Gripper
+  completion uses existing reviewed `finger_speed=0.03`, opening limits `[0.0, 0.045]`,
+  `control_dt_s=0.032` and `gripper_open_timeout_s=4.0`; the derived arrival tolerance is
+  `0.00096 m` and timeout is `125` steps. Every apply is safety and backend validated, with
+  explicit completion reason, target, error and unit. The FakeBackend rate-limited progression is
+  opt-in, so default behaviour is unchanged.
+- **Correction E:** each attempt snapshot records the complete observed `base_pose_world`
+  position and quaternion (or explicit `null` when absent). `observed-state-feedback.jsonl` moves
+  from schema 1 to schema 2; schema 1 rows remain readable verbatim. Schema 2 adds HOME completion,
+  convergence summary and explicit gripper completion fields. No frozen scored metric or H=50
+  prediction comparison changes; feedback remains non-comparable and unscored with zero pairing
+  records.
+- **Changed and added hashes:** `src/vlarobot/execution/worldmind_stage1_pipeline.py` changed from
+  `ad4401a263b33cc8e2dacb7f5db80c13fa859fdb85079594ca090791570be420` to
+  `a7135552750d43f0bef720c50eb9faa8c087c279588d4b6a326d2172811341c1`;
+  `src/vlarobot/eval/observed_state_feedback.py` from
+  `aa7e06236563cbff726f73e6e6f46862c2859dcacf9433acad6334cec8e559a7` to
+  `961b423e9ef12877500564fb7efe3d98c922f593217813c0821055be72a79136`;
+  `src/vlarobot/eval/worldmind_evidence.py` from
+  `69748ec0615e19f16a1ef2dd987642f42a6df90465c14859efd95aa7cc0e7406` to
+  `0cd500850324a000bbfb28b282d88d47fc453c364e82a6416b67d9a458acb4f6`;
+  `src/vlarobot/backends/fake/backend.py` from
+  `fd6c3e53f074b8454ac82150fb6dddc40ef90eded9323332ea62a089f2373cdb` to
+  `5156026785bd642532019610c90549cbf6e8ed1c67c5829f4aa32c6caea6b9eb`;
+  `tests/test_worldmind_observed_state_feedback.py` from
+  `3ed91143e68625c5bd0365c64d9a1620005c35353f3c601e6632dc01e095bc1b` to
+  `85c581bd19a5d6ae3eb86658f189b1b0e6bb1f6b201ef85bdddaea2bd6ad495f`. New
+  `tests/test_worldmind_v5b_postmortem_regression.py` is
+  `8de94f81bc642dcd22d78e69053b01327a73773396ae4b1ec3077246b70ac095`; new implementation plan
+  addendum is `docs/WORLDMIND_V5B_POSTMORTEM_IMPLEMENTATION_PLAN_ADDENDUM_V1.md`. The pre-existing
+  untracked `configs/report/definitions.approved.json` was left untracked and byte-identical.
+- **Verification:** the 13 new A-E regressions plus the 9 existing feedback regressions return
+  `22 passed, 8 warnings in 3.97s`; the combined relevant offline set (`v5b_postmortem`,
+  `observed_state_feedback`, `v4_postmortem`, `stage1_runner`, `fake_backend`) returns
+  `53 passed, 8 warnings in 8.24s`. `uv run ruff check .` returned `All checks passed!`;
+  `uv run ruff format --check .` returned `341 files already formatted`; `git diff --check` passed.
+  The repository-wide offline suite returned
+  `1 failed, 862 passed, 3 skipped, 540 warnings in 647.30s (0:10:47)`; the only failure is the
+  pre-existing unrelated notebook helper SHA mismatch recorded in ADR-0075/ADR-0077/ADR-0078
+  (`tests/test_drive_handoff_notebook.py::test_v7_current_session_cells_and_helper_manifest`,
+  `071cf660…` expected, `88fd4db9…` present), with no diff from `HEAD` in the helper, manifest or
+  test. All 13 new regressions and all preserved-evidence tests passed inside the full suite. All
+  six V1-V5b tree aggregates, all frozen config/eval/robot hashes and the frozen plan provenance
+  hash were independently recomputed and matched after the code and documentation changes.
+- **Remaining limitations and recommendation:** verification is offline and deterministic only.
+  No Webots timing, physical joint or gripper response, grasp, contact, release, settling,
+  swept-arm certificate, Windows run, scored campaign, calibration selection, `full_system`, V5c
+  campaign or production use was verified. **NO-GO** for V5c live/scored execution, scoring,
+  calibration selection, retry/resume of V5 or V5b, or production use. **CONDITIONAL GO** is
+  reserved for a separately authorized, non-scored VALIDATION diagnostic that explicitly selects
+  feedback mode with `scripted_proposer` and writes only to a fresh versioned output directory.

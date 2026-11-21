@@ -330,14 +330,14 @@ def test_feedback_converges_with_progression_and_full_accounting(
     assert provenance["execution_mode"] == FEEDBACK_MODE
     assert provenance["prediction_pairing_scope"].startswith("original H=50 candidate prediction")
     assert provenance["prediction_pairing_records"] == "not_emitted_non_comparable"
-    assert provenance["feedback_evidence_schema_version"] == "1"
+    assert provenance["feedback_evidence_schema_version"] == "2"
     assert provenance["feedback_step_bound_source"] == "pose_solver.execution_max_joint_step_rad"
     assert _jsonl(sidecars["prediction_pairing"]) == []
 
     rows = _jsonl(sidecars["observed_state_feedback"])
     assert len(rows) == 1
     row = rows[0]
-    assert row["schema_version"] == 1
+    assert row["schema_version"] == 2
     assert row["execution_mode"] == FEEDBACK_MODE
     assert row["selected_action_count"] == 50
     assert row["termination_reason"] == "selected_chunk_converged"
@@ -350,7 +350,10 @@ def test_feedback_converges_with_progression_and_full_accounting(
     assert row["apply_rejected_count"] == 0
     assert row["apply_accepted_count"] == row["backend_step_count"]
     assert row["applied_action_count"] == row["backend_step_count"]
-    assert row["backend_step_count"] == sum(item["backend_step_count"] for item in row["actions"])
+    assert row["backend_step_count"] == (
+        sum(item["backend_step_count"] for item in row["actions"])
+        + row["home_completion"]["backend_step_count"]
+    )
 
     first = next(
         item
@@ -391,14 +394,41 @@ def test_feedback_converges_with_progression_and_full_accounting(
     assert budgets["joint_move_timeout_steps"] == 800
     assert budgets["linear_move_timeout_steps"] == 600
     assert budgets["gripper_open_timeout_s"] == 4.0
+    assert budgets["finger_speed_m_s"] == 0.03
+    assert budgets["gripper_arrival_tolerance_m"] == pytest.approx(0.00096)
+    assert budgets["gripper_timeout_steps"] == 125
     assert budgets["episode_max_steps"] == 1059
     assert budgets["applicability"]["linear_move_timeout"].startswith("not_applicable")
-    assert budgets["applicability"]["gripper_open_timeout"].startswith("not_applicable")
+    assert budgets["applicability"]["gripper_open_timeout"].startswith("applied")
     assert budgets["applicability"]["episode_step_ceiling"].startswith("applied")
     provenance = row["prediction_provenance"]
     assert provenance["comparability"] == "non_comparable"
     assert provenance["pairing_records_emitted"] == 0
     assert provenance["original_prediction_horizon_steps"] == 50
+
+    home = row["home_completion"]
+    assert home["phase"] == "diagnostic_home_completion"
+    assert home["source"] == ("configs/worldmind_diagnostic.approved.yaml:verification.home_joints")
+    assert home["terminal_reason"] == "home_converged"
+    assert home["final_max_joint_error_rad"] <= 0.02
+    assert home["backend_step_count"] >= 0
+    assert all(
+        row["attempts"][index]["phase"] == "diagnostic_home_completion"
+        for index in home["attempt_indices"]
+    )
+    summary = row["convergence_summary"]
+    assert summary["converged_action_count"] == len(summary["converged_action_indices"])
+    assert summary["non_converged_action_indices"] == []
+    assert summary["non_converged_reasons"] == {}
+    assert sidecars["diagnostic_events"].name == "diagnostic-events.jsonl"
+    events = _jsonl(sidecars["diagnostic_events"])
+    assert any(item["event_type"] == "diagnostic_home_completion" for item in events)
+    assert sidecars["collision_proxy_attribution"].name == "collision-proxy-attribution.jsonl"
+    proxies = _jsonl(sidecars["collision_proxy_attribution"])
+    assert len(proxies) == 1
+    assert proxies[0]["schema_version"] == 1
+    assert proxies[0]["objects"]
+    assert "proxy" in proxies[0]["note"].lower()
 
     decisions = _jsonl(sidecars["decisions"])
     assert len(decisions) == 1
@@ -508,15 +538,16 @@ def test_feedback_never_claims_gripper_settling_beyond_a_bounded_command(
         actions=(GripperCmd(opening=0.045),),
         waypoints=(ScriptedWaypoint("HOME", 1, joints={name: 0.0 for name in ARM_JOINTS}),),
     )
-    assert result.diagnostic.termination_reason == "gripper_command_complete"
+    assert result.diagnostic.termination_reason == "selected_chunk_converged"
     assert result.backend_step_count == 1
     record = result.diagnostic.actions[0]
     assert record.selected_action_type == "GripperCmd"
     assert record.convergence_tolerance_rad is None
     assert record.final_max_joint_error_rad is None
     assert record.executed_action_count == 1
+    assert record.completion_unit == "m"
+    assert record.completion_target == 0.045
+    assert record.completion_error == 0.0
     budgets = result.diagnostic.budgets.applicability
-    assert budgets["gripper_open_timeout"] == (
-        "not_applicable_gripper_commands_remain_bounded_command_events"
-    )
+    assert budgets["gripper_open_timeout"].startswith("applied")
     assert "no_linear_actions" in budgets["linear_move_timeout"]

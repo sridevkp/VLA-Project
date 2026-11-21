@@ -220,3 +220,18 @@ offline suite has only the pre-existing unrelated notebook helper SHA mismatch. 
 probe reports repository-wide pre-existing diagnostics and is not an acceptance gate. Windows,
 Webots, physical actuation, V5 campaigns and scored behavior remain unverified. Conditional GO is
 limited to a separately authorized, non-scored diagnostic in a fresh output directory.
+
+ADR-0079 adds no dependency or version pin. It reuses Python 3.11 standard library, NumPy, the
+existing pinned corrected URDF registration, reviewed `configs/robot.yaml` and `configs/eval.yaml`
+values, the pose solver's `0.15 rad` execution bound, `SafetyMonitor`, `PlacementVerifier` and the
+frozen diagnostic config. The observed-state feedback sidecar is bumped from schema 1 to schema 2;
+schema 1 rows remain readable. Version-1 `diagnostic-events.jsonl` and
+`collision-proxy-attribution.jsonl` sidecars are additive, diagnostic-only channels. No public
+`core/` interface, config, seed, split, candidate, safety or verifier threshold, report definition,
+scoring, calibration, `full_system` path, V1-V5b evidence byte or live authorization changed. No
+new numerical parameter was introduced: gripper arrival tolerance and timeout are derived from
+existing reviewed values. Linux offline focused and relevant regression tests, Ruff, formatting and
+`git diff --check` pass; the full offline suite has only the pre-existing unrelated notebook helper
+SHA mismatch. Windows, Webots timing, physical actuation, V5c, scoring and production use remain
+unverified. **NO-GO** for a live/scored V5c campaign; conditional GO remains limited to a
+separately authorized, non-scored diagnostic in a fresh output directory.

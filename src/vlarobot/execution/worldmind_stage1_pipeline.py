@@ -16,7 +16,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, is_dataclass, replace
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from time import perf_counter_ns
 from typing import Any, Literal
@@ -60,14 +60,21 @@ from vlarobot.eval.decision_evidence import (
 from vlarobot.eval.decision_metrics import pair_executed_prediction
 from vlarobot.eval.metrics import write_json
 from vlarobot.eval.observed_state_feedback import (
+    COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME,
+    DIAGNOSTIC_EVENT_SIDECAR_NAME,
+    FEEDBACK_EVIDENCE_SCHEMA_VERSION,
+    FEEDBACK_SIDECAR_NAME,
     FEEDBACK_TERMINATION_REASONS,
     OBSERVED_STATE_FEEDBACK_EXECUTION_MODE,
+    DiagnosticHomeCompletionEvidence,
     FeedbackActionEvidence,
     FeedbackAttemptEvidence,
     FeedbackBudgetEvidence,
+    FeedbackConvergenceSummary,
     FeedbackPredictionProvenance,
     JointProjectionEvidence,
     ObservedStateFeedbackEvidence,
+    build_collision_proxy_attribution,
 )
 from vlarobot.eval.runner import (
     CampaignFailStop,
@@ -77,6 +84,7 @@ from vlarobot.eval.runner import (
     _completed_recording,
     run_evaluation,
 )
+from vlarobot.eval.settings import EvalSettings, load_eval_settings
 from vlarobot.eval.worldmind_config import (
     FROZEN_ARM,
     WorldMindBindings,
@@ -127,6 +135,7 @@ _FEEDBACK_ABORT_STATES: dict[str, str] = {
     "global_step_ceiling": "WORLDMIND_BOUND_EXHAUSTED",
     "joint_move_timeout": "JOINT_MOVE_TIMEOUT",
     "joint_stall": "JOINT_STALL",
+    "gripper_move_timeout": "GRIPPER_MOVE_TIMEOUT",
     "safety_rejected": "SAFETY_ABORT",
     "backend_apply_rejected": "BACKEND_ABORT",
     "execution_exception": "EXECUTION_EXCEPTION",
@@ -234,7 +243,9 @@ def _stage1_provenance(
         "execution_mode": execution_mode,
         "execution_mode_label": STAGE1_EXECUTION_MODE_LABELS[execution_mode],
         "feedback_evidence_schema_version": (
-            "1" if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE else "not_applicable"
+            str(FEEDBACK_EVIDENCE_SCHEMA_VERSION)
+            if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else "not_applicable"
         ),
         "feedback_robot_config_sha256": (
             _sha256(_robot_config_path(config))
@@ -248,6 +259,29 @@ def _stage1_provenance(
         ),
         "feedback_convergence_source": (
             "robot.yaml:pregrasp_settle_tolerance_rad,home_settle_tolerance_rad"
+            if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else "not_applicable"
+        ),
+        "feedback_diagnostic_home_source": (
+            "configs/worldmind_diagnostic.approved.yaml:verification.home_joints/home_tolerance_rad"
+            if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else "not_applicable"
+        ),
+        "feedback_gripper_completion_source": (
+            "configs/robot.yaml:finger_speed,gripper_opening_limits,"
+            "gripper_open_timeout_s; control_dt_s from the frozen pipeline config"
+            if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else "not_applicable"
+        ),
+        "feedback_reachability_precheck": (
+            "deterministic_seed_0_solver_residual_precheck; unreachable observed targets abort "
+            "before candidate generation without clamping or substitution"
+            if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else "not_applicable"
+        ),
+        "feedback_diagnostic_sidecars": (
+            f"{FEEDBACK_SIDECAR_NAME},{DIAGNOSTIC_EVENT_SIDECAR_NAME},"
+            f"{COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME}"
             if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
             else "not_applicable"
         ),
@@ -337,9 +371,15 @@ class _FeedbackContract:
     joint_move_timeout_steps: int
     linear_move_timeout_steps: int
     gripper_open_timeout_s: float
+    finger_speed_m_s: float
+    gripper_opening_limits: tuple[float, float]
+    gripper_arrival_tolerance_m: float
+    gripper_timeout_steps: int
     episode_max_steps: int
     robot_config_path: Path
     robot_config_sha256: str
+    diagnostic_home_target_rad: Mapping[str, float]
+    diagnostic_home_tolerance_rad: float
 
     def evidence(self) -> FeedbackBudgetEvidence:
         return FeedbackBudgetEvidence(
@@ -351,6 +391,9 @@ class _FeedbackContract:
             joint_move_timeout_steps=self.joint_move_timeout_steps,
             linear_move_timeout_steps=self.linear_move_timeout_steps,
             gripper_open_timeout_s=self.gripper_open_timeout_s,
+            finger_speed_m_s=self.finger_speed_m_s,
+            gripper_arrival_tolerance_m=self.gripper_arrival_tolerance_m,
+            gripper_timeout_steps=self.gripper_timeout_steps,
             episode_max_steps=self.episode_max_steps,
             robot_config_path=str(self.robot_config_path),
             robot_config_sha256=self.robot_config_sha256,
@@ -361,14 +404,18 @@ class _FeedbackContract:
                 "joint_move_timeout": "applied to each JointTarget feedback loop",
                 "linear_move_timeout": "not_applicable_no_linear_actions_in_scripted_chunk",
                 "gripper_open_timeout": (
-                    "not_applicable_gripper_commands_remain_bounded_command_events"
+                    "applied to observed GripperCmd completion using the derived per-tick "
+                    "arrival bound and tick ceiling"
                 ),
-                "episode_step_ceiling": "applied across all feedback retries without reset",
+                "episode_step_ceiling": (
+                    "applied once across selected actions, diagnostic HOME completion and retries"
+                ),
             },
         )
 
 
 def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _FeedbackContract:
+    """Derive every diagnostic budget from reviewed config values without inventing numbers."""
     path = _robot_config_path(config)
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -381,8 +428,11 @@ def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _
         "joint_move_timeout_steps",
         "linear_move_timeout_steps",
         "gripper_open_timeout_s",
+        "finger_speed",
     )
     missing = [name for name in names if name not in raw]
+    if "gripper_opening_limits" not in raw:
+        missing.append("gripper_opening_limits")
     if missing:
         raise ValueError(f"robot.yaml is missing reviewed feedback budgets: {missing}")
     integers = ("joint_stall_steps", "joint_move_timeout_steps", "linear_move_timeout_steps")
@@ -397,11 +447,43 @@ def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(float(value))
+            or float(value) <= 0.0
         ):
-            raise ValueError(f"robot.yaml {name} must be finite")
+            raise ValueError(f"robot.yaml {name} must be finite and positive")
+    limits = raw["gripper_opening_limits"]
+    if (
+        not isinstance(limits, Sequence)
+        or len(limits) != 2
+        or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in limits)
+        or not all(math.isfinite(float(value)) for value in limits)
+        or float(limits[0]) > float(limits[1])
+    ):
+        raise ValueError("robot.yaml gripper_opening_limits must be a finite ordered pair")
     step_bound = getattr(solver, "execution_max_joint_step_rad", None)
     if step_bound is None or not math.isfinite(float(step_bound)) or float(step_bound) <= 0.0:
         raise ValueError("pose solver must expose the reviewed finite execution step bound")
+    control_dt_s = float(config.pipeline.control_dt_s)
+    if not math.isfinite(control_dt_s) or control_dt_s <= 0.0:
+        raise ValueError("frozen pipeline control_dt_s must be finite and positive")
+    finger_speed = float(raw["finger_speed"])
+    timeout_s = float(raw["gripper_open_timeout_s"])
+    gripper_timeout_steps = max(1, int(math.ceil(timeout_s / control_dt_s)))
+    diagnostic_target = dict(config.verification.home_joints)
+    if not diagnostic_target:
+        raise ValueError(
+            "configured verification HOME vector is required for diagnostic completion"
+        )
+    if any(
+        not isinstance(name, str)
+        or not name
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+        for name, value in diagnostic_target.items()
+    ):
+        raise ValueError("configured verification HOME vector must contain finite named joints")
+    diagnostic_tolerance = float(config.verification.home_tolerance_rad)
+    if not math.isfinite(diagnostic_tolerance) or diagnostic_tolerance <= 0.0:
+        raise ValueError("configured verification home_tolerance_rad must be finite and positive")
     return _FeedbackContract(
         max_joint_step_rad=float(step_bound),
         non_home_tolerance_rad=float(raw["pregrasp_settle_tolerance_rad"]),
@@ -410,10 +492,16 @@ def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _
         joint_progress_epsilon_rad=float(raw["joint_progress_epsilon_rad"]),
         joint_move_timeout_steps=int(raw["joint_move_timeout_steps"]),
         linear_move_timeout_steps=int(raw["linear_move_timeout_steps"]),
-        gripper_open_timeout_s=float(raw["gripper_open_timeout_s"]),
+        gripper_open_timeout_s=timeout_s,
+        finger_speed_m_s=finger_speed,
+        gripper_opening_limits=(float(limits[0]), float(limits[1])),
+        gripper_arrival_tolerance_m=finger_speed * control_dt_s,
+        gripper_timeout_steps=gripper_timeout_steps,
         episode_max_steps=int(config.bounds.max_steps),
         robot_config_path=path,
         robot_config_sha256=_sha256(path),
+        diagnostic_home_target_rad=diagnostic_target,
+        diagnostic_home_tolerance_rad=diagnostic_tolerance,
     )
 
 
@@ -817,21 +905,25 @@ def _execute_selected_chunk(
 class _FeedbackExecutionResult:
     observation: Observation
     ground_truth: GroundTruth
+    ground_truths: tuple[GroundTruth, ...]
     evidence: ExecutionEvidence
     diagnostic: ObservedStateFeedbackEvidence
     observations: tuple[Observation, ...]
     observed_states: tuple[WorldState, ...]
+    diagnostic_events: tuple[dict[str, Any], ...]
     termination_reason: str
     backend_step_count: int
 
 
 def _robot_snapshot(robot: Any) -> dict[str, Any]:
-    """Record only observed robot fields used by feedback decisions."""
+    """Record observed robot fields, including the full world-to-base pose quaternion."""
+    base_world = robot.base_pose_world
     return {
         "joint_pos": {str(name): float(value) for name, value in robot.joint_pos.items()},
         "joint_vel": {str(name): float(value) for name, value in robot.joint_vel.items()},
         "gripper_opening": float(robot.gripper_opening),
         "base_pose": asdict(robot.base_pose),
+        "base_pose_world": None if base_world is None else asdict(base_world),
         "ee_pose": asdict(robot.ee_pose),
     }
 
@@ -883,6 +975,97 @@ def _home_action_indices(
     return frozenset(indices)
 
 
+def _precheck_observed_waypoint_reachability(
+    *,
+    config: WorldMindDiagnosticConfig,
+    solver: Any,
+    waypoints: Sequence[ScriptedWaypoint],
+    state: WorldState,
+    episode_id: str,
+    decision_id: str,
+    decision_index: int,
+) -> dict[str, Any] | None:
+    """Detect a residual-over-tolerance observed target before any candidate is drawn.
+
+    This is a read-only, fixed-seed solve against the already re-anchored observed waypoints. It
+    reuses the adapter's reviewed tolerances verbatim and never clamps, substitutes or repairs an
+    endpoint. A finite residual over tolerance is reported as a structured diagnostic event; a
+    solver exception or non-finite residual remains a true exception and still fails the campaign.
+    """
+    current_joints = {str(name): float(value) for name, value in state.robot.joint_pos.items()}
+    step_bound = getattr(solver, "execution_max_joint_step_rad", None)
+    if step_bound is None or not math.isfinite(float(step_bound)) or float(step_bound) <= 0.0:
+        raise ValueError("pose solver must expose the reviewed finite execution step bound")
+    bound = float(step_bound)
+
+    def _advance(endpoint: Mapping[str, float], hold_steps: int) -> None:
+        """Mirror the reviewed bounded joint cadence without jitter or backend actuation."""
+        for name in endpoint:
+            if name not in current_joints or not math.isfinite(float(current_joints[name])):
+                raise ValueError(f"no finite current position for precheck joint {name}")
+        for _ in range(int(hold_steps)):
+            for name, value in endpoint.items():
+                delta = float(value) - current_joints[name]
+                clamped_step = max(-bound, min(bound, delta))
+                current_joints[name] = current_joints[name] + clamped_step
+
+    for waypoint in waypoints:
+        if waypoint.joints is not None:
+            _advance(
+                {str(name): float(value) for name, value in waypoint.joints.items()},
+                waypoint.hold_steps,
+            )
+            continue
+        if waypoint.pose is None:
+            continue
+        simulated = replace(state, robot=replace(state.robot, joint_pos=dict(current_joints)))
+        solution = solver.solve(waypoint.pose, simulated, seed=0)
+        position_error = float(solution.position_error_m)
+        orientation_error = float(solution.orientation_error_rad)
+        if not math.isfinite(position_error) or not math.isfinite(orientation_error):
+            raise ValueError("solver residual precheck produced a non-finite residual")
+        position_tolerance = (
+            float(config.adapter.ik_position_tolerance_m)
+            if waypoint.position_tolerance_m is None
+            else float(waypoint.position_tolerance_m)
+        )
+        orientation_tolerance = (
+            float(config.adapter.ik_orientation_tolerance_rad)
+            if waypoint.orientation_tolerance_rad is None
+            else float(waypoint.orientation_tolerance_rad)
+        )
+        if position_error <= position_tolerance and orientation_error <= orientation_tolerance:
+            endpoint = getattr(solution, "joints", None)
+            if not isinstance(endpoint, Mapping):
+                raise ValueError("solver precheck solution must expose reviewed joint endpoints")
+            _advance(
+                {str(name): float(value) for name, value in endpoint.items()},
+                waypoint.hold_steps,
+            )
+            continue
+        return {
+            "schema_version": 1,
+            "event_type": "unreachable_observed_target",
+            "episode_id": episode_id,
+            "decision_id": decision_id,
+            "decision_index": decision_index,
+            "waypoint_label": waypoint.label,
+            "seed": 0,
+            "position_error_m": position_error,
+            "orientation_error_rad": orientation_error,
+            "position_tolerance_m": position_tolerance,
+            "orientation_tolerance_rad": orientation_tolerance,
+            "tolerance_source": "scripted_chunk_adapter reviewed IK tolerances",
+            "candidate_generation_performed": False,
+            "backend_actions_applied": 0,
+            "note": (
+                "Finite solver residual exceeded a reviewed tolerance before candidate "
+                "generation; no clamp, substitution or actuation was attempted."
+            ),
+        }
+    return None
+
+
 def _execute_observed_state_feedback_chunk(
     *,
     decision_id: str,
@@ -899,7 +1082,13 @@ def _execute_observed_state_feedback_chunk(
     waypoints: Sequence[ScriptedWaypoint],
     episode_steps_before: int,
 ) -> _FeedbackExecutionResult:
-    """Execute the immutable selected chunk against the latest observed robot state."""
+    """Execute the immutable selected chunk, then a separately labelled diagnostic HOME phase.
+
+    Every selected action payload stays byte-identical to the reviewed candidate. Gripper and HOME
+    completion use only observed state and existing reviewed budgets; no grasp, release, contact
+    or prediction pairing is inferred from convergence. One global step ledger covers selected
+    actions, diagnostic HOME completion and every bounded retry.
+    """
     if selection.chunk is None or not selection.chunk.actions:
         raise ValueError("feedback chunk execution requires a nonempty selected chunk")
     if selection.index is None:
@@ -913,15 +1102,18 @@ def _execute_observed_state_feedback_chunk(
 
     observations = [observation]
     observed_states = [state]
+    ground_truths = [ground_truth]
     attempts: list[FeedbackAttemptEvidence] = []
     action_records: list[FeedbackActionEvidence] = []
+    diagnostic_events: list[dict[str, Any]] = []
     final_ground_truth = ground_truth
     safety_calls = safety_ok = safety_rejections = 0
     apply_ok = apply_rejections = step_count = 0
     stop_reason: str | None = None
     error: str | None = None
+    home_completion: DiagnosticHomeCompletionEvidence | None = None
 
-    def _record_joint_attempt(
+    def _record_attempt(
         *,
         selected_index: int,
         selected_action: Action,
@@ -929,11 +1121,15 @@ def _execute_observed_state_feedback_chunk(
         attempt_within_action: int,
         projection: JointProjectionEvidence | None,
         before: Observation,
-        before_error: float,
+        before_error: float | None,
         safety_accepted: bool | None,
         safety_reason: str | None,
         apply_accepted: bool | None,
         apply_reason: str | None,
+        phase: str = "selected_chunk",
+        completion_error: float | None = None,
+        completion_unit: str = "rad",
+        completion_target: float | None = None,
     ) -> int:
         index = len(attempts)
         attempts.append(
@@ -964,14 +1160,49 @@ def _execute_observed_state_feedback_chunk(
                 backend_stepped=False,
                 backend_step_number=None,
                 episode_step_number=None,
+                phase=phase,
+                completion_error=completion_error,
+                completion_unit=completion_unit,
+                completion_target=completion_target,
             )
         )
         return index
+
+    def _record_exception(
+        *,
+        attempt_index: int | None,
+        exception: Exception,
+        safety_verdict_recorded: bool,
+        safety_accepted: bool,
+        apply_verdict_recorded: bool,
+        apply_accepted: bool,
+        step_completed: bool,
+    ) -> None:
+        nonlocal safety_rejections, apply_rejections, error
+        error = f"{type(exception).__name__}: {exception}"
+        if attempt_index is not None and not safety_verdict_recorded:
+            safety_rejections += 1
+        elif attempt_index is not None and safety_accepted and not apply_verdict_recorded:
+            apply_rejections += 1
+        elif apply_accepted and not step_completed:
+            apply_rejections += 1
+        if attempt_index is None:
+            return
+        updates: dict[str, Any] = {}
+        if not safety_verdict_recorded:
+            updates.update(safety_accepted=False, safety_reason=error)
+        if (safety_accepted and not apply_verdict_recorded) or (
+            apply_accepted and not step_completed
+        ):
+            updates.update(apply_accepted=False, apply_reason=error)
+        if updates:
+            attempts[attempt_index] = replace(attempts[attempt_index], **updates)
 
     for selected_index, action in enumerate(actions):
         if stop_reason is not None:
             break
         action_attempts: list[int] = []
+
         if isinstance(action, JointTarget):
             tolerance = (
                 contract.home_tolerance_rad
@@ -984,21 +1215,21 @@ def _execute_observed_state_feedback_chunk(
             final_error = 0.0
             while True:
                 current = observations[-1]
-                attempt_index: int | None = None
-                safety_verdict_recorded = False
-                safety_accepted = False
-                apply_verdict_recorded = False
-                apply_accepted = False
-                step_completed = False
+                final_error = _max_joint_error(action, current.robot.joint_pos)
+                if final_error <= tolerance:
+                    break
                 if step_count >= remaining_steps:
                     stop_reason = action_reason = "global_step_ceiling"
                     break
                 if move_steps >= contract.joint_move_timeout_steps:
                     stop_reason = action_reason = "joint_move_timeout"
                     break
-                final_error = _max_joint_error(action, current.robot.joint_pos)
-                if final_error <= tolerance:
-                    break
+                attempt_index: int | None = None
+                safety_verdict_recorded = False
+                safety_accepted = False
+                apply_verdict_recorded = False
+                apply_accepted = False
+                step_completed = False
                 try:
                     executed_action, clamped = _project_joint_target(
                         action, current.robot.joint_pos, contract.max_joint_step_rad
@@ -1026,7 +1257,7 @@ def _execute_observed_state_feedback_chunk(
                         safety_ok += 1
                     else:
                         safety_rejections += 1
-                    attempt_index = _record_joint_attempt(
+                    attempt_index = _record_attempt(
                         selected_index=selected_index,
                         selected_action=action,
                         executed_action=executed_action,
@@ -1065,17 +1296,19 @@ def _execute_observed_state_feedback_chunk(
                     )
                     observations.append(after)
                     observed_states.append(after_state)
-                    observed_before = current.robot.joint_pos
-                    observed_after = after.robot.joint_pos
+                    ground_truths.append(final_ground_truth)
                     progress = max(
                         (
-                            abs(float(observed_after[name]) - float(observed_before[name]))
+                            abs(
+                                float(after.robot.joint_pos[name])
+                                - float(current.robot.joint_pos[name])
+                            )
                             for name in action.q
-                            if name in observed_after and name in observed_before
+                            if name in after.robot.joint_pos and name in current.robot.joint_pos
                         ),
                         default=0.0,
                     )
-                    after_error = _max_joint_error(action, observed_after)
+                    after_error = _max_joint_error(action, after.robot.joint_pos)
                     no_progress_steps = (
                         0
                         if progress > contract.joint_progress_epsilon_rad
@@ -1104,25 +1337,15 @@ def _execute_observed_state_feedback_chunk(
                     if after_error <= tolerance:
                         break
                 except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
-                    error = f"{type(error_).__name__}: {error_}"
-                    if attempt_index is not None and not safety_verdict_recorded:
-                        safety_rejections += 1
-                    elif (
-                        attempt_index is not None and safety_accepted and not apply_verdict_recorded
-                    ):
-                        apply_rejections += 1
-                    elif apply_accepted and not step_completed:
-                        apply_rejections += 1
-                    if attempt_index is not None:
-                        updates: dict[str, Any] = {}
-                        if not safety_verdict_recorded:
-                            updates.update(safety_accepted=False, safety_reason=error)
-                        if (safety_accepted and not apply_verdict_recorded) or (
-                            apply_accepted and not step_completed
-                        ):
-                            updates.update(apply_accepted=False, apply_reason=error)
-                        if updates:
-                            attempts[attempt_index] = replace(attempts[attempt_index], **updates)
+                    _record_exception(
+                        attempt_index=attempt_index,
+                        exception=error_,
+                        safety_verdict_recorded=safety_verdict_recorded,
+                        safety_accepted=safety_accepted,
+                        apply_verdict_recorded=apply_verdict_recorded,
+                        apply_accepted=apply_accepted,
+                        step_completed=step_completed,
+                    )
                     stop_reason = action_reason = "execution_exception"
                     break
             action_records.append(
@@ -1146,99 +1369,111 @@ def _execute_observed_state_feedback_chunk(
             continue
 
         if isinstance(action, GripperCmd):
-            if step_count >= remaining_steps:
-                stop_reason = "global_step_ceiling"
-                break
-            current = observations[-1]
+            target = float(action.opening)
+            tolerance = contract.gripper_arrival_tolerance_m
+            gripper_steps = 0
             action_reason = "gripper_command_complete"
-            attempt_index: int | None = None
-            safety_verdict_recorded = False
-            safety_accepted = False
-            apply_verdict_recorded = False
-            apply_accepted = False
-            step_completed = False
-            try:
-                safety_calls += 1
-                verdict = monitor_probe.validate(action, current.robot)
-                safety_verdict_recorded = True
-                safety_accepted = bool(verdict.accepted)
-                if safety_accepted:
-                    safety_ok += 1
-                else:
-                    safety_rejections += 1
-                attempt_index = _record_joint_attempt(
-                    selected_index=selected_index,
-                    selected_action=action,
-                    executed_action=action,
-                    attempt_within_action=1,
-                    projection=None,
-                    before=current,
-                    before_error=0.0,
-                    safety_accepted=safety_accepted,
-                    safety_reason=verdict.reason,
-                    apply_accepted=None,
-                    apply_reason=None,
-                )
-                action_attempts.append(attempt_index)
-                if not safety_accepted:
-                    stop_reason = action_reason = "safety_rejected"
+            final_completion_error = abs(float(observations[-1].robot.gripper_opening) - target)
+            while True:
+                current = observations[-1]
+                final_completion_error = abs(float(current.robot.gripper_opening) - target)
+                if gripper_steps > 0 and final_completion_error <= tolerance:
                     break
-                applied = backend_probe.apply(action)
-                apply_verdict_recorded = True
-                apply_accepted = bool(applied.accepted)
-                if not apply_accepted:
-                    apply_rejections += 1
+                if step_count >= remaining_steps:
+                    stop_reason = action_reason = "global_step_ceiling"
+                    break
+                if gripper_steps >= contract.gripper_timeout_steps:
+                    stop_reason = action_reason = "gripper_move_timeout"
+                    break
+                attempt_index = None
+                safety_verdict_recorded = False
+                safety_accepted = False
+                apply_verdict_recorded = False
+                apply_accepted = False
+                step_completed = False
+                try:
+                    safety_calls += 1
+                    verdict = monitor_probe.validate(action, current.robot)
+                    safety_verdict_recorded = True
+                    safety_accepted = bool(verdict.accepted)
+                    if safety_accepted:
+                        safety_ok += 1
+                    else:
+                        safety_rejections += 1
+                    attempt_index = _record_attempt(
+                        selected_index=selected_index,
+                        selected_action=action,
+                        executed_action=action,
+                        attempt_within_action=gripper_steps + 1,
+                        projection=None,
+                        before=current,
+                        before_error=None,
+                        safety_accepted=safety_accepted,
+                        safety_reason=verdict.reason,
+                        apply_accepted=None,
+                        apply_reason=None,
+                        completion_error=final_completion_error,
+                        completion_unit="m",
+                        completion_target=target,
+                    )
+                    action_attempts.append(attempt_index)
+                    if not safety_accepted:
+                        stop_reason = action_reason = "safety_rejected"
+                        break
+                    applied = backend_probe.apply(action)
+                    apply_verdict_recorded = True
+                    apply_accepted = bool(applied.accepted)
+                    if not apply_accepted:
+                        apply_rejections += 1
+                        attempts[attempt_index] = replace(
+                            attempts[attempt_index],
+                            apply_accepted=False,
+                            apply_reason=applied.reason,
+                        )
+                        stop_reason = action_reason = "backend_apply_rejected"
+                        break
+                    after = backend_probe.step(1)
+                    step_completed = True
+                    step_count += 1
+                    apply_ok += 1
+                    final_ground_truth = backend_probe.get_ground_truth()
+                    after_state = _world_state(
+                        after, final_ground_truth, config, target=task.target
+                    )
+                    observations.append(after)
+                    observed_states.append(after_state)
+                    ground_truths.append(final_ground_truth)
+                    gripper_steps += 1
+                    final_completion_error = abs(float(after.robot.gripper_opening) - target)
                     attempts[attempt_index] = replace(
                         attempts[attempt_index],
-                        apply_accepted=False,
+                        executed_action_index=step_count,
+                        executed_action_type=type(action).__name__,
+                        executed_action=_action_payload(action),
+                        observed_after=_robot_snapshot(after.robot),
+                        completion_error=final_completion_error,
+                        completion_unit="m",
+                        completion_target=target,
+                        apply_accepted=True,
                         apply_reason=applied.reason,
+                        backend_stepped=True,
+                        backend_step_number=step_count,
+                        episode_step_number=episode_steps_before + step_count,
                     )
-                    stop_reason = action_reason = "backend_apply_rejected"
+                    if final_completion_error <= tolerance:
+                        break
+                except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
+                    _record_exception(
+                        attempt_index=attempt_index,
+                        exception=error_,
+                        safety_verdict_recorded=safety_verdict_recorded,
+                        safety_accepted=safety_accepted,
+                        apply_verdict_recorded=apply_verdict_recorded,
+                        apply_accepted=apply_accepted,
+                        step_completed=step_completed,
+                    )
+                    stop_reason = action_reason = "execution_exception"
                     break
-                after = backend_probe.step(1)
-                step_completed = True
-                step_count += 1
-                apply_ok += 1
-                final_ground_truth = backend_probe.get_ground_truth()
-                after_state = _world_state(after, final_ground_truth, config, target=task.target)
-                observations.append(after)
-                observed_states.append(after_state)
-                attempts[attempt_index] = replace(
-                    attempts[attempt_index],
-                    executed_action_index=step_count,
-                    executed_action_type=type(action).__name__,
-                    executed_action=_action_payload(action),
-                    observed_after=_robot_snapshot(after.robot),
-                    max_joint_error_after_rad=0.0,
-                    progress_rad=0.0,
-                    no_progress_steps=0,
-                    apply_accepted=True,
-                    apply_reason=applied.reason,
-                    backend_stepped=True,
-                    backend_step_number=step_count,
-                    episode_step_number=episode_steps_before + step_count,
-                )
-                if selected_index == len(actions) - 1:
-                    stop_reason = action_reason
-            except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
-                error = f"{type(error_).__name__}: {error_}"
-                if attempt_index is not None and not safety_verdict_recorded:
-                    safety_rejections += 1
-                elif attempt_index is not None and safety_accepted and not apply_verdict_recorded:
-                    apply_rejections += 1
-                elif apply_accepted and not step_completed:
-                    apply_rejections += 1
-                if attempt_index is not None:
-                    updates: dict[str, Any] = {}
-                    if not safety_verdict_recorded:
-                        updates.update(safety_accepted=False, safety_reason=error)
-                    if (safety_accepted and not apply_verdict_recorded) or (
-                        apply_accepted and not step_completed
-                    ):
-                        updates.update(apply_accepted=False, apply_reason=error)
-                    if updates:
-                        attempts[attempt_index] = replace(attempts[attempt_index], **updates)
-                stop_reason = action_reason = "execution_exception"
             action_records.append(
                 FeedbackActionEvidence(
                     selected_action_index=selected_index,
@@ -1255,6 +1490,9 @@ def _execute_observed_state_feedback_chunk(
                         attempts[index].backend_stepped for index in action_attempts
                     ),
                     final_max_joint_error_rad=None,
+                    completion_target=target,
+                    completion_error=final_completion_error,
+                    completion_unit="m",
                 )
             )
             continue
@@ -1262,6 +1500,227 @@ def _execute_observed_state_feedback_chunk(
         error = f"unsupported selected action type: {type(action).__name__}"
         stop_reason = "execution_exception"
         break
+
+    if stop_reason is None:
+        home_target = dict(contract.diagnostic_home_target_rad)
+        home_action = JointTarget(home_target)
+        home_tolerance = contract.diagnostic_home_tolerance_rad
+        initial_home_error = _max_joint_error(home_action, observations[-1].robot.joint_pos)
+        final_home_error = initial_home_error
+        home_reason = "home_converged"
+        home_attempts: list[int] = []
+        home_steps_before = step_count
+        home_move_steps = 0
+        home_no_progress_steps = 0
+        while True:
+            current = observations[-1]
+            final_home_error = _max_joint_error(home_action, current.robot.joint_pos)
+            if final_home_error <= home_tolerance:
+                break
+            if step_count >= remaining_steps:
+                home_reason = "global_step_ceiling"
+                break
+            if home_move_steps >= contract.joint_move_timeout_steps:
+                home_reason = "joint_move_timeout"
+                break
+            home_attempt_index: int | None = None
+            safety_verdict_recorded = False
+            safety_accepted = False
+            apply_verdict_recorded = False
+            apply_accepted = False
+            step_completed = False
+            try:
+                executed_action, clamped = _project_joint_target(
+                    home_action, current.robot.joint_pos, contract.max_joint_step_rad
+                )
+                projection = JointProjectionEvidence(
+                    observed_joint_pos_rad={
+                        str(name): float(value)
+                        for name, value in current.robot.joint_pos.items()
+                        if name in home_target
+                    },
+                    selected_joint_target_rad={
+                        str(name): float(value) for name, value in home_action.q.items()
+                    },
+                    executed_joint_target_rad={
+                        str(name): float(value) for name, value in executed_action.q.items()
+                    },
+                    clamped_joints=clamped,
+                    bound_rad=contract.max_joint_step_rad,
+                )
+                safety_calls += 1
+                verdict = monitor_probe.validate(executed_action, current.robot)
+                safety_verdict_recorded = True
+                safety_accepted = bool(verdict.accepted)
+                if safety_accepted:
+                    safety_ok += 1
+                else:
+                    safety_rejections += 1
+                home_attempt_index = _record_attempt(
+                    selected_index=len(actions),
+                    selected_action=home_action,
+                    executed_action=executed_action,
+                    attempt_within_action=home_move_steps + 1,
+                    projection=projection,
+                    before=current,
+                    before_error=final_home_error,
+                    safety_accepted=safety_accepted,
+                    safety_reason=verdict.reason,
+                    apply_accepted=None,
+                    apply_reason=None,
+                    phase="diagnostic_home_completion",
+                )
+                home_attempts.append(home_attempt_index)
+                if not safety_accepted:
+                    home_reason = "safety_rejected"
+                    break
+                applied = backend_probe.apply(executed_action)
+                apply_verdict_recorded = True
+                apply_accepted = bool(applied.accepted)
+                if not apply_accepted:
+                    apply_rejections += 1
+                    attempts[home_attempt_index] = replace(
+                        attempts[home_attempt_index],
+                        apply_accepted=False,
+                        apply_reason=applied.reason,
+                    )
+                    home_reason = "backend_apply_rejected"
+                    break
+                after = backend_probe.step(1)
+                step_completed = True
+                step_count += 1
+                apply_ok += 1
+                final_ground_truth = backend_probe.get_ground_truth()
+                after_state = _world_state(after, final_ground_truth, config, target=task.target)
+                observations.append(after)
+                observed_states.append(after_state)
+                ground_truths.append(final_ground_truth)
+                progress = max(
+                    (
+                        abs(
+                            float(after.robot.joint_pos[name])
+                            - float(current.robot.joint_pos[name])
+                        )
+                        for name in home_target
+                        if name in after.robot.joint_pos and name in current.robot.joint_pos
+                    ),
+                    default=0.0,
+                )
+                after_error = _max_joint_error(home_action, after.robot.joint_pos)
+                home_no_progress_steps = (
+                    0
+                    if progress > contract.joint_progress_epsilon_rad
+                    else home_no_progress_steps + 1
+                )
+                home_move_steps += 1
+                final_home_error = after_error
+                attempts[home_attempt_index] = replace(
+                    attempts[home_attempt_index],
+                    executed_action_index=step_count,
+                    executed_action_type=type(executed_action).__name__,
+                    executed_action=_action_payload(executed_action),
+                    observed_after=_robot_snapshot(after.robot),
+                    max_joint_error_after_rad=after_error,
+                    progress_rad=progress,
+                    no_progress_steps=home_no_progress_steps,
+                    apply_accepted=True,
+                    apply_reason=applied.reason,
+                    backend_stepped=True,
+                    backend_step_number=step_count,
+                    episode_step_number=episode_steps_before + step_count,
+                )
+                if home_no_progress_steps >= contract.joint_stall_steps:
+                    home_reason = "joint_stall"
+                    break
+                if after_error <= home_tolerance:
+                    break
+            except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
+                _record_exception(
+                    attempt_index=home_attempt_index,
+                    exception=error_,
+                    safety_verdict_recorded=safety_verdict_recorded,
+                    safety_accepted=safety_accepted,
+                    apply_verdict_recorded=apply_verdict_recorded,
+                    apply_accepted=apply_accepted,
+                    step_completed=step_completed,
+                )
+                home_reason = "execution_exception"
+                break
+        home_completion = DiagnosticHomeCompletionEvidence(
+            phase="diagnostic_home_completion",
+            source="configs/worldmind_diagnostic.approved.yaml:verification.home_joints",
+            target_joint_pos_rad=home_target,
+            tolerance_rad=home_tolerance,
+            initial_max_joint_error_rad=initial_home_error,
+            final_max_joint_error_rad=final_home_error,
+            terminal_reason=home_reason,
+            attempt_indices=tuple(home_attempts),
+            executed_action_count=sum(attempts[index].backend_stepped for index in home_attempts),
+            backend_step_count=step_count - home_steps_before,
+        )
+        diagnostic_events.append(
+            {
+                "schema_version": 1,
+                "event_type": "diagnostic_home_completion",
+                "episode_id": episode_id,
+                "decision_id": decision_id,
+                "phase": "diagnostic_home_completion",
+                "source": home_completion.source,
+                "tolerance_rad": home_tolerance,
+                "initial_max_joint_error_rad": initial_home_error,
+                "final_max_joint_error_rad": final_home_error,
+                "terminal_reason": home_reason,
+                "backend_step_count": home_completion.backend_step_count,
+                "note": (
+                    "Diagnostic-only HOME completion after selected-chunk execution; it never "
+                    "rewrites selected actions or creates a prediction pairing."
+                ),
+            }
+        )
+        if home_reason != "home_converged":
+            stop_reason = home_reason
+
+    converged = [
+        record
+        for record in action_records
+        if record.convergence_tolerance_rad is not None
+        and record.terminal_reason == "target_converged"
+    ]
+    non_converged = [
+        record
+        for record in action_records
+        if record.convergence_tolerance_rad is not None
+        and record.terminal_reason != "target_converged"
+    ]
+    reasons: dict[str, int] = {}
+    for record in non_converged:
+        reasons[record.terminal_reason] = reasons.get(record.terminal_reason, 0) + 1
+    convergence_summary = FeedbackConvergenceSummary(
+        converged_action_indices=tuple(record.selected_action_index for record in converged),
+        converged_action_count=len(converged),
+        max_final_error_converged_rad=(
+            max(
+                float(record.final_max_joint_error_rad)
+                for record in converged
+                if record.final_max_joint_error_rad is not None
+            )
+            if any(record.final_max_joint_error_rad is not None for record in converged)
+            else None
+        ),
+        non_converged_action_indices=tuple(
+            record.selected_action_index for record in non_converged
+        ),
+        non_converged_reasons=reasons,
+        non_converged_final_errors=tuple(
+            (
+                record.selected_action_index,
+                record.terminal_reason,
+                float(record.final_max_joint_error_rad),
+            )
+            for record in non_converged
+            if record.final_max_joint_error_rad is not None
+        ),
+    )
 
     termination = stop_reason or "selected_chunk_converged"
     applied_count = step_count
@@ -1279,7 +1738,7 @@ def _execute_observed_state_feedback_chunk(
         action_t_s=float(observations[-1].t),
     )
     diagnostic = ObservedStateFeedbackEvidence(
-        schema_version=1,
+        schema_version=FEEDBACK_EVIDENCE_SCHEMA_VERSION,
         execution_mode=OBSERVED_STATE_FEEDBACK_EXECUTION_MODE,
         episode_id=episode_id,
         decision_id=decision_id,
@@ -1305,15 +1764,19 @@ def _execute_observed_state_feedback_chunk(
         ),
         actions=tuple(action_records),
         attempts=tuple(attempts),
+        convergence_summary=convergence_summary,
         error=error,
+        home_completion=home_completion,
     )
     return _FeedbackExecutionResult(
         observation=observations[-1],
         ground_truth=final_ground_truth,
+        ground_truths=tuple(ground_truths),
         evidence=execution,
         diagnostic=diagnostic,
         observations=tuple(observations),
         observed_states=tuple(observed_states),
+        diagnostic_events=tuple(diagnostic_events),
         termination_reason=termination,
         backend_step_count=step_count,
     )
@@ -1330,11 +1793,13 @@ class Stage1WorldMindEpisodePolicy:
         writer: WorldMindEvidenceWriter,
         mode: Stage1ArmMode,
         execution_mode: Stage1ExecutionMode = "receding_horizon_tick",
+        settings: EvalSettings | None = None,
     ) -> None:
         self.scenario = scenario
         self.config = config
         self.bindings = bindings
         self.writer = writer
+        self.settings = settings if settings is not None else load_eval_settings()
         self.mode = validate_stage1_arm_mode(mode)
         self.execution_mode = validate_stage1_execution_mode(execution_mode)
         _require_feedback_arm_mode(self.mode, self.execution_mode)
@@ -1403,6 +1868,26 @@ class Stage1WorldMindEpisodePolicy:
                 before_observation, before_state = observation, state
                 decision_id = f"{episode_id}-d{decision_index:02d}"
                 waypoints = alternate if use_alternate and alternate else primary
+                if self.execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE:
+                    precheck = _precheck_observed_waypoint_reachability(
+                        config=self.config,
+                        solver=self.bindings.pose_solvers[self.config.adapter.pose_solver_binding],
+                        waypoints=waypoints,
+                        state=state,
+                        episode_id=episode_id,
+                        decision_id=decision_id,
+                        decision_index=decision_index,
+                    )
+                    if precheck is not None:
+                        self.writer.record_diagnostic_event(precheck)
+                        failure_state = "UNREACHABLE_OBSERVED_TARGET"
+                        failure_reason = (
+                            f"{precheck['waypoint_label']}: position_error_m="
+                            f"{precheck['position_error_m']}, orientation_error_rad="
+                            f"{precheck['orientation_error_rad']}"
+                        )
+                        loop_exited_by_bound = False
+                        break
                 generator = self._generator(waypoints, seed)
                 generation_probe = CandidateGenerationProbe(
                     generator,
@@ -1529,12 +2014,32 @@ class Stage1WorldMindEpisodePolicy:
                     observed_timestamps = tuple(item.t for item in feedback_result.observations)
                     steps += feedback_result.backend_step_count
                     self.writer.record_feedback(feedback_result.diagnostic)
+                    for event in feedback_result.diagnostic_events:
+                        self.writer.record_diagnostic_event(event)
+                    proxy = build_collision_proxy_attribution(
+                        episode_id=episode_id,
+                        ground_truths=feedback_result.ground_truths,
+                        observations=feedback_result.observations,
+                        threshold_source=f"{self.settings.source_path}:collision_proxy",
+                        max_displacement_m=self.settings.collision_proxy_max_displacement_m,
+                        max_tilt_deg=self.settings.collision_proxy_max_tilt_deg,
+                    )
+                    self.writer.record_collision_proxy(proxy)
                     boundary = feedback_result.termination_reason
                     if boundary not in FEEDBACK_TERMINATION_REASONS:
                         raise RuntimeError(f"unknown feedback termination reason: {boundary}")
                     if boundary not in ("selected_chunk_converged", "gripper_command_complete"):
                         failure_state = _FEEDBACK_ABORT_STATES[boundary]
-                        failure_reason = feedback_result.diagnostic.error or boundary
+                        home = feedback_result.diagnostic.home_completion
+                        failure_reason = feedback_result.diagnostic.error or (
+                            (
+                                f"diagnostic HOME completion {home.terminal_reason}: "
+                                f"final_max_joint_error_rad="
+                                f"{home.final_max_joint_error_rad}"
+                            )
+                            if home is not None and home.terminal_reason not in ("home_converged",)
+                            else boundary
+                        )
                         # Feedback ticks are non-comparable with the immutable H=50 rollout.
                         self.writer.record_decision(
                             _decision_evidence(
@@ -2111,10 +2616,17 @@ class Stage1PolicyFactory:
     writer: WorldMindEvidenceWriter
     mode: Stage1ArmMode
     execution_mode: Stage1ExecutionMode = "receding_horizon_tick"
+    settings: EvalSettings = field(default_factory=load_eval_settings)
 
     def __call__(self, scene: Any) -> Stage1WorldMindEpisodePolicy:
         return Stage1WorldMindEpisodePolicy(
-            scene, self.config, self.bindings, self.writer, self.mode, self.execution_mode
+            scene,
+            self.config,
+            self.bindings,
+            self.writer,
+            self.mode,
+            self.execution_mode,
+            self.settings,
         )
 
     def finish(self) -> dict[str, Path]:
@@ -2175,7 +2687,7 @@ def run_stage1_evidence(
     arm_mode: Stage1ArmMode,
     execution_mode: Stage1ExecutionMode = "receding_horizon_tick",
     runtime_values: Mapping[str, str],
-    settings: Any = None,
+    settings: EvalSettings | None = None,
     startup_s: float = 0.0,
     resume: bool = False,
 ) -> tuple[EvalReport, dict[str, Path]]:
@@ -2185,13 +2697,16 @@ def run_stage1_evidence(
     _require_feedback_arm_mode(mode, execution_mode)
     if mode == "full_system_veto" and execution_mode != "receding_horizon_tick":
         raise ValueError("full_system_veto cannot execute an open-loop chunk")
+    resolved_settings = settings if settings is not None else load_eval_settings()
     provenance = _stage1_provenance(config, plan, mode, execution_mode, runtime_values)
     writer = WorldMindEvidenceWriter(out_dir)
     writer.start(provenance, resume=resume)
     pipeline = STAGE1_RECORDER_PIPELINE[mode]
     if resume:
         _validate_resume_coverage(out_dir, plan, writer, pipeline)
-    factory = Stage1PolicyFactory(config, bindings, writer, mode, execution_mode)
+    factory = Stage1PolicyFactory(
+        config, bindings, writer, mode, execution_mode, settings=resolved_settings
+    )
     run_config = EvalRunConfig(
         out_dir=out_dir,
         pipeline=pipeline,
@@ -2210,7 +2725,7 @@ def run_stage1_evidence(
             backend,
             run_config,
             policy_factory=factory,
-            settings=settings,
+            settings=resolved_settings,
             startup_s=startup_s,
         )
     finally:

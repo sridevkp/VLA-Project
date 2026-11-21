@@ -615,50 +615,141 @@ def test_e_wiring_writes_all_versioned_diagnostic_sidecars_without_pairings(
     assert proxy["objects"]
 
 
+LEFT_FINGER = "gripper_left_finger_joint"
+RIGHT_FINGER = "gripper_right_finger_joint"
+# Read-only startup sample from the stopped V5c preflight on 2026-11-21.
+V5C_STARTUP_FINGER_POSITIONS = {
+    LEFT_FINGER: -7.142594888992681e-07,
+    RIGHT_FINGER: 7.171095938981087e-07,
+}
+
+
+class _RawFingerBackend(FakeBackend):
+    def __init__(
+        self, initial: dict[str, float], after_step: dict[str, float] | None = None
+    ) -> None:
+        super().__init__()
+        self.initial_fingers = initial
+        self.after_step_fingers = initial if after_step is None else after_step
+        self.apply_calls: list[Any] = []
+
+    def apply(self, action: Any) -> ApplyResult:
+        self.apply_calls.append(action)
+        return super().apply(action)
+
+    def _observation(self) -> Any:
+        obs = super()._observation()
+        raw = self.after_step_fingers if self._seq else self.initial_fingers
+        return replace(
+            obs,
+            robot=replace(
+                obs.robot, gripper_opening=0.0, diagnostics={"finger_joint_sensor_rad": raw}
+            ),
+        )
+
+
 @pytest.mark.parametrize(
-    ("readings", "defect"),
+    ("readings", "target", "defects"),
     [
-        ({0: 0.0, 1: 0.0}, None),
-        ({}, "missing"),
-        ({0: 0.0}, "missing"),
-        ({0: 0.0, 1: float("nan")}, "invalid_or_nonfinite"),
-        ({0: 0.0, 1: -0.02}, "outside_reviewed_limits"),
+        ({LEFT_FINGER: 0.0, RIGHT_FINGER: 0.0}, 0.0, {}),
+        ({LEFT_FINGER: 0.045, RIGHT_FINGER: 0.045}, 0.045, {}),
+        ({LEFT_FINGER: 0.0225, RIGHT_FINGER: 0.0225}, 0.0225, {}),
+        (V5C_STARTUP_FINGER_POSITIONS, 0.0, {LEFT_FINGER: "outside_reviewed_limits"}),
+        (
+            {LEFT_FINGER: math.nextafter(0.0, -math.inf), RIGHT_FINGER: 0.0},
+            0.0,
+            {LEFT_FINGER: "outside_reviewed_limits"},
+        ),
+        (
+            {LEFT_FINGER: 0.045, RIGHT_FINGER: math.nextafter(0.045, math.inf)},
+            0.045,
+            {RIGHT_FINGER: "outside_reviewed_limits"},
+        ),
+        ({}, 0.0, {LEFT_FINGER: "missing", RIGHT_FINGER: "missing"}),
+        ({LEFT_FINGER: 0.0}, 0.0, {RIGHT_FINGER: "missing"}),
+        (
+            {LEFT_FINGER: 0.0, RIGHT_FINGER: math.nan},
+            0.0,
+            {RIGHT_FINGER: "invalid_or_nonfinite"},
+        ),
+        (
+            {LEFT_FINGER: math.inf, RIGHT_FINGER: 0.0},
+            0.0,
+            {LEFT_FINGER: "invalid_or_nonfinite"},
+        ),
     ],
 )
 def test_feedback_gripper_requires_two_valid_raw_sensors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, readings: dict[int, float], defect: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    readings: dict[str, float],
+    target: float,
+    defects: dict[str, str],
 ) -> None:
     fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
     config = replace(config, backend=replace(config.backend, kind="webots"))
     contract = _load_feedback_contract(config, fixture.solver)
-    raw = {contract.finger_names[index]: value for index, value in readings.items()}
+    assert contract.gripper_opening_limits == (0.0, 0.045)
+    assert contract.gripper_arrival_tolerance_m == pytest.approx(0.00096)
+    assert contract.gripper_timeout_steps == 125
 
-    class SensorBackend(FakeBackend):
-        def _observation(self) -> Any:
-            obs = super()._observation()
-            return replace(
-                obs,
-                robot=replace(
-                    obs.robot, gripper_opening=0.0, diagnostics={"finger_joint_sensor_rad": raw}
-                ),
-            )
-
+    backend = _RawFingerBackend(readings)
+    action = GripperCmd(target)
     result = _direct(
         fixture=fixture,
         config=config,
-        backend=SensorBackend(),
-        actions=(GripperCmd(0.0),),
-        waypoints=_waypoints("CLOSE"),
+        backend=backend,
+        actions=(action,),
+        waypoints=_waypoints("GRIPPER"),
     )
-    if defect is None:
-        assert result.diagnostic.actions[0].terminal_reason == "gripper_command_complete"
+    (action_evidence,) = result.diagnostic.actions
+    if not defects:
+        assert action_evidence.terminal_reason == "gripper_command_complete"
+        assert action_evidence.completion_error == 0.0
         assert result.diagnostic.apply_accepted_count == result.backend_step_count == 1
+        assert backend.apply_calls == [action]
     else:
-        assert result.diagnostic.actions[0].terminal_reason == "execution_exception"
+        assert action_evidence.terminal_reason == "execution_exception"
+        assert action_evidence.completion_error is None
         assert result.diagnostic.apply_accepted_count == result.backend_step_count == 0
+        assert backend.apply_calls == []
         (event,) = result.diagnostic_events
         assert event["event_type"] == "invalid_gripper_telemetry"
-        assert defect in event["sensor_defects"].values()
+        assert event["sensor_defects"] == defects
+
+
+def test_invalid_post_step_finger_telemetry_preserves_confirmed_apply_and_tick(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
+    config = replace(config, backend=replace(config.backend, kind="webots"))
+    backend = _RawFingerBackend(
+        {LEFT_FINGER: 0.0, RIGHT_FINGER: 0.0}, after_step=V5C_STARTUP_FINGER_POSITIONS
+    )
+
+    action = GripperCmd(0.0)
+    result = _direct(
+        fixture=fixture,
+        config=config,
+        backend=backend,
+        actions=(action,),
+        waypoints=_waypoints("CLOSE"),
+        episode_steps_before=1058,
+    )
+
+    assert backend.apply_calls == [action]
+    assert result.diagnostic.apply_accepted_count == result.backend_step_count == 1
+    assert result.diagnostic.episode_steps_after == 1059
+    (attempt,) = result.diagnostic.attempts
+    assert attempt.apply_outcome == "accepted"
+    assert attempt.step_outcome == "confirmed"
+    (action_evidence,) = result.diagnostic.actions
+    assert action_evidence.terminal_reason == "execution_exception"
+    assert action_evidence.completion_error is None
+    (event,) = result.diagnostic_events
+    assert event["event_type"] == "invalid_gripper_telemetry"
+    assert event["sensor_defects"] == {LEFT_FINGER: "outside_reviewed_limits"}
+    assert event["episode_steps"] == 1059
 
 
 @pytest.mark.parametrize(

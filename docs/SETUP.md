@@ -370,3 +370,12 @@ are required before using this command.
 ```text
 uv run python -m vlarobot.cli worldmind-stage1-evidence --config configs/worldmind_diagnostic.approved.yaml --out runs/worldmind/stage1-validation-v5c-2026-11-21 --arm-mode scripted_proposer --execution-mode diagnostic_observed_state_feedback_chunk --backend webots --state-source oracle --split validation
 ```
+
+### Offline world-model comparison fixture (ADR-0083)
+
+`build_offline_world_model_comparison` in
+`vlarobot.execution.worldmind_world_model_comparison` is a Python-only fixture and readiness
+path. It neither adds a CLI arm nor opens a simulator. The factory reports missing scientific
+calibration; explicit injected fixture inputs exercise only one FakeBackend decision at a time.
+The historical arm name is `vla_world_model`, and the actual proposer is scripted. Run
+`uv run pytest -q tests/test_worldmind_world_model_comparison.py` for offline verification.

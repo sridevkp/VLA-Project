@@ -248,3 +248,6 @@ The implementation adds no dependencies or numerical settings.
 ADR-0082 keeps wire protocol v3 and feedback schema 3. Supported servers advertise the
 version-1 diagnostic capability and accept the session-bound diagnostic operation. Ordinary
 protocol-v3 operations keep their existing contracts.
+
+ADR-0083 adds an offline-only comparison factory without dependency, wire, evidence-schema,
+configuration-format or numerical setting changes.

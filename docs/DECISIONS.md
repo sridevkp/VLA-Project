@@ -3719,3 +3719,36 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   notebook-helper SHA mismatch (`071cf660…` expected, `88fd4db9…` present). The frozen
   configuration, definitions, regenerated VALIDATION plan and V1–V5b tree hashes all matched
   ADR-0079.
+
+## ADR-0083 — Offline scripted-primary world-model comparison factory
+
+- **Scope.** Adds a separate Python composition path for the frozen `vla_world_model` arm
+  under the ADR-0029 scripted-primary allocation. The production `eval-worldmind` CLI,
+  configuration schema, shared episode policy, and all existing arm gates keep their
+  contracts. The new path runs a single fixture decision at a time on FakeBackend and
+  has no scientific execution entry point.
+- **Composition.** Reuse the scripted adapter binding, frozen seed derivation, K=32,
+  H=50, analytic trajectory predictor, all four Eq. 3.8 inputs, the existing
+  `ComparisonPlanner` ranking branch, and `execute_first` with SafetyMonitor. That branch
+  does not call RiskGate selection or heuristic hard-check callbacks. Its prediction reasons
+  do not become a predictive veto. The motor veto remains mandatory.
+- **Inputs and provenance.** The factory reloads the report definitions and requires the
+  ADR-0079 pin. With absent calibration it returns a non-executable scientific readiness
+  result. An optional supplied candidate can be checked with the existing artifact loader
+  for identity and hashes. Loading it establishes neither arm-specific applicability nor
+  activation. An explicitly injected, in-memory fixture ranking can exercise the composition
+  and is labeled fixture-only with no scientific approval or calibration ID. Fixture output
+  carries arm, actual proposer, adapter and surrogate bindings, prediction and veto modes,
+  definition and report hashes, draw seeds, candidate IDs, selection, and fake motor verdict.
+  It creates no scored output or prediction-to-observation pairing.
+- **Remaining gap.** The no-prediction arm is outside this implementation. ADR-0065's
+  current objective factories require predicted trajectory inputs. A separate owner decision
+  is required for the admissible no-prediction inputs, ranking and unavailable evidence
+  representation before that arm can be composed. Live or scored execution, calibration
+  selection, and full-system execution remain outside the authorization.
+- **Verification.** Four focused and 102 relevant offline tests passed. The shipped production
+  registry instantiated the analytic fixture without executing a decision. Ruff lint and format
+  and `git diff --check` passed. The repository-wide non-Webots suite excluding the Packet B
+  scope module returned 876 passed, 3 skipped, and one pre-existing notebook-helper SHA failure
+  (`071cf660…` expected, `88fd4db9…` present). All four frozen input hashes, the regenerated
+  VALIDATION18 plan hash, and V1–V5b evidence tree hashes matched ADR-0079.

@@ -6,9 +6,9 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 COMPONENTS = ("Jg", "Jl", "Jr", "Ju")
 TABLE51_NAMES = (
@@ -98,3 +98,72 @@ def table51_values(
     if not all(math.isfinite(v) for v in values.values()):
         raise ValueError("nonfinite Table 5.1 metric")
     return dict(values)
+
+
+@dataclass(frozen=True)
+class Table51MetricValue:
+    """Additive metric coverage. Callers retain the approved formulas and denominators."""
+
+    status: Literal["measured", "unavailable", "not_applicable"]
+    value: float | None
+    reason: str | None = None
+    denominator: int | None = None
+    valid_paired_steps: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in ("measured", "unavailable", "not_applicable"):
+            raise ValueError("unknown Table 5.1 metric status")
+        if self.status == "measured":
+            if type(self.value) not in (int, float) or not math.isfinite(self.value):
+                raise ValueError("measured Table 5.1 values must be finite")
+            if self.reason is not None or self.denominator == 0 or self.valid_paired_steps == 0:
+                raise ValueError("measured Table 5.1 values require valid evidence")
+        elif self.value is not None or not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("absent Table 5.1 values require null and a reason")
+        for count in (self.denominator, self.valid_paired_steps):
+            if count is not None and (type(count) is not int or count < 0):
+                raise ValueError("Table 5.1 counts must be nonnegative integers")
+
+
+def table51_nullable_values(
+    definitions: ReportDefinitions | None, values: Mapping[str, Table51MetricValue]
+) -> dict[str, Any]:
+    """Serialize every approved metric, including absent values, without changing numeric export."""
+    if definitions is None or definitions.review_status != APPROVED_DEFINITION_STATUS:
+        raise ValueError("approved Table 5.1 definitions required")
+    if set(values) != set(TABLE51_NAMES) or set(values) != set(definitions.table51_definitions):
+        raise ValueError("all approved Table 5.1 metrics must be represented")
+    for name in ("Task success rate", "Collision rate", "Risk rejection rate", "Reliability"):
+        if values[name].status == "measured" and values[name].denominator is None:
+            raise ValueError(f"{name} requires its approved denominator")
+    prediction = values["Prediction error"]
+    if prediction.status == "measured" and prediction.valid_paired_steps is None:
+        raise ValueError("measured prediction error requires valid paired steps")
+    if prediction.status == "not_applicable" and prediction.valid_paired_steps != 0:
+        raise ValueError("not-applicable prediction error requires zero valid paired steps")
+    return {
+        "schema_version": 1,
+        "metrics": {
+            name: {
+                **asdict(values[name]),
+                "unit": definitions.table51_definitions[name]["unit"],
+            }
+            for name in TABLE51_NAMES
+        },
+    }
+
+
+def table51_comparison_eligible(
+    metric: str,
+    expected_arms: tuple[str, ...],
+    by_arm: Mapping[str, Mapping[str, Table51MetricValue]],
+) -> bool:
+    """Require measured coverage for every requested arm before a numeric comparison."""
+    if metric not in TABLE51_NAMES:
+        raise ValueError("unknown Table 5.1 metric")
+    if not expected_arms or len(set(expected_arms)) != len(expected_arms):
+        raise ValueError("explicit unique comparison arms required")
+    return all(
+        arm in by_arm and metric in by_arm[arm] and by_arm[arm][metric].status == "measured"
+        for arm in expected_arms
+    )

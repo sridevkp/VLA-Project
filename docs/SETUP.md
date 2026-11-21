@@ -379,3 +379,11 @@ path. It neither adds a CLI arm nor opens a simulator. The factory reports missi
 calibration; explicit injected fixture inputs exercise only one FakeBackend decision at a time.
 The historical arm name is `vla_world_model`, and the actual proposer is scripted. Run
 `uv run pytest -q tests/test_worldmind_world_model_comparison.py` for offline verification.
+
+### Offline prediction-free heuristic comparison (ADR-0084)
+
+`vlarobot.execution.worldmind_heuristic_comparison.build_offline_heuristic_comparison` composes
+the frozen scripted-primary `vla_risk_veto` arm for FakeBackend fixtures. It evaluates both
+candidate checks, selects the first eligible original draw, and applies the independent motor
+veto. The fixture has no CLI or scientific execution entry point. Run
+`uv run pytest -q tests/test_worldmind_heuristic_comparison.py` for offline verification.

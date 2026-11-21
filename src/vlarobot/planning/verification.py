@@ -41,6 +41,10 @@ class PlacementVerifier:
         self.recovery = RecoveryState()
 
     def check(self, task: TaskSpec, predicted: WorldState, observed: WorldState) -> VerifyResult:
+        return self.check_observed(task, observed)
+
+    def check_observed(self, task: TaskSpec, observed: WorldState) -> VerifyResult:
+        """Verify from observed state using the same frozen criteria as check()."""
         matches = [o for o in observed.scene.objects if o.object_id == task.target]
         if len(matches) != 1:
             return VerifyResult(False, "target pose missing or ambiguous")

@@ -251,3 +251,7 @@ protocol-v3 operations keep their existing contracts.
 
 ADR-0083 adds an offline-only comparison factory without dependency, wire, evidence-schema,
 configuration-format or numerical setting changes.
+
+ADR-0084 adds Table 5.1 nullable reporting schema 1 alongside the unchanged numeric report
+interface. It adds an observed-only concrete verifier method and an offline heuristic fixture.
+Core interfaces, dependencies and wire schemas retain their contracts.

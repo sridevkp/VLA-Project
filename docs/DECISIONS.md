@@ -3752,3 +3752,54 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   scope module returned 876 passed, 3 skipped, and one pre-existing notebook-helper SHA failure
   (`071cf660…` expected, `88fd4db9…` present). All four frozen input hashes, the regenerated
   VALIDATION18 plan hash, and V1–V5b evidence tree hashes matched ADR-0079.
+
+## ADR-0084 — Prediction-free scripted-primary heuristic-veto ablation
+
+- **Status and scope.** Owner-approved scientific contract and offline fixture implementation.
+  The frozen arm is `vla_risk_veto`, with actual source `scripted` and adapter
+  `scripted_chunk_adapter` under ADR-0029. This is an arm-specific exception to Eq. 3.8 ranking.
+  The other objective definitions retain their approved semantics. Comparison to
+  `vla_world_model` varies both prediction availability and selection policy. Scored or live
+  execution remains unauthorized.
+- **Candidate contract.** Reconcile the complete frozen K=32, H=50, 32 ms pool with the generator
+  record, retaining the original draw seeds, indices, IDs and payloads. Pool-integrity failure
+  stops before candidate evaluation. Evaluate `finite_chunk_v1` and first-command
+  `SafetyMonitor.validate` against the current observation for every candidate. Require one
+  explicit pass in each fixed check field. Record one disposition per candidate, count rejected
+  candidates once, and select the lowest eligible draw index. No surrogate, Eq. 3.8 score,
+  RiskGate ranking, or prediction-to-observation pairing is produced. A second independent
+  motor validation immediately precedes apply. Record its outcome separately from candidate
+  prefilter rejects. The checks provide no swept-clearance, future-command, or success guarantee.
+- **Recovery accounting.** Keep the episode's empty-set counter separate from the verifier's
+  retry counter, as in the shared production episode loop. The first empty set consumes the
+  re-observation allowance and regenerates the primary family when budget permits. The next
+  empty set records `alternate_candidate_family:unavailable` and aborts because the binding is
+  null. Verification may request one primary-family retry, then aborts on another failure.
+  That retry does not restore empty-set recovery. Both paths share the existing global decision
+  and control ceilings. A rejected pre-apply motor verdict prevents apply and ends the fixture.
+- **Verification.** The additive concrete `PlacementVerifier.check_observed(task, observed)`
+  shares the existing calculation with `check(task, predicted, observed)`. The core protocol
+  retains its signature. Target identity, pose and HOME finiteness, quaternion validation,
+  placement distance, height and HOME inclusive bounds, and strict tilt bound remain unchanged.
+- **Reporting.** The additive Table 5.1 v1 representation carries the approved name and unit,
+  status, nullable value, reason, and applicable denominator. Prediction error for this arm is
+  `not_applicable`, null, `arm_has_no_prediction`, with zero valid paired steps and no pairing
+  rows. `unavailable` is reserved for applicable metrics lacking evidence. Measured zero requires
+  valid evidence. A numeric comparison requires measured coverage for every expected arm;
+  observed-outcome comparisons also retain their existing scientific pairing and denominator
+  rules. Prediction-dependent contrasts including this arm are ineligible. The existing finite
+  numeric export retains its contract.
+- **Calibration and boundaries.** This arm adds no heuristic-score calibration. The world-model
+  arm's calibration stays blocked pending an approved evidence manifest and applicability
+  decision. The separate fixture uses FakeBackend only. The scientific CLI, frozen
+  configurations, shared production policy, world-model fixture, full-system prerequisites,
+  safety settings and report definitions retain their contracts.
+- **Verifier source pin.** The ADR-0079 preservation test pins the additive verifier
+  implementation at SHA-256 `823a1f2a2d4b0314f1481fbca95e9472cc5a589f71bfdbebbe53939cc8a5fe61`.
+  Behavioral parity tests cover the legacy delegation and observed-only verdict, including the
+  inclusive distance, height, and HOME bounds and strict tilt boundary.
+- **Offline verification.** 18 focused and 138 relevant tests passed. Ruff lint and formatting
+  and `git diff --check` passed. The repository-wide non-Webots suite excluded the Packet B
+  scope module and returned 894 passed, 3 skipped and one pre-existing notebook-helper SHA
+  failure (`071cf660…` expected, `88fd4db9…` present). All four frozen input hashes, the
+  regenerated VALIDATION18 plan and the V1–V5b tree hashes matched ADR-0079.

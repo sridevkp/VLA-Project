@@ -75,7 +75,7 @@ FROZEN_SOURCE_HASHES = {
         "4e39a7b8272b71d6d6fec19503b396cce5e1c1d0b339b2da08717675049ffbae"
     ),
     "src/vlarobot/planning/verification.py": (
-        "e05330f3b6d36d711f367367dfed6a8780f8409ed933b3a657f98d772d48d747"
+        "823a1f2a2d4b0314f1481fbca95e9472cc5a589f71bfdbebbe53939cc8a5fe61"
     ),
     "configs/worldmind_diagnostic.approved.yaml": (
         "9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03"

@@ -132,6 +132,12 @@ class ZmqBackendClient:
         response = self._request("step", {"n_steps": n_steps})
         return self._expect(response, "observation", Observation)
 
+    def diagnostic_step(self) -> dict[str, Any]:
+        """Request one diagnostic tick exactly once."""
+        return self._request("diagnostic_step", {}, timeout_ms=self._timeout_for("step", None))[
+            "payload"
+        ]
+
     def apply(self, action: Action) -> ApplyResult:
         response = self._request("apply", {"action": action})
         return self._expect(response, "result", ApplyResult)

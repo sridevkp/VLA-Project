@@ -24,8 +24,8 @@ from vlarobot.eval.metrics import tilt_angle_deg
 OBSERVED_STATE_FEEDBACK_EXECUTION_MODE: Literal["diagnostic_observed_state_feedback_chunk"] = (
     "diagnostic_observed_state_feedback_chunk"
 )
-FEEDBACK_EVIDENCE_SCHEMA_VERSION: Literal[2] = 2
-SUPPORTED_FEEDBACK_EVIDENCE_SCHEMA_VERSIONS: tuple[int, ...] = (1, 2)
+FEEDBACK_EVIDENCE_SCHEMA_VERSION: Literal[3] = 3
+SUPPORTED_FEEDBACK_EVIDENCE_SCHEMA_VERSIONS: tuple[int, ...] = (1, 2, 3)
 FEEDBACK_SIDECAR_NAME = "observed-state-feedback.jsonl"
 DIAGNOSTIC_EVENT_SIDECAR_NAME = "diagnostic-events.jsonl"
 COLLISION_PROXY_ATTRIBUTION_SIDECAR_NAME = "collision-proxy-attribution.jsonl"
@@ -199,6 +199,12 @@ class FeedbackAttemptEvidence:
     completion_error: float | None = None
     completion_unit: str = "rad"
     completion_target: float | None = None
+
+    apply_outcome: str = "not_attempted"
+    step_outcome: str = "not_attempted"
+    observation_outcome: str = "not_available"
+    apply_recording: str = "not_attempted"
+    step_recording: str = "not_attempted"
 
     def __post_init__(self) -> None:
         _integer(self.attempt_index, "attempt_index")
@@ -452,7 +458,7 @@ def build_collision_proxy_attribution(
 class ObservedStateFeedbackEvidence:
     """Complete versioned record of one feedback-executed selected chunk."""
 
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     execution_mode: Literal["diagnostic_observed_state_feedback_chunk"]
     episode_id: str
     decision_id: str
@@ -479,6 +485,11 @@ class ObservedStateFeedbackEvidence:
     error: str | None = None
     home_completion: DiagnosticHomeCompletionEvidence | None = None
 
+    apply_unknown_count: int = 0
+    step_unknown_count: int = 0
+    observation_failure_count: int = 0
+    recording_failure_count: int = 0
+
     def __post_init__(self) -> None:
         if self.schema_version != FEEDBACK_EVIDENCE_SCHEMA_VERSION:
             raise ValueError("unsupported observed-state feedback evidence version")
@@ -500,6 +511,10 @@ class ObservedStateFeedbackEvidence:
             "safety_rejected_count",
             "apply_accepted_count",
             "apply_rejected_count",
+            "apply_unknown_count",
+            "step_unknown_count",
+            "observation_failure_count",
+            "recording_failure_count",
             "episode_steps_before",
             "episode_steps_after",
             "episode_max_steps",
@@ -513,25 +528,34 @@ class ObservedStateFeedbackEvidence:
             raise ValueError("attempt records must be indexed sequentially from zero")
         if self.applied_action_count != self.apply_accepted_count:
             raise ValueError("every accepted apply must be an applied action")
-        if self.backend_step_count != self.applied_action_count:
-            raise ValueError("one control step is required per applied action")
+        if self.backend_step_count > self.applied_action_count:
+            raise ValueError("confirmed steps cannot outnumber accepted applies")
         if self.safety_validate_count != self.safety_accepted_count + self.safety_rejected_count:
             raise ValueError("safety outcomes must account for every validation")
-        if self.apply_accepted_count + self.apply_rejected_count != self.safety_accepted_count:
-            raise ValueError("apply outcomes must account for every safety-accepted attempt")
+        if (
+            self.apply_accepted_count + self.apply_rejected_count + self.apply_unknown_count
+            > self.safety_accepted_count
+        ):
+            raise ValueError("apply outcomes cannot outnumber safety-accepted attempts")
         if self.episode_steps_after != self.episode_steps_before + self.backend_step_count:
             raise ValueError("episode step consumption must match the recorded control steps")
         if self.episode_steps_after > self.episode_max_steps:
             raise ValueError("feedback execution exceeded the episode step ceiling")
-        if self.observation_count != self.backend_step_count + 1:
-            raise ValueError("one observation is required before and after each control step")
+        if not 1 <= self.observation_count <= self.backend_step_count + 1:
+            raise ValueError("observations cannot outnumber the initial state and confirmed steps")
+        if self.error is None and (
+            self.backend_step_count != self.applied_action_count
+            or self.observation_count != self.backend_step_count + 1
+            or self.apply_accepted_count + self.apply_rejected_count != self.safety_accepted_count
+        ):
+            raise ValueError("successful feedback operations must reconcile")
 
     def to_dict(self) -> dict[str, Any]:
         return evidence_to_dict(self)
 
 
 def validate_feedback_evidence_row(row: Mapping[str, Any]) -> dict[str, Any]:
-    """Validate a persisted feedback row, accepting schema 1 and schema 2 rows."""
+    """Validate a persisted feedback row, accepting historical and current rows."""
     version = row.get("schema_version")
     if version not in SUPPORTED_FEEDBACK_EVIDENCE_SCHEMA_VERSIONS:
         raise ValueError(f"unsupported observed-state feedback evidence version: {version}")
@@ -544,7 +568,7 @@ def validate_feedback_evidence_row(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def read_feedback_evidence(path: Path) -> list[dict[str, Any]]:
-    """Read both historical schema-1 rows and current schema-2 rows without rewriting them."""
+    """Read historical and current feedback rows without rewriting them."""
     rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():

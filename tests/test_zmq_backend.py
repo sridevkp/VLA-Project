@@ -254,3 +254,38 @@ def test_inspect_geometry_timeout_override_is_scoped_and_validated(monkeypatch) 
         monkeypatch.setenv(INSPECT_GEOMETRY_TIMEOUT_ENV, invalid)
         with pytest.raises(ValueError, match="positive integer"):
             inspect_geometry_timeout_override()
+
+
+def test_diagnostic_step_preserves_confirmed_tick_without_observation_in_v3() -> None:
+    from types import SimpleNamespace
+
+    from vlarobot.backends.webots.backend import WebotsBackend
+    from vlarobot.core.wire import decode_message, encode_message, make_message
+
+    backend = FakeBackend()
+    backend.reset(ScenarioSpec(), seed=0)
+    authoritative = SimpleNamespace(
+        _stopped=False,
+        _physics_step_count=0,
+        io=SimpleNamespace(robot=SimpleNamespace(step=lambda dt: 0), ts=32),
+        visualization=SimpleNamespace(after_physics_step=lambda: None),
+        _observation=lambda: (_ for _ in ()).throw(RuntimeError("sensor read failed")),
+    )
+    backend.diagnostic_step = lambda: WebotsBackend.diagnostic_step(authoritative)
+    server = SimServer(backend)
+
+    def exchange(operation: str, seq: int) -> dict:
+        request = decode_message(encode_message(make_message(operation, seq)))
+        return decode_message(encode_message(server.handle(request)))
+
+    diagnostic = exchange("diagnostic_step", 0)
+    assert diagnostic["protocol_version"] == 3
+    assert diagnostic["error"] is None
+    assert diagnostic["payload"] == {
+        "confirmed_ticks": 1,
+        "error": "RuntimeError: sensor read failed",
+    }
+    assert authoritative._physics_step_count == 1
+    ordinary = exchange("step", 1)
+    assert ordinary["protocol_version"] == 3
+    assert set(ordinary["payload"]) == {"observation"}

@@ -237,7 +237,8 @@ def test_a_seed_zero_cannot_veto_and_successful_pools_match_later_decisions(
     )
     assert captured[0] == captured[1]
     assert all(len(chunk["actions"]) == 50 for chunk in captured[0])
-    assert _jsonl(sidecars["diagnostic_events"]) == []
+    events = _jsonl(sidecars["diagnostic_events"])
+    assert all(row["event_type"] == "diagnostic_reobserve" for row in events)
 
 
 @pytest.mark.parametrize(
@@ -604,7 +605,7 @@ def test_e_wiring_writes_all_versioned_diagnostic_sidecars_without_pairings(
     assert sidecars["diagnostic_events"].name == "diagnostic-events.jsonl"
     assert sidecars["collision_proxy_attribution"].name == "collision-proxy-attribution.jsonl"
     assert _jsonl(sidecars["prediction_pairing"]) == []
-    assert _jsonl(sidecars["observed_state_feedback"])[0]["schema_version"] == 2
+    assert _jsonl(sidecars["observed_state_feedback"])[0]["schema_version"] == 3
     assert any(
         item["event_type"] == "diagnostic_home_completion"
         for item in _jsonl(sidecars["diagnostic_events"])
@@ -612,3 +613,174 @@ def test_e_wiring_writes_all_versioned_diagnostic_sidecars_without_pairings(
     proxy = _jsonl(sidecars["collision_proxy_attribution"])[0]
     assert proxy["execution_mode"] == FEEDBACK_MODE
     assert proxy["objects"]
+
+
+@pytest.mark.parametrize(
+    ("readings", "defect"),
+    [
+        ({0: 0.0, 1: 0.0}, None),
+        ({}, "missing"),
+        ({0: 0.0}, "missing"),
+        ({0: 0.0, 1: float("nan")}, "invalid_or_nonfinite"),
+        ({0: 0.0, 1: -0.02}, "outside_reviewed_limits"),
+    ],
+)
+def test_feedback_gripper_requires_two_valid_raw_sensors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, readings: dict[int, float], defect: str | None
+) -> None:
+    fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
+    config = replace(config, backend=replace(config.backend, kind="webots"))
+    contract = _load_feedback_contract(config, fixture.solver)
+    raw = {contract.finger_names[index]: value for index, value in readings.items()}
+
+    class SensorBackend(FakeBackend):
+        def _observation(self) -> Any:
+            obs = super()._observation()
+            return replace(
+                obs,
+                robot=replace(
+                    obs.robot, gripper_opening=0.0, diagnostics={"finger_joint_sensor_rad": raw}
+                ),
+            )
+
+    result = _direct(
+        fixture=fixture,
+        config=config,
+        backend=SensorBackend(),
+        actions=(GripperCmd(0.0),),
+        waypoints=_waypoints("CLOSE"),
+    )
+    if defect is None:
+        assert result.diagnostic.actions[0].terminal_reason == "gripper_command_complete"
+        assert result.diagnostic.apply_accepted_count == result.backend_step_count == 1
+    else:
+        assert result.diagnostic.actions[0].terminal_reason == "execution_exception"
+        assert result.diagnostic.apply_accepted_count == result.backend_step_count == 0
+        (event,) = result.diagnostic_events
+        assert event["event_type"] == "invalid_gripper_telemetry"
+        assert defect in event["sensor_defects"].values()
+
+
+@pytest.mark.parametrize(
+    ("fault", "expected_apply", "expected_step", "expected_observation", "steps"),
+    [
+        ("none", "accepted", "confirmed", "available", 1),
+        ("reject", "rejected", "not_attempted", "not_available", 0),
+        ("apply_unknown", "unknown", "not_attempted", "not_available", 0),
+        ("unexecuted", "accepted", "not_executed", "not_available", 0),
+        ("step_lost", "accepted", "unknown", "not_available", 0),
+        ("observation", "accepted", "confirmed", "failed", 1),
+        ("record_apply", "accepted", "not_attempted", "not_available", 0),
+        ("record_step", "accepted", "confirmed", "available", 1),
+    ],
+)
+def test_diagnostic_outcomes_keep_backend_facts_when_later_operations_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fault: str,
+    expected_apply: str,
+    expected_step: str,
+    expected_observation: str,
+    steps: int,
+) -> None:
+    from vlarobot.eval.recorder import RecordingBackend
+
+    fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
+    calls: list[str] = []
+
+    class InjectedBackend(FakeBackend):
+        def apply(self, action: Any) -> ApplyResult:
+            calls.append("apply")
+            if fault == "apply_unknown":
+                raise TimeoutError("lost apply reply")
+            if fault == "reject":
+                return ApplyResult(False, "rejected")
+            return super().apply(action)
+
+        def diagnostic_step(self) -> dict[str, Any]:
+            calls.append("step")
+            if fault == "unexecuted":
+                return {"confirmed_ticks": 0, "error": "stopped"}
+            observation = self.step(1)
+            if fault == "step_lost":
+                raise TimeoutError("lost step reply after possible advancement")
+            if fault == "observation":
+                return {"confirmed_ticks": 1, "error": "observation construction failed"}
+            return {"confirmed_ticks": 1, "observation": observation}
+
+    def record_action(*args: Any) -> None:
+        if fault == "record_apply":
+            raise OSError("apply recorder failed")
+
+    def record_step(observation: Any, ground_truth: Any) -> None:
+        if fault == "record_step" and observation.t > 0:
+            raise OSError("step recorder failed")
+
+    recorder = SimpleNamespace(
+        on_reset=lambda *args: None, record_action=record_action, record_step=record_step
+    )
+    result = _direct(
+        fixture=fixture,
+        config=config,
+        backend=RecordingBackend(InjectedBackend(), recorder),
+        actions=(GripperCmd(0.0),),
+        waypoints=_waypoints("CLOSE"),
+        episode_steps_before=1058,
+    )
+    evidence = result.diagnostic
+    (attempt,) = evidence.attempts
+    assert (attempt.apply_outcome, attempt.step_outcome, attempt.observation_outcome) == (
+        expected_apply,
+        expected_step,
+        expected_observation,
+    )
+    assert calls.count("apply") == 1
+    assert calls.count("step") == int(expected_step != "not_attempted")
+    assert evidence.apply_accepted_count == int(expected_apply == "accepted")
+    assert evidence.apply_rejected_count == int(expected_apply == "rejected")
+    assert evidence.apply_unknown_count == int(expected_apply == "unknown")
+    assert evidence.step_unknown_count == int(expected_step == "unknown")
+    assert evidence.observation_failure_count == int(expected_observation == "failed")
+    assert evidence.recording_failure_count == int(fault.startswith("record_"))
+    assert evidence.backend_step_count == steps
+    assert evidence.episode_steps_after == 1058 + steps
+    assert evidence.observation_count == 1 + int(expected_observation == "available")
+    assert (attempt.observed_after is not None) == (expected_observation == "available")
+
+
+def test_lost_step_reply_ends_stage1_feedback_without_another_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, config, runtime = _setup_feedback(tmp_path, monkeypatch)
+    calls: list[str] = []
+
+    class LostResponseBackend(_IncrementalBackend):
+        def apply(self, action: Any) -> ApplyResult:
+            calls.append("apply")
+            return super().apply(action)
+
+        def diagnostic_step(self) -> dict[str, Any]:
+            calls.append("step")
+            self.step(1)
+            raise TimeoutError("lost diagnostic step response")
+
+    backend = LostResponseBackend(per_step_rad=REVIEWED_STEP_RAD)
+    out = tmp_path / "lost-reply"
+    with pytest.raises(CampaignFailStop, match="lost diagnostic step response"):
+        run_stage1_evidence(
+            _one_episode_plan(),
+            backend,
+            config,
+            out,
+            fixture.bindings,
+            arm_mode="scripted_proposer",
+            execution_mode=FEEDBACK_MODE,
+            runtime_values=runtime,
+        )
+    (row,) = _jsonl(out / "worldmind-sidecars" / FEEDBACK_SIDECAR_NAME)
+    assert calls == ["apply", "step"]
+    assert row["apply_accepted_count"] == 1
+    assert row["backend_step_count"] == 0
+    assert row["step_unknown_count"] == 1
+    assert row["observation_count"] == 1
+    assert _jsonl(out / "worldmind-sidecars" / "prediction_pairing.jsonl") == []

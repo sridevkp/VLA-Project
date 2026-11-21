@@ -350,3 +350,8 @@ uv run python -m pytest -q tests/test_worldmind_v5b_postmortem_regression.py tes
 
 **NO-GO** for a V5c live or scored campaign. A separately authorized, non-scored VALIDATION
 diagnostic may be considered only in a fresh output directory under the explicit feedback mode.
+
+ADR-0081 adds a feedback-only diagnostic step outcome to protocol v3. Use a controller built
+from the same approved checkout as the diagnostic client. The client stops on unknown apply or
+tick outcomes. Schema-3 feedback distinguishes confirmed ticks, usable observations and recorder
+outcomes. Checks against both configured finger readings gate diagnostic gripper convergence.

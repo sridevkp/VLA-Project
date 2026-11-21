@@ -174,6 +174,14 @@ class SimServer:
                 observation = self.backend.step(n_steps)
                 self._sim_time = observation.t
                 response_payload = {"observation": observation}
+            elif operation == "diagnostic_step":
+                executor = getattr(self.backend, "diagnostic_step", None)
+                if not callable(executor):
+                    raise RuntimeError("Backend does not support diagnostic step outcomes.")
+                response_payload = executor()
+                observation = response_payload.get("observation")
+                if observation is not None:
+                    self._sim_time = observation.t
             elif operation == "apply":
                 action = payload.get("action")
                 if not isinstance(action, Action):

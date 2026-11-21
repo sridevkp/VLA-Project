@@ -53,10 +53,13 @@ class Visualization:
     def step(self):
         result = self.io.robot.step(self.io.ts)
         if result != -1:
-            if self.bridge is not None:
-                self.bridge.tick()
-            self.update()
+            self.after_physics_step()
         return result
+
+    def after_physics_step(self) -> None:
+        if self.bridge is not None:
+            self.bridge.tick()
+        self.update()
 
     def wait(self, count):
         for _ in range(count):

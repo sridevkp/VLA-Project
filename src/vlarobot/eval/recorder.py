@@ -340,6 +340,22 @@ class RecordingBackend:
         self._recorder.record_action(self._last_observation_t, action, result)
         return result
 
+    def diagnostic_apply(self, action: Action) -> ApplyResult:
+        return self._inner.apply(action)
+
+    def diagnostic_step(self) -> dict[str, object]:
+        executor = getattr(self._inner, "diagnostic_step", None)
+        if callable(executor):
+            return executor()
+        return {"confirmed_ticks": 1, "observation": self._inner.step(1)}
+
+    def record_diagnostic_apply(self, action: Action, result: ApplyResult) -> None:
+        self._recorder.record_action(self._last_observation_t, action, result)
+
+    def record_diagnostic_step(self, observation: Observation, ground_truth: GroundTruth) -> None:
+        self._last_observation_t = float(observation.t)
+        self._recorder.record_step(observation, ground_truth)
+
     def get_ground_truth(self) -> GroundTruth:
         return self._inner.get_ground_truth()
 

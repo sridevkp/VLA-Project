@@ -240,3 +240,7 @@ ADR-0080 removes the independent seed-0 IK precheck and adds version-1 candidate
 events to the existing diagnostic channel. The adapter reports the actual draw and waypoint.
 The feedback schema remains version 2 with version-1 reader support. The correction adds no
 dependencies, solver seeds, numerical settings or live authorization.
+
+ADR-0081 retains protocol v3 for ordinary operations. The new opt-in diagnostic step requires a
+server with ADR-0081 support. Observed-state feedback writes schema 3 and reads schemas 1–3.
+The implementation adds no dependencies or numerical settings.

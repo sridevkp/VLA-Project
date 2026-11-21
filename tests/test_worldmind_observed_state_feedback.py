@@ -330,14 +330,14 @@ def test_feedback_converges_with_progression_and_full_accounting(
     assert provenance["execution_mode"] == FEEDBACK_MODE
     assert provenance["prediction_pairing_scope"].startswith("original H=50 candidate prediction")
     assert provenance["prediction_pairing_records"] == "not_emitted_non_comparable"
-    assert provenance["feedback_evidence_schema_version"] == "2"
+    assert provenance["feedback_evidence_schema_version"] == "3"
     assert provenance["feedback_step_bound_source"] == "pose_solver.execution_max_joint_step_rad"
     assert _jsonl(sidecars["prediction_pairing"]) == []
 
     rows = _jsonl(sidecars["observed_state_feedback"])
     assert len(rows) == 1
     row = rows[0]
-    assert row["schema_version"] == 2
+    assert row["schema_version"] == 3
     assert row["execution_mode"] == FEEDBACK_MODE
     assert row["selected_action_count"] == 50
     assert row["termination_reason"] == "selected_chunk_converged"

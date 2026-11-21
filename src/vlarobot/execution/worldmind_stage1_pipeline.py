@@ -26,6 +26,7 @@ import yaml
 from vlarobot.core.types import (
     Action,
     ActionChunk,
+    ApplyResult,
     GripperCmd,
     GroundTruth,
     JointTarget,
@@ -140,7 +141,7 @@ _FEEDBACK_ABORT_STATES: dict[str, str] = {
     "gripper_move_timeout": "GRIPPER_MOVE_TIMEOUT",
     "safety_rejected": "SAFETY_ABORT",
     "backend_apply_rejected": "BACKEND_ABORT",
-    "execution_exception": "EXECUTION_EXCEPTION",
+    "execution_exception": "EXCEPTION",
 }
 STAGE1_GATE_CALL_POLICY = "stage1_no_risk_gate"
 STAGE1_EVIDENCE_CLASS: dict[Stage1ArmMode, str] = {
@@ -374,6 +375,8 @@ class _FeedbackContract:
     gripper_open_timeout_s: float
     finger_speed_m_s: float
     gripper_opening_limits: tuple[float, float]
+    finger_names: tuple[str, ...]
+    fingers_inverted: bool
     gripper_arrival_tolerance_m: float
     gripper_timeout_steps: int
     episode_max_steps: int
@@ -469,6 +472,16 @@ def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _
     finger_speed = float(raw["finger_speed"])
     timeout_s = float(raw["gripper_open_timeout_s"])
     gripper_timeout_steps = max(1, int(math.ceil(timeout_s / control_dt_s)))
+    finger_names = raw.get("finger_joints")
+    inverted = raw.get("fingers_inverted")
+    if (
+        not isinstance(finger_names, list)
+        or len(finger_names) != 2
+        or any(not isinstance(name, str) or not name for name in finger_names)
+        or finger_names[0] == finger_names[1]
+        or type(inverted) is not bool
+    ):
+        raise ValueError("robot.yaml must declare two finger names and their orientation")
     diagnostic_target = dict(config.verification.home_joints)
     if not diagnostic_target:
         raise ValueError(
@@ -496,6 +509,8 @@ def _load_feedback_contract(config: WorldMindDiagnosticConfig, solver: Any) -> _
         gripper_open_timeout_s=timeout_s,
         finger_speed_m_s=finger_speed,
         gripper_opening_limits=(float(limits[0]), float(limits[1])),
+        finger_names=tuple(finger_names),
+        fingers_inverted=inverted,
         gripper_arrival_tolerance_m=finger_speed * control_dt_s,
         gripper_timeout_steps=gripper_timeout_steps,
         episode_max_steps=int(config.bounds.max_steps),
@@ -919,10 +934,11 @@ class _FeedbackExecutionResult:
 def _robot_snapshot(robot: Any) -> dict[str, Any]:
     """Record observed robot fields, including the full world-to-base pose quaternion."""
     base_world = robot.base_pose_world
+    opening = float(robot.gripper_opening)
     return {
         "joint_pos": {str(name): float(value) for name, value in robot.joint_pos.items()},
         "joint_vel": {str(name): float(value) for name, value in robot.joint_vel.items()},
-        "gripper_opening": float(robot.gripper_opening),
+        "gripper_opening": opening if math.isfinite(opening) else None,
         "base_pose": asdict(robot.base_pose),
         "base_pose_world": None if base_world is None else asdict(base_world),
         "ee_pose": asdict(robot.ee_pose),
@@ -976,6 +992,19 @@ def _home_action_indices(
     return frozenset(indices)
 
 
+def _request_feedback_tick(backend: Any) -> tuple[int | None, Observation | None, str | None]:
+    """Return the known physics outcome independently of the usable observation."""
+    step = getattr(backend, "diagnostic_step", None)
+    outcome = step() if step is not None else {"confirmed_ticks": 1, "observation": backend.step(1)}
+    ticks = outcome.get("confirmed_ticks")
+    observation = outcome.get("observation")
+    return (
+        ticks if type(ticks) is int and ticks in (0, 1) else None,
+        observation if isinstance(observation, Observation) else None,
+        outcome.get("error"),
+    )
+
+
 def _execute_observed_state_feedback_chunk(
     *,
     decision_id: str,
@@ -1017,7 +1046,7 @@ def _execute_observed_state_feedback_chunk(
     action_records: list[FeedbackActionEvidence] = []
     diagnostic_events: list[dict[str, Any]] = []
     final_ground_truth = ground_truth
-    safety_calls = safety_ok = safety_rejections = 0
+    safety_calls = safety_ok = 0
     apply_ok = apply_rejections = step_count = 0
     stop_reason: str | None = None
     error: str | None = None
@@ -1078,35 +1107,101 @@ def _execute_observed_state_feedback_chunk(
         )
         return index
 
-    def _record_exception(
-        *,
-        attempt_index: int | None,
-        exception: Exception,
-        safety_verdict_recorded: bool,
-        safety_accepted: bool,
-        apply_verdict_recorded: bool,
-        apply_accepted: bool,
-        step_completed: bool,
-    ) -> None:
-        nonlocal safety_rejections, apply_rejections, error
-        error = f"{type(exception).__name__}: {exception}"
-        if attempt_index is not None and not safety_verdict_recorded:
-            safety_rejections += 1
-        elif attempt_index is not None and safety_accepted and not apply_verdict_recorded:
-            apply_rejections += 1
-        elif apply_accepted and not step_completed:
-            apply_rejections += 1
-        if attempt_index is None:
-            return
-        updates: dict[str, Any] = {}
-        if not safety_verdict_recorded:
-            updates.update(safety_accepted=False, safety_reason=error)
-        if (safety_accepted and not apply_verdict_recorded) or (
-            apply_accepted and not step_completed
-        ):
-            updates.update(apply_accepted=False, apply_reason=error)
-        if updates:
-            attempts[attempt_index] = replace(attempts[attempt_index], **updates)
+    def _update_attempt(index: int, **fields: Any) -> None:
+        attempts[index] = replace(attempts[index], **fields)
+
+    def _tick(index: int, action: Action) -> tuple[ApplyResult, Observation | None]:
+        nonlocal apply_ok, apply_rejections, step_count, final_ground_truth
+        apply = getattr(backend_probe, "diagnostic_apply", backend_probe.apply)
+        _update_attempt(index, apply_outcome="unknown")
+        result = apply(action)
+        if not isinstance(result, ApplyResult) or type(result.accepted) is not bool:
+            raise ValueError("diagnostic apply returned no authoritative result")
+        apply_ok += int(result.accepted)
+        apply_rejections += int(not result.accepted)
+        _update_attempt(
+            index,
+            apply_outcome="accepted" if result.accepted else "rejected",
+            apply_accepted=result.accepted,
+            apply_reason=result.reason,
+            executed_action_index=apply_ok if result.accepted else None,
+        )
+        record_apply = getattr(backend_probe, "record_diagnostic_apply", None)
+        if record_apply is not None:
+            _update_attempt(index, apply_recording="failed")
+            record_apply(action, result)
+            _update_attempt(index, apply_recording="completed")
+        if not result.accepted:
+            return result, None
+
+        _update_attempt(index, step_outcome="unknown")
+        ticks, after, step_error = _request_feedback_tick(backend_probe)
+        if ticks is None:
+            raise RuntimeError(step_error or "diagnostic tick outcome unknown")
+        if ticks == 0:
+            _update_attempt(index, step_outcome="not_executed")
+            raise RuntimeError(step_error or "diagnostic tick not executed")
+
+        step_count += 1
+        _update_attempt(
+            index,
+            step_outcome="confirmed",
+            backend_stepped=True,
+            backend_step_number=step_count,
+            episode_step_number=episode_steps_before + step_count,
+            observation_outcome="failed",
+        )
+        if after is None:
+            raise RuntimeError(step_error or "confirmed tick has no observation")
+        _update_attempt(index, observation_outcome="processing_failed")
+        _update_attempt(index, observed_after=_robot_snapshot(after.robot))
+        final_ground_truth = backend_probe.get_ground_truth()
+        after_state = _world_state(after, final_ground_truth, config, target=task.target)
+        _update_attempt(index, observation_outcome="available")
+        observations.append(after)
+        observed_states.append(after_state)
+        ground_truths.append(final_ground_truth)
+        record_step = getattr(backend_probe, "record_diagnostic_step", None)
+        if record_step is not None:
+            _update_attempt(index, step_recording="failed")
+            record_step(after, final_ground_truth)
+            _update_attempt(index, step_recording="completed")
+        return result, after
+
+    def _opening_error(robot: Any, target: float) -> float | None:
+        if config.backend.kind != "webots":
+            opening = float(robot.gripper_opening)
+            return abs(opening - target) if math.isfinite(opening) else None
+        raw = robot.diagnostics.get("finger_joint_sensor_rad")
+        minimum, maximum = contract.gripper_opening_limits
+        readings: list[float] = []
+        defects: dict[str, str] = {}
+        for name in contract.finger_names:
+            value = raw.get(name) if isinstance(raw, Mapping) else None
+            if value is None:
+                defects[name] = "missing"
+            elif type(value) not in (int, float) or not math.isfinite(value):
+                defects[name] = "invalid_or_nonfinite"
+            elif not minimum <= value <= maximum:
+                defects[name] = "outside_reviewed_limits"
+            else:
+                readings.append(float(value))
+        if not defects:
+            closed = maximum if contract.fingers_inverted else minimum
+            return abs(sum(abs(value - closed) for value in readings) / len(readings) - target)
+        diagnostic_events.append(
+            {
+                "schema_version": 1,
+                "event_type": "invalid_gripper_telemetry",
+                "episode_id": episode_id,
+                "decision_id": decision_id,
+                "expected_sensors": list(contract.finger_names),
+                "sensor_defects": defects,
+                "target_opening_m": target,
+                "episode_steps": episode_steps_before + step_count,
+            }
+        )
+        return None
 
     for selected_index, action in enumerate(actions):
         if stop_reason is not None:
@@ -1135,11 +1230,7 @@ def _execute_observed_state_feedback_chunk(
                     stop_reason = action_reason = "joint_move_timeout"
                     break
                 attempt_index: int | None = None
-                safety_verdict_recorded = False
                 safety_accepted = False
-                apply_verdict_recorded = False
-                apply_accepted = False
-                step_completed = False
                 try:
                     executed_action, clamped = _project_joint_target(
                         action, current.robot.joint_pos, contract.max_joint_step_rad
@@ -1161,12 +1252,9 @@ def _execute_observed_state_feedback_chunk(
                     )
                     safety_calls += 1
                     verdict = monitor_probe.validate(executed_action, current.robot)
-                    safety_verdict_recorded = True
                     safety_accepted = bool(verdict.accepted)
                     if safety_accepted:
                         safety_ok += 1
-                    else:
-                        safety_rejections += 1
                     attempt_index = _record_attempt(
                         selected_index=selected_index,
                         selected_action=action,
@@ -1184,29 +1272,10 @@ def _execute_observed_state_feedback_chunk(
                     if not safety_accepted:
                         stop_reason = action_reason = "safety_rejected"
                         break
-                    applied = backend_probe.apply(executed_action)
-                    apply_verdict_recorded = True
-                    apply_accepted = bool(applied.accepted)
-                    if not apply_accepted:
-                        apply_rejections += 1
-                        attempts[attempt_index] = replace(
-                            attempts[attempt_index],
-                            apply_accepted=False,
-                            apply_reason=applied.reason,
-                        )
+                    applied, after = _tick(attempt_index, executed_action)
+                    if after is None:
                         stop_reason = action_reason = "backend_apply_rejected"
                         break
-                    after = backend_probe.step(1)
-                    step_completed = True
-                    step_count += 1
-                    apply_ok += 1
-                    final_ground_truth = backend_probe.get_ground_truth()
-                    after_state = _world_state(
-                        after, final_ground_truth, config, target=task.target
-                    )
-                    observations.append(after)
-                    observed_states.append(after_state)
-                    ground_truths.append(final_ground_truth)
                     progress = max(
                         (
                             abs(
@@ -1247,15 +1316,7 @@ def _execute_observed_state_feedback_chunk(
                     if after_error <= tolerance:
                         break
                 except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
-                    _record_exception(
-                        attempt_index=attempt_index,
-                        exception=error_,
-                        safety_verdict_recorded=safety_verdict_recorded,
-                        safety_accepted=safety_accepted,
-                        apply_verdict_recorded=apply_verdict_recorded,
-                        apply_accepted=apply_accepted,
-                        step_completed=step_completed,
-                    )
+                    error = f"{type(error_).__name__}: {error_}"
                     stop_reason = action_reason = "execution_exception"
                     break
             action_records.append(
@@ -1283,10 +1344,14 @@ def _execute_observed_state_feedback_chunk(
             tolerance = contract.gripper_arrival_tolerance_m
             gripper_steps = 0
             action_reason = "gripper_command_complete"
-            final_completion_error = abs(float(observations[-1].robot.gripper_opening) - target)
+            final_completion_error: float | None = None
             while True:
                 current = observations[-1]
-                final_completion_error = abs(float(current.robot.gripper_opening) - target)
+                final_completion_error = _opening_error(current.robot, target)
+                if final_completion_error is None:
+                    error = "invalid_gripper_telemetry"
+                    stop_reason = action_reason = "execution_exception"
+                    break
                 if gripper_steps > 0 and final_completion_error <= tolerance:
                     break
                 if step_count >= remaining_steps:
@@ -1296,20 +1361,13 @@ def _execute_observed_state_feedback_chunk(
                     stop_reason = action_reason = "gripper_move_timeout"
                     break
                 attempt_index = None
-                safety_verdict_recorded = False
                 safety_accepted = False
-                apply_verdict_recorded = False
-                apply_accepted = False
-                step_completed = False
                 try:
                     safety_calls += 1
                     verdict = monitor_probe.validate(action, current.robot)
-                    safety_verdict_recorded = True
                     safety_accepted = bool(verdict.accepted)
                     if safety_accepted:
                         safety_ok += 1
-                    else:
-                        safety_rejections += 1
                     attempt_index = _record_attempt(
                         selected_index=selected_index,
                         selected_action=action,
@@ -1330,31 +1388,16 @@ def _execute_observed_state_feedback_chunk(
                     if not safety_accepted:
                         stop_reason = action_reason = "safety_rejected"
                         break
-                    applied = backend_probe.apply(action)
-                    apply_verdict_recorded = True
-                    apply_accepted = bool(applied.accepted)
-                    if not apply_accepted:
-                        apply_rejections += 1
-                        attempts[attempt_index] = replace(
-                            attempts[attempt_index],
-                            apply_accepted=False,
-                            apply_reason=applied.reason,
-                        )
+                    applied, after = _tick(attempt_index, action)
+                    if after is None:
                         stop_reason = action_reason = "backend_apply_rejected"
                         break
-                    after = backend_probe.step(1)
-                    step_completed = True
-                    step_count += 1
-                    apply_ok += 1
-                    final_ground_truth = backend_probe.get_ground_truth()
-                    after_state = _world_state(
-                        after, final_ground_truth, config, target=task.target
-                    )
-                    observations.append(after)
-                    observed_states.append(after_state)
-                    ground_truths.append(final_ground_truth)
                     gripper_steps += 1
-                    final_completion_error = abs(float(after.robot.gripper_opening) - target)
+                    final_completion_error = _opening_error(after.robot, target)
+                    if final_completion_error is None:
+                        error = "invalid_gripper_telemetry"
+                        stop_reason = action_reason = "execution_exception"
+                        break
                     attempts[attempt_index] = replace(
                         attempts[attempt_index],
                         executed_action_index=step_count,
@@ -1373,15 +1416,7 @@ def _execute_observed_state_feedback_chunk(
                     if final_completion_error <= tolerance:
                         break
                 except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
-                    _record_exception(
-                        attempt_index=attempt_index,
-                        exception=error_,
-                        safety_verdict_recorded=safety_verdict_recorded,
-                        safety_accepted=safety_accepted,
-                        apply_verdict_recorded=apply_verdict_recorded,
-                        apply_accepted=apply_accepted,
-                        step_completed=step_completed,
-                    )
+                    error = f"{type(error_).__name__}: {error_}"
                     stop_reason = action_reason = "execution_exception"
                     break
             action_records.append(
@@ -1434,11 +1469,7 @@ def _execute_observed_state_feedback_chunk(
                 home_reason = "joint_move_timeout"
                 break
             home_attempt_index: int | None = None
-            safety_verdict_recorded = False
             safety_accepted = False
-            apply_verdict_recorded = False
-            apply_accepted = False
-            step_completed = False
             try:
                 executed_action, clamped = _project_joint_target(
                     home_action, current.robot.joint_pos, contract.max_joint_step_rad
@@ -1460,12 +1491,9 @@ def _execute_observed_state_feedback_chunk(
                 )
                 safety_calls += 1
                 verdict = monitor_probe.validate(executed_action, current.robot)
-                safety_verdict_recorded = True
                 safety_accepted = bool(verdict.accepted)
                 if safety_accepted:
                     safety_ok += 1
-                else:
-                    safety_rejections += 1
                 home_attempt_index = _record_attempt(
                     selected_index=len(actions),
                     selected_action=home_action,
@@ -1484,27 +1512,10 @@ def _execute_observed_state_feedback_chunk(
                 if not safety_accepted:
                     home_reason = "safety_rejected"
                     break
-                applied = backend_probe.apply(executed_action)
-                apply_verdict_recorded = True
-                apply_accepted = bool(applied.accepted)
-                if not apply_accepted:
-                    apply_rejections += 1
-                    attempts[home_attempt_index] = replace(
-                        attempts[home_attempt_index],
-                        apply_accepted=False,
-                        apply_reason=applied.reason,
-                    )
+                applied, after = _tick(home_attempt_index, executed_action)
+                if after is None:
                     home_reason = "backend_apply_rejected"
                     break
-                after = backend_probe.step(1)
-                step_completed = True
-                step_count += 1
-                apply_ok += 1
-                final_ground_truth = backend_probe.get_ground_truth()
-                after_state = _world_state(after, final_ground_truth, config, target=task.target)
-                observations.append(after)
-                observed_states.append(after_state)
-                ground_truths.append(final_ground_truth)
                 progress = max(
                     (
                         abs(
@@ -1545,15 +1556,7 @@ def _execute_observed_state_feedback_chunk(
                 if after_error <= home_tolerance:
                     break
             except Exception as error_:  # noqa: BLE001 - fail closed with measured prefix
-                _record_exception(
-                    attempt_index=home_attempt_index,
-                    exception=error_,
-                    safety_verdict_recorded=safety_verdict_recorded,
-                    safety_accepted=safety_accepted,
-                    apply_verdict_recorded=apply_verdict_recorded,
-                    apply_accepted=apply_accepted,
-                    step_completed=step_completed,
-                )
+                error = f"{type(error_).__name__}: {error_}"
                 home_reason = "execution_exception"
                 break
         home_completion = DiagnosticHomeCompletionEvidence(
@@ -1633,8 +1636,12 @@ def _execute_observed_state_feedback_chunk(
     )
 
     termination = stop_reason or "selected_chunk_converged"
-    applied_count = step_count
-    terminal = next((item for item in reversed(attempts) if item.backend_stepped), None)
+    applied_count = apply_ok
+    safety_rejections = safety_calls - safety_ok
+    terminal = next(
+        (item for item in reversed(attempts) if item.backend_stepped),
+        attempts[-1] if attempts else None,
+    )
     execution = ExecutionEvidence(
         decision_id=decision_id,
         selected_candidate_id=selected_id,
@@ -1677,6 +1684,15 @@ def _execute_observed_state_feedback_chunk(
         convergence_summary=convergence_summary,
         error=error,
         home_completion=home_completion,
+        apply_unknown_count=sum(item.apply_outcome == "unknown" for item in attempts),
+        step_unknown_count=sum(item.step_outcome == "unknown" for item in attempts),
+        observation_failure_count=sum(
+            item.observation_outcome in ("failed", "processing_failed") for item in attempts
+        ),
+        recording_failure_count=sum(
+            (item.apply_recording == "failed") + (item.step_recording == "failed")
+            for item in attempts
+        ),
     )
     return _FeedbackExecutionResult(
         observation=observations[-1],
@@ -1842,12 +1858,53 @@ class Stage1WorldMindEpisodePolicy:
                             event = "alternate_candidate_family:unavailable"
                             abort = True
                         if event == "reobserve":
-                            observation = backend.step(1)
-                            steps += 1
-                            ground_truth = backend.get_ground_truth()
-                            state = _world_state(
-                                observation, ground_truth, self.config, target=task.target
-                            )
+                            if self.execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE:
+                                outcome = {
+                                    "schema_version": 1,
+                                    "event_type": "diagnostic_reobserve",
+                                    "episode_id": episode_id,
+                                    "decision_id": decision_id,
+                                    "step_outcome": "unknown",
+                                    "observation_outcome": "not_available",
+                                    "step_recording": "not_attempted",
+                                }
+                                try:
+                                    ticks, after, step_error = _request_feedback_tick(backend)
+                                    if ticks != 1:
+                                        if ticks == 0:
+                                            outcome["step_outcome"] = "not_executed"
+                                        raise RuntimeError(
+                                            step_error or "re-observe tick unconfirmed"
+                                        )
+                                    steps += 1
+                                    outcome["step_outcome"] = "confirmed"
+                                    if after is None:
+                                        outcome["observation_outcome"] = "failed"
+                                        raise RuntimeError(
+                                            step_error or "confirmed tick has no observation"
+                                        )
+                                    outcome["observation_outcome"] = "processing_failed"
+                                    observation = after
+                                    ground_truth = backend.get_ground_truth()
+                                    state = _world_state(
+                                        observation, ground_truth, self.config, target=task.target
+                                    )
+                                    outcome["observation_outcome"] = "available"
+                                    outcome["step_recording"] = "failed"
+                                    backend.record_diagnostic_step(observation, ground_truth)
+                                    outcome["step_recording"] = "completed"
+                                except Exception as exc:  # noqa: BLE001 - retain outcome then fail-stop
+                                    outcome["error"] = f"{type(exc).__name__}: {exc}"
+                                    raise
+                                finally:
+                                    self.writer.record_diagnostic_event(outcome)
+                            else:
+                                observation = backend.step(1)
+                                steps += 1
+                                ground_truth = backend.get_ground_truth()
+                                state = _world_state(
+                                    observation, ground_truth, self.config, target=task.target
+                                )
                         if event == "alternate_candidate_family":
                             use_alternate = True
                     recovery_s = self._seconds(recovery_start)

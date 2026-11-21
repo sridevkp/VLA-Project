@@ -3634,3 +3634,57 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   The failure was the pre-existing notebook-helper SHA mismatch (`071cf660…` expected,
   `88fd4db9…` present). The frozen config, definitions, recomputed VALIDATION plan and all six
   recomputed V1–V5b evidence tree hashes matched ADR-0079.
+
+## ADR-0081 — Authoritative telemetry and execution outcomes for feedback diagnostics
+
+- **Scope:** supersedes ADR-0079's diagnostic gripper telemetry and feedback accounting where
+  they could omit a missing device or conflate an accepted command with a later failure.
+  Applies to the explicit scripted observed-state feedback diagnostic. ADR-0080's generator
+  and candidate failure rules continue to apply.
+- **Gripper:** validate both configured names in the existing `finger_joint_sensor_rad`
+  diagnostic mapping. Despite the historical key spelling, the TIAGo finger joints are
+  prismatic. Their raw positions are metres in the reviewed stroke interval. The diagnostic
+  measures the mean displacement from the configured closed end only after validating both
+  readings. A missing, non-finite, nonnumeric, or out-of-range reading emits a version-1
+  `invalid_gripper_telemetry` event identifying the affected devices and aborts. The reviewed
+  tolerance and timeout still apply in either direction. Ordinary gripper command and telemetry
+  code keeps its existing behavior.
+- **Transport:** protocol v3 adds the opt-in `diagnostic_step` request for one tick. It returns
+  `confirmed_ticks=1` only after the underlying Webots physics-step call reports success,
+  including when visualization or observation construction subsequently fails. A stopped
+  backend that declines to call physics returns 0. A termination return or exception from the
+  physics call does not establish advancement and returns null. A lost, malformed or missing
+  outcome is unknown. Ordinary `apply` returns its existing verdict, and transport failures
+  yield an unknown apply in the diagnostic. The standard `apply` and `step` requests and
+  responses retain their contracts. No unknown operation is automatically retried.
+- **Recorder:** the diagnostic obtains the backend verdict or outcome before requesting the
+  corresponding recorder call. A recorder exception preserves the confirmed backend outcome.
+  `completed` means the recorder call returned successfully. Durability is determined by the
+  recorder's later episode finalization and filesystem. Sidecar persistence itself can also
+  fail. No success is inferred for writes that throw.
+- **Feedback schema 3:** existing schema-1 and schema-2 rows remain readable. Each attempt
+  adds `apply_outcome` (not_attempted, accepted, rejected, unknown), `step_outcome`
+  (not_attempted, confirmed, not_executed, unknown), `observation_outcome` (not_available,
+  failed, processing_failed, available), and `apply_recording` and `step_recording`
+  (not_attempted, completed, failed). `failed` observation means a confirmed tick did not
+  return a usable observation. `processing_failed` means it returned an observation but
+  feedback could not finish processing it. The attempt retains a snapshot when one is
+  available. Apply totals reflect confirmed replies before recording or stepping.
+  `backend_step_count` counts only confirmed physics ticks, and `observation_count`
+  counts the initial observation plus usable post-step states. Added totals cover unknown
+  applies, unknown ticks, observation failures and recording failures. A version-1
+  `diagnostic_reobserve` event records the tick, observation and recorder outcomes for
+  recovery ticks with no associated apply. Each confirmed tick is charged once to the same
+  1059-step episode ceiling. Execution or evidence processing exceptions fail-stop before
+  another command. Ordinary safety and backend rejection boundaries retain their semantics.
+- **Limitations:** the new request needs a server running this implementation. A protocol-v3
+  ping alone establishes wire connectivity. Offline tests exercise injected devices, protocol
+  messages and recorder faults. Live device readings, simulator behavior, and V5c remain
+  unverified. Another read-only readiness audit and separate live authorization are required.
+- **Offline verification:** 47 focused and 86 relevant tests passed. Approved-source parity
+  matched all six candidate pools and 9,600 action payloads. Ruff lint and formatting and
+  `git diff --check` passed. The repository-wide non-Webots suite excluded the Packet B scope
+  module and returned 849 passed, 3 skipped and one failure. The failure was the pre-existing
+  notebook-helper SHA mismatch (`071cf660…` expected, `88fd4db9…` present). Frozen config,
+  definitions, the recomputed VALIDATION plan and all six historical evidence-tree hashes
+  matched ADR-0079.

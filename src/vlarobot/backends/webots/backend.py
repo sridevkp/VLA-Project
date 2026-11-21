@@ -259,6 +259,23 @@ class WebotsBackend:
             self._physics_step_count += 1
         return self._observation()
 
+    def diagnostic_step(self) -> dict[str, object]:
+        """Report the authoritative result of one feedback diagnostic tick."""
+        if self._stopped:
+            return {"confirmed_ticks": 0, "error": "backend_stopped"}
+        try:
+            status = self.io.robot.step(self.io.ts)
+        except Exception as error:  # noqa: BLE001 - advancement could not be established
+            return {"confirmed_ticks": None, "error": f"{type(error).__name__}: {error}"}
+        if status == -1:
+            return {"confirmed_ticks": None, "error": "simulation_stopped"}
+        self._physics_step_count += 1
+        try:
+            self.visualization.after_physics_step()
+            return {"confirmed_ticks": 1, "observation": self._observation()}
+        except Exception as error:  # noqa: BLE001 - retain confirmed physics advancement
+            return {"confirmed_ticks": 1, "error": f"{type(error).__name__}: {error}"}
+
     def apply(self, action: Action) -> ApplyResult:
         if self._stopped:
             raise RuntimeError("Cannot apply an action to a stopped backend.")

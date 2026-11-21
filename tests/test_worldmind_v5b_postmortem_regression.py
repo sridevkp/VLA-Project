@@ -784,3 +784,62 @@ def test_lost_step_reply_ends_stage1_feedback_without_another_apply(
     assert row["step_unknown_count"] == 1
     assert row["observation_count"] == 1
     assert _jsonl(out / "worldmind-sidecars" / "prediction_pairing.jsonl") == []
+
+
+@pytest.mark.parametrize(("existing", "advertised"), [(False, False), (True, False), (False, True)])
+def test_webots_capability_rejects_before_any_campaign_operation_or_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing: bool, advertised: bool
+) -> None:
+    fixture, config, runtime = _setup_feedback(tmp_path, monkeypatch)
+    config = replace(config, backend=replace(config.backend, kind="webots"))
+    out = tmp_path / "capability-rejected"
+    if existing:
+        out.mkdir()
+        (out / "preserved.txt").write_text("preserved", encoding="utf-8")
+    operations: list[str] = []
+
+    class UnsupportedBackend:
+        def require_diagnostic_session(self, *, expected_backend: str) -> None:
+            assert expected_backend == "webots"
+            operations.append("ping")
+            if not advertised:
+                raise ValueError("missing diagnostic_step capability")
+
+        def reset(self, *args: Any) -> None:
+            operations.append("reset")
+            pytest.fail("capability must gate reset")
+
+        def apply(self, *args: Any) -> None:
+            operations.append("apply")
+            pytest.fail("capability must gate apply")
+
+        def step(self, *args: Any) -> None:
+            operations.append("step")
+            pytest.fail("capability must gate step")
+
+    with pytest.raises(RuntimeError) as error:
+        run_stage1_evidence(
+            _one_episode_plan(),
+            UnsupportedBackend(),
+            config,
+            out,
+            fixture.bindings,
+            arm_mode="scripted_proposer",
+            execution_mode=FEEDBACK_MODE,
+            runtime_values=runtime,
+            resume=existing,
+        )
+    detail = json.loads(str(error.value))
+    assert detail["event_type"] == "diagnostic_capability_rejected"
+    assert detail["phase"] == "before_reset"
+    assert (
+        "client operation is required" in detail["reason"]
+        if advertised
+        else ("missing diagnostic_step capability" in detail["reason"])
+    )
+    assert operations == ["ping"]
+    if existing:
+        assert {path.name for path in out.iterdir()} == {"preserved.txt"}
+        assert (out / "preserved.txt").read_text(encoding="utf-8") == "preserved"
+    else:
+        assert not out.exists()

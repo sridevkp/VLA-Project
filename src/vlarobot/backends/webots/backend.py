@@ -81,6 +81,8 @@ LOGGER = logging.getLogger(__name__)
 class WebotsBackend:
     """Adapt the existing TIAGo controller devices to the core backend interface."""
 
+    diagnostic_step_capability = ("webots", 1)
+
     def __init__(self) -> None:
         self.io = RobotIO()
         can_node = self.io.initialize_can(CAN_DEF)

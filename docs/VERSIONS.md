@@ -244,3 +244,7 @@ dependencies, solver seeds, numerical settings or live authorization.
 ADR-0081 retains protocol v3 for ordinary operations. The new opt-in diagnostic step requires a
 server with ADR-0081 support. Observed-state feedback writes schema 3 and reads schemas 1–3.
 The implementation adds no dependencies or numerical settings.
+
+ADR-0082 keeps wire protocol v3 and feedback schema 3. Supported servers advertise the
+version-1 diagnostic capability and accept the session-bound diagnostic operation. Ordinary
+protocol-v3 operations keep their existing contracts.

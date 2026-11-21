@@ -289,3 +289,165 @@ def test_diagnostic_step_preserves_confirmed_tick_without_observation_in_v3() ->
     ordinary = exchange("step", 1)
     assert ordinary["protocol_version"] == 3
     assert set(ordinary["payload"]) == {"observation"}
+
+
+class _DiagnosticProtocolBackend(FakeBackend):
+    diagnostic_step_capability = ("webots", 1)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.operations: list[str] = []
+
+    def reset(self, scenario, seed):
+        self.operations.append("reset")
+        return super().reset(scenario, seed)
+
+    def apply(self, action):
+        self.operations.append("apply")
+        return super().apply(action)
+
+    def step(self, n_steps=1):
+        self.operations.append("ordinary_step")
+        return super().step(n_steps)
+
+    def diagnostic_step(self):
+        self.operations.append("diagnostic_step")
+        return {"confirmed_ticks": 1, "observation": super().step(1)}
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"protocol_version": 2}, "protocol-v3 ping"),
+        ({"status": "error"}, "protocol-v3 ping"),
+        ({"capabilities": None}, "version 1"),
+        ({"capabilities": ["diagnostic_step"]}, "version 1"),
+        ({"capabilities": {"diagnostic_step": True}}, "version 1"),
+        ({"capabilities": {"diagnostic_step": 2}}, "version 1"),
+        ({"diagnostic_backend": "fake"}, "diagnostic backend"),
+        ({"session_id": {"pid": 1, "start_time": 1.0, "nonce": ""}}, "session identity"),
+        ({"session_id": {"pid": True, "start_time": 1.0, "nonce": "n"}}, "session identity"),
+    ],
+)
+def test_diagnostic_capability_malformed_replies_latch_before_any_mutation(
+    monkeypatch, fields, message
+):
+    client = ZmqBackendClient()
+    payload = {
+        "status": "ok",
+        "session_id": {"pid": 1, "start_time": 1.0, "nonce": "n"},
+        "capabilities": {"diagnostic_step": 1},
+        "diagnostic_backend": "webots",
+    }
+    payload.update(fields)
+    requests = []
+
+    def exchange(operation, arguments, timeout_ms):
+        requests.append(operation)
+        return {
+            "protocol_version": fields.get("protocol_version", 3),
+            "type": "ping",
+            "payload": payload,
+        }
+
+    monkeypatch.setattr(client, "_exchange", exchange)
+    try:
+        with pytest.raises(ValueError, match=message):
+            client.require_diagnostic_session(expected_backend="webots")
+        with pytest.raises(ValueError, match="closed"):
+            client.reset(ScenarioSpec(), seed=0)
+        with pytest.raises(ValueError, match="closed"):
+            client.apply(GripperCmd(0.0))
+        assert requests == ["ping"]
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("replacement", ["none", "new_session", "older_v3", "lost_reply"])
+def test_diagnostic_capability_pins_session_and_never_falls_back(monkeypatch, replacement):
+    from vlarobot.core.wire import decode_message, encode_message, make_message
+
+    class OlderV3Server(SimServer):
+        def handle(self, request):
+            if request["type"] == "diagnostic_session_request":
+                return make_message(request["type"], request["seq"], error="unknown operation")
+            return super().handle(request)
+
+    backend = _DiagnosticProtocolBackend()
+    server = SimServer(backend)
+    other_backend = _DiagnosticProtocolBackend()
+    other = OlderV3Server(other_backend) if replacement == "older_v3" else SimServer(other_backend)
+    requests = []
+    client = ZmqBackendClient()
+
+    def exchange(operation, arguments, timeout_ms):
+        requests.append(operation)
+        peer = (
+            other if replacement in ("new_session", "older_v3") and operation != "ping" else server
+        )
+        request = decode_message(encode_message(make_message(operation, 0, arguments)))
+        reply = decode_message(encode_message(peer.handle(request)))
+        if replacement == "lost_reply" and arguments.get("operation") == "diagnostic_step":
+            raise TimeoutError("reply lost")
+        if reply["error"] is not None:
+            raise RuntimeError(reply["error"])
+        return reply
+
+    monkeypatch.setattr(client, "_exchange", exchange)
+    try:
+        client.require_diagnostic_session(expected_backend="webots")
+        if replacement in ("new_session", "older_v3"):
+            with pytest.raises(RuntimeError, match="identity_mismatch|unknown operation"):
+                client.reset(ScenarioSpec(), seed=0)
+            with pytest.raises(ValueError, match="closed"):
+                client.apply(GripperCmd(0.0))
+            assert backend.operations == other_backend.operations == []
+            assert requests == ["ping", "diagnostic_session_request"]
+            return
+        client.reset(ScenarioSpec(), seed=0)
+        with pytest.raises(ValueError, match="unavailable"):
+            client.step()
+        assert client.apply(GripperCmd(0.0)).accepted
+        if replacement == "lost_reply":
+            with pytest.raises(TimeoutError, match="reply lost"):
+                client.diagnostic_step()
+            with pytest.raises(ValueError, match="closed"):
+                client.diagnostic_step()
+            with pytest.raises(ValueError, match="closed"):
+                client.apply(GripperCmd(0.0))
+        else:
+            assert client.diagnostic_step()["confirmed_ticks"] == 1
+        assert backend.operations == ["reset", "apply", "diagnostic_step"]
+        assert requests == [
+            "ping",
+            "diagnostic_session_request",
+            "diagnostic_session_request",
+            "diagnostic_session_request",
+        ]
+    finally:
+        client.close()
+
+
+def test_ping_advertises_only_backend_with_explicit_diagnostic_support(monkeypatch):
+    from vlarobot.core.wire import make_message
+
+    backend = FakeBackend()
+    # Implementing a method alone does not attest to ADR-0081 outcome semantics.
+    backend.diagnostic_step = lambda: {"confirmed_ticks": 0}
+    server = SimServer(backend)
+    client = ZmqBackendClient()
+    monkeypatch.setattr(
+        client,
+        "_exchange",
+        lambda operation, payload, timeout: server.handle(make_message(operation, 0, payload)),
+    )
+    try:
+        reply = client.ping()
+        assert reply["protocol_version"] == 3
+        assert reply["payload"]["status"] == "ok"
+        assert "session_id" in reply["payload"]
+        assert "capabilities" not in reply["payload"]
+        with pytest.raises(ValueError, match="version 1"):
+            client.require_diagnostic_session(expected_backend="webots")
+    finally:
+        client.close()

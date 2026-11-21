@@ -2680,6 +2680,19 @@ def run_stage1_evidence(
     _require_feedback_arm_mode(mode, execution_mode)
     if mode == "full_system_veto" and execution_mode != "receding_horizon_tick":
         raise ValueError("full_system_veto cannot execute an open-loop chunk")
+    if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE and config.backend.kind == "webots":
+        try:
+            backend.require_diagnostic_session(expected_backend="webots")
+            if not callable(getattr(backend, "diagnostic_step", None)):
+                raise ValueError("diagnostic_step client operation is required")
+        except Exception as error:  # noqa: BLE001 - structured pre-actuation error
+            detail = {
+                "event_type": "diagnostic_capability_rejected",
+                "phase": "before_reset",
+                "backend": config.backend.kind,
+                "reason": f"{type(error).__name__}: {error}",
+            }
+            raise RuntimeError(json.dumps(detail, sort_keys=True)) from error
     resolved_settings = settings if settings is not None else load_eval_settings()
     provenance = _stage1_provenance(config, plan, mode, execution_mode, runtime_values)
     writer = WorldMindEvidenceWriter(out_dir)

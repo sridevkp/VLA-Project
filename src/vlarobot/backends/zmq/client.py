@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from collections.abc import Mapping
 from time import perf_counter
@@ -90,6 +91,8 @@ class ZmqBackendClient:
         self._timings: dict[str, float] = {}
         self._session_id: dict[str, object] | None = None
         self._expected_session_id: dict[str, object] | None = None
+        self._diagnostic_session: dict[str, object] | None = None
+        self._diagnostic_failed = False
         self._ever_responsive = False
         self._ensure_socket(self._default_timeout_ms)
 
@@ -201,6 +204,45 @@ class ZmqBackendClient:
         """Record the server session identity this client is bound to."""
         self._expected_session_id = dict(session_id)
 
+    def require_diagnostic_session(self, *, expected_backend: str) -> None:
+        """Validate capability before any campaign mutation and pin its server session."""
+        if self._diagnostic_session is not None or self._diagnostic_failed:
+            raise ProtocolError("diagnostic capability requires a fresh client")
+        # Fail closed even when the ping or its decoding raises.
+        self._diagnostic_failed = True
+        reply = self.ping()
+        payload = reply.get("payload")
+        if (
+            type(reply.get("protocol_version")) is not int
+            or reply["protocol_version"] != 3
+            or reply.get("type") != "ping"
+            or not isinstance(payload, dict)
+            or payload.get("status") != "ok"
+        ):
+            raise ProtocolError("diagnostic capability requires a successful protocol-v3 ping")
+        session = payload.get("session_id")
+        if not isinstance(session, dict):
+            raise ProtocolError("diagnostic capability requires a valid session identity")
+        pid, started, nonce = (session.get(name) for name in ("pid", "start_time", "nonce"))
+        if (
+            type(pid) is not int
+            or pid <= 0
+            or type(started) not in (int, float)
+            or not math.isfinite(started)
+            or started <= 0
+            or not isinstance(nonce, str)
+            or not nonce.strip()
+        ):
+            raise ProtocolError("diagnostic capability requires a valid session identity")
+        capabilities = payload.get("capabilities")
+        version = capabilities.get("diagnostic_step") if isinstance(capabilities, dict) else None
+        if type(version) is not int or version != 1:
+            raise ProtocolError("diagnostic_step capability version 1 is required")
+        if payload.get("diagnostic_backend") != expected_backend:
+            raise ProtocolError(f"diagnostic backend must advertise {expected_backend!r}")
+        self._diagnostic_session = dict(session)
+        self._diagnostic_failed = False
+
     def stop(self) -> None:
         if self._closed:
             return
@@ -244,6 +286,52 @@ class ZmqBackendClient:
         return int(self._request_timeouts_ms.get(operation, self._default_timeout_ms))
 
     def _request(
+        self, operation: str, payload: dict[str, Any], timeout_ms: int | None = None
+    ) -> dict[str, Any]:
+        if operation == "ping":
+            return self._exchange(operation, payload, timeout_ms)
+        if self._diagnostic_failed:
+            raise ProtocolError("diagnostic session is closed after a failed operation")
+        session = self._diagnostic_session
+        if session is None:
+            return self._exchange(operation, payload, timeout_ms)
+        if operation not in ("reset", "apply", "diagnostic_step", "get_gt", "shutdown"):
+            raise ProtocolError(f"operation {operation!r} is unavailable in a diagnostic session")
+
+        # A server predating the gate rejects this new request type before dispatch.
+        self._diagnostic_failed = True
+        response = self._exchange(
+            "diagnostic_session_request",
+            {"session_id": session, "operation": operation, "arguments": payload},
+            self._timeout_for(operation, timeout_ms),
+        )
+        if (
+            response["type"] != "diagnostic_session_request"
+            or response["payload"].get("session_id") != session
+        ):
+            raise ProtocolError("diagnostic reply session identity or type mismatch")
+        if operation == "reset":
+            self._expect(response, "observation", Observation)
+        elif operation == "apply":
+            result = self._expect(response, "result", ApplyResult)
+            if type(result.accepted) is not bool:
+                raise ProtocolError("diagnostic apply reply has an invalid verdict")
+        elif operation == "get_gt":
+            self._expect(response, "ground_truth", GroundTruth)
+        elif operation == "diagnostic_step":
+            step = response["payload"]
+            ticks = step.get("confirmed_ticks")
+            if (
+                type(ticks) is not int
+                or ticks != 1
+                or not isinstance(step.get("observation"), Observation)
+            ):
+                # Preserve the authoritative partial reply for feedback evidence.
+                return response
+        self._diagnostic_failed = False
+        return response
+
+    def _exchange(
         self, operation: str, payload: dict[str, Any], timeout_ms: int | None = None
     ) -> dict[str, Any]:
         if self._closed:

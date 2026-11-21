@@ -3688,3 +3688,34 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   notebook-helper SHA mismatch (`071cf660…` expected, `88fd4db9…` present). Frozen config,
   definitions, the recomputed VALIDATION plan and all six historical evidence-tree hashes
   matched ADR-0079.
+
+## ADR-0082 — Gate V5c on a session-bound ADR-0081 capability
+
+- **Advertisement:** protocol-v3 ping preserves its existing fields. The server adds
+  `capabilities.diagnostic_step: 1` and `diagnostic_backend: webots` only for the explicit Webots
+  ADR-0081 backend opt-in with a callable diagnostic tick implementation.
+- **Mandatory gate:** the Webots observed-state feedback runner uses the campaign client's ping
+  before opening the writer or sending reset, apply or step. It validates the v3 ping reply type
+  and success status, positive integer PID, finite positive start time, nonempty nonce, explicit
+  integer capability version 1, and expected backend. Failure produces a structured
+  `diagnostic_capability_rejected` error and leaves any existing evidence untouched.
+- **Continuity:** the campaign client wraps reset, apply, diagnostic step and ground-truth reads
+  in the new v3 `diagnostic_session_request` operation with the validated identity. The server
+  checks capability and identity before dispatch and echoes identity in the reply. A replacement
+  supported server rejects the stale identity. An older server rejects the new operation type.
+  The guard also applies if a bound client requests shutdown. These checks bind requests to the
+  server instance across transparent transport reconnects. They do not provide authentication
+  against an impersonating endpoint.
+- **Failure behavior:** a rejected, lost or invalid guarded reply latches the client closed to
+  further campaign operations. A confirmed partial tick result remains available to feedback
+  accounting. The client neither retries unknown operations nor falls back to ordinary step.
+  Ordinary protocol-v3 clients, core interfaces, numerical settings, and evidence schemas retain
+  their contracts. Offline-only change. A focused read-only readiness verification and separate
+  live authorization are required.
+- **Offline verification:** 64 focused and 103 relevant tests passed. Approved-source parity
+  matched six candidate pools and 9,600 action payloads. Ruff lint and formatting and
+  `git diff --check` passed. The repository-wide non-Webots suite excluded the Packet B scope
+  module and returned 866 passed, 3 skipped and one failure. The only failure was the existing
+  notebook-helper SHA mismatch (`071cf660…` expected, `88fd4db9…` present). The frozen
+  configuration, definitions, regenerated VALIDATION plan and V1–V5b tree hashes all matched
+  ADR-0079.

@@ -127,16 +127,40 @@ class SimServer:
             else:
                 self._write_status()
 
+    def _diagnostic_step_capability(self) -> tuple[str, int] | None:
+        capability = getattr(self.backend, "diagnostic_step_capability", None)
+        if (
+            isinstance(capability, tuple)
+            and capability == ("webots", 1)
+            and type(capability[1]) is int
+            and callable(getattr(self.backend, "diagnostic_step", None))
+        ):
+            return capability
+        return None
+
     def handle(self, request: dict[str, Any]) -> dict[str, Any]:
         """Validate and dispatch one decoded protocol request."""
         seq = request["seq"]
         operation = request["type"]
+        response_type = operation
+        guarded = operation == "diagnostic_session_request"
         payload = request["payload"]
         started = time.perf_counter()
         self._set_busy(operation)
         self._write_status()
         _LOGGER.info("request_start op=%s seq=%s sim_time=%s", operation, seq, self._sim_time)
         try:
+            if guarded:
+                if self._diagnostic_step_capability() is None:
+                    raise ProtocolError("diagnostic_session_unsupported_backend")
+                if payload.get("session_id") != self.session_id:
+                    raise ProtocolError("diagnostic_session_identity_mismatch")
+                operation = payload.get("operation")
+                payload = payload.get("arguments")
+                if operation not in ("reset", "apply", "diagnostic_step", "get_gt", "shutdown"):
+                    raise ProtocolError("diagnostic_session_unsupported_operation")
+                if not isinstance(payload, dict):
+                    raise ProtocolError("diagnostic_session_invalid_arguments")
             if operation == "ping":
                 telemetry_enabled = bool(
                     getattr(self.backend, "export_sim_kinematics_enabled", None)
@@ -154,6 +178,11 @@ class SimServer:
                     "session_id": self.session_id,
                     "kinematics_telemetry_enabled": telemetry_enabled,
                 }
+                capability = self._diagnostic_step_capability()
+                if capability is not None:
+                    backend_kind, version = capability
+                    response_payload["capabilities"] = {"diagnostic_step": version}
+                    response_payload["diagnostic_backend"] = backend_kind
                 world_hash = os.environ.get("VLAROBOT_WORLD_SHA256")
                 if world_hash:
                     response_payload["world_sha256"] = world_hash
@@ -249,7 +278,9 @@ class SimServer:
                 _LOGGER.warning("slow_request op=%s seq=%s duration_s=%.4f", operation, seq, dur)
             with self._status_lock:
                 self._last_completed = {"op": operation, "seq": seq, "duration_s": dur, "ok": True}
-            return make_message(operation, seq, response_payload, sim_time=self._sim_time)
+            if guarded:
+                response_payload = {**response_payload, "session_id": self.session_id}
+            return make_message(response_type, seq, response_payload, sim_time=self._sim_time)
         except (ProtocolError, TypeError, ValueError, RuntimeError) as exc:
             dur = time.perf_counter() - started
             _LOGGER.warning(
@@ -264,7 +295,7 @@ class SimServer:
                     "error": str(exc),
                 }
             return make_message(
-                operation,
+                response_type,
                 seq,
                 error=str(exc),
                 sim_time=self._sim_time,

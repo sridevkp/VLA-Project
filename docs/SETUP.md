@@ -355,3 +355,18 @@ ADR-0081 adds a feedback-only diagnostic step outcome to protocol v3. Use a cont
 from the same approved checkout as the diagnostic client. The client stops on unknown apply or
 tick outcomes. Schema-3 feedback distinguishes confirmed ticks, usable observations and recorder
 outcomes. Checks against both configured finger readings gate diagnostic gripper convergence.
+
+### V5c capability gate (ADR-0082)
+
+For a separately authorized future diagnostic, start the factory world in server mode using the
+approved checkout and matching controller environment. A standalone protocol-v3 ping is a
+connectivity check. The command below negotiates the required ADR-0081 capability on its own
+client before reset and pins every diagnostic operation to that simulator session. An absent or
+incompatible capability aborts before output creation. Preserve any partial output and exit
+status if a session fails after the campaign starts. Shut down only the verified simulator
+instance after the campaign client exits. A fresh readiness verification and live authorization
+are required before using this command.
+
+```text
+uv run python -m vlarobot.cli worldmind-stage1-evidence --config configs/worldmind_diagnostic.approved.yaml --out runs/worldmind/stage1-validation-v5c-2026-11-21 --arm-mode scripted_proposer --execution-mode diagnostic_observed_state_feedback_chunk --backend webots --state-source oracle --split validation
+```

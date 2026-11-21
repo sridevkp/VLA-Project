@@ -2,19 +2,19 @@
 
 V5b remains read-only evidence. Nothing here starts Webots, resumes a campaign, writes into a
 preserved run directory, scores a pipeline, selects a calibration or reads TRAIN/TEST. Every
-numerical input below is either a frozen V5b measurement or a value already present in the
-reviewed config/bindings.
+fixture distinguishes injected IK residuals from preserved V5b measurements.
 """
 
 from __future__ import annotations
 
 import json
 import math
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 import yaml
 from test_worldmind_observed_state_feedback import (  # noqa: PLC2701 - existing shared helpers
@@ -27,7 +27,7 @@ from test_worldmind_production import (  # noqa: PLC2701 - existing shared solve
     StaticPoseSolver,
     _one_episode_plan,
 )
-from test_worldmind_v4_postmortem_regression import REPO_ROOT  # noqa: PLC2701
+from test_worldmind_v4_postmortem_regression import REPO_ROOT, _tree_hash  # noqa: PLC2701
 
 from vlarobot.backends.fake import FakeBackend
 from vlarobot.backends.webots.config import MAX_JOINT_STEP_RAD as REVIEWED_STEP_RAD
@@ -45,9 +45,9 @@ from vlarobot.eval.settings import load_eval_settings
 from vlarobot.execution.scripted_chunk_adapter import ScriptedWaypoint
 from vlarobot.execution.worldmind_pipeline import _world_state
 from vlarobot.execution.worldmind_stage1_pipeline import (
+    Stage1WorldMindEpisodePolicy,
     _execute_observed_state_feedback_chunk,
     _load_feedback_contract,
-    _precheck_observed_waypoint_reachability,
     run_stage1_evidence,
 )
 from vlarobot.risk.comparison import Selection
@@ -56,8 +56,8 @@ ARM_JOINTS = tuple(f"arm_{index}_joint" for index in range(1, 8))
 ARM5 = "arm_5_joint"
 IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 
-V5B_RESIDUAL_POSITION_M = 2.770961553780716
-V5B_RESIDUAL_ORIENTATION_RAD = 0.3235694262270646
+INJECTED_RESIDUAL_POSITION_M = 2.770961553780716
+INJECTED_RESIDUAL_ORIENTATION_RAD = 0.3235694262270646
 V5B_HOME_JOINT_RAD = 1.0899390970577643
 V5B_CONFIGURED_HOME_RAD = 4.885743745552387e-06
 V5B_SELECTED_TARGET_ERROR_RAD = 0.018605150431497686
@@ -82,29 +82,49 @@ def _with_approved_verification(config: Any) -> Any:
     )
 
 
-class _RecordingSolver:
-    """Zero-residual solver that records the observed state used by each solve."""
+class _SeedSensitiveSolver(StaticPoseSolver):
+    seed_calls: list[int]
+    failed_seed: int
+    failure: str
 
-    def __init__(self, joints: dict[str, float]) -> None:
-        self.joints = dict(joints)
-        self.calls: list[tuple[Pose3D, dict[str, float], int]] = []
-        self.position_error_m = 0.0
-        self.orientation_error_rad = 0.0
-        self.execution_max_joint_step_rad = REVIEWED_STEP_RAD
+    def solve(self, pose: Pose3D, state: Any, *, seed: int = 0) -> Any:
+        self.seed_calls.append(seed)
+        if seed == self.failed_seed:
+            if self.failure == "solver":
+                raise RuntimeError("solver residual exploded")
+            return SimpleNamespace(
+                joints=self.joints,
+                position_error_m=(
+                    math.nan if self.failure == "nonfinite" else INJECTED_RESIDUAL_POSITION_M
+                ),
+                orientation_error_rad=INJECTED_RESIDUAL_ORIENTATION_RAD,
+            )
+        return super().solve(pose, state, seed=seed)
 
-    def solve(self, pose: Pose3D, state: Any, *, seed: int = 0) -> _RecordingSolver:
-        self.calls.append((pose, dict(state.robot.joint_pos), seed))
-        return self
+
+def _install_solver(
+    fixture: Any, config: Any, failed_seed: int, failure: str
+) -> _SeedSensitiveSolver:
+    solver = _SeedSensitiveSolver(dict(fixture.solver.joints))
+    solver.seed_calls = []
+    solver.failed_seed = failed_seed
+    solver.failure = failure
+    fixture.bindings.pose_solvers[config.adapter.pose_solver_binding] = solver
+    return solver
 
 
-class _ExplodingSolver:
-    """Solver whose residual exception must remain a true campaign exception."""
+def _pose_waypoints(fixture: Any, config: Any) -> list[ScriptedWaypoint]:
+    return [
+        waypoint
+        for waypoint in fixture.bindings.waypoint_sets[config.adapter.waypoints_binding]
+        if waypoint.pose is not None
+    ]
 
-    execution_max_joint_step_rad = REVIEWED_STEP_RAD
 
-    def solve(self, pose: Pose3D, robot: Any, *, seed: int = 0) -> None:
-        del pose, robot, seed
-        raise RuntimeError("solver residual exploded")
+def _approved_draw_seeds() -> tuple[int, list[int]]:
+    decision_seed = int(np.random.SeedSequence([0, 0]).generate_state(1)[0])
+    assert decision_seed == 2968811710
+    return decision_seed, np.random.default_rng(decision_seed).integers(0, 2**31, size=32).tolist()
 
 
 class _RejectingMonitor:
@@ -175,130 +195,73 @@ def _direct(
     )
 
 
-def test_a_v5b_residual_becomes_structured_unreachable_event(
+def test_a_seed_zero_cannot_veto_and_successful_pools_match_later_decisions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
-    solver = StaticPoseSolver({name: 0.0 for name in ARM_JOINTS})
-    solver.position_error_m = V5B_RESIDUAL_POSITION_M
-    solver.orientation_error_rad = V5B_RESIDUAL_ORIENTATION_RAD
-    backend = FakeBackend()
-    observation = backend.reset(_one_episode_plan()[0].scene, 0)
-    ground_truth = backend.get_ground_truth()
-    state = _world_state(observation, ground_truth, config, target=config.task.target)
-    waypoints = (
-        ScriptedWaypoint(
-            "PREGRASP",
-            1,
-            pose=Pose3D(Vec3(0.5, 0.0, 0.5), IDENTITY_QUAT),
-        ),
-    )
+    fixture, config, runtime = _setup_feedback(tmp_path, monkeypatch, max_decisions=3)
+    solver = _install_solver(fixture, config, 0, "finite")
+    # Force re-observation to exercise fresh generator construction without moving the robot.
+    captured: list[Any] = []
+    original_select = Stage1WorldMindEpisodePolicy._select
 
-    event = _precheck_observed_waypoint_reachability(
-        config=config,
-        solver=solver,
-        waypoints=waypoints,
-        state=state,
-        episode_id="validation-clear-i00-s0",
-        decision_id="validation-clear-i00-s0-d00",
-        decision_index=0,
-    )
+    def defer_selection(policy: Any, candidates: Any, predictions: Any, assessments: Any) -> Any:
+        selection = original_select(policy, candidates, predictions, assessments)
+        assert selection.index == 0
+        captured.append([asdict(chunk) for chunk in candidates])
+        return replace(selection, chunk=None, index=None)
 
-    assert event is not None
-    assert event["event_type"] == "unreachable_observed_target"
-    assert event["seed"] == 0
-    assert event["waypoint_label"] == "PREGRASP"
-    assert event["position_error_m"] == V5B_RESIDUAL_POSITION_M
-    assert event["orientation_error_rad"] == V5B_RESIDUAL_ORIENTATION_RAD
-    assert event["position_tolerance_m"] == config.adapter.ik_position_tolerance_m
-    assert event["orientation_tolerance_rad"] == config.adapter.ik_orientation_tolerance_rad
-    assert event["candidate_generation_performed"] is False
-    assert event["backend_actions_applied"] == 0
-    assert "no clamp, substitution or actuation" in event["note"]
-
-
-def test_a_precheck_uses_reviewed_tolerances_and_chain_without_actuation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fixture, config, _ = _setup_feedback(tmp_path, monkeypatch)
-    solver = _RecordingSolver({name: 0.0 for name in ARM_JOINTS})
-    backend = FakeBackend()
-    observation = backend.reset(_one_episode_plan()[0].scene, 0)
-    ground_truth = backend.get_ground_truth()
-    state = _world_state(observation, ground_truth, config, target=config.task.target)
-    endpoint = 0.1
-    waypoints = (
-        ScriptedWaypoint("JOINT", 1, joints={ARM5: endpoint}),
-        ScriptedWaypoint("PREGRASP", 1, pose=Pose3D(Vec3(0.5, 0.0, 0.5), IDENTITY_QUAT)),
-    )
-
-    event = _precheck_observed_waypoint_reachability(
-        config=config,
-        solver=solver,
-        waypoints=waypoints,
-        state=state,
-        episode_id="validation-clear-i00-s0",
-        decision_id="validation-clear-i00-s0-d00",
-        decision_index=0,
-    )
-
-    assert event is None
-    assert len(solver.calls) == 1
-    assert solver.calls[0][2] == 0
-    assert solver.calls[0][1][ARM5] == pytest.approx(min(endpoint, REVIEWED_STEP_RAD))
-    assert backend._seq == 0
-
-
-def test_a_policy_records_unreachable_event_before_any_candidate_generation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fixture, config, runtime = _setup_feedback(tmp_path, monkeypatch)
-    fixture.solver.position_error_m = V5B_RESIDUAL_POSITION_M
-    fixture.solver.orientation_error_rad = V5B_RESIDUAL_ORIENTATION_RAD
-    backend = _IncrementalBackend(per_step_rad=REVIEWED_STEP_RAD)
-    out = tmp_path / "precheck-abort"
-
-    report, sidecars = run_stage1_evidence(
+    monkeypatch.setattr(Stage1WorldMindEpisodePolicy, "_select", defer_selection)
+    _, sidecars = run_stage1_evidence(
         _one_episode_plan(),
-        backend,
+        FakeBackend(),
         config,
-        out,
+        tmp_path / "seed-parity",
         fixture.bindings,
         arm_mode="scripted_proposer",
         execution_mode=FEEDBACK_MODE,
         runtime_values=runtime,
     )
-
-    assert report.summary["campaign_status"] == "complete"
-    assert backend.applied == []
-    assert _jsonl(sidecars["decisions"]) == []
-    sidecar_folder = out / "worldmind-sidecars"
-    assert _jsonl(sidecar_folder / FEEDBACK_SIDECAR_NAME) == []
-    events = _jsonl(sidecar_folder / DIAGNOSTIC_EVENT_SIDECAR_NAME)
-    assert len(events) == 1
-    assert events[0]["event_type"] == "unreachable_observed_target"
-    assert events[0]["position_error_m"] == V5B_RESIDUAL_POSITION_M
-    expected_waypoint = next(
-        item
-        for item in fixture.bindings.waypoint_sets[config.adapter.waypoints_binding]
-        if item.label == events[0]["waypoint_label"]
+    decision_seed, draw_seeds = _approved_draw_seeds()
+    decisions = _jsonl(sidecars["decisions"])
+    assert [row["decision_index"] for row in decisions][:2] == [0, 1]
+    assert all(row["draw_seed"] == decision_seed for row in decisions)
+    assert all(row["draw_seeds"] == draw_seeds for row in decisions)
+    assert all(
+        [candidate["candidate_id"] for candidate in row["candidates"]]
+        == [f"candidate-{slot:02d}" for slot in range(32)]
+        for row in decisions
     )
-    assert events[0]["position_tolerance_m"] == expected_waypoint.position_tolerance_m
-    assert events[0]["orientation_tolerance_rad"] == expected_waypoint.orientation_tolerance_rad
+    pose_count = len(_pose_waypoints(fixture, config))
+    assert solver.seed_calls == [seed for seed in draw_seeds for _ in range(pose_count)] * len(
+        decisions
+    )
+    assert captured[0] == captured[1]
+    assert all(len(chunk["actions"]) == 50 for chunk in captured[0])
+    assert _jsonl(sidecars["diagnostic_events"]) == []
 
 
-def test_a_solver_exception_still_fails_the_campaign_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("slot", "failure", "classification"),
+    [
+        (0, "finite", "candidate_ik_residual_outside_tolerance"),
+        (5, "finite", "candidate_ik_residual_outside_tolerance"),
+        (0, "nonfinite", "candidate_ik_nonfinite_residual"),
+        (0, "solver", "candidate_ik_solver_exception"),
+    ],
+)
+def test_a_failed_draw_stops_pool_and_reports_actual_ik_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, slot: int, failure: str, classification: str
 ) -> None:
     fixture, config, runtime = _setup_feedback(tmp_path, monkeypatch)
-    solver_key = config.adapter.pose_solver_binding
-    fixture.bindings.pose_solvers[solver_key] = _ExplodingSolver()
-    out = tmp_path / "precheck-exception"
-
-    with pytest.raises(CampaignFailStop, match="solver residual exploded"):
+    _, draw_seeds = _approved_draw_seeds()
+    solver = _install_solver(fixture, config, draw_seeds[slot], failure)
+    backend = _IncrementalBackend(per_step_rad=REVIEWED_STEP_RAD)
+    out = tmp_path / "failed-draw"
+    reason = "solver residual exploded" if failure == "solver" else "outside reviewed tolerance"
+    with pytest.raises(CampaignFailStop, match=reason):
         run_stage1_evidence(
             _one_episode_plan(),
-            FakeBackend(),
+            backend,
             config,
             out,
             fixture.bindings,
@@ -307,9 +270,54 @@ def test_a_solver_exception_still_fails_the_campaign_closed(
             runtime_values=runtime,
         )
 
-    errors = _jsonl(out / "worldmind-sidecars" / "errors.jsonl")
-    assert errors[0]["error_type"] == "RuntimeError"
-    assert "solver residual exploded" in errors[0]["error"]
+    pose_waypoints = _pose_waypoints(fixture, config)
+    assert solver.seed_calls == [seed for seed in draw_seeds[:slot] for _ in pose_waypoints] + [
+        draw_seeds[slot]
+    ]
+    assert backend.applied == []
+    folder = out / "worldmind-sidecars"
+    assert _jsonl(folder / "decisions.jsonl") == []
+    assert _jsonl(folder / "prediction_pairing.jsonl") == []
+    assert _jsonl(folder / FEEDBACK_SIDECAR_NAME) == []
+    errors = _jsonl(folder / "errors.jsonl")
+    assert errors[0]["error_type"] == ("RuntimeError" if failure == "solver" else "ValueError")
+    (event,) = _jsonl(folder / DIAGNOSTIC_EVENT_SIDECAR_NAME)
+    waypoint = pose_waypoints[0]
+    assert event["schema_version"] == 1
+    assert event["event_type"] == classification
+    assert event["episode_id"] == _one_episode_plan()[0].scene.name
+    assert event["decision_id"] == f"{event['episode_id']}-d00"
+    assert event["draw_slot"] == slot
+    assert event["draw_seed"] == draw_seeds[slot]
+    assert event["waypoint_label"] == waypoint.label
+    assert event["target_pose_base"] == json.loads(json.dumps(asdict(waypoint.pose)))
+    assert event["position_tolerance_m"] == waypoint.position_tolerance_m
+    assert event["orientation_tolerance_rad"] == waypoint.orientation_tolerance_rad
+    assert event["backend_actions_applied"] == 0
+    assert event["position_error_m"] == (
+        INJECTED_RESIDUAL_POSITION_M if failure == "finite" else None
+    )
+    assert event["orientation_error_rad"] == (
+        None if failure == "solver" else INJECTED_RESIDUAL_ORIENTATION_RAD
+    )
+    assert event["solver_error"] == (reason if failure == "solver" else None)
+
+
+def test_a_preserved_v5b_tree_and_historical_reader() -> None:
+    root = REPO_ROOT / "runs/worldmind/stage1-validation-v5b-2026-11-21"
+    assert _tree_hash(root, REPO_ROOT) == (
+        "1946ff3ab5ce461ad92f3a354df4d292ecf469af2d6e7a77bd1322c530eae828"
+    )
+    rows = read_feedback_evidence(root / "worldmind-sidecars" / FEEDBACK_SIDECAR_NAME)
+    assert rows and all(row["schema_version"] == 1 for row in rows)
+    errors = _jsonl(root / "worldmind-sidecars" / "errors.jsonl")
+    assert errors == [
+        {
+            "episode_id": "validation-clear-i03-s0",
+            "error": "scripted pose residual outside reviewed tolerance",
+            "error_type": "ValueError",
+        }
+    ]
 
 
 def test_b_diagnostic_home_uses_configured_vector_and_is_separately_labelled(

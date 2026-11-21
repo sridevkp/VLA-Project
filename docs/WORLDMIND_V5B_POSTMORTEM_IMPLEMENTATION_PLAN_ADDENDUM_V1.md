@@ -30,6 +30,11 @@ only from existing reviewed values in `configs/robot.yaml` and `configs/eval.yam
 
 ## 2. Correction A — deterministic reachability precheck
 
+ADR-0080 supersedes this section. The original V5b archive records the exception and observed
+state available in schema 1. Its failed draw target and numerical residual were not independently
+reproduced from that archive. The residual magnitudes in the offline regression are injected
+fixture values.
+
 - Run before candidate generation for the explicit feedback mode only, using the already
   re-anchored observed waypoints and fixed solver seed `0`.
 - Reuse the adapter's reviewed per-waypoint IK tolerances (or adapter-level tolerances when a

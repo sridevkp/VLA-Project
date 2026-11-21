@@ -25,6 +25,7 @@ import yaml
 
 from vlarobot.core.types import (
     Action,
+    ActionChunk,
     GripperCmd,
     GroundTruth,
     JointTarget,
@@ -92,6 +93,7 @@ from vlarobot.eval.worldmind_config import (
 )
 from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter
 from vlarobot.execution.scripted_chunk_adapter import (
+    CandidateIKFailure,
     JointJitter,
     ScriptedChunkAdapter,
     ScriptedWaypoint,
@@ -273,9 +275,8 @@ def _stage1_provenance(
             if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
             else "not_applicable"
         ),
-        "feedback_reachability_precheck": (
-            "deterministic_seed_0_solver_residual_precheck; unreachable observed targets abort "
-            "before candidate generation without clamping or substitution"
+        "feedback_candidate_ik_failure": (
+            "actual failed draw recorded; candidate generation remains fail-fast"
             if execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
             else "not_applicable"
         ),
@@ -973,97 +974,6 @@ def _home_action_indices(
     if offset != horizon_steps:
         raise ValueError("waypoint cadence does not match the frozen horizon")
     return frozenset(indices)
-
-
-def _precheck_observed_waypoint_reachability(
-    *,
-    config: WorldMindDiagnosticConfig,
-    solver: Any,
-    waypoints: Sequence[ScriptedWaypoint],
-    state: WorldState,
-    episode_id: str,
-    decision_id: str,
-    decision_index: int,
-) -> dict[str, Any] | None:
-    """Detect a residual-over-tolerance observed target before any candidate is drawn.
-
-    This is a read-only, fixed-seed solve against the already re-anchored observed waypoints. It
-    reuses the adapter's reviewed tolerances verbatim and never clamps, substitutes or repairs an
-    endpoint. A finite residual over tolerance is reported as a structured diagnostic event; a
-    solver exception or non-finite residual remains a true exception and still fails the campaign.
-    """
-    current_joints = {str(name): float(value) for name, value in state.robot.joint_pos.items()}
-    step_bound = getattr(solver, "execution_max_joint_step_rad", None)
-    if step_bound is None or not math.isfinite(float(step_bound)) or float(step_bound) <= 0.0:
-        raise ValueError("pose solver must expose the reviewed finite execution step bound")
-    bound = float(step_bound)
-
-    def _advance(endpoint: Mapping[str, float], hold_steps: int) -> None:
-        """Mirror the reviewed bounded joint cadence without jitter or backend actuation."""
-        for name in endpoint:
-            if name not in current_joints or not math.isfinite(float(current_joints[name])):
-                raise ValueError(f"no finite current position for precheck joint {name}")
-        for _ in range(int(hold_steps)):
-            for name, value in endpoint.items():
-                delta = float(value) - current_joints[name]
-                clamped_step = max(-bound, min(bound, delta))
-                current_joints[name] = current_joints[name] + clamped_step
-
-    for waypoint in waypoints:
-        if waypoint.joints is not None:
-            _advance(
-                {str(name): float(value) for name, value in waypoint.joints.items()},
-                waypoint.hold_steps,
-            )
-            continue
-        if waypoint.pose is None:
-            continue
-        simulated = replace(state, robot=replace(state.robot, joint_pos=dict(current_joints)))
-        solution = solver.solve(waypoint.pose, simulated, seed=0)
-        position_error = float(solution.position_error_m)
-        orientation_error = float(solution.orientation_error_rad)
-        if not math.isfinite(position_error) or not math.isfinite(orientation_error):
-            raise ValueError("solver residual precheck produced a non-finite residual")
-        position_tolerance = (
-            float(config.adapter.ik_position_tolerance_m)
-            if waypoint.position_tolerance_m is None
-            else float(waypoint.position_tolerance_m)
-        )
-        orientation_tolerance = (
-            float(config.adapter.ik_orientation_tolerance_rad)
-            if waypoint.orientation_tolerance_rad is None
-            else float(waypoint.orientation_tolerance_rad)
-        )
-        if position_error <= position_tolerance and orientation_error <= orientation_tolerance:
-            endpoint = getattr(solution, "joints", None)
-            if not isinstance(endpoint, Mapping):
-                raise ValueError("solver precheck solution must expose reviewed joint endpoints")
-            _advance(
-                {str(name): float(value) for name, value in endpoint.items()},
-                waypoint.hold_steps,
-            )
-            continue
-        return {
-            "schema_version": 1,
-            "event_type": "unreachable_observed_target",
-            "episode_id": episode_id,
-            "decision_id": decision_id,
-            "decision_index": decision_index,
-            "waypoint_label": waypoint.label,
-            "seed": 0,
-            "position_error_m": position_error,
-            "orientation_error_rad": orientation_error,
-            "position_tolerance_m": position_tolerance,
-            "orientation_tolerance_rad": orientation_tolerance,
-            "tolerance_source": "scripted_chunk_adapter reviewed IK tolerances",
-            "candidate_generation_performed": False,
-            "backend_actions_applied": 0,
-            "note": (
-                "Finite solver residual exceeded a reviewed tolerance before candidate "
-                "generation; no clamp, substitution or actuation was attempted."
-            ),
-        }
-    return None
 
 
 def _execute_observed_state_feedback_chunk(
@@ -1868,27 +1778,9 @@ class Stage1WorldMindEpisodePolicy:
                 before_observation, before_state = observation, state
                 decision_id = f"{episode_id}-d{decision_index:02d}"
                 waypoints = alternate if use_alternate and alternate else primary
-                if self.execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE:
-                    precheck = _precheck_observed_waypoint_reachability(
-                        config=self.config,
-                        solver=self.bindings.pose_solvers[self.config.adapter.pose_solver_binding],
-                        waypoints=waypoints,
-                        state=state,
-                        episode_id=episode_id,
-                        decision_id=decision_id,
-                        decision_index=decision_index,
-                    )
-                    if precheck is not None:
-                        self.writer.record_diagnostic_event(precheck)
-                        failure_state = "UNREACHABLE_OBSERVED_TARGET"
-                        failure_reason = (
-                            f"{precheck['waypoint_label']}: position_error_m="
-                            f"{precheck['position_error_m']}, orientation_error_rad="
-                            f"{precheck['orientation_error_rad']}"
-                        )
-                        loop_exited_by_bound = False
-                        break
-                generator = self._generator(waypoints, seed)
+                generator = self._generator(
+                    waypoints, seed, episode_id=episode_id, decision_id=decision_id
+                )
                 generation_probe = CandidateGenerationProbe(
                     generator,
                     episode_id=episode_id,
@@ -2455,7 +2347,12 @@ class Stage1WorldMindEpisodePolicy:
         }
 
     def _generator(
-        self, waypoints: Sequence[ScriptedWaypoint], seed: int
+        self,
+        waypoints: Sequence[ScriptedWaypoint],
+        seed: int,
+        *,
+        episode_id: str,
+        decision_id: str,
     ) -> SeededCandidateGenerator:
         monitor = self.bindings.safety[self.config.safety.binding](
             self.config, self.bindings.inputs.get("safety", {})
@@ -2479,8 +2376,37 @@ class Stage1WorldMindEpisodePolicy:
             position_tolerance_m=self.config.adapter.ik_position_tolerance_m,
             orientation_tolerance_rad=self.config.adapter.ik_orientation_tolerance_rad,
         )
+        draw_slot = 0
+
+        def record_failure(failure: CandidateIKFailure) -> None:
+            self.writer.record_diagnostic_event(
+                {
+                    **asdict(failure),
+                    "schema_version": 1,
+                    "episode_id": episode_id,
+                    "decision_id": decision_id,
+                    "draw_slot": draw_slot,
+                    # Execution begins only after propose returns the entire pool.
+                    "backend_actions_applied": 0,
+                }
+            )
+
+        draw = adapter.draw(
+            on_ik_failure=record_failure
+            if self.execution_mode == OBSERVED_STATE_FEEDBACK_EXECUTION_MODE
+            else None
+        )
+
+        def tracked_draw(
+            task: TaskSpec, state: WorldState, memory: object, seed: int
+        ) -> ActionChunk:
+            nonlocal draw_slot
+            chunk = draw(task, state, memory, seed)
+            draw_slot += 1
+            return chunk
+
         return SeededCandidateGenerator(
-            adapter.draw(),
+            tracked_draw,
             seed=self.config.pipeline.decision_seed_base + seed,
             count=self.config.pipeline.candidate_count,
             source="scripted",

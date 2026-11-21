@@ -3600,3 +3600,37 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   calibration selection, retry/resume of V5 or V5b, or production use. **CONDITIONAL GO** is
   reserved for a separately authorized, non-scored VALIDATION diagnostic that explicitly selects
   feedback mode with `scripted_proposer` and writes only to a fresh versioned output directory.
+
+## ADR-0080 — Report candidate IK failure at the actual draw (offline only)
+
+- **Supersedes ADR-0079 correction A** and section 2 of its implementation plan addendum. The
+  independent seed-0 precheck could not establish equivalence with the approved draw seeds and
+  simulated joint states. Remove its early veto. The other ADR-0079 corrections remain in force.
+- **Generator contract:** keep K=32, H=50, decision seed derivation, draw seed order, eager
+  sequential all-or-error generation, candidate IDs and payloads, waypoint construction,
+  tolerances, and first-eligible scripted selection. A failed draw leaves later draws unattempted.
+  The episode records the original exception and the runner fail-stops. A failed pool yields zero
+  applies, completed generation observations, and prediction-pairing records for that decision.
+- **Evidence:** feedback mode adds three version-1 event types to `diagnostic-events.jsonl`.
+  `candidate_ik_residual_outside_tolerance` reports a finite failure on a specific draw.
+  `candidate_ik_nonfinite_residual` stores non-finite components as null.
+  `candidate_ik_solver_exception` stores the original exception type and message. Each row
+  records the decision and episode, zero-based draw slot, draw seed, waypoint label, requested
+  base-frame pose, effective tolerances and failed-decision apply count. These events report a
+  failed solve under the approved policy. The feedback v1/v2 reader and historical rows are
+  preserved.
+- **Historical evidence:** V5b episode index 3 (`validation-clear-i03-s0`) records an
+  `EXCEPTION` after 419 control steps with the message
+  `scripted pose residual outside reviewed tolerance`. The failed target and numeric residuals
+  were not independently reproduced from the archived run. The archive lacks the full observed
+  world-frame base transform and has no failed-draw target or residual record. The values
+  2.770961553780716 m and 0.3235694262270646 rad are injected regression inputs.
+- **Scope:** offline implementation only. V5c readiness and any live diagnostic require separate
+  owner authorization.
+- **Offline verification:** focused tests returned 24 passed. The relevant offline set returned
+  55 passed. Approved-source parity matched six generated pools and 9,600 action payloads.
+  Ruff lint and format and `git diff --check` passed. The repository-wide non-Webots run
+  excluded the Packet B scope module and returned 834 passed, 3 skipped and one failure.
+  The failure was the pre-existing notebook-helper SHA mismatch (`071cf660…` expected,
+  `88fd4db9…` present). The frozen config, definitions, recomputed VALIDATION plan and all six
+  recomputed V1–V5b evidence tree hashes matched ADR-0079.

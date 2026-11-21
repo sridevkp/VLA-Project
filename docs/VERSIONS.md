@@ -235,3 +235,8 @@ existing reviewed values. Linux offline focused and relevant regression tests, R
 SHA mismatch. Windows, Webots timing, physical actuation, V5c, scoring and production use remain
 unverified. **NO-GO** for a live/scored V5c campaign; conditional GO remains limited to a
 separately authorized, non-scored diagnostic in a fresh output directory.
+
+ADR-0080 removes the independent seed-0 IK precheck and adds version-1 candidate IK failure
+events to the existing diagnostic channel. The adapter reports the actual draw and waypoint.
+The feedback schema remains version 2 with version-1 reader support. The correction adds no
+dependencies, solver seeds, numerical settings or live authorization.

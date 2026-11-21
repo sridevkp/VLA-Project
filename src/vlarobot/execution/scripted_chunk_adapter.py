@@ -103,6 +103,20 @@ class JointJitter:
             raise ValueError("jitter max_attempts must be a positive integer")
 
 
+@dataclass(frozen=True)
+class CandidateIKFailure:
+    event_type: str
+    draw_seed: int
+    waypoint_label: str
+    target_pose_base: Pose3D
+    position_tolerance_m: float
+    orientation_tolerance_rad: float
+    position_error_m: float | None = None
+    orientation_error_rad: float | None = None
+    solver_error_type: str | None = None
+    solver_error: str | None = None
+
+
 Draw = Callable[[TaskSpec, WorldState, object, int], ActionChunk]
 
 
@@ -149,7 +163,7 @@ class ScriptedChunkAdapter:
         self.position_tolerance_m = float(position_tolerance_m)
         self.orientation_tolerance_rad = float(orientation_tolerance_rad)
 
-    def draw(self) -> Draw:
+    def draw(self, *, on_ik_failure: Callable[[CandidateIKFailure], None] | None = None) -> Draw:
         """Return the callable consumed by ``SeededCandidateGenerator``."""
 
         def propose(task: TaskSpec, state: WorldState, memory: object, seed: int) -> ActionChunk:
@@ -166,11 +180,6 @@ class ScriptedChunkAdapter:
             for waypoint in self.waypoints:
                 if waypoint.pose is not None:
                     simulated = replace(state, robot=replace(state.robot, joint_pos=current_joints))
-                    solution = self.solver.solve(waypoint.pose, simulated, seed=int(seed))
-                    residuals = (
-                        float(solution.position_error_m),
-                        float(solution.orientation_error_rad),
-                    )
                     position_limit = (
                         self.position_tolerance_m
                         if waypoint.position_tolerance_m is None
@@ -181,9 +190,50 @@ class ScriptedChunkAdapter:
                         if waypoint.orientation_tolerance_rad is None
                         else float(waypoint.orientation_tolerance_rad)
                     )
-                    if not all(math.isfinite(value) for value in residuals) or (
-                        residuals[0] > position_limit or residuals[1] > orientation_limit
+                    try:
+                        solution = self.solver.solve(waypoint.pose, simulated, seed=int(seed))
+                    except Exception as error:  # noqa: BLE001 - report and re-raise unchanged
+                        if on_ik_failure is not None:
+                            on_ik_failure(
+                                CandidateIKFailure(
+                                    "candidate_ik_solver_exception",
+                                    int(seed),
+                                    waypoint.label,
+                                    waypoint.pose,
+                                    position_limit,
+                                    orientation_limit,
+                                    solver_error_type=type(error).__name__,
+                                    solver_error=str(error),
+                                )
+                            )
+                        raise
+                    residuals = (
+                        float(solution.position_error_m),
+                        float(solution.orientation_error_rad),
+                    )
+                    finite = all(math.isfinite(value) for value in residuals)
+                    if (
+                        not finite
+                        or residuals[0] > position_limit
+                        or residuals[1] > orientation_limit
                     ):
+                        if on_ik_failure is not None:
+                            on_ik_failure(
+                                CandidateIKFailure(
+                                    "candidate_ik_residual_outside_tolerance"
+                                    if finite
+                                    else "candidate_ik_nonfinite_residual",
+                                    int(seed),
+                                    waypoint.label,
+                                    waypoint.pose,
+                                    position_limit,
+                                    orientation_limit,
+                                    *(
+                                        value if math.isfinite(value) else None
+                                        for value in residuals
+                                    ),
+                                )
+                            )
                         raise ValueError("scripted pose residual outside reviewed tolerance")
                     endpoint = self._jittered_endpoint(solution.joints, rng)
                     stepped, current_joints = self._bounded_joint_actions(

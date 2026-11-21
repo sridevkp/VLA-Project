@@ -336,12 +336,13 @@ Current source remains **NO-GO** for another live campaign.
 
 The V5b postmortem corrections (ADR-0079 and
 `WORLDMIND_V5B_POSTMORTEM_IMPLEMENTATION_PLAN_ADDENDUM_V1.md`) are also offline-only. They add a
-pre-candidate reachability precheck, a separately labelled configured-HOME completion phase,
+separately labelled configured-HOME completion phase,
 explicit convergence classification, per-object collision-proxy attribution with reviewed gripper
 completion, and full observed base-pose evidence. The feedback sidecar is now schema 2 while still
 reading schema 1 rows; `diagnostic-events.jsonl` and `collision-proxy-attribution.jsonl` are
-additional diagnostic-only channels. V5b evidence is read-only and is not resumable. Verify the
-corrections without Webots with:
+additional diagnostic-only channels. ADR-0080 supersedes the precheck portion of ADR-0079.
+Candidate IK failures are logged at the actual failed draw, and the original generation fail-stop
+applies. V5b evidence is read-only and is not resumable. Verify the corrections without Webots:
 
 ```text
 uv run python -m pytest -q tests/test_worldmind_v5b_postmortem_regression.py tests/test_worldmind_observed_state_feedback.py

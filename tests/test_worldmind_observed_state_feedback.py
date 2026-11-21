@@ -63,7 +63,7 @@ FEEDBACK_MODE = "diagnostic_observed_state_feedback_chunk"
 TARGET_RAD = 0.6
 FROZEN_SOURCE_HASHES = {
     "src/vlarobot/execution/scripted_chunk_adapter.py": (
-        "890e2f5bd3621338db85cb60088f27c091b792ca437d2aeadd744dc7029432f4"
+        "a3a3958bcb9448f6674fdc7ff65029eeabd6d536e0e3aeaf46f0c1c0a4e8bc92"
     ),
     "src/vlarobot/execution/safety_monitor.py": (
         "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a"

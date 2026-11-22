@@ -94,6 +94,7 @@ class ZmqBackendClient:
         self._expected_session_id: dict[str, object] | None = None
         self._diagnostic_session: dict[str, object] | None = None
         self._diagnostic_failed = False
+        self._owned_diagnostic_session = False
         self._ever_responsive = False
         self._ensure_socket(self._default_timeout_ms)
 
@@ -228,6 +229,7 @@ class ZmqBackendClient:
             raise ProtocolError("invalid independently attested diagnostic pins")
         self.expect_session(session_id)
         self._require_diagnostic_session("webots", world_sha256)
+        self._owned_diagnostic_session = True
 
     def require_diagnostic_session(self, *, expected_backend: str) -> None:
         """Validate capability before any campaign mutation and pin its server session."""
@@ -278,8 +280,8 @@ class ZmqBackendClient:
     def shutdown_diagnostic_session(self, *, session_id: dict[str, object]) -> dict[str, Any]:
         """Return an owned guarded shutdown acknowledgement or raise, and close the socket."""
         try:
-            if self._diagnostic_session is None or self._diagnostic_session != session_id:
-                raise ProtocolError("shutdown requires the exact pinned diagnostic session")
+            if not self._owned_diagnostic_session or self._diagnostic_session != session_id:
+                raise ProtocolError("shutdown requires the exact pinned owned diagnostic session")
             response = self._request("shutdown", {})
             if response["payload"].get("status") != "stopped":
                 raise ProtocolError("diagnostic shutdown acknowledgement missing")

@@ -205,3 +205,42 @@ def test_attestation_mapping_includes_provenance_and_verification_state():
     assert payload["verified_executable_version_pair"] is True
     assert payload["evidence_source"] == "launch_time_executable_version_probe"
     assert payload["captured_at_utc"] == "2026-11-18T00:00:00+00:00"
+
+
+@pytest.mark.parametrize("defect", [None, "stale", "endpoint", "foreign", "no_group", "exited"])
+def test_owned_controller_status_requires_launch_process_group(tmp_path, monkeypatch, defect):
+    import json
+
+    process = SimpleNamespace(pid=123, poll=lambda: 1 if defect == "exited" else None)
+    status_file = tmp_path / "status.json"
+    endpoint = "tcp://127.0.0.1:5555"
+    session = {"pid": 456, "start_time": 5.0 if defect == "stale" else 10.0, "nonce": "run"}
+    status_file.write_text(
+        json.dumps(
+            {
+                "endpoint": "different" if defect == "endpoint" else endpoint,
+                "session_id": session,
+                "updated_at": 11.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        attestation_module.os,
+        "getpgid",
+        None
+        if defect == "no_group"
+        else lambda pid: 987 if defect == "foreign" and pid == 456 else 123,
+        raising=False,
+    )
+    args = dict(
+        endpoint=endpoint,
+        process=process,
+        runtime_attestation={"process_pid": 123, "process_identity_verified": True},
+        launch_started_at_s=9.0,
+    )
+    if defect is None:
+        assert attestation_module.read_owned_controller_session(status_file, **args) == session
+    else:
+        with pytest.raises(ValueError):
+            attestation_module.read_owned_controller_session(status_file, **args)

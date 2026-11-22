@@ -9,6 +9,8 @@ the configured expected version, so a mismatch remains visible and fail-closed.
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 import os
 import re
 import subprocess
@@ -264,3 +266,66 @@ def attest_webots_executable(
         captured_at_utc=datetime.now(UTC).isoformat(),
     )
     return attach_process_identity(attestation, process) if process is not None else attestation
+
+
+def read_owned_controller_session(
+    status_path: Path,
+    *,
+    endpoint: str,
+    process: subprocess.Popen[str],
+    runtime_attestation: Mapping[str, object],
+    launch_started_at_s: float,
+) -> dict[str, object]:
+    """Read a fresh launch status and establish owner process-group membership on POSIX.
+
+    This helper sends no request. The returned pins still have to match the guarded peer.
+    """
+    get_group = getattr(os, "getpgid", None)
+    if not callable(get_group):
+        raise ValueError("owned controller process-group verification is unavailable")
+    pid = process.pid
+    if (
+        type(pid) is not int
+        or pid <= 0
+        or process.poll() is not None
+        or runtime_attestation.get("process_identity_verified") is not True
+        or runtime_attestation.get("process_pid") != pid
+        or type(launch_started_at_s) not in (int, float)
+        or not math.isfinite(launch_started_at_s)
+        or launch_started_at_s <= 0
+    ):
+        raise ValueError(
+            "live launcher identity and launch timestamp must be independently attested"
+        )
+    if status_path.is_symlink():
+        raise ValueError("controller status must be a run-scoped local file")
+    status = json.loads(status_path.read_bytes())
+    if not isinstance(status, dict) or status.get("endpoint") != endpoint:
+        raise ValueError("controller status endpoint differs from the owned launch")
+    session = status.get("session_id")
+    if not isinstance(session, dict):
+        raise ValueError("controller status lacks session identity")
+    controller_pid = session.get("pid")
+    start = session.get("start_time")
+    nonce = session.get("nonce")
+    updated = status.get("updated_at")
+    if (
+        type(controller_pid) is not int
+        or controller_pid <= 0
+        or not isinstance(nonce, str)
+        or not nonce.strip()
+        or type(start) not in (int, float)
+        or not math.isfinite(start)
+        or type(updated) not in (int, float)
+        or not math.isfinite(updated)
+        or not launch_started_at_s <= start <= updated
+    ):
+        raise ValueError("controller status identity is missing, malformed, or stale")
+    try:
+        if get_group(pid) != pid or get_group(controller_pid) != pid:
+            raise ValueError("controller is not in the owned launch process group")
+    except OSError as exc:
+        raise ValueError("owned controller process group is unverified") from exc
+    if process.poll() is not None:
+        raise ValueError("owned launch exited during controller verification")
+    return dict(session)

@@ -177,3 +177,12 @@ and its preparation steps, then one decision and at most one selected command
 and one authoritative tick. Use a fresh non-scored evidence directory and the
 existing strict admission policy. No qualification caller or scientific
 execution entry point is registered by these helpers.
+
+For a POSIX owned launch, capture wall time before launch and request a fresh
+controller status file inside the attempt directory. Use
+`read_owned_controller_session()` with the attested process handle, endpoint,
+and pre-launch timestamp. It checks freshness and operating-system process
+group membership before that identity is supplied to
+`require_owned_diagnostic_session()`. An unavailable process-group query
+blocks ownership verification. This prepares the local POSIX path and grants
+no equivalence to a Windows or remote ownership mechanism.

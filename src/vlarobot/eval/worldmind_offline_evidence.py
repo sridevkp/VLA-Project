@@ -418,7 +418,14 @@ def _execution(
                 "invalid backend outcome",
             )
             _require(
-                (apply != "not_attempted") == motor.accepted
+                (
+                    (apply != "not_attempted") == motor.accepted
+                    or (
+                        motor.accepted
+                        and apply == "not_attempted"
+                        and bool(failures & {"incomplete_recording", "interrupted_execution"})
+                    )
+                )
                 and (tick == "not_executed" or apply == "accepted"),
                 "inconsistent motor/backend outcome",
             )

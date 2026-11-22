@@ -91,3 +91,43 @@ A valid step reply followed by an observation conversion failure preserves the
 confirmed tick and leaves the resulting state absent. The adapter has no retry or
 recovery loop. Phase timings are empty because the fixture has no authoritative phase
 timing record. Successful one-tick capture leaves the episode in progress.
+
+## Offline one-decision execution boundary
+
+`OfflineBoundary.run` accepts an already prepared FakeBackend observation and an
+explicitly owned local session. It exposes no reset, network transport, or Webots
+entry point. Its exact offline capability and session identity are checked before
+use, at each operation, and at shutdown. Identity matching supplies continuity
+within this fixture. It does not authenticate an endpoint.
+
+Admission checks the declared task and scene, the exact robot snapshot and
+configured arm joints, the full base pose and the observation timestamp. It uses
+both named raw fingers and the hash-pinned bounds from `robot.yaml`. The offline
+fixture requires exact agreement between the two raw values and the declared opening
+after the configured closed-reference conversion. This is an exact fixture check.
+It introduces no physical noise allowance or reviewed cross-finger tolerance.
+Unknown gripper holding remains unknown.
+
+The boundary exclusively creates a journal directory. It synchronizes the
+pre-apply bundle and the directory, reads the bundle back, and writes a durable
+intent bound to the session, decision, selected action digest, and one-command and
+one-tick budgets. A verified intent and actual motor acceptance are necessary
+before submission. The pre-apply bundle retains the exact intended action and
+independent motor verdict. The one-tick executor and selection policy are unchanged.
+
+Apply and tick receipts are separate files bound to their intents. A confirmed
+apply receipt must persist before tick submission. Unknown results stop without
+retry. An authoritative confirmed tick can survive absent or invalid observation
+data. In that case the record has zero eligible paired steps. A final bundle is
+published only after the outcome is reconciled. A later recorder failure leaves the
+already persisted intent and receipts available for inspection. Shutdown records
+its own status and only calls the owned session after the capability and identity
+check.
+
+No run can reopen an existing journal, including a complete journal, an unresolved
+intent, or a partial write. Inspect those records offline. The journal does not
+infer what happened from the absence of a receipt. The writer requires file and
+directory synchronization. A filesystem or platform without that capability fails
+closed before submission. These are local storage and fixture guarantees. A future
+physical path requires separate review of storage durability, runtime attestation,
+session transport and raw sensor admission.

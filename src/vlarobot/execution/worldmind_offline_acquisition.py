@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -39,6 +39,9 @@ from vlarobot.risk.comparison import ComparisonPlanner, Selection
 from vlarobot.risk.gate import CandidateAssessment
 from vlarobot.world_model.rollout import Trajectory
 
+if TYPE_CHECKING:
+    from vlarobot.execution.worldmind_offline_boundary import OfflineBoundary
+
 _POLICY = "adr0083_fixture_eq38_motor_only_execute_first"
 
 
@@ -59,6 +62,17 @@ class _ExecutionCapture:
     apply_reason: str | None = None
     stepped: str = "not_executed"
     observed: Observation | None = None
+    boundary: OfflineBoundary | None = None
+    records: dict[str, Any] | None = None
+    recording_failed: bool = False
+
+    def _record(self, event: str, **detail: Any) -> None:
+        if self.boundary is not None:
+            try:
+                self.boundary.record(event, **detail)
+            except Exception:
+                self.recording_failed = True
+                raise
 
     def validate(self, action: Action, state: RobotState) -> ApplyResult:
         verdict = self.monitor.validate(action, state)
@@ -68,20 +82,57 @@ class _ExecutionCapture:
         return verdict
 
     def apply(self, action: Action) -> ApplyResult:
+        if self.boundary is not None:
+            try:
+                self.boundary.prepare_apply(self.records, action, self.motor)
+            except OSError:
+                self.recording_failed = True
+                raise
         self.applied = "unknown"
-        result = self.backend.apply(action)
-        if not isinstance(result, ApplyResult) or type(result.accepted) is not bool:
-            raise ValueError("invalid fixture apply outcome")
+        try:
+            result = (
+                self.backend.apply(action)
+                if self.boundary is None
+                else self.boundary.submit(action)
+            )
+            if not isinstance(result, ApplyResult) or type(result.accepted) is not bool:
+                raise ValueError("invalid fixture apply outcome")
+        except Exception as exc:
+            if self.boundary is not None and not self.boundary.submitted:
+                self.applied = "not_attempted"
+            self._record("apply_result", outcome=self.applied, reason=_reason(exc))
+            raise
         self.applied = "accepted" if result.accepted else "rejected"
         self.apply_reason = result.reason
+        self._record("apply_result", outcome=self.applied, reason=self.apply_reason)
         return result
 
     def step(self, n_steps: int) -> Observation:
+        if self.boundary is not None:
+            try:
+                self.boundary.prepare_tick(n_steps)
+            except OSError:
+                self.recording_failed = True
+                raise
         self.stepped = "unknown"
-        observation = self.backend.step(n_steps)
-        if not isinstance(observation, Observation):
-            raise ValueError("fixture step returned no authoritative result")
-        self.stepped = "confirmed"
+        try:
+            if self.boundary is None:
+                observation = self.backend.step(n_steps)
+                if not isinstance(observation, Observation):
+                    raise ValueError("fixture step returned no authoritative result")
+                self.stepped = "confirmed"
+            else:
+                outcome = self.boundary.tick()
+                self.stepped = outcome.status
+                observation = outcome.observation
+        except Exception as exc:
+            if self.boundary is not None and not self.boundary.ticked:
+                self.stepped = "not_executed"
+            self._record("tick_result", outcome=self.stepped, reason=_reason(exc))
+            raise
+        self._record("tick_result", outcome=self.stepped)
+        if self.stepped != "confirmed" or not isinstance(observation, Observation):
+            raise ValueError("fixture tick or observation unavailable")
         self.observed = observation
         return observation
 
@@ -242,6 +293,7 @@ def acquire_fixture_decision(
     goal_base: Pose3D,
     source_hashes: Mapping[str, str],
     binding_refs: Mapping[str, str] | None = None,
+    boundary: OfflineBoundary | None = None,
 ) -> AcquisitionResult:
     """Capture reset decision zero, an optional FakeBackend tick, and any valid failure evidence.
 
@@ -331,6 +383,8 @@ def acquire_fixture_decision(
             "frames": {"scene": "base", "goal": "base", "base_pose_world": "world"},
         }
         validate_offline_records(records)
+        if boundary is not None:
+            boundary.admit(task, state, observation)
     except Exception as exc:
         records["input"] = None
         failures.clear()
@@ -352,12 +406,16 @@ def acquire_fixture_decision(
     selection = _plan(fixture, state, candidates, records)
     validate_offline_records(records)
     if selection is not None and records["selected"] is not None and not failures:
-        capture = _ExecutionCapture(backend, fixture.monitor)
+        capture = _ExecutionCapture(backend, fixture.monitor, boundary=boundary, records=records)
         after = None
         try:
             execute_first(selection, observation, cast(Any, capture), cast(SafetyMonitor, capture))
             if capture.observed is not None:
-                _, observed_state = fixture.prepare_fixture_input(backend, capture.observed)
+                observed_task, observed_state = fixture.prepare_fixture_input(
+                    backend, capture.observed
+                )
+                if boundary is not None:
+                    boundary.admit(observed_task, observed_state, capture.observed)
                 validate_offline_observed_state(
                     observed_state, records["input"]["expected_objects"]
                 )
@@ -369,7 +427,7 @@ def acquire_fixture_decision(
                 "unknown_backend_outcome"
                 if "unknown" in (capture.applied, capture.stepped)
                 else "incomplete_recording"
-                if capture.stepped == "confirmed"
+                if capture.stepped == "confirmed" or capture.recording_failed
                 else "interrupted_execution"
             )
             failures[failure] = _reason(exc)

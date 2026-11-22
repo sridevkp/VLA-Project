@@ -34,7 +34,7 @@ def capture_finger_admission(backend: Any) -> dict[str, Any]:
 
         actual_name = motor.getName()
         sensor_name = sensor.getName()
-        reading = float(sensor.getValue())
+        reading = sensor.getValue()
         row.update(
             resolved_motor=actual_name,
             resolved_sensor=sensor_name,
@@ -43,17 +43,25 @@ def capture_finger_admission(backend: Any) -> dict[str, Any]:
             motor_limits_m=[float(motor.getMinPosition()), float(motor.getMaxPosition())],
             admission=_bound(reading, lower, upper),
         )
+        if type(reading) not in (int, float):
+            row["raw_coordinate_m"] = None
+            row["raw_reading_type"] = type(reading).__name__
         if len(cached) != 1 or cached[0][1] is None or actual_name != name:
             row["mapping"] = "unreconciled_cached_pair"
         else:
             cached_sensor = cached[0][1]
-            cached_reading = float(cached_sensor.getValue())
+            cached_reading = cached_sensor.getValue()
             row.update(
                 cached_sensor=cached_sensor.getName(),
-                cached_raw_coordinate_m=cached_reading,
+                cached_raw_coordinate_m=(
+                    cached_reading if type(cached_reading) in (int, float) else None
+                ),
                 mapping=(
                     "matches"
-                    if cached_sensor.getName() == sensor_name and cached_reading == reading
+                    if cached_sensor.getName() == sensor_name
+                    and type(cached_reading) in (int, float)
+                    and type(reading) in (int, float)
+                    and cached_reading == reading
                     else "mismatch_or_unstable"
                 ),
             )

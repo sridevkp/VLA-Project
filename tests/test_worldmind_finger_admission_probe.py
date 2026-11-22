@@ -101,3 +101,12 @@ def test_clock_change_invalidates_read_only_capture():
     backend.io.robot.getTime = lambda: next(times)
     with pytest.raises(RuntimeError, match="physics boundary"):
         capture_finger_admission(backend)
+
+
+def test_invalid_raw_type_is_not_coerced_to_a_valid_endpoint():
+    backend = _backend()
+    backend.io.fingers[0][1].getValue = lambda: False
+    row = capture_finger_admission(backend)["readings"][0]
+    assert row["raw_coordinate_m"] is None
+    assert row["raw_reading_type"] == "bool"
+    assert row["admission"] == "invalid_or_nonfinite"

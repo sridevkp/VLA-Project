@@ -147,3 +147,18 @@ for mapping or sampling diagnosis, with no change to admission. Missing nodes
 or inaccessible Supervisor fields leave that cross-check incomplete. The
 generic inspect observation builder updates velocity bookkeeping, so use the
 finger-only request before reset when that bookkeeping must be preserved.
+
+A future qualification must derive the expected controller session and world
+digest independently from the owned launch. The controller can put liveness
+status in the fresh run directory through `VLAROBOT_DIAGNOSTIC_STATUS_PATH`.
+Use the launch process handle, controller provenance and endpoint to establish
+ownership before supplying those pins to `require_owned_diagnostic_session()`.
+The pin compares the exact session and declared world. It does not discover
+process ownership or authenticate the peer. The world declaration also does
+not replace hashing the actual launched world.
+
+Use the explicit guarded shutdown acknowledgement for the pinned session
+(`shutdown_diagnostic_session()`). A missing or malformed acknowledgement
+raises and closes the client. It leaves process exit to be verified separately
+against the owned launch handle. A failed operation does not reopen the guarded
+channel for shutdown, and this helper never falls back to ordinary shutdown.

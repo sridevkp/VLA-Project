@@ -341,7 +341,12 @@ class SimServer:
             port = int(bound.rsplit(":", 1)[-1])
         except Exception:
             port = 0
-        self._status_path = Path.cwd() / "runs" / "campaign-2026-11-11" / f"sim-status-{port}.json"
+        status_path = os.environ.get("VLAROBOT_DIAGNOSTIC_STATUS_PATH")
+        self._status_path = (
+            Path(status_path)
+            if status_path
+            else Path.cwd() / "runs" / "campaign-2026-11-11" / f"sim-status-{port}.json"
+        )
         self._watchdog_stop.clear()
         self._watchdog_thread = threading.Thread(
             target=self._watchdog_loop, name="sim-watchdog", daemon=True

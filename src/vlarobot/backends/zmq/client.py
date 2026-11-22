@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import re
 from collections.abc import Mapping
 from time import perf_counter
 from typing import Any
@@ -210,8 +211,29 @@ class ZmqBackendClient:
         """Record the server session identity this client is bound to."""
         self._expected_session_id = dict(session_id)
 
+    def require_owned_diagnostic_session(
+        self, *, session_id: dict[str, object], world_sha256: str
+    ) -> None:
+        """Require an independently established local controller identity and world pin."""
+        if self._diagnostic_session is not None or self._diagnostic_failed:
+            raise ProtocolError("diagnostic capability requires a fresh client")
+        if (
+            type(session_id.get("pid")) is not int
+            or type(session_id.get("start_time")) not in (int, float)
+            or not isinstance(session_id.get("nonce"), str)
+            or not isinstance(world_sha256, str)
+            or re.fullmatch("[0-9a-f]{64}", world_sha256) is None
+        ):
+            self._diagnostic_failed = True
+            raise ProtocolError("invalid independently attested diagnostic pins")
+        self.expect_session(session_id)
+        self._require_diagnostic_session("webots", world_sha256)
+
     def require_diagnostic_session(self, *, expected_backend: str) -> None:
         """Validate capability before any campaign mutation and pin its server session."""
+        self._require_diagnostic_session(expected_backend, None)
+
+    def _require_diagnostic_session(self, expected_backend: str, world_sha256: str | None) -> None:
         if self._diagnostic_session is not None or self._diagnostic_failed:
             raise ProtocolError("diagnostic capability requires a fresh client")
         # Fail closed even when the ping or its decoding raises.
@@ -240,6 +262,10 @@ class ZmqBackendClient:
             or not nonce.strip()
         ):
             raise ProtocolError("diagnostic capability requires a valid session identity")
+        if self._expected_session_id is not None and session != self._expected_session_id:
+            raise ProtocolError("diagnostic controller differs from the expected session")
+        if world_sha256 is not None and payload.get("world_sha256") != world_sha256:
+            raise ProtocolError("diagnostic controller world hash mismatch")
         capabilities = payload.get("capabilities")
         version = capabilities.get("diagnostic_step") if isinstance(capabilities, dict) else None
         if type(version) is not int or version != 1:
@@ -248,6 +274,18 @@ class ZmqBackendClient:
             raise ProtocolError(f"diagnostic backend must advertise {expected_backend!r}")
         self._diagnostic_session = dict(session)
         self._diagnostic_failed = False
+
+    def shutdown_diagnostic_session(self, *, session_id: dict[str, object]) -> dict[str, Any]:
+        """Return an owned guarded shutdown acknowledgement or raise, and close the socket."""
+        try:
+            if self._diagnostic_session is None or self._diagnostic_session != session_id:
+                raise ProtocolError("shutdown requires the exact pinned diagnostic session")
+            response = self._request("shutdown", {})
+            if response["payload"].get("status") != "stopped":
+                raise ProtocolError("diagnostic shutdown acknowledgement missing")
+            return response["payload"]
+        finally:
+            self.close()
 
     def stop(self) -> None:
         if self._closed:

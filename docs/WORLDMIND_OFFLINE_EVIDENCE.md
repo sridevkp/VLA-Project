@@ -66,3 +66,28 @@ Historical recordings, frozen configurations and scientific definitions remain
 unchanged. Future use requires separate review of source and numeric binding
 provenance, the collection policy and safety gates, the calibration estimand,
 and the approval manifest. No fixture archive qualifies as calibration evidence.
+
+## ADR-0083 fixture acquisition
+
+`acquire_fixture_decision` takes a prepared FakeBackend observation for decision zero
+of a bound VALIDATION episode. Callers provide the fixture's explicit base-frame goal
+declaration and source provenance. The adapter verifies config, definitions, and plan
+hashes and preserves the declared source fingerprint. Opaque component providers
+continue to receive the original state, action chunk, and trajectory. Their identities
+are external fixture references if supplied. The goal declaration alone does not
+attest what an opaque component provider computed.
+
+The adapter shares fixture input and pool construction and delegates to the existing
+comparison planner and `execute_first`. It copies evidence at capture boundaries.
+An unavailable complete ranking can leave valid partial evidence. A planner selection
+that cannot pass evidence reconciliation is kept separately from the execution
+selection and cannot reach the FakeBackend apply. Scores reconstructed from captured
+finite fixture components use the planner's expression and order. Fixture-only
+component values are kept distinct from values with supplied binding references.
+
+One observed tick yields a one-step pairing prefix, with no claim about the rest of
+the horizon. A backend exception or an invalid step reply leaves its outcome unknown.
+A valid step reply followed by an observation conversion failure preserves the
+confirmed tick and leaves the resulting state absent. The adapter has no retry or
+recovery loop. Phase timings are empty because the fixture has no authoritative phase
+timing record. Successful one-tick capture leaves the episode in progress.

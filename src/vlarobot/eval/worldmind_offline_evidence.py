@@ -614,6 +614,16 @@ def _validate(records: dict[str, Any], digest: str) -> OfflineEvidence:
     return OfflineEvidence(digest, records, complete, not blockers, tuple(blockers))
 
 
+def validate_offline_observed_state(state: WorldState, expected_objects: tuple[str, ...]) -> None:
+    """Validate a newly observed state without assigning an execution outcome."""
+    _state(state, expected_objects)
+
+
+def validate_offline_records(records: dict[str, Any]) -> None:
+    """Check an in-memory index before allowing the offline fixture to apply an action."""
+    _validate(records, "")
+
+
 def read_evidence(path: Path, *, expected_digest: str | None = None) -> OfflineEvidence:
     """Validate the bundle, cross-references and semantic reconciliation without side effects."""
     try:

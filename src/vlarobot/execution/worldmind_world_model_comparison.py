@@ -90,14 +90,44 @@ class WorldModelComparisonFixture:
             raise TypeError("offline comparison execution requires FakeBackend")
         if type(seed) is not int or seed not in FROZEN_SEEDS:
             raise ValueError("offline comparison requires a frozen episode seed")
+        task, state = self.prepare_fixture_input(backend, observation)
+        generation, candidates = self.generate_fixture_pool(
+            task, state, episode_id=episode_id, seed=seed, decision_index=decision_index
+        )
+        selection = self.planner.select(state, candidates)
+        after, applied = execute_first(selection, observation, backend, self.monitor)
+        return ComparisonFixtureDecision(
+            provenance=self.provenance,
+            generation=generation,
+            candidate_ids=tuple(candidate_id(i) for i in range(len(candidates))),
+            candidates=candidates,
+            selection=selection,
+            selected_candidate_id=None
+            if selection.index is None
+            else candidate_id(selection.index),
+            apply_result=applied,
+            observation_after=after,
+        )
+
+    def prepare_fixture_input(
+        self, backend: FakeBackend, observation: Observation
+    ) -> tuple[TaskSpec, WorldState]:
+        """Expose the actual fixture task and observed world state to offline capture."""
+        if not isinstance(backend, FakeBackend):
+            raise TypeError("offline comparison execution requires FakeBackend")
         task = TaskSpec(
             instruction=self.config.task.instruction,
             target=self.config.task.target,
             destination=self.config.task.destination,
         )
-        state = _world_state(
+        return task, _world_state(
             observation, backend.get_ground_truth(), self.config, target=task.target
         )
+
+    def generate_fixture_pool(
+        self, task: TaskSpec, state: WorldState, *, episode_id: str, seed: int, decision_index: int
+    ) -> tuple[GenerationObservation, tuple[ActionChunk, ...]]:
+        """Share the existing all-or-error generator with the acquisition adapter."""
         adapter_config = self.config.adapter
         waypoint_factory = self.bindings.waypoint_factories.get(adapter_config.waypoints_binding)
         waypoints = (
@@ -134,20 +164,7 @@ class WorldModelComparisonFixture:
             generator, episode_id=episode_id, decision_id=f"{episode_id}-d{decision_index:02d}"
         )
         candidates = tuple(probe.propose(task, state, None))
-        selection = self.planner.select(state, candidates)
-        after, applied = execute_first(selection, observation, backend, self.monitor)
-        return ComparisonFixtureDecision(
-            provenance=self.provenance,
-            generation=probe.observations[0],
-            candidate_ids=tuple(candidate_id(i) for i in range(len(candidates))),
-            candidates=candidates,
-            selection=selection,
-            selected_candidate_id=None
-            if selection.index is None
-            else candidate_id(selection.index),
-            apply_result=applied,
-            observation_after=after,
-        )
+        return probe.observations[0], candidates
 
 
 @dataclass(frozen=True)

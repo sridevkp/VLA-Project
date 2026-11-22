@@ -131,3 +131,19 @@ directory synchronization. A filesystem or platform without that capability fail
 closed before submission. These are local storage and fixture guarantees. A future
 physical path requires separate review of storage durability, runtime attestation,
 session transport and raw sensor admission.
+
+### Read-only finger mapping check
+
+The guarded diagnostic client's `inspect_fingers()` request is a getter-only
+operation. It resolves each configured motor and position sensor, compares it
+with the controller's cached pair, and captures raw coordinates, limits, the
+direct Supervisor position field where available, and before/after physics
+identity. It never builds an observation, changes a device, or advances physics.
+The endpoint and simulator launch require separate owner authorization.
+
+A matching negative direct and cached sensor value is a raw out-of-range
+reading, even if the Supervisor field differs. Record disagreements as evidence
+for mapping or sampling diagnosis, with no change to admission. Missing nodes
+or inaccessible Supervisor fields leave that cross-check incomplete. The
+generic inspect observation builder updates velocity bookkeeping, so use the
+finger-only request before reset when that bookkeeping must be preserved.

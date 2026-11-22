@@ -149,6 +149,12 @@ class ZmqBackendClient:
         response = self._request("get_gt", {})
         return self._expect(response, "ground_truth", GroundTruth)
 
+    def inspect_fingers(self) -> dict[str, Any]:
+        """Read raw finger-device identity and coordinates from the pinned diagnostic session."""
+        if self._diagnostic_session is None:
+            raise ProtocolError("finger inspection requires a pinned diagnostic session")
+        return self._request("inspect_fingers", {})["payload"]
+
     def inspect(self) -> dict[str, Any]:
         """Read a backend snapshot without applying actions or advancing simulation."""
         response = self._request("inspect", {})
@@ -295,7 +301,14 @@ class ZmqBackendClient:
         session = self._diagnostic_session
         if session is None:
             return self._exchange(operation, payload, timeout_ms)
-        if operation not in ("reset", "apply", "diagnostic_step", "get_gt", "shutdown"):
+        if operation not in (
+            "reset",
+            "apply",
+            "diagnostic_step",
+            "get_gt",
+            "shutdown",
+            "inspect_fingers",
+        ):
             raise ProtocolError(f"operation {operation!r} is unavailable in a diagnostic session")
 
         # A server predating the gate rejects this new request type before dispatch.

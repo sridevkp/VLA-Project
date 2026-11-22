@@ -157,7 +157,14 @@ class SimServer:
                     raise ProtocolError("diagnostic_session_identity_mismatch")
                 operation = payload.get("operation")
                 payload = payload.get("arguments")
-                if operation not in ("reset", "apply", "diagnostic_step", "get_gt", "shutdown"):
+                if operation not in (
+                    "reset",
+                    "apply",
+                    "diagnostic_step",
+                    "get_gt",
+                    "shutdown",
+                    "inspect_fingers",
+                ):
                     raise ProtocolError("diagnostic_session_unsupported_operation")
                 if not isinstance(payload, dict):
                     raise ProtocolError("diagnostic_session_invalid_arguments")
@@ -219,6 +226,14 @@ class SimServer:
                 response_payload = {"result": result}
             elif operation == "get_gt":
                 response_payload = {"ground_truth": self.backend.get_ground_truth()}
+            elif operation == "inspect_fingers":
+                if not guarded or payload:
+                    raise ProtocolError(
+                        "finger inspection requires a guarded session and no arguments"
+                    )
+                from vlarobot.backends.webots.finger_admission_probe import capture_finger_admission
+
+                response_payload = capture_finger_admission(self.backend)
             elif operation == "inspect":
                 from vlarobot.backends.read_only_state import capture_read_only_state
 

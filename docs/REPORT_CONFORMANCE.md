@@ -113,3 +113,12 @@ Fake-backend integration runs, replay conditioning, inert tests and CPU fixtures
 explicitly **not** gate evidence. Nominal-kernel profiling is not full-system latency.
 The submitted report remains a hash-matched candidate until the owner's confirmation is
 recorded in `docs/DECISIONS.md`.
+
+### Frozen VALIDATION coverage check
+
+`eval/worldmind_validation_coverage.py::load_canonical_baseline_coverage` checks
+the reviewed canonical summary's SHA-256 and reconciles its records to the
+exact frozen 18 trial keys. It preserves raw failure-state labels and reports
+missing keys separately. Its structural reconciliation helper grants no
+scientific eligibility to arbitrary input. Diagnostic and fixture records
+cannot substitute for the pinned baseline or for another arm's outcomes.

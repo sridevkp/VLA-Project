@@ -744,6 +744,7 @@ def launch_webots_session(
     grace_s: float = 10.0,
     extra_env: Mapping[str, str] | None = None,
     runtime_attestation_required: bool = False,
+    rpc_shutdown_on_exit: bool = True,
 ) -> Generator[WebotsSession, None, None]:
     """Launch one Webots process that can serve many episodes (soft reset per episode).
 
@@ -753,7 +754,9 @@ def launch_webots_session(
     :func:`run_episodes`; the log and pid file land in ``trace_dir``. When
     ``runtime_attestation_required`` is set, the same resolved executable is hashed and queried
     with ``--version`` before launch and the spawned PID is bound to that evidence; unavailable
-    evidence fails before any simulator process is created.
+    evidence fails before any simulator process is created. Set
+    `rpc_shutdown_on_exit=False` when the caller owns protocol shutdown and may reject
+    an unverified peer. The context still closes its socket and cleans up its process.
     """
     trace_dir = Path(trace_dir)
     trace_dir.mkdir(parents=True, exist_ok=True)
@@ -812,7 +815,10 @@ def launch_webots_session(
                     ),
                 )
             finally:
-                _stop_client(client)
+                if rpc_shutdown_on_exit:
+                    _stop_client(client)
+                else:
+                    client.close()
                 # Let Webots exit on its own after simulationQuit(0); SIGTERM can race with
                 # its shutdown sequence and force an unnecessary SIGKILL.
                 deadline = perf_counter() + max(0.0, grace_s)

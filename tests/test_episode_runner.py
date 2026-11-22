@@ -512,3 +512,40 @@ def test_required_attestation_unavailable_fails_before_popen(
             runtime_attestation_required=True,
         ):
             raise AssertionError("the session must not be yielded")
+
+
+@pytest.mark.parametrize("reject_peer", [False, True])
+def test_explicit_owned_teardown_never_sends_ordinary_shutdown(tmp_path, monkeypatch, reject_peer):
+    process = SimpleNamespace(pid=4242, poll=lambda: 0)
+    calls = []
+    client = SimpleNamespace(close=lambda: calls.append("close"))
+    monkeypatch.setattr(episode_runner, "resolve_webots", lambda *args: "/fake/webots")
+    monkeypatch.setattr(episode_runner, "_reserve_free_port", lambda: 5555)
+    monkeypatch.setattr(episode_runner, "_popen", lambda *args: process)
+    monkeypatch.setattr(episode_runner, "wait_for_simulator", lambda *args: client)
+    monkeypatch.setattr(
+        episode_runner,
+        "_stop_client",
+        lambda *args: pytest.fail("ordinary shutdown would send RPC"),
+    )
+
+    def terminate(owned, *args, **kwargs):
+        assert owned is process
+        calls.append("terminate_owned_process")
+
+    monkeypatch.setattr(episode_runner, "_terminate_process", terminate)
+
+    def use_session():
+        with episode_runner.launch_webots_session(
+            trace_dir=tmp_path, rpc_shutdown_on_exit=False, grace_s=0.0
+        ) as session:
+            assert session.client is client and session.process is process
+            if reject_peer:
+                raise ValueError("peer ownership could not be established")
+
+    if reject_peer:
+        with pytest.raises(ValueError, match="ownership"):
+            use_session()
+    else:
+        use_session()
+    assert calls == ["close", "terminate_owned_process"]

@@ -162,3 +162,18 @@ Use the explicit guarded shutdown acknowledgement for the pinned session
 raises and closes the client. It leaves process exit to be verified separately
 against the owned launch handle. A failed operation does not reopen the guarded
 channel for shutdown, and this helper never falls back to ordinary shutdown.
+
+The future qualification should opt out of the launch context's ordinary
+shutdown RPC with `rpc_shutdown_on_exit=False`. A validated caller can request
+the explicit guarded acknowledgement once. If preflight fails, or an operation
+leaves its outcome unknown, the context closes the socket and cleans up only
+the process it launched. It does not send ordinary shutdown to a peer whose
+ownership was never established.
+
+The first eligible runtime check is a separately authorized idle,
+non-actuating finger inspection. Preserve the raw result and the owned runtime
+pins. A subsequent qualification needs separate approval for the existing reset
+and its preparation steps, then one decision and at most one selected command
+and one authoritative tick. Use a fresh non-scored evidence directory and the
+existing strict admission policy. No qualification caller or scientific
+execution entry point is registered by these helpers.

@@ -67,6 +67,8 @@ class SimServer:
 
     def __init__(self, backend: RobotBackend) -> None:
         self.backend = backend
+        self._finger_idle = os.environ.get("VLAROBOT_FINGER_IDLE_ONLY") == "1"
+        self._finger_idle_step_failed = False
         self._sim_time: float | None = None
         self._shutdown = False
         self.endpoint: str | None = None
@@ -164,10 +166,19 @@ class SimServer:
                     "get_gt",
                     "shutdown",
                     "inspect_fingers",
+                    "idle_finger_step",
                 ):
                     raise ProtocolError("diagnostic_session_unsupported_operation")
                 if not isinstance(payload, dict):
                     raise ProtocolError("diagnostic_session_invalid_arguments")
+            if self._finger_idle and (
+                operation != "ping"
+                and (
+                    not guarded
+                    or operation not in {"inspect_fingers", "idle_finger_step", "shutdown"}
+                )
+            ):
+                raise ProtocolError("idle finger session forbids this operation")
             if operation == "ping":
                 telemetry_enabled = bool(
                     getattr(self.backend, "export_sim_kinematics_enabled", None)
@@ -190,6 +201,8 @@ class SimServer:
                     backend_kind, version = capability
                     response_payload["capabilities"] = {"diagnostic_step": version}
                     response_payload["diagnostic_backend"] = backend_kind
+                if self._finger_idle:
+                    response_payload["finger_idle_only"] = 1
                 world_hash = os.environ.get("VLAROBOT_WORLD_SHA256")
                 if world_hash:
                     response_payload["world_sha256"] = world_hash
@@ -226,14 +239,28 @@ class SimServer:
                 response_payload = {"result": result}
             elif operation == "get_gt":
                 response_payload = {"ground_truth": self.backend.get_ground_truth()}
+            elif operation == "idle_finger_step":
+                if not self._finger_idle or not guarded or payload:
+                    raise ProtocolError("idle finger stepping requires an isolated guarded session")
+                from vlarobot.backends.webots.finger_admission_probe import idle_finger_step
+
+                if self._finger_idle_step_failed:
+                    raise ProtocolError("idle step is closed after a failed operation")
+                self._finger_idle_step_failed = True
+                response_payload = idle_finger_step(self.backend)
+                self._finger_idle_step_failed = response_payload.get("confirmed_ticks") != 1
             elif operation == "inspect_fingers":
                 if not guarded or payload:
                     raise ProtocolError(
                         "finger inspection requires a guarded session and no arguments"
                     )
-                from vlarobot.backends.webots.finger_admission_probe import capture_finger_admission
+                from vlarobot.backends.webots.finger_admission_probe import (
+                    capture_finger_admission,
+                    capture_idle_fingers,
+                )
 
-                response_payload = capture_finger_admission(self.backend)
+                capture = capture_idle_fingers if self._finger_idle else capture_finger_admission
+                response_payload = capture(self.backend)
             elif operation == "inspect":
                 from vlarobot.backends.read_only_state import capture_read_only_state
 

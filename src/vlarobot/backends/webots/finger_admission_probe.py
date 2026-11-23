@@ -83,3 +83,44 @@ def capture_finger_admission(backend: Any) -> dict[str, Any]:
         "reviewed_limits_m": [lower, upper],
         "readings": readings,
     }
+
+
+def idle_finger_step(backend: Any) -> dict[str, Any]:
+    """Advance one isolated physics tick without visualization or observation callbacks."""
+    before = backend._physics_step_count
+    if backend.io.ts != 32 or type(before) is not int or not 0 <= before < 32:
+        raise ValueError("idle finger step budget or time step mismatch")
+    robot = backend.io.robot
+    time_before = float(robot.getTime())
+    try:
+        status = robot.step(32)
+    except Exception as exc:
+        return {"confirmed_ticks": None, "error": str(exc)}
+    if status != 0:
+        return {"confirmed_ticks": None, "error": f"unexpected physics status {status!r}"}
+    backend._physics_step_count = before + 1
+    return {
+        "confirmed_ticks": 1,
+        "physics_step_count": before + 1,
+        "simulator_time_s": float(robot.getTime()),
+        "previous_simulator_time_s": time_before,
+    }
+
+
+def capture_idle_fingers(backend: Any) -> dict[str, Any]:
+    """Add world-frame slider endpoint geometry using Supervisor getters only."""
+    snapshot = capture_finger_admission(backend)
+    robot = backend.io.robot
+    for row in snapshot["readings"]:
+        motor = robot.getDevice(row["expected_motor"])
+        node = robot.getFromDevice(motor._tag)
+        while node is not None and node.getTypeName() != "SliderJoint":
+            node = node.getParentNode()
+        if node is None:
+            raise RuntimeError("slider joint unavailable")
+        endpoint = node.getField("endPoint").getSFNode()
+        row["endpoint_position_world_m"] = list(endpoint.getPosition())
+        row["endpoint_orientation_world"] = list(endpoint.getOrientation())
+    if robot.getTime() != snapshot["simulator_time_s"]:
+        raise RuntimeError("geometry capture crossed a physics boundary")
+    return snapshot

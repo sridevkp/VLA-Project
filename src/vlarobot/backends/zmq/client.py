@@ -151,6 +151,12 @@ class ZmqBackendClient:
         response = self._request("get_gt", {})
         return self._expect(response, "ground_truth", GroundTruth)
 
+    def idle_finger_step(self) -> dict[str, Any]:
+        """Request one idle physics tick from the independently pinned controller."""
+        if not self._owned_diagnostic_session:
+            raise ProtocolError("idle finger stepping requires an owned diagnostic session")
+        return self._request("idle_finger_step", {})["payload"]
+
     def inspect_fingers(self) -> dict[str, Any]:
         """Read raw finger-device identity and coordinates from the pinned diagnostic session."""
         if self._diagnostic_session is None:
@@ -348,6 +354,7 @@ class ZmqBackendClient:
             "get_gt",
             "shutdown",
             "inspect_fingers",
+            "idle_finger_step",
         ):
             raise ProtocolError(f"operation {operation!r} is unavailable in a diagnostic session")
 
@@ -381,6 +388,11 @@ class ZmqBackendClient:
             ):
                 # Preserve the authoritative partial reply for feedback evidence.
                 return response
+        elif operation == "idle_finger_step" and (
+            type(response["payload"].get("confirmed_ticks")) is not int
+            or response["payload"]["confirmed_ticks"] != 1
+        ):
+            return response
         self._diagnostic_failed = False
         return response
 

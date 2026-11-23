@@ -127,29 +127,38 @@ def _operation(
     directory: Path,
     session: WebotsSession,
     session_id: dict[str, object],
-    record: dict[str, Any],
+    before: Observation,
+    decision_path: Path,
+    snapshot: str,
     action: Action,
+    action_index: int,
+    verdict_sha: str | None,
     scope: str,
 ) -> tuple[str, Observation | None]:
     client = session.client
     request = _encode({"action": action}, scope)
-    snapshot = _persist(directory / "decision.msgpack", _encode(record, scope))
     intent = {
         "scope": scope,
         "session_id": session_id,
         "decision_sha256": snapshot,
         "command_sha256": _sha(request),
         "operation": "apply",
+        "action_index": action_index,
+        "motor_verdict_sha256": verdict_sha,
         "budget": 1,
     }
     intent_path = directory / "apply-intent.json"
     intent_sha = _write_event(intent_path, intent)
     _verify_event(intent_path, intent_sha)
     if (
-        _sha((directory / "decision.msgpack").read_bytes()) != snapshot
+        _sha(decision_path.read_bytes()) != snapshot
         or _encode({"action": action}, scope) != request
     ):
         raise ValueError("qualification intent no longer matches the candidate evidence")
+    if verdict_sha is not None and (
+        _sha((directory / "motor-verdict.msgpack").read_bytes()) != verdict_sha
+    ):
+        raise ValueError("qualification intent no longer matches the motor verdict")
     # Unknown outcomes leave the corresponding durable intent unresolved if its receipt cannot
     # be stored. The fresh directory gate prevents reuse or replay.
     try:
@@ -167,9 +176,7 @@ def _operation(
     if not result.accepted:
         return "backend_rejected", None
     _verify_event(directory / "apply-result.json", apply_sha)
-    return _tick(
-        directory, session, record["observation"], {"accepted_apply_sha256": apply_sha}, scope
-    )
+    return _tick(directory, session, before, {"accepted_apply_sha256": apply_sha}, scope)
 
 
 def _tick(
@@ -316,6 +323,7 @@ def _run_owned(
                 "arm": "vla_risk_veto",
                 "actual_proposer": "scripted_chunk_adapter",
                 "selection_policy": "first_eligible_in_draw_order",
+                "execution_policy": "first_action" if qualification else "selected_chunk",
                 "source_commit": head,
                 "episode": episode_id,
                 "session": owned,
@@ -429,27 +437,71 @@ def _run_owned(
             else:
                 picked = replace(rows[selected], disposition="selected")
                 rows[selected] = picked
-                action = picked.chunk.actions[0]
-                verdict = monitor.validate(action, observation.robot)
-                if not isinstance(verdict, ApplyResult) or type(verdict.accepted) is not bool:
-                    raise ValueError("invalid independent motor verdict")
-                record.update(
-                    pool=[_row_data(row) for row in rows],
-                    selected=picked.candidate_id,
-                    motor_verdict=verdict,
-                )
-                if not verdict.accepted:
-                    _persist(decision_dir / "decision.msgpack", _encode(record, scope))
-                    terminal = "motor_veto"
-                    break
-                tick_status, after = _operation(
-                    decision_dir,
-                    session,
-                    owned,
-                    record,
-                    action,
-                    scope,
-                )
+                record.update(pool=[_row_data(row) for row in rows], selected=picked.candidate_id)
+                actions = picked.chunk.actions[:1] if qualification else picked.chunk.actions
+                decision_path = decision_dir / "decision.msgpack"
+                for action_index, action in enumerate(actions):
+                    if confirmed >= config.bounds.max_steps:
+                        terminal = "WORLDMIND_BOUND_EXHAUSTED"
+                        break
+                    verdict = monitor.validate(action, observation.robot)
+                    if not isinstance(verdict, ApplyResult) or type(verdict.accepted) is not bool:
+                        raise ValueError("invalid independent motor verdict")
+                    action_dir = decision_dir
+                    verdict_sha = None
+                    if not qualification:
+                        action_dir = decision_dir / f"action-{action_index:02d}"
+                        action_dir.mkdir()
+                        _sync_dir(decision_dir)
+                        verdict_sha = _persist(
+                            action_dir / "motor-verdict.msgpack",
+                            _encode({"action": action, "motor_verdict": verdict}, scope),
+                        )
+                    if action_index == 0:
+                        record["motor_verdict"] = verdict
+                        snapshot = _persist(decision_path, _encode(record, scope))
+                    if not verdict.accepted:
+                        terminal = "motor_veto"
+                        break
+                    tick_status, after = _operation(
+                        action_dir,
+                        session,
+                        owned,
+                        observation,
+                        decision_path,
+                        snapshot,
+                        action,
+                        action_index,
+                        verdict_sha,
+                        scope,
+                    )
+                    if after is None:
+                        terminal = tick_status
+                        break
+                    confirmed += 1
+                    observation = after
+                    state, truth = observe(after, action_dir / "post-state.msgpack")
+                else:
+                    if verifier is None:
+                        terminal = tick_status
+                        break
+                    # Verification is meaningful only after the selected chunk has finished.
+                    result = verifier.check_observed(task, state)
+                    transition = verifier.next_action(result)
+                    _write_event(
+                        decision_dir / "verification.json",
+                        {
+                            "success": result.success,
+                            "reason": result.reason,
+                            "transition": transition,
+                            "verification_retries": verifier.recovery.verification_retries,
+                        },
+                    )
+                    if transition == "retry_once":
+                        terminal = "WORLDMIND_BOUND_EXHAUSTED"
+                        continue
+                    terminal = "COMPLETE" if transition == "complete" else "VERIFICATION_ABORT"
+                break
 
             if after is None:
                 terminal = tick_status
@@ -457,24 +509,6 @@ def _run_owned(
             confirmed += 1
             observation = after
             state, truth = observe(after, decision_dir / "post-state.msgpack")
-            if verifier is None:
-                terminal = tick_status
-                break
-            if selected is not None:
-                result = verifier.check_observed(task, state)
-                transition = verifier.next_action(result)
-                _write_event(
-                    decision_dir / "verification.json",
-                    {
-                        "success": result.success,
-                        "reason": result.reason,
-                        "transition": transition,
-                        "verification_retries": verifier.recovery.verification_retries,
-                    },
-                )
-                if transition != "retry_once":
-                    terminal = "COMPLETE" if transition == "complete" else "VERIFICATION_ABORT"
-                    break
             terminal = "WORLDMIND_BOUND_EXHAUSTED"
         if terminal in {"tick_unknown", "tick_unobserved", "tick_not_executed"}:
             pinned = False

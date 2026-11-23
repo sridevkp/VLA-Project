@@ -397,25 +397,16 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
         (
             "episode_complete",
             "COMPLETE",
-            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "shutdown", "close"],
+            ["pin", "inspect", "reset", "gt"]
+            + ["apply", "tick", "gt"] * 50
+            + ["shutdown", "close"],
         ),
         (
             "episode_retry",
             "VERIFICATION_ABORT",
-            [
-                "pin",
-                "inspect",
-                "reset",
-                "gt",
-                "apply",
-                "tick",
-                "gt",
-                "apply",
-                "tick",
-                "gt",
-                "shutdown",
-                "close",
-            ],
+            ["pin", "inspect", "reset", "gt"]
+            + ["apply", "tick", "gt"] * 100
+            + ["shutdown", "close"],
         ),
         (
             "episode_empty",
@@ -425,19 +416,24 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
         (
             "episode_interleaved",
             "NO_SAFE_SET",
-            [
-                "pin",
-                "inspect",
-                "reset",
-                "gt",
-                "tick",
-                "gt",
-                "apply",
-                "tick",
-                "gt",
-                "shutdown",
-                "close",
-            ],
+            ["pin", "inspect", "reset", "gt", "tick", "gt"]
+            + ["apply", "tick", "gt"] * 50
+            + ["shutdown", "close"],
+        ),
+        (
+            "episode_partial_budget",
+            "WORLDMIND_BOUND_EXHAUSTED",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "shutdown", "close"],
+        ),
+        (
+            "episode_mid_veto",
+            "motor_veto",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "shutdown", "close"],
+        ),
+        (
+            "episode_mid_unknown",
+            "tick_unknown",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "apply", "tick", "close"],
         ),
         ("episode_corrupt_reobserve", None, ["pin", "inspect", "reset", "gt", "close"]),
         (
@@ -459,12 +455,13 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
     from vlarobot.execution import worldmind_heuristic_qualification as qualification
 
     episode = fault is not None and fault.startswith("episode_")
-    if fault == "episode_budget":
+    if fault in {"episode_budget", "episode_partial_budget"}:
         config = replace(config, bounds=replace(config.bounds, max_steps=1))
     bindings, backend, *_ = _fixture(
         config,
         monkeypatch,
         motor_veto=fault == "veto",
+        prefilter=(33,) if fault == "episode_mid_veto" else (),
         rejected_rounds={
             "empty": (0,),
             "episode_empty": (0, 1),
@@ -536,9 +533,14 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
             decision = decode_message((d / "decision.msgpack").read_bytes())["payload"]
             selected = [row for row in decision["pool"] if row["disposition"] == "selected"]
             assert len(decision["pool"]) == 32 and len(selected) == 1
-            assert selected[0]["chunk"].actions[0] == action
-            assert decision["motor_verdict"].accepted
-            assert (d / "apply-intent.json").is_file()
+            action_dir = sorted(d.glob("action-*"))[-1] if episode else d
+            intent = json.loads((action_dir / "apply-intent.json").read_bytes())["payload"]
+            assert selected[0]["chunk"].actions[intent["action_index"]] == action
+            if episode:
+                verdict = decode_message((action_dir / "motor-verdict.msgpack").read_bytes())
+                assert verdict["payload"]["motor_verdict"].accepted
+            else:
+                assert decision["motor_verdict"].accepted
             if fault == "unknown_apply":
                 raise TimeoutError("lost apply reply")
             if fault == "reject":
@@ -548,12 +550,16 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
         def diagnostic_step(self):
             calls.append("tick")
             d = sorted(output.glob("decision-*"))[-1] if episode else output
+            action_dirs = sorted(d.glob("action-*"))
+            d = action_dirs[-1] if action_dirs else d
             intent = json.loads((d / "tick-intent.json").read_bytes())["payload"]
             if "reobserve_decision_sha256" in intent:
                 assert not (d / "apply-intent.json").exists()
             else:
                 assert (d / "apply-result.json").is_file()
-            if fault in {"unknown_tick", "episode_unknown"}:
+            if fault in {"unknown_tick", "episode_unknown"} or (
+                fault == "episode_mid_unknown" and d.name == "action-01"
+            ):
                 return {"confirmed_ticks": None}
             if fault == "missing_observation":
                 return {"confirmed_ticks": 1, "error": "fixture observation failed"}
@@ -615,6 +621,8 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
     else:
         assert run(session, **args) == terminal
     assert calls == expected
+    if fault in {"episode_partial_budget", "episode_mid_veto", "episode_mid_unknown"}:
+        assert not (output / "decision-0000" / "verification.json").exists()
     if fault == "missing_observation":
         receipt = json.loads((output / "tick-result.json").read_bytes())["payload"]
         assert receipt["confirmed_ticks"] == 1 and not receipt["observation_returned"]

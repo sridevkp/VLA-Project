@@ -111,6 +111,8 @@ def capture_idle_fingers(backend: Any) -> dict[str, Any]:
     """Add world-frame slider endpoint geometry using Supervisor getters only."""
     snapshot = capture_finger_admission(backend)
     robot = backend.io.robot
+    snapshot["base_position_world_m"] = list(backend.io.me.getPosition())
+    snapshot["base_orientation_world"] = list(backend.io.me.getOrientation())
     for row in snapshot["readings"]:
         motor = robot.getDevice(row["expected_motor"])
         node = robot.getFromDevice(motor._tag)
@@ -121,6 +123,9 @@ def capture_idle_fingers(backend: Any) -> dict[str, Any]:
         endpoint = node.getField("endPoint").getSFNode()
         row["endpoint_position_world_m"] = list(endpoint.getPosition())
         row["endpoint_orientation_world"] = list(endpoint.getOrientation())
-    if robot.getTime() != snapshot["simulator_time_s"]:
+    if (
+        robot.getTime() != snapshot["simulator_time_s"]
+        or backend._physics_step_count != snapshot["physics_step_count"]
+    ):
         raise RuntimeError("geometry capture crossed a physics boundary")
     return snapshot

@@ -218,6 +218,25 @@ class HeuristicComparisonFixture:
             )
         return records, selected
 
+    def build_verifier(self, observation: Observation) -> PlacementVerifier:
+        config = self.config
+        bindings = self.bindings
+        base = observation.robot.base_pose_world
+        if base is None:
+            raise ValueError("heuristic ablation requires a world-to-base transform")
+        inverse = _inverse_pose(base)
+        identity = (0.0, 0.0, 0.0, 1.0)
+        verification = config.verification
+        verifier = bindings.verification[verification.binding](
+            config,
+            compose(inverse, Pose3D(Vec3(*verification.destination_world), identity)),
+            compose(inverse, Pose3D(Vec3(*verification.rest_center_world), identity)),
+            bindings.inputs.get("verification", {}),
+        )
+        if not isinstance(verifier, PlacementVerifier):
+            raise TypeError("heuristic ablation requires PlacementVerifier")
+        return verifier
+
     def execute_fixture_episode(
         self, backend: FakeBackend, observation: Observation, *, episode_id: str, seed: int
     ) -> HeuristicFixtureEpisode:
@@ -231,20 +250,7 @@ class HeuristicComparisonFixture:
         monitor = bindings.safety[config.safety.binding](config, bindings.inputs.get("safety", {}))
         if not isinstance(monitor, SafetyMonitor):
             raise TypeError("offline heuristic ablation requires a SafetyMonitor")
-        base = observation.robot.base_pose_world
-        if base is None:
-            raise ValueError("offline heuristic ablation requires a world-to-base transform")
-        inverse = _inverse_pose(base)
-        identity = (0.0, 0.0, 0.0, 1.0)
-        verification = config.verification
-        verifier = bindings.verification[verification.binding](
-            config,
-            compose(inverse, Pose3D(Vec3(*verification.destination_world), identity)),
-            compose(inverse, Pose3D(Vec3(*verification.rest_center_world), identity)),
-            bindings.inputs.get("verification", {}),
-        )
-        if not isinstance(verifier, PlacementVerifier):
-            raise TypeError("offline heuristic ablation requires PlacementVerifier")
+        verifier = self.build_verifier(observation)
         task = TaskSpec(config.task.instruction, config.task.target, config.task.destination)
         no_safe = RecoveryState()
         decisions: list[HeuristicDecision] = []

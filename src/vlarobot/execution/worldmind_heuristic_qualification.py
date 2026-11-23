@@ -1,4 +1,4 @@
-"""One explicitly authorized, non-scored ADR-0084 Webots qualification.
+"""Guarded, non-scored ADR-0084 Webots qualification and episode execution.
 
 The caller owns the launch context and its process cleanup. This module registers no CLI.
 """
@@ -15,12 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 from vlarobot.backends.webots.runtime_attestation import read_owned_controller_session
 from vlarobot.backends.worldmind_bindings import production_worldmind_bindings
-from vlarobot.core.types import Action, ApplyResult, Observation, TaskSpec
+from vlarobot.core.types import Action, ApplyResult, GroundTruth, Observation, TaskSpec, WorldState
 from vlarobot.core.wire import encode_message, make_message
 from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.worldmind_config import (
     FROZEN_CONTROL_DT_S,
-    WorldMindDiagnosticConfig,
     load_worldmind_diagnostic_config,
 )
 from vlarobot.eval.worldmind_offline_evidence import validate_offline_observed_state
@@ -29,6 +28,7 @@ from vlarobot.execution.worldmind_heuristic_comparison import build_offline_heur
 from vlarobot.execution.worldmind_offline_boundary import _sync_dir, _verify_event, _write_event  # noqa: PLC2701
 from vlarobot.execution.worldmind_pipeline import _world_state  # noqa: PLC2701
 from vlarobot.execution.worldmind_stage1_pipeline import _plan_sha256  # noqa: PLC2701
+from vlarobot.risk.gate import RecoveryState
 
 if TYPE_CHECKING:
     from vlarobot.execution.episode_runner import WebotsSession
@@ -59,8 +59,8 @@ def _persist(path: Path, raw: bytes) -> str:
     return _sha(raw)
 
 
-def _encode(payload: dict[str, Any]) -> bytes:
-    return encode_message(make_message(_SCOPE, 0, payload))
+def _encode(payload: dict[str, Any], scope: str = _SCOPE) -> bytes:
+    return encode_message(make_message(scope, 0, payload))
 
 
 def _raw(value: Any) -> bool:
@@ -129,13 +129,13 @@ def _operation(
     session_id: dict[str, object],
     record: dict[str, Any],
     action: Action,
-    config: WorldMindDiagnosticConfig,
-) -> str:
+    scope: str,
+) -> tuple[str, Observation | None]:
     client = session.client
-    request = _encode({"action": action})
-    snapshot = _persist(directory / "decision.msgpack", _encode(record))
+    request = _encode({"action": action}, scope)
+    snapshot = _persist(directory / "decision.msgpack", _encode(record, scope))
     intent = {
-        "scope": _SCOPE,
+        "scope": scope,
         "session_id": session_id,
         "decision_sha256": snapshot,
         "command_sha256": _sha(request),
@@ -147,7 +147,7 @@ def _operation(
     _verify_event(intent_path, intent_sha)
     if (
         _sha((directory / "decision.msgpack").read_bytes()) != snapshot
-        or _encode({"action": action}) != request
+        or _encode({"action": action}, scope) != request
     ):
         raise ValueError("qualification intent no longer matches the candidate evidence")
     # Unknown outcomes leave the corresponding durable intent unresolved if its receipt cannot
@@ -165,11 +165,29 @@ def _operation(
         {"status": "accepted" if result.accepted else "rejected", "reason": result.reason},
     )
     if not result.accepted:
-        return "backend_rejected"
+        return "backend_rejected", None
     _verify_event(directory / "apply-result.json", apply_sha)
+    return _tick(
+        directory, session, record["observation"], {"accepted_apply_sha256": apply_sha}, scope
+    )
+
+
+def _tick(
+    directory: Path,
+    session: WebotsSession,
+    before: Observation,
+    intent: dict[str, Any],
+    scope: str,
+) -> tuple[str, Observation | None]:
+    client = session.client
     tick_path = directory / "tick-intent.json"
-    tick_sha = _write_event(tick_path, {"accepted_apply_sha256": apply_sha, "budget": 1})
+    tick_sha = _write_event(tick_path, {**intent, "budget": 1})
     _verify_event(tick_path, tick_sha)
+    reobserve_digest = intent.get("reobserve_decision_sha256")
+    if reobserve_digest is not None and (
+        _sha((directory / "decision.msgpack").read_bytes()) != reobserve_digest
+    ):
+        raise ValueError("re-observation intent no longer matches the candidate evidence")
     try:
         reply = client.diagnostic_step()
     except Exception as exc:
@@ -189,20 +207,16 @@ def _operation(
         },
     )
     if authoritative is None:
-        return "tick_unknown"
+        return "tick_unknown", None
     if authoritative == 0:
-        return "tick_not_executed"
+        return "tick_not_executed", None
     if not isinstance(after, Observation):
-        return "tick_unobserved"
-    _persist(directory / "post-tick.msgpack", _encode({"observation": after}))
+        return "tick_unobserved", None
+    _persist(directory / "post-tick.msgpack", _encode({"observation": after}, scope))
     _admit(after)
-    if not math.isclose(after.t - record["observation"].t, FROZEN_CONTROL_DT_S):
+    if not math.isclose(after.t - before.t, FROZEN_CONTROL_DT_S):
         raise ValueError("post-tick observation time does not match one control tick")
-    post_truth = client.get_ground_truth()
-    post_state = _world_state(after, post_truth, config, target=record["task"].target)
-    validate_offline_observed_state(post_state, (record["task"].target,))
-    _persist(directory / "post-state.msgpack", _encode({"state": post_state, "oracle": post_truth}))
-    return "one_tick_observed"
+    return "one_tick_observed", after
 
 
 def _verified_head(expected: str) -> str:
@@ -224,6 +238,42 @@ def run_heuristic_qualification(
     expected_head: str,
 ) -> str:
     """Run the fixed arm-3 qualification envelope in a separately authorized owned launch."""
+    return _run_owned(
+        session, status_path, launch_started_at_s, directory, expected_head, _EPISODE, _SCOPE
+    )
+
+
+def run_heuristic_episode(
+    session: WebotsSession,
+    *,
+    status_path: Path,
+    launch_started_at_s: float,
+    directory: Path,
+    expected_head: str,
+    episode_id: str,
+) -> str:
+    """Run one separately authorized, non-scored ADR-0084 episode in an owned launch."""
+    return _run_owned(
+        session,
+        status_path,
+        launch_started_at_s,
+        directory,
+        expected_head,
+        episode_id,
+        "non_scored_arm3_guarded_episode",
+    )
+
+
+def _run_owned(
+    session: WebotsSession,
+    status_path: Path,
+    launch_started_at_s: float,
+    directory: Path,
+    expected_head: str,
+    episode_id: str,
+    scope: str,
+) -> str:
+    qualification = scope == _SCOPE
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
     for path, digest in (
@@ -236,7 +286,9 @@ def run_heuristic_qualification(
     plan = build_episode_plan("validation", 0)
     if len(plan) != 18 or _plan_sha256(plan) != _PLAN:
         raise ValueError("qualification VALIDATION plan pin mismatch")
-    entry = next(row for row in plan if row.scene.name == _EPISODE)
+    entry = next((row for row in plan if row.scene.name == episode_id), None)
+    if entry is None:
+        raise ValueError("episode is outside the frozen VALIDATION plan")
     attestation = session.runtime_attestation
     if (
         not session.endpoint.startswith("tcp://127.0.0.1:")
@@ -260,12 +312,12 @@ def run_heuristic_qualification(
         _write_event(
             directory / "scope.json",
             {
-                "scope": _SCOPE,
+                "scope": scope,
                 "arm": "vla_risk_veto",
                 "actual_proposer": "scripted_chunk_adapter",
                 "selection_policy": "first_eligible_in_draw_order",
                 "source_commit": head,
-                "episode": _EPISODE,
+                "episode": episode_id,
                 "session": owned,
                 "endpoint": session.endpoint,
                 "runtime": dict(attestation),
@@ -283,7 +335,7 @@ def run_heuristic_qualification(
             },
         )
         probe = session.client.inspect_fingers()
-        _persist(directory / "pre-reset-fingers.msgpack", _encode(probe))
+        _persist(directory / "pre-reset-fingers.msgpack", _encode(probe, scope))
         _check_probe(probe, owned)
         config = load_worldmind_diagnostic_config(config_path)
         bindings = production_worldmind_bindings()
@@ -291,62 +343,145 @@ def run_heuristic_qualification(
         monitor = bindings.safety[config.safety.binding](config, bindings.inputs.get("safety", {}))
         if not isinstance(monitor, SafetyMonitor):
             raise TypeError("arm-3 qualification requires the independent SafetyMonitor")
-        _write_event(directory / "reset-intent.json", {"episode": _EPISODE, "seed": entry.seed})
+        _write_event(directory / "reset-intent.json", {"episode": episode_id, "seed": entry.seed})
         observation = session.client.reset(entry.scene, entry.seed)
-        _persist(directory / "reset-observation.msgpack", _encode({"observation": observation}))
+        _persist(
+            directory / "reset-observation.msgpack", _encode({"observation": observation}, scope)
+        )
         _admit(observation)
         task = TaskSpec(config.task.instruction, config.task.target, config.task.destination)
-        truth = session.client.get_ground_truth()
         required = {task.target} | {item["def"] for item in entry.scene.objects}
-        if not required <= truth.object_poses.keys():
-            raise ValueError("qualification is missing a frozen scene object")
-        state = _world_state(observation, truth, config, target=task.target)
-        validate_offline_observed_state(state, (task.target,))
-        generation, pool = fixture._pool(  # noqa: PLC2701
-            task, state, monitor, episode_id=_EPISODE, seed=entry.seed, decision_index=0
-        )
-        rows, selected = fixture.assess_pool(state, observation, monitor, generation, pool)
-        if selected is None:
-            _persist(
-                directory / "decision.msgpack",
-                _encode(
-                    {
-                        "state": state,
-                        "task": task,
-                        "observation": observation,
-                        "oracle": truth,
-                        "generation": asdict(generation),
-                        "pool": [_row_data(row) for row in rows],
-                        "selected": None,
-                    }
-                ),
+
+        def observe(obs: Observation, evidence_path: Path) -> tuple[WorldState, GroundTruth]:
+            truth = session.client.get_ground_truth()
+            if not required <= truth.object_poses.keys():
+                raise ValueError("episode is missing a frozen scene object")
+            state = _world_state(obs, truth, config, target=task.target)
+            validate_offline_observed_state(state, (task.target,))
+            _persist(evidence_path, _encode({"state": state, "oracle": truth}, scope))
+            return state, truth
+
+        state, truth = observe(observation, directory / "observed-state.msgpack")
+        verifier = None if qualification else fixture.build_verifier(observation)
+        no_safe = RecoveryState()
+        confirmed = 0
+        terminal = "WORLDMIND_BOUND_EXHAUSTED"
+        max_decisions = 1 if qualification else config.bounds.max_decisions
+        for decision_index in range(max_decisions):
+            if confirmed >= config.bounds.max_steps:
+                break
+            decision_dir = directory
+            if not qualification:
+                decision_dir = directory / f"decision-{decision_index:04d}"
+                decision_dir.mkdir()
+                _sync_dir(directory)
+
+            generation, pool = fixture._pool(  # noqa: PLC2701
+                task,
+                state,
+                monitor,
+                episode_id=episode_id,
+                seed=entry.seed,
+                decision_index=decision_index,
             )
-            terminal = "empty_eligible_set"
-        else:
-            rows[selected] = replace(rows[selected], disposition="selected")
-            picked = rows[selected]
-            action = picked.chunk.actions[0]
-            verdict = monitor.validate(action, observation.robot)
-            if not isinstance(verdict, ApplyResult) or type(verdict.accepted) is not bool:
-                raise ValueError("invalid independent motor verdict")
+            rows, selected = fixture.assess_pool(state, observation, monitor, generation, pool)
             record = {
                 "state": state,
                 "task": task,
                 "observation": observation,
                 "oracle": truth,
                 "generation": asdict(generation),
-                "pool": [_row_data(row) for row in rows],
-                "selected": picked.candidate_id,
-                "motor_verdict": verdict,
+                "selected": None,
             }
-            if not verdict.accepted:
-                _persist(directory / "decision.msgpack", _encode(record))
-                terminal = "motor_veto"
+            if selected is None:
+                record["pool"] = [_row_data(row) for row in rows]
+                digest = _persist(decision_dir / "decision.msgpack", _encode(record, scope))
+                terminal = "empty_eligible_set" if qualification else "NO_SAFE_SET"
+                if qualification:
+                    break
+                transition = no_safe.no_safe()
+                if transition != "reobserve":
+                    _write_event(
+                        decision_dir / "recovery.json",
+                        {
+                            "transition": "alternate_candidate_family:unavailable",
+                            "empty_sets": no_safe.no_safe_count,
+                        },
+                    )
+                    break
+                if decision_index + 1 == max_decisions:
+                    terminal = "WORLDMIND_BOUND_EXHAUSTED"
+                    break
+                _write_event(
+                    decision_dir / "recovery.json",
+                    {
+                        "transition": transition,
+                        "empty_sets": no_safe.no_safe_count,
+                    },
+                )
+                tick_status, after = _tick(
+                    decision_dir,
+                    session,
+                    observation,
+                    {"reobserve_decision_sha256": digest},
+                    scope,
+                )
             else:
-                terminal = _operation(directory, session, owned, record, action, config)
+                picked = replace(rows[selected], disposition="selected")
+                rows[selected] = picked
+                action = picked.chunk.actions[0]
+                verdict = monitor.validate(action, observation.robot)
+                if not isinstance(verdict, ApplyResult) or type(verdict.accepted) is not bool:
+                    raise ValueError("invalid independent motor verdict")
+                record.update(
+                    pool=[_row_data(row) for row in rows],
+                    selected=picked.candidate_id,
+                    motor_verdict=verdict,
+                )
+                if not verdict.accepted:
+                    _persist(decision_dir / "decision.msgpack", _encode(record, scope))
+                    terminal = "motor_veto"
+                    break
+                tick_status, after = _operation(
+                    decision_dir,
+                    session,
+                    owned,
+                    record,
+                    action,
+                    scope,
+                )
+
+            if after is None:
+                terminal = tick_status
+                break
+            confirmed += 1
+            observation = after
+            state, truth = observe(after, decision_dir / "post-state.msgpack")
+            if verifier is None:
+                terminal = tick_status
+                break
+            if selected is not None:
+                result = verifier.check_observed(task, state)
+                transition = verifier.next_action(result)
+                _write_event(
+                    decision_dir / "verification.json",
+                    {
+                        "success": result.success,
+                        "reason": result.reason,
+                        "transition": transition,
+                        "verification_retries": verifier.recovery.verification_retries,
+                    },
+                )
+                if transition != "retry_once":
+                    terminal = "COMPLETE" if transition == "complete" else "VERIFICATION_ABORT"
+                    break
+            terminal = "WORLDMIND_BOUND_EXHAUSTED"
         if terminal in {"tick_unknown", "tick_unobserved", "tick_not_executed"}:
             pinned = False
-        _write_event(directory / "terminal.json", {"status": terminal, "scored": False})
+        _write_event(
+            directory / "terminal.json",
+            {"status": terminal, "scored": False, "confirmed_observed_ticks": confirmed},
+        )
         return terminal
     except BaseException as exc:
         # On failure use the owned launch context for cleanup without another RPC.

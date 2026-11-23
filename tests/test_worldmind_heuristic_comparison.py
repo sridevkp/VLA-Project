@@ -394,19 +394,88 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
             "tick_unobserved",
             ["pin", "inspect", "reset", "gt", "apply", "tick", "close"],
         ),
+        (
+            "episode_complete",
+            "COMPLETE",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "shutdown", "close"],
+        ),
+        (
+            "episode_retry",
+            "VERIFICATION_ABORT",
+            [
+                "pin",
+                "inspect",
+                "reset",
+                "gt",
+                "apply",
+                "tick",
+                "gt",
+                "apply",
+                "tick",
+                "gt",
+                "shutdown",
+                "close",
+            ],
+        ),
+        (
+            "episode_empty",
+            "NO_SAFE_SET",
+            ["pin", "inspect", "reset", "gt", "tick", "gt", "shutdown", "close"],
+        ),
+        (
+            "episode_interleaved",
+            "NO_SAFE_SET",
+            [
+                "pin",
+                "inspect",
+                "reset",
+                "gt",
+                "tick",
+                "gt",
+                "apply",
+                "tick",
+                "gt",
+                "shutdown",
+                "close",
+            ],
+        ),
+        ("episode_corrupt_reobserve", None, ["pin", "inspect", "reset", "gt", "close"]),
+        (
+            "episode_unknown",
+            "tick_unknown",
+            ["pin", "inspect", "reset", "gt", "tick", "close"],
+        ),
+        (
+            "episode_budget",
+            "WORLDMIND_BOUND_EXHAUSTED",
+            ["pin", "inspect", "reset", "gt", "tick", "gt", "shutdown", "close"],
+        ),
     ],
 )
-def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal, expected):
+def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expected):
     import json
 
     from vlarobot.core.wire import decode_message
     from vlarobot.execution import worldmind_heuristic_qualification as qualification
 
+    episode = fault is not None and fault.startswith("episode_")
+    if fault == "episode_budget":
+        config = replace(config, bounds=replace(config.bounds, max_steps=1))
     bindings, backend, *_ = _fixture(
         config,
         monkeypatch,
         motor_veto=fault == "veto",
-        rejected_rounds=(0,) if fault == "empty" else (),
+        rejected_rounds={
+            "empty": (0,),
+            "episode_empty": (0, 1),
+            "episode_interleaved": (0, 2),
+            "episode_unknown": (0,),
+            "episode_corrupt_reobserve": (0,),
+            "episode_budget": (0,),
+        }.get(fault, ()),
+        verification=(False, False)
+        if fault in {"episode_retry", "episode_interleaved"}
+        else (True,),
     )
     calls = []
     owned = {"pid": 42, "start_time": 1.0, "nonce": "fixture"}
@@ -463,12 +532,13 @@ def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal,
 
         def apply(self, action):
             calls.append("apply")
-            decision = decode_message((output / "decision.msgpack").read_bytes())["payload"]
+            d = sorted(output.glob("decision-*"))[-1] if episode else output
+            decision = decode_message((d / "decision.msgpack").read_bytes())["payload"]
             selected = [row for row in decision["pool"] if row["disposition"] == "selected"]
             assert len(decision["pool"]) == 32 and len(selected) == 1
             assert selected[0]["chunk"].actions[0] == action
             assert decision["motor_verdict"].accepted
-            assert (output / "apply-intent.json").is_file()
+            assert (d / "apply-intent.json").is_file()
             if fault == "unknown_apply":
                 raise TimeoutError("lost apply reply")
             if fault == "reject":
@@ -477,9 +547,13 @@ def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal,
 
         def diagnostic_step(self):
             calls.append("tick")
-            assert (output / "apply-result.json").is_file()
-            assert (output / "tick-intent.json").is_file()
-            if fault == "unknown_tick":
+            d = sorted(output.glob("decision-*"))[-1] if episode else output
+            intent = json.loads((d / "tick-intent.json").read_bytes())["payload"]
+            if "reobserve_decision_sha256" in intent:
+                assert not (d / "apply-intent.json").exists()
+            else:
+                assert (d / "apply-result.json").is_file()
+            if fault in {"unknown_tick", "episode_unknown"}:
                 return {"confirmed_ticks": None}
             if fault == "missing_observation":
                 return {"confirmed_ticks": 1, "error": "fixture observation failed"}
@@ -509,6 +583,7 @@ def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal,
     monkeypatch.setattr(qualification, "_verified_head", lambda expected: expected)
     monkeypatch.setattr(qualification, "production_worldmind_bindings", lambda: bindings)
     monkeypatch.setattr(qualification, "read_owned_controller_session", lambda *a, **kw: owned)
+    monkeypatch.setattr(qualification, "load_worldmind_diagnostic_config", lambda path: config)
     writer = qualification._write_event
 
     def injected_write(path, payload):
@@ -519,6 +594,8 @@ def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal,
         digest = writer(path, payload)
         if path.name == "apply-intent.json" and fault == "corrupt_intent":
             path.write_bytes(b"{}")
+        if path.name == "tick-intent.json" and fault == "episode_corrupt_reobserve":
+            path.with_name("decision.msgpack").write_bytes(b"corrupt decision")
         return digest
 
     monkeypatch.setattr(qualification, "_write_event", injected_write)
@@ -528,15 +605,19 @@ def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal,
         directory=output,
         expected_head="approved-fixture",
     )
+    run = qualification.run_heuristic_qualification
+    if episode:
+        run = qualification.run_heuristic_episode
+        args["episode_id"] = "validation-clear-i00-s0"
     if terminal is None:
         with pytest.raises((ValueError, OSError, KeyError)):
-            qualification.run_heuristic_qualification(session, **args)
+            run(session, **args)
     else:
-        assert qualification.run_heuristic_qualification(session, **args) == terminal
+        assert run(session, **args) == terminal
     assert calls == expected
     if fault == "missing_observation":
         receipt = json.loads((output / "tick-result.json").read_bytes())["payload"]
         assert receipt["confirmed_ticks"] == 1 and not receipt["observation_returned"]
     with pytest.raises(FileExistsError):
-        qualification.run_heuristic_qualification(session, **args)
+        run(session, **args)
     assert calls == expected

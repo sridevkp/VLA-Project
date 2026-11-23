@@ -361,3 +361,182 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
     assert not table51_comparison_eligible("Risk rejection rate", arms, {arms[0]: values})
     with pytest.raises((TypeError, ValueError)):
         table51_values(defs, {name: item.value for name, item in values.items()})
+
+
+@pytest.mark.parametrize(
+    ("fault", "terminal", "expected"),
+    [
+        (
+            None,
+            "one_tick_observed",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "shutdown", "close"],
+        ),
+        ("negative", None, ["pin", "inspect", "close"]),
+        ("bad_observation", None, ["pin", "inspect", "reset", "close"]),
+        ("empty", "empty_eligible_set", ["pin", "inspect", "reset", "gt", "shutdown", "close"]),
+        ("veto", "motor_veto", ["pin", "inspect", "reset", "gt", "shutdown", "close"]),
+        ("storage", None, ["pin", "inspect", "reset", "gt", "close"]),
+        ("corrupt_intent", None, ["pin", "inspect", "reset", "gt", "close"]),
+        (
+            "reject",
+            "backend_rejected",
+            ["pin", "inspect", "reset", "gt", "apply", "shutdown", "close"],
+        ),
+        ("unknown_apply", None, ["pin", "inspect", "reset", "gt", "apply", "close"]),
+        ("receipt_storage", None, ["pin", "inspect", "reset", "gt", "apply", "close"]),
+        (
+            "unknown_tick",
+            "tick_unknown",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "close"],
+        ),
+        (
+            "missing_observation",
+            "tick_unobserved",
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "close"],
+        ),
+    ],
+)
+def test_owned_one_decision_arm3(config, monkeypatch, tmp_path, fault, terminal, expected):
+    import json
+
+    from vlarobot.core.wire import decode_message
+    from vlarobot.execution import worldmind_heuristic_qualification as qualification
+
+    bindings, backend, *_ = _fixture(
+        config,
+        monkeypatch,
+        motor_veto=fault == "veto",
+        rejected_rounds=(0,) if fault == "empty" else (),
+    )
+    calls = []
+    owned = {"pid": 42, "start_time": 1.0, "nonce": "fixture"}
+    output = tmp_path / "qualification"
+
+    class Client:
+        def require_owned_diagnostic_session(self, *, session_id, world_sha256):
+            assert session_id == owned and world_sha256 == qualification._WORLD
+            calls.append("pin")
+
+        def inspect_fingers(self):
+            calls.append("inspect")
+            rows = []
+            for index, name in enumerate(qualification._FINGERS):
+                captured = (-7.142594888992681e-07, 7.171095938981087e-07)
+                reading = captured[index] if fault == "negative" else 0.0
+                sensor = name.replace("_finger_joint", "_sensor_finger_joint")
+                rows.append(
+                    {
+                        "expected_motor": name,
+                        "resolved_motor": name,
+                        "resolved_sensor": sensor,
+                        "cached_sensor": sensor,
+                        "mapping": "matches",
+                        "raw_coordinate_m": reading,
+                        "cached_raw_coordinate_m": reading,
+                        "cached_pair_count": 1,
+                        "motor_limits_m": [0.0, 0.045],
+                        "sampling_period_ms": 32,
+                    }
+                )
+            return dict(
+                scope="read_only_finger_admission",
+                session_id=owned,
+                reviewed_limits_m=[0.0, 0.045],
+                physics_step_count=0,
+                simulator_time_s=0.096,
+                readings=rows,
+            )
+
+        def reset(self, scenario, seed):
+            calls.append("reset")
+            assert (scenario.name, seed) == ("validation-clear-i00-s0", 0)
+            result = backend.reset(scenario, seed)
+            if fault != "bad_observation":
+                result.robot.diagnostics["finger_joint_sensor_rad"] = dict.fromkeys(
+                    qualification._FINGERS, 0.0
+                )
+            return result
+
+        def get_ground_truth(self):
+            calls.append("gt")
+            return backend.get_ground_truth()
+
+        def apply(self, action):
+            calls.append("apply")
+            decision = decode_message((output / "decision.msgpack").read_bytes())["payload"]
+            selected = [row for row in decision["pool"] if row["disposition"] == "selected"]
+            assert len(decision["pool"]) == 32 and len(selected) == 1
+            assert selected[0]["chunk"].actions[0] == action
+            assert decision["motor_verdict"].accepted
+            assert (output / "apply-intent.json").is_file()
+            if fault == "unknown_apply":
+                raise TimeoutError("lost apply reply")
+            if fault == "reject":
+                return ApplyResult(False)
+            return backend.apply(action)
+
+        def diagnostic_step(self):
+            calls.append("tick")
+            assert (output / "apply-result.json").is_file()
+            assert (output / "tick-intent.json").is_file()
+            if fault == "unknown_tick":
+                return {"confirmed_ticks": None}
+            if fault == "missing_observation":
+                return {"confirmed_ticks": 1, "error": "fixture observation failed"}
+            obs = backend.step(1)
+            obs.robot.diagnostics["finger_joint_sensor_rad"] = dict.fromkeys(
+                qualification._FINGERS, 0.0
+            )
+            return {"confirmed_ticks": 1, "observation": obs}
+
+        def shutdown_diagnostic_session(self, *, session_id):
+            assert session_id == owned
+            calls.append("shutdown")
+            return {"status": "stopped", "session_id": owned}
+
+        def close(self):
+            calls.append("close")
+
+    session = SimpleNamespace(
+        client=Client(),
+        endpoint="tcp://127.0.0.1:5555",
+        process=object(),
+        runtime_attestation={
+            "reported_version": "R2025a",
+            "executable_sha256": qualification._RUNTIME,
+        },
+    )
+    monkeypatch.setattr(qualification, "_verified_head", lambda expected: expected)
+    monkeypatch.setattr(qualification, "production_worldmind_bindings", lambda: bindings)
+    monkeypatch.setattr(qualification, "read_owned_controller_session", lambda *a, **kw: owned)
+    writer = qualification._write_event
+
+    def injected_write(path, payload):
+        if path.name == "apply-intent.json" and fault == "storage":
+            raise OSError("fixture storage fault")
+        if path.name == "apply-result.json" and fault == "receipt_storage":
+            raise OSError("fixture receipt storage fault")
+        digest = writer(path, payload)
+        if path.name == "apply-intent.json" and fault == "corrupt_intent":
+            path.write_bytes(b"{}")
+        return digest
+
+    monkeypatch.setattr(qualification, "_write_event", injected_write)
+    args = dict(
+        status_path=tmp_path / "status.json",
+        launch_started_at_s=1.0,
+        directory=output,
+        expected_head="approved-fixture",
+    )
+    if terminal is None:
+        with pytest.raises((ValueError, OSError, KeyError)):
+            qualification.run_heuristic_qualification(session, **args)
+    else:
+        assert qualification.run_heuristic_qualification(session, **args) == terminal
+    assert calls == expected
+    if fault == "missing_observation":
+        receipt = json.loads((output / "tick-result.json").read_bytes())["payload"]
+        assert receipt["confirmed_ticks"] == 1 and not receipt["observation_returned"]
+    with pytest.raises(FileExistsError):
+        qualification.run_heuristic_qualification(session, **args)
+    assert calls == expected

@@ -182,6 +182,42 @@ class HeuristicComparisonFixture:
             raise ValueError("inconsistent frozen scripted candidate pool")
         return generation, pool
 
+    def assess_pool(
+        self,
+        state: WorldState,
+        observation: Observation,
+        monitor: SafetyMonitor,
+        generation: GenerationObservation,
+        pool: tuple[ActionChunk, ...],
+    ) -> tuple[list[HeuristicCandidate], int | None]:
+        """Evaluate ADR-0084 eligibility in draw order without applying a command."""
+        if len(pool) != FROZEN_CANDIDATE_COUNT or len(generation.draw_seeds) != len(pool):
+            raise ValueError("incomplete heuristic pool")
+        records: list[HeuristicCandidate] = []
+        selected = None
+        for index, chunk in enumerate(pool):
+            finite = self.bindings.hard_checks[FINITE_CHUNK](state, chunk, None)
+            first = monitor.validate(chunk.actions[0], observation.robot)
+            if not isinstance(first, ApplyResult) or type(first.accepted) is not bool:
+                first = None
+            disposition: Literal["selected", "eligible", "rejected"] = "rejected"
+            if finite is True and first is not None and first.accepted is True:
+                disposition = "eligible"
+                if selected is None:
+                    selected = index
+            records.append(
+                HeuristicCandidate(
+                    candidate_id(index),
+                    index,
+                    generation.draw_seeds[index],
+                    chunk,
+                    finite if isinstance(finite, bool) else None,
+                    first,
+                    disposition,
+                )
+            )
+        return records, selected
+
     def execute_fixture_episode(
         self, backend: FakeBackend, observation: Observation, *, episode_id: str, seed: int
     ) -> HeuristicFixtureEpisode:
@@ -226,29 +262,7 @@ class HeuristicComparisonFixture:
                 seed=seed,
                 decision_index=len(decisions),
             )
-            records: list[HeuristicCandidate] = []
-            selected = None
-            for index, chunk in enumerate(pool):
-                finite = bindings.hard_checks[FINITE_CHUNK](state, chunk, None)
-                first = monitor.validate(chunk.actions[0], observation.robot)
-                if not isinstance(first, ApplyResult) or type(first.accepted) is not bool:
-                    first = None
-                disposition: Literal["selected", "eligible", "rejected"] = "rejected"
-                if finite is True and first is not None and first.accepted is True:
-                    disposition = "eligible"
-                    if selected is None:
-                        selected = index
-                records.append(
-                    HeuristicCandidate(
-                        candidate_id(index),
-                        index,
-                        generation.draw_seeds[index],
-                        chunk,
-                        finite if isinstance(finite, bool) else None,
-                        first,
-                        disposition,
-                    )
-                )
+            records, selected = self.assess_pool(state, observation, monitor, generation, pool)
             if selected is None:
                 event = no_safe.no_safe()
                 if event == "reobserve":

@@ -63,6 +63,7 @@ def _fixture(
     unknown_prefilter=(),
     motor_veto=False,
     verification=(True,),
+    on_validate=None,
 ):
     monkeypatch.setattr(RiskGate, "select", _forbidden)
     monkeypatch.setattr(ComparisonPlanner, "select", _forbidden)
@@ -80,6 +81,8 @@ def _fixture(
                 index = count
                 count += 1
                 seen.append(index)
+                if on_validate is not None:
+                    on_validate(action, state)
                 if index in unknown_prefilter:
                     return None
                 if index in prefilter or (index == 32 and motor_veto):
@@ -435,6 +438,16 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
             "tick_unknown",
             ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "apply", "tick", "close"],
         ),
+        (
+            "episode_corrupt_motor_verdict",
+            None,
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "gt", "close"],
+        ),
+        (
+            "episode_invalid_post_tick",
+            None,
+            ["pin", "inspect", "reset", "gt", "apply", "tick", "close"],
+        ),
         ("episode_corrupt_reobserve", None, ["pin", "inspect", "reset", "gt", "close"]),
         (
             "episode_unknown",
@@ -449,6 +462,7 @@ def test_nullable_table_preserves_denominators_and_requires_every_expected_arm(c
     ],
 )
 def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expected):
+    import hashlib
     import json
 
     from vlarobot.core.wire import decode_message
@@ -457,9 +471,15 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
     episode = fault is not None and fault.startswith("episode_")
     if fault in {"episode_budget", "episode_partial_budget"}:
         config = replace(config, bounds=replace(config.bounds, max_steps=1))
+    validations = []
+
+    def on_validate(action, state):
+        validations.append((action, state.diagnostics.get("fixture_observation_id")))
+
     bindings, backend, *_ = _fixture(
         config,
         monkeypatch,
+        on_validate=on_validate,
         motor_veto=fault == "veto",
         prefilter=(33,) if fault == "episode_mid_veto" else (),
         rejected_rounds={
@@ -517,6 +537,7 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
             calls.append("reset")
             assert (scenario.name, seed) == ("validation-clear-i00-s0", 0)
             result = backend.reset(scenario, seed)
+            result.robot.diagnostics["fixture_observation_id"] = 0
             if fault != "bad_observation":
                 result.robot.diagnostics["finger_joint_sensor_rad"] = dict.fromkeys(
                     qualification._FINGERS, 0.0
@@ -537,7 +558,10 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
             intent = json.loads((action_dir / "apply-intent.json").read_bytes())["payload"]
             assert selected[0]["chunk"].actions[intent["action_index"]] == action
             if episode:
-                verdict = decode_message((action_dir / "motor-verdict.msgpack").read_bytes())
+                raw_verdict = (action_dir / "motor-verdict.msgpack").read_bytes()
+                assert intent["motor_verdict_sha256"] == hashlib.sha256(raw_verdict).hexdigest()
+                assert validations[-1] == (action, calls.count("tick"))
+                verdict = decode_message(raw_verdict)
                 assert verdict["payload"]["motor_verdict"].accepted
             else:
                 assert decision["motor_verdict"].accepted
@@ -567,6 +591,9 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
             obs.robot.diagnostics["finger_joint_sensor_rad"] = dict.fromkeys(
                 qualification._FINGERS, 0.0
             )
+            obs.robot.diagnostics["fixture_observation_id"] = calls.count("tick")
+            if fault == "episode_invalid_post_tick":
+                obs.robot.diagnostics["finger_joint_sensor_rad"][qualification._FINGERS[0]] = -1e-6
             return {"confirmed_ticks": 1, "observation": obs}
 
         def shutdown_diagnostic_session(self, *, session_id):
@@ -600,6 +627,12 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
         digest = writer(path, payload)
         if path.name == "apply-intent.json" and fault == "corrupt_intent":
             path.write_bytes(b"{}")
+        if (
+            path.name == "apply-intent.json"
+            and path.parent.name == "action-01"
+            and fault == "episode_corrupt_motor_verdict"
+        ):
+            path.with_name("motor-verdict.msgpack").write_bytes(b"corrupt verdict")
         if path.name == "tick-intent.json" and fault == "episode_corrupt_reobserve":
             path.with_name("decision.msgpack").write_bytes(b"corrupt decision")
         return digest
@@ -623,6 +656,11 @@ def test_owned_guarded_arm3(config, monkeypatch, tmp_path, fault, terminal, expe
     assert calls == expected
     if fault in {"episode_partial_budget", "episode_mid_veto", "episode_mid_unknown"}:
         assert not (output / "decision-0000" / "verification.json").exists()
+    if fault == "episode_invalid_post_tick":
+        action_dir = output / "decision-0000" / "action-00"
+        receipt = json.loads((action_dir / "tick-result.json").read_bytes())["payload"]
+        assert receipt["confirmed_ticks"] == 1 and receipt["observation_returned"]
+        assert not (action_dir / "post-state.msgpack").exists()
     if fault == "missing_observation":
         receipt = json.loads((output / "tick-result.json").read_bytes())["payload"]
         assert receipt["confirmed_ticks"] == 1 and not receipt["observation_returned"]

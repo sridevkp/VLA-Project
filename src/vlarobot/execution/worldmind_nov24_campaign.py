@@ -1,0 +1,381 @@
+"""Owned frozen VALIDATION campaigns under the November 24 decision."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+
+from vlarobot.core.wire import decode_message
+from vlarobot.eval.runner import build_episode_plan
+from vlarobot.eval.worldmind_proxy_policy import GRID, OPTIONAL_GRID, select_policy
+from vlarobot.execution.episode_runner import launch_webots_session
+from vlarobot.execution.worldmind_heuristic_qualification import (
+    _CONFIG,  # noqa: PLC2701
+    _EVAL,  # noqa: PLC2701
+    _PLAN,  # noqa: PLC2701
+    _PROXY_CONFIG,  # noqa: PLC2701
+    _ROOT,  # noqa: PLC2701
+    _SCENARIOS,  # noqa: PLC2701
+    _WORLD,  # noqa: PLC2701
+    _sha,  # noqa: PLC2701
+    _verified_head,  # noqa: PLC2701
+    run_frozen_test_episode,
+    run_heuristic_validation_episode,
+    run_proxy_validation_episode,
+)
+from vlarobot.execution.worldmind_offline_boundary import _verify_event  # noqa: PLC2701
+from vlarobot.execution.worldmind_stage1_pipeline import _plan_sha256  # noqa: PLC2701
+
+_ELIGIBLE_TERMINALS = frozenset(
+    {
+        "COMPLETE",
+        "VERIFICATION_ABORT",
+        "NO_SAFE_SET",
+        "motor_veto",
+        "backend_rejected",
+        "IK_INFEASIBLE",
+        "PLACEMENT_FAILED",
+        "WORLDMIND_BOUND_EXHAUSTED",
+    }
+)
+
+
+def run_trial(output: Path, episode_id: str, seed: int, run_attempt: Any) -> dict[str, Any]:
+    """Keep both attempts when the first runner outcome is unreliable."""
+    episode_path = output / episode_id
+    episode_path.mkdir()
+    attempts = []
+    for attempt in (1, 2):
+        attempt_path = episode_path / f"attempt-{attempt}"
+        attempt_path.mkdir()
+        started = time.perf_counter()
+        try:
+            terminal = run_attempt(attempt_path, episode_id)
+        except Exception as exc:
+            terminal = f"{type(exc).__name__}: {exc}"
+        attempts.append(
+            {
+                "attempt": attempt,
+                "terminal": terminal,
+                "eligible": terminal in _ELIGIBLE_TERMINALS,
+                "seconds": time.perf_counter() - started,
+            }
+        )
+        if attempts[-1]["eligible"]:
+            break
+    return {
+        "episode_id": episode_id,
+        "seed": seed,
+        "attempts": attempts,
+        "eligible": attempts[-1]["eligible"],
+        "success": attempts[-1]["terminal"] == "COMPLETE" if attempts[-1]["eligible"] else None,
+    }
+
+
+def _read_event(path: Path) -> dict[str, Any]:
+    document = json.loads(path.read_bytes())
+    return _verify_event(path, document["sha256"])
+
+
+def verify_policy_contrast(reference: Path, policy: str, proxy_hash: str) -> None:
+    """Require an actual same-pool selection difference before a second policy launch."""
+    launch = _read_event(reference / "launch.json")
+    if (
+        launch["proxy_policy"] != "equal"
+        or launch["proxy_config_sha256"] != proxy_hash
+        or launch["plan_sha256"] != _PLAN
+    ):
+        raise ValueError("policy contrast requires the matching equal-policy VALIDATION campaign")
+    for path in reference.glob("validation-*/attempt-*/episode/decision-*/decision.msgpack"):
+        choices = decode_message(path.read_bytes())["payload"]["proxy"]["policy_choices"]
+        if choices["equal"] != choices[policy]:
+            return
+    raise ValueError(f"no distinct observed-pool selections for {policy}")
+
+
+def freeze_validation(out: Path, runs: list[Path]) -> str:
+    """Verify eligible per-trial evidence and record the selected policy without touching TEST."""
+    from vlarobot.execution.worldmind_idle_fingers import record
+
+    proxy_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
+    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+        raise ValueError("selection must finish in the authorized VALIDATION window")
+    outcomes = {}
+    sources = {}
+    episode_ids = tuple(entry.scene.name for entry in build_episode_plan("validation", 0))
+    for run_dir in runs:
+        launch_path = run_dir / "launch.json"
+        launch = _read_event(launch_path)
+        policy = launch["proxy_policy"]
+        if (
+            policy not in GRID | OPTIONAL_GRID
+            or policy in sources
+            or launch["proxy_config_sha256"] != proxy_hash
+            or launch["config_sha256"] != _CONFIG
+            or launch["plan_sha256"] != _PLAN
+        ):
+            raise ValueError("incompatible, duplicated, or unpinned policy campaign")
+        terminal = run_dir / "terminal.json"
+        campaign = _read_event(terminal)
+        if campaign["eligible"] != 18 or len(campaign["results"]) != 18:
+            raise ValueError("missing or unreliable trial blocks selection")
+        outcomes[policy] = {}
+        for row in campaign["results"]:
+            episode = row["episode_id"]
+            if (
+                episode not in episode_ids
+                or episode in outcomes[policy]
+                or row != _read_event(run_dir / episode / "result.json")
+                or row["eligible"] is not True
+                or type(row["success"]) is not bool
+            ):
+                raise ValueError("corrupt or unreliable trial blocks selection")
+            outcomes[policy][episode] = row["success"]
+        sources[policy] = {"path": str(run_dir), "terminal_sha256": _sha(terminal.read_bytes())}
+    for policy in sources.keys() - {"equal"}:
+        verify_policy_contrast(Path(sources["equal"]["path"]), policy, proxy_hash)
+    winner, scores = select_policy(episode_ids, outcomes)
+    record(
+        out,
+        {
+            "schema_version": 1,
+            "selected_policy": winner,
+            "scores": scores,
+            "sources": sources,
+            "weights": (GRID | OPTIONAL_GRID)[winner],
+            "maximize": False,
+            "split": "validation",
+            "config_sha256": proxy_hash,
+            "plan_sha256": _PLAN,
+            "interpretation": "same-set selection statistic",
+        },
+    )
+    return winner
+
+
+def committed_test_policy(path: Path) -> str:
+    """Ensure TEST only uses the immutable November 29 or earlier selection commit."""
+    relative = path.resolve().relative_to(_ROOT)
+    required_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
+    committed = subprocess.check_output(["git", "show", f"HEAD:{relative.as_posix()}"], cwd=_ROOT)
+    commit_date = subprocess.check_output(
+        ["git", "log", "-1", "--format=%cs", "--", relative.as_posix()], cwd=_ROOT, text=True
+    ).strip()
+    if (
+        committed != path.read_bytes()
+        or not commit_date
+        or date.fromisoformat(commit_date) > date(2026, 11, 29)
+    ):
+        raise ValueError("TEST requires the selection committed by November 29")
+    frozen = _read_event(path)
+    policy = frozen["selected_policy"]
+    if (
+        frozen["split"] != "validation"
+        or frozen["plan_sha256"] != _PLAN
+        or frozen["config_sha256"] != required_hash
+        or policy not in GRID | OPTIONAL_GRID
+        or tuple(frozen["weights"]) != (GRID | OPTIONAL_GRID)[policy]
+        or frozen["maximize"] is not False
+    ):
+        raise ValueError("TEST freeze artifact does not match the approved policy")
+    return policy
+
+
+def run(
+    output: Path,
+    expected_head: str,
+    workers: int,
+    policy: str | None = None,
+    contrast_evidence: Path | None = None,
+    *,
+    split: str = "validation",
+    frozen_policy: Path | None = None,
+    baseline: bool = False,
+) -> None:
+    from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
+
+    if split == "validation":
+        if (
+            baseline
+            or frozen_policy
+            or not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29)
+        ):
+            raise ValueError("live VALIDATION is outside the approved scope or dates")
+    elif split == "test":
+        if policy is not None or not date(2026, 11, 30) <= date.today() <= date(2026, 12, 3):
+            raise ValueError("live TEST is outside the approved scope or dates")
+        if baseline and frozen_policy:
+            raise ValueError("baseline does not use a WorldMind policy")
+        policy = committed_test_policy(frozen_policy) if frozen_policy else None
+    else:
+        raise ValueError("only authorized VALIDATION and TEST are supported")
+    if not 1 <= workers <= 3:
+        raise ValueError("use one to three isolated workers")
+    _verified_head(expected_head)
+    world = _ROOT / "worlds/factory.wbt"
+    config = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
+    for path, digest in (
+        (world, _WORLD),
+        (config, _CONFIG),
+        (RUNTIME, RUNTIME_SHA),
+        (_ROOT / "configs/eval.yaml", _EVAL),
+        (_ROOT / "configs/scenarios.yaml", _SCENARIOS),
+    ):
+        if _sha(path.read_bytes()) != digest:
+            raise ValueError(f"campaign provenance mismatch: {path}")
+    proxy_hash = None
+    if policy is not None:
+        if policy not in GRID | OPTIONAL_GRID:
+            raise ValueError("unknown proxy policy")
+        from vlarobot.execution.worldmind_proxy_binding import verified_table_world
+
+        verified_table_world(_ROOT)
+        proxy_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
+        if proxy_hash != _PROXY_CONFIG:
+            raise ValueError("November 24 proxy configuration pin mismatch")
+        if policy != "equal" and split == "validation":
+            if contrast_evidence is None:
+                raise ValueError("second policy requires observed-pool selection contrast evidence")
+            verify_policy_contrast(contrast_evidence, policy, proxy_hash)
+    plan = build_episode_plan(split, 0, allow_test=split == "test")
+    plan_hash = _plan_sha256(plan)
+    if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (
+        split == "test" and len(plan) != 30
+    ):
+        raise ValueError("campaign requires the frozen episode plan")
+    entries = {entry.scene.name: entry for entry in plan}
+    output.mkdir(exist_ok=False)
+    record(
+        output / "launch.json",
+        {
+            "arm": "scripted_baseline"
+            if baseline
+            else ("full_system" if policy else "vla_risk_veto"),
+            "proxy_policy": policy,
+            "proxy_config_sha256": proxy_hash,
+            "config_sha256": _CONFIG,
+            "split": split,
+            "trials": len(plan),
+            "workers": workers,
+            "started_at": datetime.now().astimezone().isoformat(),
+            "head": expected_head,
+            "plan_sha256": plan_hash,
+        },
+    )
+    launch = _read_event(output / "launch.json")
+    print(json.dumps({"event": "campaign_launched", "evidence": str(output), **launch}), flush=True)
+    started = time.perf_counter()
+
+    def run_attempt(path: Path, episode_id: str) -> str:
+        status = path / "controller-status.json"
+        launch_started_at_s = time.time()
+        with launch_webots_session(
+            webots=str(RUNTIME),
+            world=world,
+            trace_dir=path,
+            trace_prefix="worldmind",
+            runtime_attestation_required=True,
+            rpc_shutdown_on_exit=baseline,
+            extra_env={
+                "VLAROBOT_WEBOTS_MODE": "server",
+                "VLAROBOT_FINGER_IDLE_ONLY": "0",
+                "VLAROBOT_WORLD_SHA256": _WORLD,
+                "VLAROBOT_DIAGNOSTIC_STATUS_PATH": str(status),
+            },
+        ) as owned:
+            arguments = dict(
+                status_path=status,
+                launch_started_at_s=launch_started_at_s,
+                directory=path / "episode",
+                expected_head=expected_head,
+                episode_id=episode_id,
+            )
+            if baseline:
+                from vlarobot.backends.webots.runtime_attestation import (
+                    read_owned_controller_session,
+                )
+                from vlarobot.eval.runner import EvalRunConfig, run_evaluation
+                from vlarobot.execution.scripted_baseline import scripted_policy_factory
+
+                session_id = read_owned_controller_session(
+                    status,
+                    endpoint=owned.endpoint,
+                    process=owned.process,
+                    runtime_attestation=owned.runtime_attestation,
+                    launch_started_at_s=launch_started_at_s,
+                )
+                ping = owned.client.ping()["payload"]
+                if ping.get("session_id") != session_id or ping.get("world_sha256") != _WORLD:
+                    raise ValueError("baseline TEST ownership or world mismatch")
+                report = run_evaluation(
+                    [entries[episode_id]],
+                    owned.client,
+                    EvalRunConfig(
+                        path / "episode", split="test", record_frames=True, stop_on_exception=True
+                    ),
+                    policy_factory=scripted_policy_factory,
+                )
+                terminal = "COMPLETE" if report.rows[0]["success"] else "PLACEMENT_FAILED"
+            elif split == "test":
+                terminal = run_frozen_test_episode(owned, frozen_policy=frozen_policy, **arguments)
+            elif policy is None:
+                terminal = run_heuristic_validation_episode(owned, **arguments)
+            else:
+                terminal = run_proxy_validation_episode(owned, policy_id=policy, **arguments)
+        if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
+            raise RuntimeError("owned episode shutdown failed")
+        return terminal
+
+    def trial(entry: Any) -> dict[str, Any]:
+        result = run_trial(output, entry.scene.name, entry.seed, run_attempt)
+        record(output / entry.scene.name / "result.json", result)
+        return result
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = list(executor.map(trial, plan))
+    eligible = [row for row in results if row["eligible"]]
+    seconds = time.perf_counter() - started
+    record(
+        output / "terminal.json",
+        {
+            "seconds": seconds,
+            "results": results,
+            "eligible": len(eligible),
+            "successes": sum(row["success"] is True for row in eligible),
+            "eligible_per_hour": 3600 * len(eligible) / seconds,
+        },
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--expected-head")
+    parser.add_argument("--policy", choices=tuple(GRID | OPTIONAL_GRID))
+    parser.add_argument("--contrast-evidence", type=Path)
+    parser.add_argument("--freeze-from", type=Path, nargs="+")
+    parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    parser.add_argument("--frozen-policy", type=Path)
+    parser.add_argument("--baseline", action="store_true")
+    args = parser.parse_args()
+    head = (
+        args.expected_head
+        or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_ROOT, text=True).strip()
+    )
+    run(
+        args.output.resolve(),
+        head,
+        args.workers,
+        args.policy,
+        args.contrast_evidence,
+        split=args.split,
+        frozen_policy=args.frozen_policy,
+        baseline=args.baseline,
+    )

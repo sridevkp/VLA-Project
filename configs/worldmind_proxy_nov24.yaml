@@ -1,0 +1,29 @@
+# ADR-0030 addendum 2. Scope and candidate policies, not selected calibration.
+schema_version: 1
+arm: full_system
+split: validation
+proposer: scripted_chunk_adapter
+candidate_count: 32
+horizon_steps: 50
+control_dt_s: 0.032
+maximize: false
+placement_state_index: 43
+objective:
+  Jg: placement_stage_tool_distance_m
+  Jl: tool_path_length_m
+  Jr: modelled_object_clearance_deficit
+  Ju: disabled_no_justified_scale_bundle
+  time_weight: 0
+  proxy_margin_m: 0.03
+candidate_weights:
+  equal: [1, 1, 1, 0]
+  goal_x2: [2, 1, 1, 0]
+optional_candidate_weights:
+  risk_x2: [1, 1, 2, 0]
+hard_checks:
+  - joint_limit_margin
+  - ik_feasibility_and_residual
+  - table_clearance
+  - object_clearance
+  - placement_tolerance
+claim: geometric_tool_proxy_only

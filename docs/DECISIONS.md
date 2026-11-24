@@ -3803,3 +3803,28 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   scope module and returned 894 passed, 3 skipped and one pre-existing notebook-helper SHA
   failure (`071cf660…` expected, `88fd4db9…` present). All four frozen input hashes, the
   regenerated VALIDATION18 plan and the V1–V5b tree hashes matched ADR-0079.
+
+### ADR-0030 addendum 2 — November 24 experiment scope
+
+- Owner authorization sets a 0.0001 m **logging-only** finger telemetry allowance.
+  The observed simulated finger coordinates can extend roughly 0.000001 m beyond
+  motor targets during idle settling. The signed readings stay raw. Arm joint
+  admission, the independent SafetyMonitor, motor targets, and task thresholds
+  keep their original limits. No endpoint experiment is planned.
+- Eq. 3.8 uses placement-stage tool distance in metres, path length in metres with
+  zero time weight, a 0.03 m tool-envelope clearance proxy, and zero Ju weight
+  because no justified scale bundle exists. The preregistered relative weights are
+  equal and goal doubled, with risk doubled optional as capacity permits.
+  Complete observed PlacementVerifier outcomes on the same frozen VALIDATION18
+  identities select the policy by success fraction, then candidate ID.
+- The November 24 arm-5 path uses joint-limit margin, waypoint IK feasibility and
+  residual, verified table-box clearance, modeled-object tool-envelope clearance,
+  and placement tolerance. The absence of a full-arm sweep certificate is outside
+  this geometric-proxy scope. Arm links outside the tool envelope and unmodeled
+  background geometry are excluded. The older Packet B result of zero positive
+  controls in 13,766 expert steps remains attributable to the older sweep contract.
+- Eligible trials finish on a frozen scene with the recorded configuration and no
+  software or runner failure. Terminal task failures and vetoes count. An unreliable
+  attempt is preserved and retried once on the same seed in a fresh session.
+  The scripted-primary comparison does not establish that WorldMind improves a
+  competent VLA.

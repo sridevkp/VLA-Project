@@ -39,9 +39,20 @@ _ROBOT = "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d"
 _CONFIG = "9f9d4ebc328c4f05ade96be52d4aa1be26ff1df94fa077ffc1d2a24cc49c6c03"
 _RUNTIME = "d5a846c134dfdf9ff5984b4cf8a30c0aed8c943f022bf83f754ecb325cef86e6"
 _PLAN = "013ca8ee314df6ca6b72505761c0ab7bc37caf4ec469f6696db80d7ce428fcb2"
+_PROXY_CONFIG = "7c22ff211f007b9377762819f3fb6d9561ea88cc751091cb85cce4e47135a965"
+_EVAL = "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f"
+_SCENARIOS = "e519dc59d09012ad94fb2ba10a269bdcda847272a607113990c1f22ffdefebfa"
 _EPISODE = "validation-clear-i00-s0"
 _FINGERS = ("gripper_left_finger_joint", "gripper_right_finger_joint")
 _SCOPE = "non_scored_arm3_one_decision_qualification"
+VALIDATION_SCOPE = "scored_arm3_validation"
+PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
+_ARM3_TEST_SCOPE = "scored_arm3_test"
+_ARM5_TEST_SCOPE = "scored_arm5_proxy_test"
+_SCORED_SCOPES = frozenset(
+    {VALIDATION_SCOPE, PROXY_VALIDATION_SCOPE, _ARM3_TEST_SCOPE, _ARM5_TEST_SCOPE}
+)
+FINGER_LOG_TOLERANCE_M = 1e-4
 
 
 def _sha(data: bytes) -> str:
@@ -67,7 +78,19 @@ def _raw(value: Any) -> bool:
     return type(value) in (float, int) and math.isfinite(value) and 0 <= value <= 0.045
 
 
-def _check_probe(probe: dict[str, Any], session_id: dict[str, object]) -> None:
+def finger_log_status(value: float) -> str:
+    if type(value) not in (int, float) or not math.isfinite(value):
+        return "invalid"
+    if _raw(value):
+        return "in_motor_range"
+    if -FINGER_LOG_TOLERANCE_M <= value <= 0.045 + FINGER_LOG_TOLERANCE_M:
+        return "outside_motor_range_within_logging_tolerance"
+    return "outside_logging_tolerance"
+
+
+def _check_probe(
+    probe: dict[str, Any], session_id: dict[str, object], *, finger_logging_only: bool = False
+) -> None:
     if (
         probe.get("scope") != "read_only_finger_admission"
         or probe.get("session_id") != session_id
@@ -85,7 +108,7 @@ def _check_probe(probe: dict[str, Any], session_id: dict[str, object]) -> None:
     for row in rows:
         name = row["expected_motor"]
         value = row.get("raw_coordinate_m")
-        if not _raw(value):
+        if finger_log_status(value) == "invalid" or (not finger_logging_only and not _raw(value)):
             raise ValueError(f"invalid raw finger coordinate: {name}: {value!r}")
         if (
             row.get("resolved_motor") != name
@@ -95,13 +118,13 @@ def _check_probe(probe: dict[str, Any], session_id: dict[str, object]) -> None:
             or row.get("sampling_period_ms") != 32
             or row.get("mapping") != "matches"
             or row.get("cached_pair_count") != 1
-            or not _raw(row.get("cached_raw_coordinate_m"))
+            or finger_log_status(row.get("cached_raw_coordinate_m")) == "invalid"
             or row["cached_raw_coordinate_m"] != value
         ):
             raise ValueError(f"unreconciled raw finger mapping: {name}")
 
 
-def _admit(obs: Observation) -> None:
+def _admit(obs: Observation, *, finger_logging_only: bool = False) -> None:
     if (
         not isinstance(obs, Observation)
         or type(obs.t) not in (int, float)
@@ -115,7 +138,7 @@ def _admit(obs: Observation) -> None:
     readings = obs.robot.diagnostics.get("finger_joint_sensor_rad")
     for name in _FINGERS:
         value = readings.get(name) if isinstance(readings, dict) else None
-        if not _raw(value):
+        if finger_log_status(value) == "invalid" or (not finger_logging_only and not _raw(value)):
             raise ValueError(f"invalid raw finger coordinate: {name}: {value!r}")
 
 
@@ -220,7 +243,7 @@ def _tick(
     if not isinstance(after, Observation):
         return "tick_unobserved", None
     _persist(directory / "post-tick.msgpack", _encode({"observation": after}, scope))
-    _admit(after)
+    _admit(after, finger_logging_only=scope in _SCORED_SCOPES)
     if not math.isclose(after.t - before.t, FROZEN_CONTROL_DT_S):
         raise ValueError("post-tick observation time does not match one control tick")
     return "one_tick_observed", after
@@ -271,6 +294,93 @@ def run_heuristic_episode(
     )
 
 
+def run_heuristic_validation_episode(
+    session: WebotsSession,
+    *,
+    status_path: Path,
+    launch_started_at_s: float,
+    directory: Path,
+    expected_head: str,
+    episode_id: str,
+) -> str:
+    """Run one scored episode from the frozen VALIDATION plan in an owned session."""
+    from datetime import date
+
+    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+        raise ValueError("arm-3 live VALIDATION is outside the owner execution dates")
+    return _run_owned(
+        session,
+        status_path,
+        launch_started_at_s,
+        directory,
+        expected_head,
+        episode_id,
+        VALIDATION_SCOPE,
+    )
+
+
+def run_proxy_validation_episode(
+    session: WebotsSession,
+    *,
+    status_path: Path,
+    launch_started_at_s: float,
+    directory: Path,
+    expected_head: str,
+    episode_id: str,
+    policy_id: str,
+) -> str:
+    """Run one scoped arm-5 candidate policy on a frozen VALIDATION episode."""
+    from datetime import date
+
+    from vlarobot.eval.worldmind_proxy_policy import GRID, OPTIONAL_GRID
+
+    if policy_id not in GRID | OPTIONAL_GRID:
+        raise ValueError("unknown November 24 candidate policy")
+    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+        raise ValueError("arm-5 live VALIDATION is outside the owner execution dates")
+    return _run_owned(
+        session,
+        status_path,
+        launch_started_at_s,
+        directory,
+        expected_head,
+        episode_id,
+        PROXY_VALIDATION_SCOPE,
+        policy_id,
+    )
+
+
+def run_frozen_test_episode(
+    session: WebotsSession,
+    *,
+    status_path: Path,
+    launch_started_at_s: float,
+    directory: Path,
+    expected_head: str,
+    episode_id: str,
+    frozen_policy: Path | None = None,
+) -> str:
+    """Run the scheduled TEST only, with arm 5 bound to the committed freeze artifact."""
+    from datetime import date
+
+    from vlarobot.execution.worldmind_nov24_campaign import committed_test_policy
+
+    if not date(2026, 11, 30) <= date.today() <= date(2026, 12, 3):
+        raise ValueError("live TEST is outside the owner execution dates")
+    policy_id = committed_test_policy(frozen_policy) if frozen_policy else None
+    return _run_owned(
+        session,
+        status_path,
+        launch_started_at_s,
+        directory,
+        expected_head,
+        episode_id,
+        _ARM5_TEST_SCOPE if policy_id else _ARM3_TEST_SCOPE,
+        policy_id,
+        "test",
+    )
+
+
 def _run_owned(
     session: WebotsSession,
     status_path: Path,
@@ -279,20 +389,33 @@ def _run_owned(
     expected_head: str,
     episode_id: str,
     scope: str,
+    proxy_policy: str | None = None,
+    split: str = "validation",
 ) -> str:
     qualification = scope == _SCOPE
+    scored = scope in _SCORED_SCOPES
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
     for path, digest in (
         (config_path, _CONFIG),
         (_ROOT / "configs/robot.yaml", _ROBOT),
         (_ROOT / "worlds/factory.wbt", _WORLD),
+        (_ROOT / "configs/eval.yaml", _EVAL),
+        (_ROOT / "configs/scenarios.yaml", _SCENARIOS),
     ):
         if _sha(path.read_bytes()) != digest:
             raise ValueError(f"qualification pin mismatch: {path}")
-    plan = build_episode_plan("validation", 0)
-    if len(plan) != 18 or _plan_sha256(plan) != _PLAN:
-        raise ValueError("qualification VALIDATION plan pin mismatch")
+    if (
+        proxy_policy
+        and _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes()) != _PROXY_CONFIG
+    ):
+        raise ValueError("November 24 proxy config pin mismatch")
+    plan = build_episode_plan(split, 0, allow_test=split == "test")
+    plan_hash = _plan_sha256(plan)
+    if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (
+        split == "test" and len(plan) != 30
+    ):
+        raise ValueError("frozen episode plan pin mismatch")
     entry = next((row for row in plan if row.scene.name == episode_id), None)
     if entry is None:
         raise ValueError("episode is outside the frozen VALIDATION plan")
@@ -320,9 +443,15 @@ def _run_owned(
             directory / "scope.json",
             {
                 "scope": scope,
-                "arm": "vla_risk_veto",
+                "arm": "full_system" if proxy_policy else "vla_risk_veto",
                 "actual_proposer": "scripted_chunk_adapter",
-                "selection_policy": "first_eligible_in_draw_order",
+                "selection_policy": proxy_policy or "first_eligible_in_draw_order",
+                "safety_scope": "tool_envelope_proxy_v1" if proxy_policy else "motor_safety",
+                "proxy_config_sha256": _sha(
+                    (_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes()
+                )
+                if proxy_policy
+                else None,
                 "execution_policy": "first_action" if qualification else "selected_chunk",
                 "source_commit": head,
                 "episode": episode_id,
@@ -331,10 +460,13 @@ def _run_owned(
                 "runtime": dict(attestation),
                 "world_sha256": _WORLD,
                 "config_sha256": _CONFIG,
-                "validation_plan_sha256": _PLAN,
+                "split": split,
+                "plan_sha256": plan_hash,
                 "robot_sha256": _ROBOT,
                 "caller_sha256": _sha(Path(__file__).read_bytes()),
-                "prediction_error": {
+                "prediction_error": None
+                if proxy_policy
+                else {
                     "status": "not_applicable",
                     "value": None,
                     "reason": "arm_has_no_prediction",
@@ -344,19 +476,41 @@ def _run_owned(
         )
         probe = session.client.inspect_fingers()
         _persist(directory / "pre-reset-fingers.msgpack", _encode(probe, scope))
-        _check_probe(probe, owned)
+        _check_probe(probe, owned, finger_logging_only=scored)
+        if scored:
+            _write_event(
+                directory / "finger-telemetry.json",
+                {
+                    "logging_only_tolerance_m": FINGER_LOG_TOLERANCE_M,
+                    "pre_reset": [
+                        finger_log_status(row["raw_coordinate_m"]) for row in probe["readings"]
+                    ],
+                },
+            )
         config = load_worldmind_diagnostic_config(config_path)
         bindings = production_worldmind_bindings()
         fixture = build_offline_heuristic_comparison(config, bindings)
         monitor = bindings.safety[config.safety.binding](config, bindings.inputs.get("safety", {}))
         if not isinstance(monitor, SafetyMonitor):
             raise TypeError("arm-3 qualification requires the independent SafetyMonitor")
+        if proxy_policy:
+            from vlarobot.execution.worldmind_proxy_binding import verified_table_world
+
+            tables = verified_table_world(_ROOT)
+            predictor = bindings.surrogates[config.surrogate.binding](
+                config,
+                {
+                    k: v
+                    for k, v in bindings.inputs.get("surrogate", {}).items()
+                    if k != "arm_sweep_config"
+                },
+            )
         _write_event(directory / "reset-intent.json", {"episode": episode_id, "seed": entry.seed})
         observation = session.client.reset(entry.scene, entry.seed)
         _persist(
             directory / "reset-observation.msgpack", _encode({"observation": observation}, scope)
         )
-        _admit(observation)
+        _admit(observation, finger_logging_only=scored)
         task = TaskSpec(config.task.instruction, config.task.target, config.task.destination)
         required = {task.target} | {item["def"] for item in entry.scene.objects}
 
@@ -366,7 +520,13 @@ def _run_owned(
                 raise ValueError("episode is missing a frozen scene object")
             state = _world_state(obs, truth, config, target=task.target)
             validate_offline_observed_state(state, (task.target,))
-            _persist(evidence_path, _encode({"state": state, "oracle": truth}, scope))
+            record = {"state": state, "oracle": truth}
+            if scored:
+                values = obs.robot.diagnostics["finger_joint_sensor_rad"]
+                record["finger_logging_status"] = {
+                    name: finger_log_status(values[name]) for name in _FINGERS
+                }
+            _persist(evidence_path, _encode(record, scope))
             return state, truth
 
         state, truth = observe(observation, directory / "observed-state.msgpack")
@@ -384,16 +544,56 @@ def _run_owned(
                 decision_dir.mkdir()
                 _sync_dir(directory)
 
-            generation, pool = fixture._pool(  # noqa: PLC2701
-                task,
-                state,
-                monitor,
-                episode_id=episode_id,
-                seed=entry.seed,
-                decision_index=decision_index,
-            )
+            try:
+                generation, pool = fixture._pool(  # noqa: PLC2701
+                    task,
+                    state,
+                    monitor,
+                    episode_id=episode_id,
+                    seed=entry.seed,
+                    decision_index=decision_index,
+                )
+            except ValueError as exc:
+                if not scored or str(exc) != "scripted pose residual outside reviewed tolerance":
+                    raise
+                _write_event(
+                    decision_dir / "generation-veto.json",
+                    {
+                        "status": "IK_INFEASIBLE",
+                        "reason": str(exc),
+                        "decision_index": decision_index,
+                        "partial_pool_executed": False,
+                    },
+                )
+                terminal = "IK_INFEASIBLE"
+                break
             rows, selected = fixture.assess_pool(state, observation, monitor, generation, pool)
+            proxy_records = None
+            if proxy_policy:
+                from vlarobot.execution.worldmind_proxy_binding import evaluate_proxy_pool
+
+                assessments, policy_choices = evaluate_proxy_pool(
+                    state, truth, pool, monitor, predictor, tables, config
+                )
+                selected = policy_choices[proxy_policy][0]
+                proxy_records = {
+                    "policy_choices": policy_choices,
+                    "assessments": [
+                        {"checks": assessment.hard_checks, "components": assessment.components}
+                        for assessment in assessments
+                    ],
+                }
+                rows = [
+                    replace(
+                        row,
+                        disposition="eligible"
+                        if all(value for _, value in assessment.hard_checks)
+                        else "rejected",
+                    )
+                    for row, assessment in zip(rows, assessments, strict=True)
+                ]
             record = {
+                "proxy": proxy_records,
                 "state": state,
                 "task": task,
                 "observation": observation,
@@ -514,7 +714,7 @@ def _run_owned(
             pinned = False
         _write_event(
             directory / "terminal.json",
-            {"status": terminal, "scored": False, "confirmed_observed_ticks": confirmed},
+            {"status": terminal, "scored": scored, "confirmed_observed_ticks": confirmed},
         )
         return terminal
     except BaseException as exc:

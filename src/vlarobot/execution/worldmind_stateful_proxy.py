@@ -94,6 +94,18 @@ def bind_placement(
     )
 
 
+def select_phase_assessments(
+    policy: str, placement_required: bool, assessments: list[CandidateAssessment]
+) -> Decision:
+    """Use identical ranking rules for saved-pool contrast and live selection."""
+    return RiskGate(
+        weights=GRID[policy],
+        maximize=False,
+        required_constraints=HARD_CHECKS if placement_required else HARD_CHECKS[:-1],
+        inactive_components=() if placement_required else (0,),
+    ).select(assessments)
+
+
 def rank_phase_pool(
     current: WorldState,
     pool: Sequence[ActionChunk],
@@ -104,18 +116,14 @@ def rank_phase_pool(
     goal: Sequence[float],
     placement_tolerance_m: float,
     ik_accepts: Callable[[Action], bool | tuple[bool, dict[str, float]]],
+    *,
+    policy: str = "equal",
 ) -> tuple[Decision, list[dict[str, Any]]]:
     """Run production geometric checks and Eq. 3.8 with only same-phase applicable terms."""
     if waypoint.phase not in _PHASES:
         raise ValueError("unrecognized predicted waypoint phase")
     placement_required = waypoint.placement_required
     required = HARD_CHECKS if placement_required else HARD_CHECKS[:-1]
-    gate = RiskGate(
-        weights=GRID["equal"],
-        maximize=False,
-        required_constraints=required,
-        inactive_components=() if placement_required else (0,),
-    )
     assessments, records = [], []
     previous_action = None
     for chunk in pool:
@@ -202,4 +210,4 @@ def rank_phase_pool(
                 "prediction_reasons": trajectory.hard_reasons,
             }
         )
-    return gate.select(assessments), records
+    return select_phase_assessments(policy, placement_required, assessments), records

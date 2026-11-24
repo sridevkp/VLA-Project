@@ -255,6 +255,7 @@ def run_stateful_expert(
     scored: bool,
     proxy: tuple[Any, Any] | None = None,
     evidence_scope: str | None = None,
+    ranking_policy: str = "equal",
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
     scope = evidence_scope or (STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE)
@@ -352,12 +353,14 @@ def run_stateful_expert(
                 goal.as_array(),
                 config.verification.distance_tolerance_m,
                 ik_accepts,
+                policy=ranking_policy,
             )
             selected = decision.selected_index
             proxy_admitted += sum(row["admitted"] for row in proxy_rows)
             proxy_rejected += sum(not row["admitted"] for row in proxy_rows)
             proxy_record = {
                 "rationale": decision.rationale,
+                "ranking_policy": ranking_policy,
                 "assessments": [
                     {
                         **assessment,

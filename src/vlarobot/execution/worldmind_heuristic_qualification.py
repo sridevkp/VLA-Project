@@ -60,9 +60,16 @@ MATCHED_PROXY_PATH = "configs/worldmind_arm5_matched_clearance.json"
 MATCHED_PROXY_SHA = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
 STATEFUL_DIAGNOSTIC_SCOPE = "non_scored_stateful_candidate_00"
 STATEFUL_PROXY_DIAGNOSTIC_SCOPE = "non_scored_stateful_arm5_equal"
-STATEFUL_PROXY_VALIDATION_SCOPE = "scored_arm5_stateful_equal"
+STATEFUL_PROXY_VALIDATION_SCOPE = "scored_arm5_stateful_policy"
 STATEFUL_PROXY_PATH = "configs/worldmind_arm5_stateful.yaml"
 STATEFUL_PROXY_SHA = "d716898ddd48dbfdee30f6a2d561c2e0e298c18c613e17a5c82f595e95f07538"
+STATEFUL_PROXY_PROFILES = {
+    "equal": (STATEFUL_PROXY_PATH, STATEFUL_PROXY_SHA),
+    "goal_x2": (
+        "configs/worldmind_arm5_stateful_goal_x2.yaml",
+        "e740105921543a4895053d12bf796e0c185c54c5a3b51dc5fee8f0b63a004888",
+    ),
+}
 STATEFUL_VALIDATION_SCOPE = "scored_arm3_validation_stateful"
 STATEFUL_REGISTRATION = "calibration/urdf-base-train-v1.yaml"
 STATEFUL_REGISTRATION_SHA = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
@@ -517,6 +524,9 @@ def _run_owned(
 ) -> str:
     qualification = scope == _SCOPE
     proxy_stateful = scope in {STATEFUL_PROXY_DIAGNOSTIC_SCOPE, STATEFUL_PROXY_VALIDATION_SCOPE}
+    stateful_path, stateful_sha = STATEFUL_PROXY_PROFILES.get(
+        proxy_policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
+    )
     stateful = proxy_stateful or scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
     if scope == STATEFUL_PROXY_DIAGNOSTIC_SCOPE and episode_id != "validation-clear-i00-s0":
         raise ValueError("stateful arm-5 diagnostic requires the frozen clear identity")
@@ -559,12 +569,12 @@ def _run_owned(
         or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
         != STATEFUL_REGISTRATION_SHA
         or split != "validation"
-        or (proxy_stateful and (proxy_policy != "equal" or not matched_clearance))
-        or (not proxy_stateful and proxy_policy is not None)
-        or _sha(
-            (_ROOT / (STATEFUL_PROXY_PATH if proxy_stateful else STATEFUL_CONFIG_PATH)).read_bytes()
+        or (
+            proxy_stateful
+            and (proxy_policy not in STATEFUL_PROXY_PROFILES or not matched_clearance)
         )
-        != (STATEFUL_PROXY_SHA if proxy_stateful else STATEFUL_CONFIG_SHA)
+        or (not proxy_stateful and proxy_policy is not None)
+        or _sha((_ROOT / stateful_path).read_bytes()) != stateful_sha
     ):
         raise ValueError("stateful executor scope or profile mismatch")
     plan = build_episode_plan(split, 0, allow_test=split == "test")
@@ -616,9 +626,7 @@ def _run_owned(
                 else "selected_chunk_with_expert_INIT_wait"
                 if settled_init
                 else ("first_action" if qualification else "selected_chunk"),
-                "executor_config_sha256": (
-                    STATEFUL_PROXY_SHA if proxy_stateful else STATEFUL_CONFIG_SHA
-                )
+                "executor_config_sha256": (stateful_sha)
                 if stateful
                 else (SETTLED_CONFIG_SHA if settled_init else None),
                 "expert_registration_sha256": STATEFUL_REGISTRATION_SHA if stateful else None,
@@ -718,6 +726,7 @@ def _run_owned(
                 scored=scored,
                 proxy=(predictor, geometry) if proxy_stateful else None,
                 evidence_scope=scope,
+                ranking_policy=proxy_policy or "equal",
             )
         no_safe = RecoveryState()
         confirmed = 0

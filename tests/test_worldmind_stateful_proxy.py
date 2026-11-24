@@ -117,3 +117,25 @@ def test_contact_endpoint_is_not_inferred_from_an_intermediate_waypoint(fixture)
     decision, (row,) = rank(fixture, waypoint, JointTarget({"joint": 0.1}), target, (0, 0, 1))
     assert decision.selected_index == 0 and row["active_prefix_ticks"] == 1
     assert row["checks"]["table_clearance"]
+
+
+def test_goal_heavy_changes_only_applicable_goal_ranking():
+    from vlarobot.execution.worldmind_stateful_proxy import select_phase_assessments
+    from vlarobot.risk.gate import CandidateAssessment
+
+    names = (
+        "joint_limit_margin",
+        "ik_feasibility_and_residual",
+        "table_clearance",
+        "object_clearance",
+    )
+    checks = tuple((name, True) for name in names)
+    measured = [
+        CandidateAssessment((*checks, ("placement_tolerance", True)), (0.02, 0.00, 0.0, 0.0)),
+        CandidateAssessment((*checks, ("placement_tolerance", True)), (0.00, 0.03, 0.0, 0.0)),
+    ]
+    assert select_phase_assessments("equal", True, measured).selected_index == 0
+    assert select_phase_assessments("goal_x2", True, measured).selected_index == 1
+    early = [CandidateAssessment(checks, (None, row.components[1], 0.0, 0.0)) for row in measured]
+    assert select_phase_assessments("equal", False, early).selected_index == 0
+    assert select_phase_assessments("goal_x2", False, early).selected_index == 0

@@ -30,7 +30,7 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     SETTLED_CONFIG_SHA,
     STATEFUL_CONFIG_PATH,
     STATEFUL_CONFIG_SHA,
-    STATEFUL_PROXY_PATH,
+    STATEFUL_PROXY_PROFILES,
     STATEFUL_PROXY_SHA,
     STATEFUL_REGISTRATION,
     STATEFUL_REGISTRATION_SHA,
@@ -104,6 +104,35 @@ def verify_policy_contrast(reference: Path, policy: str, proxy_hash: str) -> Non
         or launch["plan_sha256"] != _PLAN
     ):
         raise ValueError("policy contrast requires the matching equal-policy VALIDATION campaign")
+    if launch.get("executor_config_sha256") == STATEFUL_PROXY_SHA:
+        from vlarobot.execution.worldmind_stateful_proxy import select_phase_assessments
+        from vlarobot.risk.gate import CandidateAssessment
+
+        if policy not in STATEFUL_PROXY_PROFILES:
+            raise ValueError("unapproved stateful contrast policy")
+        for path in sorted(
+            reference.glob("validation-*/attempt-*/episode/chunk-*/decision.msgpack")
+        ):
+            payload = decode_message(path.read_bytes())["payload"]
+            records = payload["proxy"]["assessments"]
+            if not any("placement_tolerance" in row["checks"] for row in records):
+                continue
+            candidates = [
+                CandidateAssessment(tuple(row["checks"].items()), row["components"])
+                for row in records
+            ]
+            first = select_phase_assessments("equal", True, candidates).selected_index
+            second = select_phase_assessments(policy, True, candidates).selected_index
+            pool = payload["pool"]
+            if payload["selected"] != (None if first is None else pool[first]["candidate_id"]):
+                raise ValueError("saved stateful equal selection does not reconcile")
+            if (
+                first is not None
+                and second is not None
+                and pool[first]["chunk"] != pool[second]["chunk"]
+            ):
+                return
+        raise ValueError(f"no distinct observed-pool selections for {policy}")
     for path in reference.glob("validation-*/attempt-*/episode/decision-*/decision.msgpack"):
         choices = decode_message(path.read_bytes())["payload"]["proxy"]["policy_choices"]
         if choices["equal"] != choices[policy]:
@@ -233,16 +262,18 @@ def run(
             split != "validation"
             or baseline
             or settled_init
-            or (policy, matched_clearance) not in {(None, False), ("equal", True)}
+            or (policy, matched_clearance)
+            not in {(None, False), ("equal", True), ("goal_x2", True)}
         ):
-            raise ValueError("stateful executor is scoped to arm-3 or arm-5 equal VALIDATION")
+            raise ValueError("stateful executor is scoped to arm-3 or approved arm-5 VALIDATION")
         branch = subprocess.run(
             ["git", "symbolic-ref", "-q", "HEAD"], cwd=_ROOT, check=False, capture_output=True
         )
         if branch.returncode != 1:
             raise ValueError("stateful VALIDATION requires a detached campaign worktree")
-        stateful_path = STATEFUL_PROXY_PATH if policy else STATEFUL_CONFIG_PATH
-        stateful_hash = STATEFUL_PROXY_SHA if policy else STATEFUL_CONFIG_SHA
+        stateful_path, stateful_hash = STATEFUL_PROXY_PROFILES.get(
+            policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
+        )
         if (
             _sha((_ROOT / stateful_path).read_bytes()) != stateful_hash
             or os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
@@ -250,7 +281,11 @@ def run(
             != STATEFUL_REGISTRATION_SHA
         ):
             raise ValueError("stateful executor profile pin mismatch")
-    if matched_clearance and (split != "validation" or policy != "equal" or settled_init):
+    if matched_clearance and (
+        split != "validation"
+        or settled_init
+        or (policy != "equal" and not (stateful and policy == "goal_x2"))
+    ):
         raise ValueError("matched clearance is scoped to arm-5 equal VALIDATION")
     if settled_init and (split != "validation" or policy is not None or baseline):
         raise ValueError("settled INIT is the corrected arm-3 VALIDATION executor")

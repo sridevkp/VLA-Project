@@ -3849,3 +3849,17 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   SHA-256 `e35cf001b0fa02af16025fa4bbb1c5dfb83f9e5b56216f335537af99bb3ff87c`.
   Live arm 5 still requires a positive control with the existing joint, IK,
   and placement checks. Preserve the v1 spherical-veto results separately.
+
+### ADR-0030 addendum 4 — November 24 RiskGate numerical tolerance
+
+- The arm-5 v2 control admits signed predicted joint slack down to −0.0001 rad
+  in the RiskGate joint-limit predicate only. Archived expert state crossed
+  the original bound by up to 0.000000397 rad. The tolerance addresses numerical
+  noise. Joint limits, independent SafetyMonitor, IK and placement gates retain
+  their original values and behavior.
+- The `equal` v2 campaign requires at least 14 of 15 successful VALIDATION
+  expert-command controls to pass. The v2 geometric configuration hash is
+  `704f143f49f5d3552ebccd7e965985fc482c0ac18ad1fbc4c392081abbd82420`.
+  The prediction replay gives an upper bound of 6/15 because nine traces
+  fail the geometric veto before any uncertainty about archived full-pose IK
+  could affect the result. This configuration is retained as offline evidence.

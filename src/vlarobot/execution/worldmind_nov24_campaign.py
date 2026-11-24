@@ -281,7 +281,17 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
 def committed_test_policy(path: Path) -> str:
     """Ensure TEST only uses the immutable November 29 or earlier selection commit."""
     relative = path.resolve().relative_to(_ROOT)
-    required_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
+    manifest_path = _ROOT / "configs/worldmind_frozen_execution.json"
+    manifest_bytes = manifest_path.read_bytes()
+    if manifest_bytes != subprocess.check_output(
+        ["git", "show", "HEAD:configs/worldmind_frozen_execution.json"], cwd=_ROOT
+    ):
+        raise ValueError("TEST execution manifest must be committed")
+    manifest = json.loads(manifest_bytes)
+    if manifest["selection_sha256"] != _sha(path.read_bytes()) or any(
+        _sha((_ROOT / name).read_bytes()) != digest for name, digest in manifest["pins"].items()
+    ):
+        raise ValueError("TEST frozen execution manifest pin mismatch")
     committed = subprocess.check_output(["git", "show", f"HEAD:{relative.as_posix()}"], cwd=_ROOT)
     commit_date = subprocess.check_output(
         ["git", "log", "-1", "--format=%cs", "--", relative.as_posix()], cwd=_ROOT, text=True
@@ -297,7 +307,13 @@ def committed_test_policy(path: Path) -> str:
     if (
         frozen["split"] != "validation"
         or frozen["plan_sha256"] != _PLAN
-        or frozen["config_sha256"] != required_hash
+        or frozen["config_sha256"] != MATCHED_PROXY_SHA
+        or frozen.get("schema_version") != 2
+        or frozen.get("home_profile_sha256") != VERIFIED_HOME_PROFILE_SHA
+        or frozen.get("lift_recovery_profile_sha256") != LIFT_RECOVERY_PROFILE_SHA
+        or policy != manifest["selected_policy"]
+        or frozen["executor_config_sha256"]
+        != executor_profile_sha(STATEFUL_PROXY_PROFILES[policy][1], True, True)
         or policy not in GRID | OPTIONAL_GRID
         or tuple(frozen["weights"]) != (GRID | OPTIONAL_GRID)[policy]
         or frozen["maximize"] is not False
@@ -324,6 +340,25 @@ def run(
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
+    if split == "test":
+        if date.today() < date(2026, 11, 30):
+            raise ValueError("live TEST is outside the owner execution dates")
+        if frozen_policy is None or settled_init or contrast_evidence is not None:
+            raise ValueError("TEST requires the committed corrected freeze")
+        selected = committed_test_policy(frozen_policy)
+        if baseline and (
+            world_model or policy is not None or stateful or matched_clearance or verified_home
+        ):
+            raise ValueError("baseline TEST uses only the scripted baseline")
+        if world_model and (baseline or policy is not None):
+            raise ValueError("arm-4 TEST uses its fixed equal profile")
+        if policy is not None and policy != selected:
+            raise ValueError("arm-5 TEST must use the frozen policy")
+        if not baseline:
+            if world_model:
+                policy = "equal"
+            matched_clearance = policy is not None
+            stateful = verified_home = True
     lift_recovery = bool(verified_home and policy and not world_model)
     if lift_recovery and (
         _sha((_ROOT / LIFT_RECOVERY_PROFILE_PATH).read_bytes()) != LIFT_RECOVERY_PROFILE_SHA
@@ -331,31 +366,21 @@ def run(
         raise ValueError("unapproved LIFT campaign profile")
     if verified_home and (
         not stateful
-        or split != "validation"
         or _sha((_ROOT / VERIFIED_HOME_PROFILE_PATH).read_bytes()) != VERIFIED_HOME_PROFILE_SHA
     ):
-        raise ValueError("verified HOME requires pinned stateful VALIDATION")
-    if world_model and (
-        split != "validation" or not stateful or not matched_clearance or policy != "equal"
-    ):
-        raise ValueError("arm-4 is scoped to the matched equal VALIDATION profile")
+        raise ValueError("verified HOME requires pinned stateful execution")
+    if world_model and (not stateful or not matched_clearance or policy != "equal"):
+        raise ValueError("arm-4 is scoped to the matched equal profile")
     if split == "validation":
         if baseline or frozen_policy or date.today() < date(2026, 11, 21):
             raise ValueError("live VALIDATION is outside the approved scope or dates")
-    elif split == "test":
-        if policy is not None or date.today() < date(2026, 11, 30):
-            raise ValueError("live TEST is outside the approved scope or dates")
-        if baseline and frozen_policy:
-            raise ValueError("baseline does not use a WorldMind policy")
-        policy = committed_test_policy(frozen_policy) if frozen_policy else None
-    else:
+    elif split != "test":
         raise ValueError("only authorized VALIDATION and TEST are supported")
     if not 1 <= workers <= 3:
         raise ValueError("use one to three isolated workers")
     if stateful:
         if (
-            split != "validation"
-            or baseline
+            baseline
             or settled_init
             or (policy, matched_clearance)
             not in {(None, False), ("equal", True), ("goal_x2", True)}
@@ -367,7 +392,7 @@ def run(
             ["git", "symbolic-ref", "-q", "HEAD"], cwd=_ROOT, check=False, capture_output=True
         )
         if branch.returncode != 1:
-            raise ValueError("stateful VALIDATION requires a detached campaign worktree")
+            raise ValueError("stateful execution requires a detached campaign worktree")
         stateful_path, stateful_hash = STATEFUL_PROXY_PROFILES.get(
             policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
         )
@@ -381,9 +406,7 @@ def run(
         ):
             raise ValueError("stateful executor profile pin mismatch")
     if matched_clearance and (
-        split != "validation"
-        or settled_init
-        or (policy != "equal" and not (stateful and policy == "goal_x2"))
+        settled_init or (policy != "equal" and not (stateful and policy == "goal_x2"))
     ):
         raise ValueError("matched clearance is scoped to arm-5 equal VALIDATION")
     if settled_init and (split != "validation" or policy is not None or baseline):
@@ -419,10 +442,14 @@ def run(
         proxy_hash = _sha((_ROOT / proxy_path).read_bytes())
         if proxy_hash != (MATCHED_PROXY_SHA if matched_clearance else _PROXY_CONFIG):
             raise ValueError("November 24 proxy configuration pin mismatch")
-        if policy != "equal" and split == "validation":
+        if split == "validation" and policy != "equal":
             if contrast_evidence is None:
                 raise ValueError("second policy requires observed-pool selection contrast evidence")
             verify_policy_contrast(contrast_evidence, policy, proxy_hash)
+    if not baseline:
+        from vlarobot.eval.worldmind_config import load_worldmind_diagnostic_config
+
+        load_worldmind_diagnostic_config(config)
     plan = build_episode_plan(split, 0, allow_test=split == "test")
     plan_hash = _plan_sha256(plan)
     if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (
@@ -454,6 +481,7 @@ def run(
             "home_profile_sha256": VERIFIED_HOME_PROFILE_SHA if verified_home else None,
             "lift_recovery_profile_sha256": LIFT_RECOVERY_PROFILE_SHA if lift_recovery else None,
             "config_sha256": _CONFIG,
+            "frozen_selection_sha256": _sha(frozen_policy.read_bytes()) if frozen_policy else None,
             "split": split,
             "trials": len(plan),
             "workers": workers,
@@ -525,7 +553,13 @@ def run(
                 )
                 terminal = "COMPLETE" if report.rows[0]["success"] else "PLACEMENT_FAILED"
             elif split == "test":
-                terminal = run_frozen_test_episode(owned, frozen_policy=frozen_policy, **arguments)
+                terminal = run_frozen_test_episode(
+                    owned,
+                    frozen_policy=frozen_policy,
+                    policy_id=policy,
+                    world_model=world_model,
+                    **arguments,
+                )
             elif policy is None:
                 terminal = run_heuristic_validation_episode(
                     owned,

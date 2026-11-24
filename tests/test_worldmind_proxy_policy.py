@@ -184,3 +184,66 @@ def test_stateful_freeze_compares_two_eligible_full_system_campaigns(
         campaign.STATEFUL_PROXY_PROFILES["goal_x2"][1], profiles[1]
     )
     assert payload["scores"] == {"equal": 11 / 18, "goal_x2": 12 / 18}
+
+
+@pytest.mark.parametrize(
+    ("policy", "world_model", "scope"),
+    [
+        (None, False, "scored_arm3_test"),
+        ("equal", True, "scored_arm4_stateful_equal_test"),
+        ("equal", False, "scored_arm5_stateful_proxy_test"),
+    ],
+)
+def test_scheduled_test_dispatch_uses_the_corrected_frozen_profile(
+    monkeypatch, tmp_path, policy, world_model, scope
+):
+    import datetime
+    from types import SimpleNamespace
+
+    from vlarobot.execution import worldmind_heuristic_qualification as qualification
+    from vlarobot.execution import worldmind_nov24_campaign as campaign
+
+    class AuthorizedDate(datetime.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 30)
+
+    monkeypatch.setattr(datetime, "date", AuthorizedDate)
+    monkeypatch.setattr(campaign, "committed_test_policy", lambda path: "equal")
+
+    def stub(*args, **kwargs):
+        assert args[-3:] == (scope, policy, "test")
+        assert kwargs == {"matched_clearance": policy is not None, "verified_home": True}
+        return "COMPLETE"
+
+    monkeypatch.setattr(qualification, "_run_owned", stub)
+    assert (
+        qualification.run_frozen_test_episode(
+            SimpleNamespace(),
+            status_path=tmp_path / "status",
+            launch_started_at_s=0,
+            directory=tmp_path / "episode",
+            expected_head="fixture",
+            episode_id="synthetic-id",
+            frozen_policy=tmp_path / "freeze",
+            policy_id=policy,
+            world_model=world_model,
+        )
+        == "COMPLETE"
+    )
+
+
+def test_test_date_guard_precedes_freeze_and_plan_access(monkeypatch, tmp_path):
+    from datetime import date
+
+    from vlarobot.execution import worldmind_nov24_campaign as campaign
+
+    class EarlyDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 29)
+
+    monkeypatch.setattr(campaign, "date", EarlyDate)
+    with pytest.raises(ValueError, match="outside the owner execution dates"):
+        campaign.run(tmp_path / "out", "fixture", 1, split="test")
+    assert not (tmp_path / "out").exists()

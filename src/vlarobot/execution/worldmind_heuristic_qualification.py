@@ -88,7 +88,8 @@ SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
 SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
 _ARM3_TEST_SCOPE = "scored_arm3_test"
-_ARM5_TEST_SCOPE = "scored_arm5_proxy_test"
+_ARM5_TEST_SCOPE = "scored_arm5_stateful_proxy_test"
+_ARM4_TEST_SCOPE = "scored_arm4_stateful_equal_test"
 _SCORED_SCOPES = frozenset(
     {
         STATEFUL_VALIDATION_SCOPE,
@@ -99,6 +100,7 @@ _SCORED_SCOPES = frozenset(
         PROXY_VALIDATION_SCOPE,
         _ARM3_TEST_SCOPE,
         _ARM5_TEST_SCOPE,
+        _ARM4_TEST_SCOPE,
     }
 )
 FINGER_LOG_TOLERANCE_M = 1e-4
@@ -516,6 +518,8 @@ def run_frozen_test_episode(
     expected_head: str,
     episode_id: str,
     frozen_policy: Path | None = None,
+    policy_id: str | None = None,
+    world_model: bool = False,
 ) -> str:
     """Run the scheduled TEST only, with arm 5 bound to the committed freeze artifact."""
     from datetime import date
@@ -524,7 +528,13 @@ def run_frozen_test_episode(
 
     if date.today() < date(2026, 11, 30):
         raise ValueError("live TEST is outside the owner execution dates")
-    policy_id = committed_test_policy(frozen_policy) if frozen_policy else None
+    if frozen_policy is None:
+        raise ValueError("TEST requires the committed corrected freeze")
+    selected = committed_test_policy(frozen_policy)
+    if (world_model and policy_id != "equal") or (
+        not world_model and policy_id not in (None, selected)
+    ):
+        raise ValueError("TEST policy does not match the committed profile")
     return _run_owned(
         session,
         status_path,
@@ -532,9 +542,11 @@ def run_frozen_test_episode(
         directory,
         expected_head,
         episode_id,
-        _ARM5_TEST_SCOPE if policy_id else _ARM3_TEST_SCOPE,
+        _ARM4_TEST_SCOPE if world_model else _ARM5_TEST_SCOPE if policy_id else _ARM3_TEST_SCOPE,
         policy_id,
         "test",
+        matched_clearance=policy_id is not None,
+        verified_home=True,
     )
 
 
@@ -553,17 +565,22 @@ def _run_owned(
     verified_home: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
-    world_model = scope == STATEFUL_WORLD_MODEL_SCOPE
+    world_model = scope in {STATEFUL_WORLD_MODEL_SCOPE, _ARM4_TEST_SCOPE}
     proxy_stateful = world_model or scope in {
         STATEFUL_PROXY_DIAGNOSTIC_SCOPE,
         STATEFUL_PROXY_VALIDATION_SCOPE,
+        _ARM5_TEST_SCOPE,
     }
     stateful_path, stateful_sha = STATEFUL_PROXY_PROFILES.get(
         proxy_policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
     )
     if world_model:
         stateful_path, stateful_sha = STATEFUL_WORLD_MODEL_PROFILE
-    stateful = proxy_stateful or scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
+    stateful = proxy_stateful or scope in {
+        STATEFUL_DIAGNOSTIC_SCOPE,
+        STATEFUL_VALIDATION_SCOPE,
+        _ARM3_TEST_SCOPE,
+    }
     if scope == STATEFUL_PROXY_DIAGNOSTIC_SCOPE and episode_id != "validation-clear-i00-s0":
         raise ValueError("stateful arm-5 diagnostic requires the frozen clear identity")
     if scope == STATEFUL_DIAGNOSTIC_SCOPE and (
@@ -579,7 +596,6 @@ def _run_owned(
     if verified_home and (
         not stateful
         or not scored
-        or split != "validation"
         or _sha((_ROOT / VERIFIED_HOME_PROFILE_PATH).read_bytes()) != VERIFIED_HOME_PROFILE_SHA
     ):
         raise ValueError("verified HOME requires pinned stateful VALIDATION")
@@ -616,7 +632,6 @@ def _run_owned(
         os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
         or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
         != STATEFUL_REGISTRATION_SHA
-        or split != "validation"
         or (world_model and proxy_policy != "equal")
         or (
             proxy_stateful
@@ -626,6 +641,8 @@ def _run_owned(
         or _sha((_ROOT / stateful_path).read_bytes()) != stateful_sha
     ):
         raise ValueError("stateful executor scope or profile mismatch")
+    if (split == "test") != (scope in {_ARM3_TEST_SCOPE, _ARM4_TEST_SCOPE, _ARM5_TEST_SCOPE}):
+        raise ValueError("episode scope does not match the requested split")
     plan = build_episode_plan(split, 0, allow_test=split == "test")
     plan_hash = _plan_sha256(plan)
     if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (

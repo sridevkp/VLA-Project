@@ -3881,3 +3881,22 @@ a release condition. The deliberately crossing table and non-target controls
 remain vetoed. The live executor uses the existing observed INIT opening
 criterion. The arm-5 profile SHA-256 is
 `6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4`.
+
+### ADR-0030 addendum 6 — stateful scripted WorldMind execution
+
+Arm 3 binds the expert's observed waypoint completion state to WorldMind's seeded
+chunk decisions. H=50 limits a candidate's prediction/command horizon. A newly
+completed waypoint invalidates the held suffix. If it has not completed by H,
+a fresh chunk starts from the resulting observation while retaining the active
+target and expert settle timer. Final verification follows HOME. The motor veto,
+global budgets, observed verifier and single recovery allowances are preserved.
+
+The arm-3 executor profile SHA-256 is
+`585ea6ef1ef850f2c0251b4fa797cb5a4032376a2ddca370144b0d35bf22c58b`.
+Run the campaign from an isolated detached worktree. The candidate-00
+demonstration is separately marked non-scored. The prior fixed-phase campaigns
+retain their results and engineering interruptions.
+
+Arm 5 still needs a binding for the mandatory placement-stage input when an
+earlier chunk contains only the current waypoint. The matched-clearance
+configuration and original placement definition are preserved.

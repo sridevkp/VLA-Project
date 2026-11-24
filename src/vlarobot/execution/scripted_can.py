@@ -1710,6 +1710,10 @@ class ScriptedCanPolicy:
                 self._trace_gt_tip(backend, settled, state, "mid")
         return self._commanded_vector(), observation_now
 
+    def _accepted_joint_waypoint(self, backend, requested: dict[str, float]) -> dict[str, float]:
+        """Return the accepted target used by the waypoint completion check."""
+        return requested
+
     def _command_and_wait(
         self,
         backend,
@@ -1741,6 +1745,7 @@ class ScriptedCanPolicy:
             )
             return None
 
+        joint_target = self._accepted_joint_waypoint(backend, joint_target)
         previous = {name: float(start_q[self.kinematics.idx[name]]) for name in ARM_JOINTS}
         stalled_steps = 0
         for _ in range(max_steps):

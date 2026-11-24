@@ -6,10 +6,11 @@ candidate evidence, motor admission, simulator operations, and final verificatio
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from scipy.special import ndtr, ndtri
 
 from vlarobot.core.types import (
     Action,
@@ -23,6 +24,7 @@ from vlarobot.eval.decision_adapters import CandidateGenerationProbe
 from vlarobot.execution.scripted_can import ScriptedCanPolicy
 from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2701
     STATEFUL_DIAGNOSTIC_SCOPE,
+    STATEFUL_VALIDATION_SCOPE,
     _encode,
     _journal_apply,
     _persist,
@@ -34,6 +36,30 @@ from vlarobot.planning.candidates import SeededCandidateGenerator
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def bounded_normal_target(
+    value: float, lower: float, upper: float, std: float, radius: float, rng: np.random.Generator
+) -> float:
+    """Draw from the same conditional normal without finite rejection exhaustion."""
+    if not lower <= value <= upper:
+        raise ValueError("reference waypoint violates absolute joint bounds")
+    if std == 0 or radius == 0 or lower == upper:
+        return value
+    low_cdf = ndtr(max(lower - value, -radius) / std)
+    high_cdf = ndtr(min(upper - value, radius) / std)
+    drawn = value + std * float(ndtri(rng.uniform(low_cdf, high_cdf)))
+    if not lower <= drawn <= upper or abs(drawn - value) > radius:
+        raise ValueError("conditional waypoint draw outside reviewed jitter support")
+    return drawn
+
+
+class TaskStop(RuntimeError):
+    """An observed bounded task termination, separate from a runner exception."""
+
+    def __init__(self, terminal: str) -> None:
+        super().__init__(terminal)
+        self.terminal = terminal
 
 
 class StatefulChunkBackend:
@@ -50,11 +76,15 @@ class StatefulChunkBackend:
         decide: Any,
         advance: Any,
         truth: Any,
+        reobserve: Any = None,
     ) -> None:
         self.observation = initial
         self.scenario, self.seed = scenario, seed
         self.horizon, self.max_ticks = horizon, max_ticks
         self.decide, self.advance, self.truth = decide, advance, truth
+        self.reobserve = reobserve
+        self.empty_recovery_used = False
+        self.verification_retry_used = False
         self.ticks = self.decisions = self.used = 0
         self.phase = "INIT"
         self.target: Action | None = None
@@ -68,6 +98,15 @@ class StatefulChunkBackend:
         self.initial_delivered = True
         return self.observation
 
+    def retry_verification(self) -> None:
+        """Explicit primary-family retry, without a backend reset or budget reset."""
+        if self.phase != "HOME" or self.verification_retry_used:
+            raise ValueError("invalid verification retry boundary")
+        self.verification_retry_used = True
+        self.initial_delivered = False
+        self.armed = False
+        self.phase = "INIT"
+
     def get_ground_truth(self) -> Any:
         return self.truth()
 
@@ -76,13 +115,28 @@ class StatefulChunkBackend:
 
     def _choose(self, action: Action, *, continuation: bool) -> ApplyResult:
         if not self.initial_delivered or self.ticks >= self.max_ticks:
-            raise RuntimeError("stateful episode control budget exhausted")
+            raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
         self.armed = False
-        result = self.decide(self, action, continuation)
+        result, selected = self.decide(self, action, continuation)
         self.decisions += 1
+        if (
+            result.reason == "no eligible stateful candidate"
+            and self.reobserve is not None
+            and not self.empty_recovery_used
+            and self.ticks < self.max_ticks
+        ):
+            self.empty_recovery_used = True
+            self.observation = self.reobserve(self)
+            self.ticks += 1
+            if self.ticks >= self.max_ticks:
+                raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
+            result, selected = self.decide(self, action, continuation)
+            self.decisions += 1
+        if result.reason == "no eligible stateful candidate" and self.reobserve is not None:
+            raise TaskStop("NO_SAFE_SET")
         self.used = 0
         if result.accepted:
-            self.target = action
+            self.target = selected
             self.armed = True
         return result
 
@@ -90,7 +144,7 @@ class StatefulChunkBackend:
         if count != 1 or not self.armed or self.target is None:
             raise ValueError("stateful caller requires one tick under an accepted command")
         if self.ticks >= self.max_ticks:
-            raise RuntimeError("stateful episode control budget exhausted")
+            raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
         if self.used == self.horizon:
             result = self._choose(self.target, continuation=True)
             if not result.accepted:
@@ -103,6 +157,13 @@ class StatefulChunkBackend:
 
 class ChunkExpert(ScriptedCanPolicy):
     """Expose the baseline's actual phase cursor to the chunk backend."""
+
+    def _accepted_joint_waypoint(
+        self, backend: StatefulChunkBackend, requested: dict[str, float]
+    ) -> dict[str, float]:
+        if not isinstance(backend.target, JointTarget):
+            raise RuntimeError("accepted waypoint has no reconciled joint target")
+        return backend.target.q
 
     def _trace_boundary(
         self,
@@ -119,7 +180,7 @@ class ChunkExpert(ScriptedCanPolicy):
         super()._trace_boundary(backend, observation, state, phase, target, failed, **details)
 
 
-def run_candidate_zero(
+def run_stateful_expert(
     session: Any,
     owned: dict[str, object],
     directory: Path,
@@ -131,18 +192,24 @@ def run_candidate_zero(
     verifier: Any,
     task: Any,
     observe: Any,
+    *,
+    scored: bool,
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
-    scope = STATEFUL_DIAGNOSTIC_SCOPE
+    scope = STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE
     active: dict[str, Any] = {}
     peak = float("-inf")
+    rejected_terminal = "PLACEMENT_FAILED"
     start_z = session.client.get_ground_truth().object_poses[task.target].position.z
     limits = monitor.limits.joint_position
     settings = config.adapter.jitter
 
-    def decide(cursor: StatefulChunkBackend, action: Action, continuation: bool) -> ApplyResult:
+    def decide(
+        cursor: StatefulChunkBackend, action: Action, continuation: bool
+    ) -> tuple[ApplyResult, Action]:
+        nonlocal rejected_terminal
         if cursor.decisions >= config.bounds.max_decisions:
-            raise RuntimeError("stateful episode decision budget exhausted")
+            raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
         folder = directory / f"chunk-{cursor.decisions:04d}"
         folder.mkdir()
         state, _ = observe(cursor.observation, folder / "observed-state.msgpack")
@@ -153,16 +220,12 @@ def run_candidate_zero(
             chosen = action
             if index and not continuation and isinstance(action, JointTarget):
                 rng = np.random.default_rng(seed)
-                joints = {}
-                for name, value in action.q.items():
-                    lo, hi = limits[name]
-                    for _ in range(settings.max_attempts):
-                        delta = float(rng.normal(0.0, settings.joint_std_rad))
-                        if abs(delta) <= settings.joint_limit_rad and lo <= value + delta <= hi:
-                            joints[name] = value + delta
-                            break
-                    else:
-                        raise ValueError("stateful waypoint jitter rejection budget exhausted")
+                joints = {
+                    name: bounded_normal_target(
+                        value, *limits[name], settings.joint_std_rad, settings.joint_limit_rad, rng
+                    )
+                    for name, value in action.q.items()
+                }
                 chosen = JointTarget(joints)
             index += 1
             return ActionChunk(
@@ -182,6 +245,10 @@ def run_candidate_zero(
         pool = tuple(probe.propose(task, state, None))
         (generation,) = probe.observations
         rows, selected = fixture.assess_pool(state, cursor.observation, monitor, generation, pool)
+        if selected is not None and (scored or selected == 0):
+            rows[selected] = replace(rows[selected], disposition="selected")
+        else:
+            selected = None
         path = folder / "decision.msgpack"
         snapshot = _persist(
             path,
@@ -189,7 +256,7 @@ def run_candidate_zero(
                 {
                     "generation": asdict(generation),
                     "pool": [_row_data(row) for row in rows],
-                    "selected": rows[0].candidate_id if selected == 0 else None,
+                    "selected": rows[selected].candidate_id if selected is not None else None,
                     "phase": cursor.phase,
                     "continuation": continuation,
                     "episode_tick": cursor.ticks,
@@ -199,8 +266,9 @@ def run_candidate_zero(
                 scope,
             ),
         )
-        if selected != 0:
-            return ApplyResult(False, "reference candidate-00 is ineligible")
+        if selected is None:
+            return ApplyResult(False, "no eligible stateful candidate"), action
+        action = pool[selected].actions[0]
         motor_verdict = monitor.validate(action, cursor.observation.robot)
         verdict_sha = _persist(
             folder / "motor-verdict.msgpack",
@@ -213,7 +281,8 @@ def run_candidate_zero(
             ),
         )
         if not motor_verdict.accepted:
-            return motor_verdict
+            rejected_terminal = "motor_veto"
+            return motor_verdict, action
         if continuation:
             # The persistent target was already submitted. Reconcile a fresh chunk without
             # resubmitting the unchanged command (and without resetting its settle timer).
@@ -240,7 +309,9 @@ def run_candidate_zero(
             )
         if result.accepted:
             active.update(folder=folder, receipt=receipt_sha, decision=snapshot)
-        return result
+        else:
+            rejected_terminal = "backend_rejected"
+        return result, action
 
     def advance(cursor: StatefulChunkBackend) -> Observation:
         nonlocal peak
@@ -266,6 +337,16 @@ def run_candidate_zero(
         _persist(folder / "truth.msgpack", _encode({"oracle": truth}, scope))
         return after
 
+    def reobserve(cursor: StatefulChunkBackend) -> Observation:
+        folder = directory / f"empty-set-reobserve-{cursor.decisions:04d}"
+        folder.mkdir()
+        status, after = _tick(
+            folder, session, cursor.observation, {"reason": "one empty-set recovery tick"}, scope
+        )
+        if after is None:
+            raise RuntimeError(f"stateful empty-set re-observation stopped: {status}")
+        return after
+
     cursor = StatefulChunkBackend(
         observation,
         entry.scene,
@@ -275,24 +356,57 @@ def run_candidate_zero(
         decide=decide,
         advance=advance,
         truth=session.client.get_ground_truth,
+        reobserve=reobserve if scored else None,
     )
-    expert = ChunkExpert(scenario=entry.scene, trace_path=directory / "expert-phases.jsonl")
-    result = expert.execute(cursor, entry.seed)
+    result = None
     verdict = None
-    if result.home_reached:
-        last, _ = observe(cursor.observation, directory / "final-state.msgpack")
-        verdict = verifier.check_observed(task, last)
-    success = bool(result.success and verdict is not None and verdict.success)
-    terminal = "COMPLETE" if success else "STATEFUL_TASK_FAILED"
+    terminal = "PLACEMENT_FAILED"
+    try:
+        for attempt in range(2 if scored else 1):
+            expert = ChunkExpert(
+                scenario=entry.scene, trace_path=directory / f"expert-phases-{attempt}.jsonl"
+            )
+            result = expert.execute(cursor, entry.seed)
+            if not result.home_reached or cursor.phase != "HOME":
+                if result.rejections:
+                    terminal = rejected_terminal
+                break
+            last, _ = observe(cursor.observation, directory / f"final-state-{attempt}.msgpack")
+            verdict = verifier.check_observed(task, last)
+            transition = (
+                verifier.next_action(verdict)
+                if scored
+                else ("complete" if result.success and verdict.success else "abort")
+            )
+            _write_event(
+                directory / f"verification-{attempt}.json",
+                {
+                    "tick": cursor.ticks,
+                    "phase": cursor.phase,
+                    "verdict": asdict(verdict),
+                    "transition": transition,
+                },
+            )
+            if transition == "complete":
+                terminal = "COMPLETE"
+                break
+            terminal = "VERIFICATION_ABORT"
+            if transition != "retry_once":
+                break
+            cursor.retry_verification()
+    except TaskStop as stop:
+        terminal = stop.terminal
     _write_event(
         directory / "terminal.json",
         {
             "status": terminal,
-            "scored": False,
+            "scored": scored,
             "confirmed_observed_ticks": cursor.ticks,
             "chunks": cursor.decisions,
             "can_max_rise_m": max(0.0, peak - start_z),
-            "expert_result": asdict(result),
+            "verification_retries": int(cursor.verification_retry_used),
+            "empty_set_recoveries": int(cursor.empty_recovery_used),
+            "expert_result": None if result is None else asdict(result),
             "placement_verification": None if verdict is None else asdict(verdict),
         },
     )

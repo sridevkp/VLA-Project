@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +27,10 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     MATCHED_PROXY_PATH,
     MATCHED_PROXY_SHA,
     SETTLED_CONFIG_SHA,
+    STATEFUL_CONFIG_PATH,
+    STATEFUL_CONFIG_SHA,
+    STATEFUL_REGISTRATION,
+    STATEFUL_REGISTRATION_SHA,
     _sha,  # noqa: PLC2701
     _verified_head,  # noqa: PLC2701
     run_frozen_test_episode,
@@ -203,6 +208,7 @@ def run(
     baseline: bool = False,
     settled_init: bool = False,
     matched_clearance: bool = False,
+    stateful: bool = False,
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
@@ -219,6 +225,27 @@ def run(
         raise ValueError("only authorized VALIDATION and TEST are supported")
     if not 1 <= workers <= 3:
         raise ValueError("use one to three isolated workers")
+    if stateful:
+        if (
+            split != "validation"
+            or policy is not None
+            or baseline
+            or settled_init
+            or matched_clearance
+        ):
+            raise ValueError("stateful executor is scoped to arm-3 VALIDATION")
+        branch = subprocess.run(
+            ["git", "symbolic-ref", "-q", "HEAD"], cwd=_ROOT, check=False, capture_output=True
+        )
+        if branch.returncode != 1:
+            raise ValueError("stateful VALIDATION requires a detached campaign worktree")
+        if (
+            _sha((_ROOT / STATEFUL_CONFIG_PATH).read_bytes()) != STATEFUL_CONFIG_SHA
+            or os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
+            or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
+            != STATEFUL_REGISTRATION_SHA
+        ):
+            raise ValueError("stateful executor profile pin mismatch")
     if matched_clearance and (split != "validation" or policy != "equal" or settled_init):
         raise ValueError("matched clearance is scoped to arm-5 equal VALIDATION")
     if settled_init and (split != "validation" or policy is not None or baseline):
@@ -305,6 +332,7 @@ def run(
                 "VLAROBOT_FINGER_IDLE_ONLY": "0",
                 "VLAROBOT_WORLD_SHA256": _WORLD,
                 "VLAROBOT_DIAGNOSTIC_STATUS_PATH": str(status),
+                **({"VLAROBOT_URDF_REGISTRATION_FILE": STATEFUL_REGISTRATION} if stateful else {}),
             },
         ) as owned:
             arguments = dict(
@@ -344,7 +372,7 @@ def run(
                 terminal = run_frozen_test_episode(owned, frozen_policy=frozen_policy, **arguments)
             elif policy is None:
                 terminal = run_heuristic_validation_episode(
-                    owned, settled_init=settled_init, **arguments
+                    owned, settled_init=settled_init, stateful=stateful, **arguments
                 )
             else:
                 terminal = run_proxy_validation_episode(
@@ -388,6 +416,7 @@ if __name__ == "__main__":
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--settled-init", action="store_true")
     parser.add_argument("--matched-clearance", action="store_true")
+    parser.add_argument("--stateful", action="store_true")
     args = parser.parse_args()
     head = (
         args.expected_head
@@ -404,4 +433,5 @@ if __name__ == "__main__":
         baseline=args.baseline,
         settled_init=args.settled_init,
         matched_clearance=args.matched_clearance,
+        stateful=args.stateful,
     )

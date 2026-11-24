@@ -59,6 +59,11 @@ VALIDATION_SCOPE = "scored_arm3_validation"
 MATCHED_PROXY_PATH = "configs/worldmind_arm5_matched_clearance.json"
 MATCHED_PROXY_SHA = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
 STATEFUL_DIAGNOSTIC_SCOPE = "non_scored_stateful_candidate_00"
+STATEFUL_VALIDATION_SCOPE = "scored_arm3_validation_stateful"
+STATEFUL_REGISTRATION = "calibration/urdf-base-train-v1.yaml"
+STATEFUL_REGISTRATION_SHA = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+STATEFUL_CONFIG_PATH = "configs/worldmind_arm3_stateful.yaml"
+STATEFUL_CONFIG_SHA = "585ea6ef1ef850f2c0251b4fa797cb5a4032376a2ddca370144b0d35bf22c58b"
 SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
 SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
@@ -66,6 +71,7 @@ _ARM3_TEST_SCOPE = "scored_arm3_test"
 _ARM5_TEST_SCOPE = "scored_arm5_proxy_test"
 _SCORED_SCOPES = frozenset(
     {
+        STATEFUL_VALIDATION_SCOPE,
         VALIDATION_SCOPE,
         SETTLED_VALIDATION_SCOPE,
         PROXY_VALIDATION_SCOPE,
@@ -401,6 +407,7 @@ def run_heuristic_validation_episode(
     expected_head: str,
     episode_id: str,
     settled_init: bool = False,
+    stateful: bool = False,
 ) -> str:
     """Run one scored episode from the frozen VALIDATION plan in an owned session."""
     from datetime import date
@@ -414,7 +421,9 @@ def run_heuristic_validation_episode(
         directory,
         expected_head,
         episode_id,
-        SETTLED_VALIDATION_SCOPE if settled_init else VALIDATION_SCOPE,
+        STATEFUL_VALIDATION_SCOPE
+        if stateful
+        else (SETTLED_VALIDATION_SCOPE if settled_init else VALIDATION_SCOPE),
     )
 
 
@@ -496,8 +505,8 @@ def _run_owned(
     matched_clearance: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
-    stateful = scope == STATEFUL_DIAGNOSTIC_SCOPE
-    if stateful and (
+    stateful = scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
+    if scope == STATEFUL_DIAGNOSTIC_SCOPE and (
         episode_id != "validation-clear-i00-s0" or proxy_policy or split != "validation"
     ):
         raise ValueError("stateful candidate-00 diagnostic requires the frozen clear identity")
@@ -531,6 +540,15 @@ def _run_owned(
         != SETTLED_CONFIG_SHA
     ):
         raise ValueError("settled INIT profile pin mismatch")
+    if stateful and (
+        os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
+        or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
+        != STATEFUL_REGISTRATION_SHA
+        or split != "validation"
+        or proxy_policy
+        or _sha((_ROOT / STATEFUL_CONFIG_PATH).read_bytes()) != STATEFUL_CONFIG_SHA
+    ):
+        raise ValueError("stateful executor scope or profile mismatch")
     plan = build_episode_plan(split, 0, allow_test=split == "test")
     plan_hash = _plan_sha256(plan)
     if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (
@@ -575,10 +593,15 @@ def _run_owned(
                     else "motor_safety"
                 ),
                 "proxy_config_sha256": proxy_pin if proxy_policy else None,
-                "execution_policy": "selected_chunk_with_expert_INIT_wait"
+                "execution_policy": "observed_expert_phase_and_waypoint_cursor"
+                if stateful
+                else "selected_chunk_with_expert_INIT_wait"
                 if settled_init
                 else ("first_action" if qualification else "selected_chunk"),
-                "executor_config_sha256": SETTLED_CONFIG_SHA if settled_init else None,
+                "executor_config_sha256": STATEFUL_CONFIG_SHA
+                if stateful
+                else (SETTLED_CONFIG_SHA if settled_init else None),
+                "expert_registration_sha256": STATEFUL_REGISTRATION_SHA if stateful else None,
                 "source_commit": head,
                 "episode": episode_id,
                 "session": owned,
@@ -658,9 +681,9 @@ def _run_owned(
         state, truth = observe(observation, directory / "observed-state.msgpack")
         verifier = None if qualification else fixture.build_verifier(observation)
         if stateful:
-            from vlarobot.execution.worldmind_stateful_chunk import run_candidate_zero
+            from vlarobot.execution.worldmind_stateful_chunk import run_stateful_expert
 
-            return run_candidate_zero(
+            return run_stateful_expert(
                 session,
                 owned,
                 directory,
@@ -672,6 +695,7 @@ def _run_owned(
                 verifier,
                 task,
                 observe,
+                scored=scored,
             )
         no_safe = RecoveryState()
         confirmed = 0

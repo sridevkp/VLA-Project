@@ -7,13 +7,15 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
+import numpy as np
+
 from vlarobot.core.types import Action, ActionChunk, Decision, JointTarget, WorldState
 from vlarobot.eval.worldmind_config import FROZEN_CONTROL_DT_S, FROZEN_HORIZON_STEPS
 from vlarobot.eval.worldmind_objectives import predicted_risk, tool_envelope_clearances
 from vlarobot.eval.worldmind_proxy_policy import GRID, HARD_CHECKS, PROXY_MARGIN_M
 from vlarobot.execution.worldmind_proxy_binding import _matched_proxy_evidence  # noqa: PLC2701
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
-from vlarobot.world_model.rollout import Trajectory
+from vlarobot.world_model.rollout import Trajectory, rotate
 
 _PHASES = frozenset(
     (
@@ -133,6 +135,34 @@ def select_phase_assessments(
     ).select(assessments)
 
 
+def table_height(state: WorldState, geometry: Mapping[str, Any]) -> float:
+    """Tool tip height above the calibrated table plane, in metres."""
+    base = state.robot.base_pose_world
+    if base is None:
+        return math.nan
+    tip = rotate(np.asarray(base.orientation), state.robot.ee_pose.position.as_array())
+    return float(base.position.z + tip[2] - geometry["table_top_world_z_m"])
+
+
+def lift_recovery(
+    states: Sequence[WorldState], geometry: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """Allow at most the initial endpoint deficiency at the first LIFT transition."""
+    heights = [table_height(state, geometry) for state in states]
+    floor = geometry["table_margin_m"]["LIFT"]
+    if len(heights) < 2 or not all(map(math.isfinite, heights)):
+        return None
+    initial, first = heights[:2]
+    if not (0 < initial < floor <= min(heights[1:])):
+        return None
+    return {
+        "initial_height_m": initial,
+        "predicted_tick_one_height_m": first,
+        "predicted_minimum_after_entry_m": min(heights[1:]),
+        "floor_m": floor,
+    }
+
+
 def rank_phase_pool(
     current: WorldState,
     pool: Sequence[ActionChunk],
@@ -146,6 +176,7 @@ def rank_phase_pool(
     *,
     policy: str = "equal",
     veto: bool = True,
+    allow_lift_entry: bool = False,
 ) -> tuple[Decision, list[dict[str, Any]]]:
     """Run production geometric checks and Eq. 3.8 with only same-phase applicable terms."""
     if waypoint.phase not in _PHASES:
@@ -181,6 +212,7 @@ def rank_phase_pool(
         checks: dict[str, bool | None] = {"prediction_complete": complete}
         components = (placement.error_m, None, None, 0.0)
         margins: dict[str, Any] = {}
+        recovery = None
         if veto and placement.error_m is not None:
             margins["placement_tolerance"] = placement_tolerance_m - placement.error_m
         if complete:
@@ -197,6 +229,9 @@ def rank_phase_pool(
                     phase_terminal=waypoint.terminal and completion is not None,
                 )
                 table, objects = evidence.geometric_hard_pass
+                if not table and objects and allow_lift_entry and waypoint.phase == "LIFT":
+                    recovery = lift_recovery(states, geometry)
+                    table = recovery is not None
                 margins.update(evidence.signed_margins or {})
                 ik = ik_accepts(action)
                 if isinstance(ik, tuple):
@@ -254,6 +289,7 @@ def rank_phase_pool(
                     for name in ((*required, "prediction_complete") if veto else checks)
                 ),
                 "prediction_reasons": trajectory.hard_reasons,
+                "lift_entry_recovery": recovery,
             }
         )
     if veto:

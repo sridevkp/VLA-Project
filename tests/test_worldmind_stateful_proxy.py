@@ -200,3 +200,42 @@ def test_verified_terminal_home_prediction_uses_canonical_inclusive_predicate(fi
     assert predicted_completion(held, states, ordinary) == 1
     assert predicted_completion(held, states, canonical) == 3
     assert predicted_completion(held, states[:-1], canonical) is None
+
+
+@pytest.mark.parametrize(
+    ("initial_m", "after_m", "enable", "expected"),
+    [
+        (0.080, (0.09, 0.09), True, True),
+        (0.080, (0.09, 0.09), False, False),
+        (-0.001, (0.09, 0.09), True, False),
+        (0.080, (0.079, 0.09), True, False),
+        (0.080, (0.080, 0.09), True, False),
+        (0.080, (0.09, 0.079), True, False),
+    ],
+)
+def test_lift_entry_recovery_only_exempts_inherited_table_floor(
+    fixture, initial_m, after_m, enable, expected
+):
+    config, initial, monitor = fixture
+
+    def state(height):
+        point = Vec3(0, 0, config["table_top_world_z_m"] + height)
+        return replace(initial, robot=replace(initial.robot, ee_pose=Pose3D(point, Q)))
+
+    current, first, subsequent = map(state, (initial_m, *after_m))
+    chunk = ActionChunk([JointTarget({"joint": 0.1})] * 50, 0.032, "scripted")
+    decision, (row,) = rank_phase_pool(
+        current,
+        [chunk],
+        Waypoint("LIFT", False, 0.01, None),
+        lambda *_: Trajectory((current, first, *([subsequent] * 49)), 0.032, (), (), ()),
+        monitor,
+        config,
+        (0, 0, 1),
+        0.1,
+        lambda _: True,
+        allow_lift_entry=enable,
+    )
+    assert (decision.selected_index == 0) is expected
+    assert (row["lift_entry_recovery"] is not None) is expected
+    assert row["signed_margins"]["table_clearance"] < 0

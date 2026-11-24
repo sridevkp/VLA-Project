@@ -3968,3 +3968,22 @@ command and 0.021947 rad from the verifier's HOME. This mismatch triggered
 a full task retry. The new stateful profile hash incorporates HOME profile
 SHA-256 `2a014f1e38e28e56d43c5ec0127aa9030ef59e2af4dbf180ffc2640cba486e85`.
 Do not mix old and corrected HOME profiles in policy selection.
+
+### ADR-0030 addendum 11 — Matched VALIDATION LIFT entry, 2026-11-24
+
+The owner approved a one-tick predictive-veto exception for the first LIFT
+waypoint immediately after CLOSE. Three archived inherited shortfalls were
+0.138–0.382 mm below the operating floor. All 192 archived predictions recovered
+on tick one in the offline replay, with the clear and collision controls unchanged.
+
+Only the starting endpoint may be below the unchanged operating floor. It must be
+above the geometric plane, and every subsequent predicted endpoint must be
+at or above the floor. Other predictive vetoes and the independent motor monitor
+still apply. The first confirmed observation must recover the unchanged floor
+and show no recorded contact. Failure terminates the episode, with no repeated
+exception for that waypoint. Predicted and observed heights are recorded.
+This is geometric-proxy evidence, with no independently certified safety claim.
+
+Both matched arm-5 profiles use the same pinned exception. All four stateful
+VALIDATION profiles use the configured HOME reference introduced in addendum 10.
+The prior profiles and their results remain engineering-development evidence.

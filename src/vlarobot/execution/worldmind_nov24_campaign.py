@@ -25,6 +25,8 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     _ROOT,  # noqa: PLC2701
     _SCENARIOS,  # noqa: PLC2701
     _WORLD,  # noqa: PLC2701
+    LIFT_RECOVERY_PROFILE_PATH,
+    LIFT_RECOVERY_PROFILE_SHA,
     MATCHED_PROXY_PATH,
     MATCHED_PROXY_SHA,
     SETTLED_CONFIG_SHA,
@@ -52,6 +54,7 @@ _ELIGIBLE_TERMINALS = frozenset(
         "COMPLETE",
         "VERIFICATION_ABORT",
         "NO_SAFE_SET",
+        "LIFT_RECOVERY_FAILED",
         "NO_RANKABLE_CANDIDATE",
         "motor_veto",
         "backend_rejected",
@@ -112,8 +115,11 @@ def verify_policy_contrast(reference: Path, policy: str, proxy_hash: str) -> Non
     home_profile = launch.get("home_profile_sha256")
     if home_profile not in (None, VERIFIED_HOME_PROFILE_SHA):
         raise ValueError("unapproved HOME contrast profile")
+    lift_profile = launch.get("lift_recovery_profile_sha256")
+    if lift_profile not in (None, LIFT_RECOVERY_PROFILE_SHA):
+        raise ValueError("unapproved LIFT contrast profile")
     if launch.get("executor_config_sha256") == executor_profile_sha(
-        STATEFUL_PROXY_SHA, home_profile is not None
+        STATEFUL_PROXY_SHA, home_profile is not None, lift_profile is not None
     ):
         from vlarobot.execution.worldmind_stateful_proxy import select_phase_assessments
         from vlarobot.risk.gate import CandidateAssessment
@@ -168,6 +174,13 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
     ):
         raise ValueError("unapproved HOME freeze profile")
     verified_home = home_profile is not None
+    lift_profile = first.get("lift_recovery_profile_sha256")
+    if lift_profile is not None and (
+        not verified_home
+        or lift_profile != LIFT_RECOVERY_PROFILE_SHA
+        or _sha((_ROOT / LIFT_RECOVERY_PROFILE_PATH).read_bytes()) != LIFT_RECOVERY_PROFILE_SHA
+    ):
+        raise ValueError("unapproved LIFT freeze profile")
     if stateful and len(runs) != len(STATEFUL_PROXY_PROFILES):
         raise ValueError("stateful freeze requires both approved equal and goal-heavy outcomes")
     proxy_path = MATCHED_PROXY_PATH if stateful else "configs/worldmind_proxy_nov24.yaml"
@@ -190,8 +203,11 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
                 and (
                     policy not in STATEFUL_PROXY_PROFILES
                     or launch.get("home_profile_sha256") != home_profile
+                    or launch.get("lift_recovery_profile_sha256") != lift_profile
                     or launch["executor_config_sha256"]
-                    != executor_profile_sha(STATEFUL_PROXY_PROFILES[policy][1], verified_home)
+                    != executor_profile_sha(
+                        STATEFUL_PROXY_PROFILES[policy][1], verified_home, lift_profile is not None
+                    )
                     or _sha((_ROOT / STATEFUL_PROXY_PROFILES[policy][0]).read_bytes())
                     != STATEFUL_PROXY_PROFILES[policy][1]
                 )
@@ -247,9 +263,10 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
             **(
                 {
                     "executor_config_sha256": executor_profile_sha(
-                        STATEFUL_PROXY_PROFILES[winner][1], verified_home
+                        STATEFUL_PROXY_PROFILES[winner][1], verified_home, lift_profile is not None
                     ),
                     "home_profile_sha256": home_profile,
+                    "lift_recovery_profile_sha256": lift_profile,
                 }
                 if stateful
                 else {}
@@ -307,6 +324,11 @@ def run(
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
+    lift_recovery = bool(verified_home and policy and not world_model)
+    if lift_recovery and (
+        _sha((_ROOT / LIFT_RECOVERY_PROFILE_PATH).read_bytes()) != LIFT_RECOVERY_PROFILE_SHA
+    ):
+        raise ValueError("unapproved LIFT campaign profile")
     if verified_home and (
         not stateful
         or split != "validation"
@@ -422,7 +444,7 @@ def run(
             "policy_status": "approved_pre_calibration_equal" if world_model else None,
             "proxy_policy": policy,
             "executor_config_sha256": (
-                executor_profile_sha(stateful_hash, verified_home)
+                executor_profile_sha(stateful_hash, verified_home, lift_recovery)
                 if stateful
                 else SETTLED_CONFIG_SHA
                 if settled_init or matched_clearance
@@ -430,6 +452,7 @@ def run(
             ),
             "proxy_config_sha256": proxy_hash,
             "home_profile_sha256": VERIFIED_HOME_PROFILE_SHA if verified_home else None,
+            "lift_recovery_profile_sha256": LIFT_RECOVERY_PROFILE_SHA if lift_recovery else None,
             "config_sha256": _CONFIG,
             "split": split,
             "trials": len(plan),

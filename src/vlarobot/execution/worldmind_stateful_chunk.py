@@ -6,7 +6,9 @@ candidate evidence, motor admission, simulator operations, and final verificatio
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, replace
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -34,7 +36,12 @@ from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2
     _write_event,
 )
 from vlarobot.execution.worldmind_proxy_binding import proxy_scene
-from vlarobot.execution.worldmind_stateful_proxy import Waypoint, home_joint_error, rank_phase_pool
+from vlarobot.execution.worldmind_stateful_proxy import (
+    Waypoint,
+    home_joint_error,
+    rank_phase_pool,
+    table_height,
+)
 from vlarobot.planning.candidates import SeededCandidateGenerator
 
 if TYPE_CHECKING:
@@ -127,6 +134,9 @@ class StatefulChunkBackend:
         self.target: Action | None = None
         self.armed = False
         self.initial_delivered = False
+        self.last_apply_phase: str | None = None
+        self.lift_entry = False
+        self.lift_exception_used = False
 
     def reset(self, scenario: ScenarioSpec, seed: int) -> Observation:
         """Supply the already owned and durably recorded reset exactly once."""
@@ -148,6 +158,9 @@ class StatefulChunkBackend:
         return self.truth()
 
     def apply(self, action: Action) -> ApplyResult:
+        self.lift_entry = self.phase == "LIFT" and self.last_apply_phase == "CLOSE"
+        self.last_apply_phase = self.phase
+        self.lift_exception_used = False
         self.waypoint_index += 1
         self.waypoint_reference = action
         self.replacements_used = 0
@@ -300,6 +313,7 @@ def run_stateful_expert(
     evidence_scope: str | None = None,
     ranking_policy: str = "equal",
     predictive_veto: bool = True,
+    lift_entry_recovery: bool = False,
     verified_home: bool = False,
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
@@ -323,6 +337,8 @@ def run_stateful_expert(
         folder = directory / f"chunk-{cursor.decisions:04d}"
         folder.mkdir()
         state, truth = observe(cursor.observation, folder / "observed-state.msgpack")
+        planning_start = perf_counter()
+        selected_prediction = None
         index = 0
 
         def draw(_task: Any, _state: Any, _memory: Any, seed: int) -> ActionChunk:
@@ -388,11 +404,18 @@ def run_stateful_expert(
                 }
                 return all(value >= 0 for value in margins.values()), margins
 
+            predictions = {}
+
+            def predict(state, chunk):
+                prediction = predictor.predict_trajectory(state, chunk)
+                predictions[id(chunk)] = prediction
+                return prediction
+
             decision, proxy_rows = rank_phase_pool(
                 complete,
                 pool,
                 cursor.waypoint,
-                predictor.predict_trajectory,
+                predict,
                 monitor,
                 geometry,
                 goal.as_array(),
@@ -400,6 +423,12 @@ def run_stateful_expert(
                 ik_accepts,
                 policy=ranking_policy,
                 veto=predictive_veto,
+                allow_lift_entry=(
+                    lift_entry_recovery
+                    and cursor.lift_entry
+                    and not cursor.lift_exception_used
+                    and not continuation
+                ),
             )
             selected = decision.selected_index
             proxy_admitted += sum(row["admitted"] for row in proxy_rows)
@@ -438,6 +467,13 @@ def run_stateful_expert(
             ]
             if selected is not None:
                 cursor.active_prefix = proxy_rows[selected]["active_prefix_ticks"]
+                if verified_home:
+                    # Contiguous equal commands reuse exactly the same assessment and rollout.
+                    first = selected
+                    while id(pool[first]) not in predictions:
+                        first -= 1
+                    selected_prediction = predictions[id(pool[first])]
+        planning_latency_s = perf_counter() - planning_start
         if selected is not None and (scored or proxy is not None or selected == 0):
             rows[selected] = replace(rows[selected], disposition="selected")
         else:
@@ -448,6 +484,7 @@ def run_stateful_expert(
             _encode(
                 {
                     "generation": asdict(generation),
+                    **({"planning_latency_s": planning_latency_s} if verified_home else {}),
                     "pool": [_row_data(row) for row in rows],
                     "selected": rows[selected].candidate_id if selected is not None else None,
                     "phase": cursor.phase,
@@ -478,6 +515,19 @@ def run_stateful_expert(
                     },
                 )
             return ApplyResult(False, "no eligible stateful candidate"), action
+        if selected_prediction is not None:
+            _persist(
+                folder / "selected-prediction.msgpack",
+                _encode(
+                    {
+                        "decision_sha256": snapshot,
+                        "candidate_id": rows[selected].candidate_id,
+                        "dt_s": selected_prediction.dt_s,
+                        "states": selected_prediction.states[: cursor.active_prefix + 1],
+                    },
+                    scope,
+                ),
+            )
         action = pool[selected].actions[0]
         motor_verdict = monitor.validate(action, cursor.observation.robot)
         verdict_sha = _persist(
@@ -527,7 +577,11 @@ def run_stateful_expert(
                 scope,
             )
         if result.accepted:
+            recovery = proxy_rows[selected]["lift_entry_recovery"] if proxy is not None else None
+            if recovery is not None:
+                cursor.lift_exception_used = True
             active.update(
+                recovery=recovery,
                 folder=folder,
                 receipt=receipt_sha,
                 decision=snapshot,
@@ -575,6 +629,26 @@ def run_stateful_expert(
                     "first_confirmed_tick": cursor.ticks + 1,
                 },
             )
+        if cursor.used == 0 and active["recovery"] is not None:
+            recovery = active["recovery"]
+            observed, _ = observe(after, folder / "lift-recovery-observation.msgpack")
+            height = table_height(observed, proxy[1])
+            contacts = after.robot.diagnostics.get("contact_nodes")
+            recovered = math.isfinite(height) and height >= recovery["floor_m"] and contacts == []
+            _write_event(
+                folder / "lift-recovery.json",
+                {
+                    **recovery,
+                    "observed_height_m": height if math.isfinite(height) else None,
+                    "contact_nodes": contacts,
+                    "recovered": recovered,
+                    "tick": cursor.ticks + 1,
+                    "candidate_id": active["selected"],
+                },
+            )
+            if not recovered:
+                cursor.ticks += 1
+                raise TaskStop("LIFT_RECOVERY_FAILED")
         truth = session.client.get_ground_truth()
         height = truth.object_poses[task.target].position.z
         peak = max(peak, height)

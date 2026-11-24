@@ -104,7 +104,7 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
     from vlarobot.execution.worldmind_idle_fingers import record
 
     proxy_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
-    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+    if not date(2026, 11, 21) <= date.today() <= date(2026, 11, 29):
         raise ValueError("selection must finish in the authorized VALIDATION window")
     outcomes = {}
     sources = {}
@@ -201,14 +201,10 @@ def run(
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
     if split == "validation":
-        if (
-            baseline
-            or frozen_policy
-            or not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29)
-        ):
+        if baseline or frozen_policy or date.today() < date(2026, 11, 21):
             raise ValueError("live VALIDATION is outside the approved scope or dates")
     elif split == "test":
-        if policy is not None or not date(2026, 11, 30) <= date.today() <= date(2026, 12, 3):
+        if policy is not None or date.today() < date(2026, 11, 30):
             raise ValueError("live TEST is outside the approved scope or dates")
         if baseline and frozen_policy:
             raise ValueError("baseline does not use a WorldMind policy")

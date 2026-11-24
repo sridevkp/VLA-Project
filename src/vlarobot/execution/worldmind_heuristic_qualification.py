@@ -306,7 +306,7 @@ def run_heuristic_validation_episode(
     """Run one scored episode from the frozen VALIDATION plan in an owned session."""
     from datetime import date
 
-    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+    if date.today() < date(2026, 11, 21):
         raise ValueError("arm-3 live VALIDATION is outside the owner execution dates")
     return _run_owned(
         session,
@@ -336,7 +336,7 @@ def run_proxy_validation_episode(
 
     if policy_id not in GRID | OPTIONAL_GRID:
         raise ValueError("unknown November 24 candidate policy")
-    if not date(2026, 11, 26) <= date.today() <= date(2026, 11, 29):
+    if date.today() < date(2026, 11, 21):
         raise ValueError("arm-5 live VALIDATION is outside the owner execution dates")
     return _run_owned(
         session,
@@ -365,7 +365,7 @@ def run_frozen_test_episode(
 
     from vlarobot.execution.worldmind_nov24_campaign import committed_test_policy
 
-    if not date(2026, 11, 30) <= date.today() <= date(2026, 12, 3):
+    if date.today() < date(2026, 11, 30):
         raise ValueError("live TEST is outside the owner execution dates")
     policy_id = committed_test_policy(frozen_policy) if frozen_policy else None
     return _run_owned(

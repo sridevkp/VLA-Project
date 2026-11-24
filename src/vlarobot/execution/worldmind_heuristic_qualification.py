@@ -243,7 +243,11 @@ def _tick(
     if not isinstance(after, Observation):
         return "tick_unobserved", None
     _persist(directory / "post-tick.msgpack", _encode({"observation": after}, scope))
-    _admit(after, finger_logging_only=scope in _SCORED_SCOPES)
+    _admit(
+        after,
+        finger_logging_only=scope in _SCORED_SCOPES
+        or scope == "non_scored_expert_candidate_00_parity",
+    )
     if not math.isclose(after.t - before.t, FROZEN_CONTROL_DT_S):
         raise ValueError("post-tick observation time does not match one control tick")
     return "one_tick_observed", after

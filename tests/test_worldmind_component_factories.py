@@ -7,7 +7,7 @@ never convert ``MissingObjectiveInput`` into a default. Registration does not po
 
 from __future__ import annotations
 
-from dataclasses import MISSING
+from dataclasses import MISSING, replace
 from types import SimpleNamespace
 
 import pytest
@@ -26,6 +26,7 @@ from vlarobot.backends.worldmind_component_factories import (
     consistency_component_factory,
     goal_component_factory,
     length_component_factory,
+    predicted_tool_path,
     risk_component_factory,
 )
 from vlarobot.core.types import (
@@ -236,3 +237,21 @@ def test_production_registers_factories_but_components_stay_empty() -> None:
     with pytest.raises(ValueError, match="unregistered WorldMind bindings") as err:
         validate_worldmind_bindings(config, bindings)  # type: ignore[arg-type]
     assert "components.Jg=approved-jg-v1" in str(err.value)
+
+
+def test_predicted_tool_path_preserves_initial_point_and_control_alignment() -> None:
+    current, after = _state(0.2), _state(0.4)
+    chunk = _delta_chunk()
+    trajectory = _trajectory(current, after)
+    assert predicted_tool_path(current, chunk, trajectory) == (
+        current.robot.ee_pose.position,
+        after.robot.ee_pose.position,
+    )
+    for invalid in (
+        _trajectory(after),
+        _trajectory(after, current),
+        _trajectory(current, _state(float("nan"))),
+        replace(trajectory, dt_s=0.064),
+    ):
+        with pytest.raises(MissingObjectiveInput, match="Jl requires"):
+            predicted_tool_path(current, chunk, invalid)

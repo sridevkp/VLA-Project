@@ -19,7 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from vlarobot.core.types import Pose3D, Vec3, WorldState
+from vlarobot.core.types import ActionChunk, Pose3D, Vec3, WorldState
 from vlarobot.eval.worldmind_objectives import (
     MissingObjectiveInput,
     goal_error,
@@ -64,6 +64,31 @@ def _trajectory(trajectory: Trajectory | None, name: str) -> Trajectory:
     if not isinstance(trajectory, Trajectory) or not trajectory.states:
         raise MissingObjectiveInput(f"{name} requires a nonempty predicted Trajectory")
     return trajectory
+
+
+def predicted_tool_path(
+    current: WorldState, chunk: ActionChunk, trajectory: Trajectory
+) -> tuple[Vec3, ...]:
+    """Supply the ordered base-frame tool path, including the decision-time point."""
+    predicted = _trajectory(trajectory, "Jl")
+    if (
+        not isinstance(chunk, ActionChunk)
+        or not chunk.actions
+        or len(predicted.states) != len(chunk.actions) + 1
+        or predicted.dt_s != chunk.dt
+        or any(not isinstance(state, WorldState) for state in predicted.states)
+        or predicted.states[0].robot.ee_pose != current.robot.ee_pose
+    ):
+        raise MissingObjectiveInput("Jl requires an aligned action/state path and control tick")
+    points = []
+    for state in predicted.states:
+        position = state.robot.ee_pose.position
+        if not isinstance(position, Vec3) or not all(
+            math.isfinite(value) for value in (position.x, position.y, position.z)
+        ):
+            raise MissingObjectiveInput("Jl requires finite base-frame tool positions")
+        points.append(position)
+    return tuple(points)
 
 
 @dataclass(frozen=True)

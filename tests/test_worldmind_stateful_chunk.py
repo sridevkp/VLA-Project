@@ -187,3 +187,55 @@ def test_boundary_waypoint_draws_are_deterministic_without_rejection_exhaustion(
         assert actual == draws(reference)
         assert len(set(actual)) == len(actual)
         assert all(-1.39 <= value <= 1.39 and abs(value - reference) <= 0.005 for value in actual)
+
+
+def test_final_verifier_is_not_called_before_observed_home(tmp_path, monkeypatch):
+    from dataclasses import dataclass
+    from types import SimpleNamespace
+
+    from vlarobot.core.types import GroundTruth, Pose3D, Vec3
+    from vlarobot.execution import worldmind_stateful_chunk as module
+
+    @dataclass
+    class Result:
+        home_reached: bool = True
+        rejections: int = 0
+
+    class EarlyExpert:
+        def __init__(self, **_kwargs):
+            pass
+
+        def execute(self, cursor, _seed):
+            cursor.phase = "PREGRASP"
+            return Result()
+
+    def unexpected(*_args):
+        pytest.fail("observed verifier ran before HOME")
+
+    monkeypatch.setattr(module, "ChunkExpert", EarlyExpert)
+    backend = FakeBackend()
+    scene = ScenarioSpec()
+    initial = backend.reset(scene, 0)
+    truth = GroundTruth({"CAN": Pose3D(Vec3(0.0, 0.0, 0.1), (0.0, 0.0, 0.0, 1.0))})
+    assert (
+        module.run_stateful_expert(
+            SimpleNamespace(client=SimpleNamespace(get_ground_truth=lambda: truth)),
+            {},
+            tmp_path,
+            SimpleNamespace(seed=0, scene=scene),
+            SimpleNamespace(
+                adapter=SimpleNamespace(jitter=None),
+                pipeline=SimpleNamespace(horizon_steps=50),
+                bounds=SimpleNamespace(max_steps=1059),
+            ),
+            None,
+            SimpleNamespace(limits=SimpleNamespace(joint_position={})),
+            initial,
+            SimpleNamespace(check_observed=unexpected),
+            SimpleNamespace(target="CAN"),
+            unexpected,
+            scored=False,
+        )
+        == "PLACEMENT_FAILED"
+    )
+    assert list(tmp_path.glob("verification-*.json")) == []

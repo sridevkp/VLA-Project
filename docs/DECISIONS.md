@@ -3828,3 +3828,24 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   attempt is preserved and retried once on the same seed in a fresh session.
   The scripted-primary comparison does not establish that WorldMind improves a
   competent VLA.
+
+### ADR-0030 addendum 3 — November 24 opening cadence and geometric replay
+
+- Arm 3 VALIDATION uses the baseline's observed INIT opening criterion and
+  timeout before PREGRASP. Idle ticks share the existing episode ceiling. The
+  executor configuration SHA-256 is
+  `98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4`.
+- The arm-5 geometric replay measures metres in the world frame. It uses the
+  verified tabletop half-space, separate DESCEND and PLACE_DESCEND contact
+  heights, and a 3.8 mm pad-derived tip radius against non-target oriented boxes.
+  The target CAN is exempt. The 0th percentile of VALIDATION expert minima
+  bounds the replay floors so every recorded geometric positive control remains
+  represented. The fit and check share the same 15 successes. TRAIN provides a
+  separate object-only check because the archived phase labels are missing.
+- Geometric checks pass 15/15 VALIDATION successes. The two collision controls
+  are vetoed. The full gate records zero verified passes: nine archived
+  VALIDATION paths violate the existing joint margin and the full-pose waypoint
+  IK inputs are absent. The geometric values are offline replay configuration
+  SHA-256 `e35cf001b0fa02af16025fa4bbb1c5dfb83f9e5b56216f335537af99bb3ff87c`.
+  Live arm 5 still requires a positive control with the existing joint, IK,
+  and placement checks. Preserve the v1 spherical-veto results separately.

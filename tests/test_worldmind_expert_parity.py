@@ -78,3 +78,41 @@ def test_candidate_00_replays_holds_and_checks_measured_opening(tmp_path, openin
         assert tick == 50
     for phase_tick, _ in phases:
         assert (tmp_path / f"tick-{phase_tick:04d}/phase.json").exists()
+
+
+@pytest.mark.parametrize(("remaining", "success"), ((60, True), (10, False)))
+def test_worldmind_init_wait_uses_expert_criterion_and_shared_budget(
+    monkeypatch,
+    tmp_path,
+    remaining,
+    success,
+):
+    from vlarobot.execution import worldmind_heuristic_qualification as runner
+
+    observation = FakeBackend().reset(ScenarioSpec(), 0)
+    start = replace(observation, robot=replace(observation.robot, gripper_opening=0.00192))
+    ticks = []
+
+    def tick(_, session, before, intent, scope):
+        assert intent["phase"] == "INIT"
+        ticks.append(intent["hold_tick"])
+        return "one_tick_observed", replace(
+            before,
+            t=before.t + DT,
+            robot=replace(before.robot, gripper_opening=before.robot.gripper_opening + 0.00096),
+        )
+
+    monkeypatch.setattr(runner, "_tick", tick)
+    status, after, count = runner.wait_for_expert_opening(
+        tmp_path / "hold",
+        SimpleNamespace(),
+        start,
+        remaining_ticks=remaining,
+        elapsed_open_ticks=2,
+    )
+    assert ticks == list(range(count))
+    if success:
+        assert status == "opening_reached" and count == 43
+        assert after.robot.gripper_opening >= 0.043
+    else:
+        assert status == "WORLDMIND_BOUND_EXHAUSTED" and count == 10 and after is None

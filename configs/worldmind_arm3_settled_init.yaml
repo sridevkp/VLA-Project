@@ -1,0 +1,13 @@
+# Explicit executor-only variant. Candidate pool, motor safety and final criteria are unchanged.
+schema_version: 1
+arm: vla_risk_veto
+split: validation
+proposer: scripted_chunk_adapter
+candidate_count: 32
+horizon_steps: 50
+control_dt_s: 0.032
+execution:
+  initial_opening: wait_for_existing_expert_criterion_before_pregrasp
+  contact_and_placement_criteria: unchanged
+  control_budget: shared_existing_1059_ticks
+  prediction_error: not_applicable

@@ -13,9 +13,18 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vlarobot.backends.webots.config import GRIPPER_OPEN
 from vlarobot.backends.webots.runtime_attestation import read_owned_controller_session
 from vlarobot.backends.worldmind_bindings import production_worldmind_bindings
-from vlarobot.core.types import Action, ApplyResult, GroundTruth, Observation, TaskSpec, WorldState
+from vlarobot.core.types import (
+    Action,
+    ApplyResult,
+    GripperCmd,
+    GroundTruth,
+    Observation,
+    TaskSpec,
+    WorldState,
+)
 from vlarobot.core.wire import encode_message, make_message
 from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.worldmind_config import (
@@ -46,11 +55,19 @@ _EPISODE = "validation-clear-i00-s0"
 _FINGERS = ("gripper_left_finger_joint", "gripper_right_finger_joint")
 _SCOPE = "non_scored_arm3_one_decision_qualification"
 VALIDATION_SCOPE = "scored_arm3_validation"
+SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
+SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
 _ARM3_TEST_SCOPE = "scored_arm3_test"
 _ARM5_TEST_SCOPE = "scored_arm5_proxy_test"
 _SCORED_SCOPES = frozenset(
-    {VALIDATION_SCOPE, PROXY_VALIDATION_SCOPE, _ARM3_TEST_SCOPE, _ARM5_TEST_SCOPE}
+    {
+        VALIDATION_SCOPE,
+        SETTLED_VALIDATION_SCOPE,
+        PROXY_VALIDATION_SCOPE,
+        _ARM3_TEST_SCOPE,
+        _ARM5_TEST_SCOPE,
+    }
 )
 FINGER_LOG_TOLERANCE_M = 1e-4
 
@@ -253,6 +270,54 @@ def _tick(
     return "one_tick_observed", after
 
 
+def wait_for_expert_opening(
+    path: Path,
+    session: WebotsSession,
+    observation: Observation,
+    *,
+    remaining_ticks: int,
+    elapsed_open_ticks: int,
+) -> tuple[str, Observation | None, int]:
+    """Reuse the expert INIT measured opening criterion and shared tick ceiling."""
+    from vlarobot.backends.webots.config import GRIPPER_OPEN_TIMEOUT_S
+    from vlarobot.execution.scripted_can import GRIPPER_OPEN_TOLERANCE_M
+
+    path.mkdir()
+    cap = round(GRIPPER_OPEN_TIMEOUT_S / FROZEN_CONTROL_DT_S)
+    consumed = 0
+    while math.isfinite(observation.robot.gripper_opening) and (
+        observation.robot.gripper_opening < GRIPPER_OPEN - GRIPPER_OPEN_TOLERANCE_M
+    ):
+        if consumed >= remaining_ticks:
+            return "WORLDMIND_BOUND_EXHAUSTED", None, consumed
+        if consumed + elapsed_open_ticks >= cap:
+            return "GRIPPER_OPEN_TIMEOUT", None, consumed
+        tick_path = path / f"hold-{consumed:03d}"
+        tick_path.mkdir()
+        status, after = _tick(
+            tick_path,
+            session,
+            observation,
+            {"phase": "INIT", "hold_tick": consumed},
+            SETTLED_VALIDATION_SCOPE,
+        )
+        if after is None:
+            return status, None, consumed + (status == "tick_unobserved")
+        consumed += 1
+        observation = after
+    if not math.isfinite(observation.robot.gripper_opening):
+        raise ValueError("invalid observed opening for expert INIT")
+    _write_event(
+        path / "opening-reached.json",
+        {
+            "opening_m": observation.robot.gripper_opening,
+            "additional_ticks": consumed,
+            "observed_time_s": observation.t,
+        },
+    )
+    return "opening_reached", observation, consumed
+
+
 def _verified_head(expected: str) -> str:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_ROOT, text=True).strip()
     tracked = subprocess.check_output(
@@ -306,6 +371,7 @@ def run_heuristic_validation_episode(
     directory: Path,
     expected_head: str,
     episode_id: str,
+    settled_init: bool = False,
 ) -> str:
     """Run one scored episode from the frozen VALIDATION plan in an owned session."""
     from datetime import date
@@ -319,7 +385,7 @@ def run_heuristic_validation_episode(
         directory,
         expected_head,
         episode_id,
-        VALIDATION_SCOPE,
+        SETTLED_VALIDATION_SCOPE if settled_init else VALIDATION_SCOPE,
     )
 
 
@@ -398,6 +464,7 @@ def _run_owned(
 ) -> str:
     qualification = scope == _SCOPE
     scored = scope in _SCORED_SCOPES
+    settled_init = scope == SETTLED_VALIDATION_SCOPE
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
     for path, digest in (
@@ -414,6 +481,12 @@ def _run_owned(
         and _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes()) != _PROXY_CONFIG
     ):
         raise ValueError("November 24 proxy config pin mismatch")
+    if (
+        settled_init
+        and _sha((_ROOT / "configs/worldmind_arm3_settled_init.yaml").read_bytes())
+        != SETTLED_CONFIG_SHA
+    ):
+        raise ValueError("settled INIT profile pin mismatch")
     plan = build_episode_plan(split, 0, allow_test=split == "test")
     plan_hash = _plan_sha256(plan)
     if (split == "validation" and (len(plan) != 18 or plan_hash != _PLAN)) or (
@@ -456,7 +529,10 @@ def _run_owned(
                 )
                 if proxy_policy
                 else None,
-                "execution_policy": "first_action" if qualification else "selected_chunk",
+                "execution_policy": "selected_chunk_with_expert_INIT_wait"
+                if settled_init
+                else ("first_action" if qualification else "selected_chunk"),
+                "executor_config_sha256": SETTLED_CONFIG_SHA if settled_init else None,
                 "source_commit": head,
                 "episode": episode_id,
                 "session": owned,
@@ -643,8 +719,37 @@ def _run_owned(
                 rows[selected] = picked
                 record.update(pool=[_row_data(row) for row in rows], selected=picked.candidate_id)
                 actions = picked.chunk.actions[:1] if qualification else picked.chunk.actions
+                if settled_init and (
+                    len(actions) < 19
+                    or not all(
+                        isinstance(action, GripperCmd) and action.opening == GRIPPER_OPEN
+                        for action in actions[:2]
+                    )
+                ):
+                    raise ValueError("settled INIT requires the frozen opening command prefix")
                 decision_path = decision_dir / "decision.msgpack"
                 for action_index, action in enumerate(actions):
+                    if settled_init and action_index == 2:
+                        terminal, opened, spent = wait_for_expert_opening(
+                            decision_dir / "INIT-settle",
+                            session,
+                            observation,
+                            remaining_ticks=config.bounds.max_steps - confirmed,
+                            elapsed_open_ticks=action_index,
+                        )
+                        confirmed += spent
+                        if opened is None:
+                            break
+                        observation = opened
+                        state, truth = observe(opened, decision_dir / "post-INIT-state.msgpack")
+                    if settled_init and action_index == 18:
+                        _write_event(
+                            decision_dir / "pre-CLOSE.json",
+                            {
+                                "opening_m": observation.robot.gripper_opening,
+                                "sim_time_s": observation.t,
+                            },
+                        )
                     if confirmed >= config.bounds.max_steps:
                         terminal = "WORLDMIND_BOUND_EXHAUSTED"
                         break

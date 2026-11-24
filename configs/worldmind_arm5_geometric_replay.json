@@ -1,0 +1,44 @@
+{
+  "contact_height_m": {
+    "DESCEND": {
+      "intended_height_above_top_m": 0.0811711623570518,
+      "path_lower_m": 0.07953968047894087,
+      "terminal_quantiles_m": [
+        0.07953968047894089,
+        0.08046462170314739,
+        0.0811711623570518,
+        0.0828399419902875,
+        0.08291749036607099
+      ],
+      "tolerance_m": 0.0017463280090191937
+    },
+    "PLACE_DESCEND": {
+      "intended_height_above_top_m": 0.1008902997407275,
+      "path_lower_m": 0.0996928908100486,
+      "terminal_quantiles_m": [
+        0.09969289081004862,
+        0.10026807558732509,
+        0.1008902997407275,
+        0.10294568634518475,
+        0.10322628346938534
+      ],
+      "tolerance_m": 0.0023359837286578426
+    }
+  },
+  "frame": "world",
+  "geometry_source": "verified factory tabletop and pinned HAM/APP boxes",
+  "length_unit": "m",
+  "object_margin_m": 0.026191407956744923,
+  "percentile": 0,
+  "schema_version": 1,
+  "status": "offline_calibration_only",
+  "table_margin_m": {
+    "LIFT": 0.08016578362045433,
+    "PREGRASP": 0.13909921170794345,
+    "RETREAT": 0.10164802293435825,
+    "TRANSIT": 0.1992431155147972
+  },
+  "table_top_world_z_m": 0.75,
+  "target_grasp_object_exempt": true,
+  "tool_tip_radius_m": 0.0038
+}

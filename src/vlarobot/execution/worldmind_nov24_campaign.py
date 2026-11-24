@@ -23,6 +23,7 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     _ROOT,  # noqa: PLC2701
     _SCENARIOS,  # noqa: PLC2701
     _WORLD,  # noqa: PLC2701
+    SETTLED_CONFIG_SHA,
     _sha,  # noqa: PLC2701
     _verified_head,  # noqa: PLC2701
     run_frozen_test_episode,
@@ -41,6 +42,7 @@ _ELIGIBLE_TERMINALS = frozenset(
         "backend_rejected",
         "IK_INFEASIBLE",
         "PLACEMENT_FAILED",
+        "GRIPPER_OPEN_TIMEOUT",
         "WORLDMIND_BOUND_EXHAUSTED",
     }
 )
@@ -197,6 +199,7 @@ def run(
     split: str = "validation",
     frozen_policy: Path | None = None,
     baseline: bool = False,
+    settled_init: bool = False,
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
@@ -213,6 +216,14 @@ def run(
         raise ValueError("only authorized VALIDATION and TEST are supported")
     if not 1 <= workers <= 3:
         raise ValueError("use one to three isolated workers")
+    if settled_init and (split != "validation" or policy is not None or baseline):
+        raise ValueError("settled INIT is the corrected arm-3 VALIDATION executor")
+    if (
+        settled_init
+        and _sha((_ROOT / "configs/worldmind_arm3_settled_init.yaml").read_bytes())
+        != SETTLED_CONFIG_SHA
+    ):
+        raise ValueError("settled INIT profile pin mismatch")
     _verified_head(expected_head)
     world = _ROOT / "worlds/factory.wbt"
     config = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
@@ -254,6 +265,7 @@ def run(
             if baseline
             else ("full_system" if policy else "vla_risk_veto"),
             "proxy_policy": policy,
+            "executor_config_sha256": SETTLED_CONFIG_SHA if settled_init else None,
             "proxy_config_sha256": proxy_hash,
             "config_sha256": _CONFIG,
             "split": split,
@@ -321,7 +333,9 @@ def run(
             elif split == "test":
                 terminal = run_frozen_test_episode(owned, frozen_policy=frozen_policy, **arguments)
             elif policy is None:
-                terminal = run_heuristic_validation_episode(owned, **arguments)
+                terminal = run_heuristic_validation_episode(
+                    owned, settled_init=settled_init, **arguments
+                )
             else:
                 terminal = run_proxy_validation_episode(owned, policy_id=policy, **arguments)
         if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
@@ -360,6 +374,7 @@ if __name__ == "__main__":
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--frozen-policy", type=Path)
     parser.add_argument("--baseline", action="store_true")
+    parser.add_argument("--settled-init", action="store_true")
     args = parser.parse_args()
     head = (
         args.expected_head
@@ -374,4 +389,5 @@ if __name__ == "__main__":
         split=args.split,
         frozen_policy=args.frozen_policy,
         baseline=args.baseline,
+        settled_init=args.settled_init,
     )

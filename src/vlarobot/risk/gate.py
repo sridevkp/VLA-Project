@@ -12,7 +12,7 @@ from vlarobot.core.types import Decision
 class CandidateAssessment:
     hard_checks: tuple[tuple[str, bool | None], ...]
     # Caller supplies report-defined Jg, Jl, Jr, Ju; no invented success probabilities.
-    components: tuple[float, float, float, float]
+    components: tuple[float | None, float | None, float | None, float | None]
 
 
 class RiskGate:
@@ -22,6 +22,7 @@ class RiskGate:
         weights: tuple[float, float, float, float],
         maximize: bool,
         required_constraints: tuple[str, ...],
+        inactive_components: tuple[int, ...] = (),
     ) -> None:
         if (
             not required_constraints
@@ -32,6 +33,13 @@ class RiskGate:
             raise ValueError("explicit unique hard constraints and ranking direction required")
         if not all(math.isfinite(w) and w >= 0 for w in weights) or not any(weights):
             raise ValueError("finite explicit validation-selected weights required")
+        if (
+            len(set(inactive_components)) != len(inactive_components)
+            or any(index not in range(4) for index in inactive_components)
+            or not any(weight for i, weight in enumerate(weights) if i not in inactive_components)
+        ):
+            raise ValueError("explicit comparable active objective components required")
+        self.inactive_components = frozenset(inactive_components)
         self.weights, self.maximize = weights, maximize
         self.required_constraints = required_constraints
 
@@ -49,13 +57,18 @@ class RiskGate:
             if not candidate.hard_checks:
                 failed.append("missing-hard-constraints")
             if len(candidate.components) != 4 or not all(
-                math.isfinite(v) for v in candidate.components
+                v is None if i in self.inactive_components else v is not None and math.isfinite(v)
+                for i, v in enumerate(candidate.components)
             ):
                 failed.append("nonfinite-utility-components")
             if failed:
                 rejected.append(f"{index}:" + ",".join(failed))
                 continue
-            score = sum(w * v for w, v in zip(self.weights, candidate.components, strict=True))
+            score = sum(
+                w * v
+                for i, (w, v) in enumerate(zip(self.weights, candidate.components, strict=True))
+                if i not in self.inactive_components and v is not None
+            )
             if not math.isfinite(score):
                 rejected.append(f"{index}:nonfinite-utility")
                 continue

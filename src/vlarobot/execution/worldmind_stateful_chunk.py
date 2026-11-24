@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy.special import ndtr, ndtri
 
+from vlarobot.backends.webots.config import MAX_TILT_DEG
 from vlarobot.core.types import (
     Action,
     ActionChunk,
@@ -21,7 +22,7 @@ from vlarobot.core.types import (
     ScenarioSpec,
 )
 from vlarobot.eval.decision_adapters import CandidateGenerationProbe
-from vlarobot.execution.scripted_can import ScriptedCanPolicy
+from vlarobot.execution.scripted_can import ScriptedCanPolicy, _ik_tolerance_for_state  # noqa: PLC2701
 from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2701
     STATEFUL_DIAGNOSTIC_SCOPE,
     STATEFUL_VALIDATION_SCOPE,
@@ -32,6 +33,8 @@ from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2
     _tick,
     _write_event,
 )
+from vlarobot.execution.worldmind_proxy_binding import proxy_scene
+from vlarobot.execution.worldmind_stateful_proxy import Waypoint, rank_phase_pool
 from vlarobot.planning.candidates import SeededCandidateGenerator
 
 if TYPE_CHECKING:
@@ -87,6 +90,8 @@ class StatefulChunkBackend:
         self.verification_retry_used = False
         self.ticks = self.decisions = self.used = 0
         self.phase = "INIT"
+        self.waypoint = Waypoint("INIT", False, None, None)
+        self.active_prefix = horizon
         self.target: Action | None = None
         self.armed = False
         self.initial_delivered = False
@@ -145,7 +150,7 @@ class StatefulChunkBackend:
             raise ValueError("stateful caller requires one tick under an accepted command")
         if self.ticks >= self.max_ticks:
             raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
-        if self.used == self.horizon:
+        if self.used == self.active_prefix:
             result = self._choose(self.target, continuation=True)
             if not result.accepted:
                 raise RuntimeError(f"stateful continuation rejected: {result.reason}")
@@ -157,6 +162,14 @@ class StatefulChunkBackend:
 
 class ChunkExpert(ScriptedCanPolicy):
     """Expose the baseline's actual phase cursor to the chunk backend."""
+
+    def _command_and_wait(self, backend, joint_target, state, **kwargs):
+        terminal = kwargs.get("phase_terminal")
+        target = tuple(map(float, kwargs["target_position"])) if terminal is not None else None
+        backend.waypoint = Waypoint(
+            backend.phase, terminal is True, kwargs["settle_tolerance"], target
+        )
+        return super()._command_and_wait(backend, joint_target, state, **kwargs)
 
     def _accepted_joint_waypoint(
         self, backend: StatefulChunkBackend, requested: dict[str, float]
@@ -177,6 +190,7 @@ class ChunkExpert(ScriptedCanPolicy):
     ) -> None:
         if phase in {"enter", "command"}:
             backend.phase = state
+            backend.waypoint = Waypoint(state, False, None, None)
         super()._trace_boundary(backend, observation, state, phase, target, failed, **details)
 
 
@@ -194,9 +208,12 @@ def run_stateful_expert(
     observe: Any,
     *,
     scored: bool,
+    proxy: tuple[Any, Any] | None = None,
+    evidence_scope: str | None = None,
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
-    scope = STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE
+    scope = evidence_scope or (STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE)
+    proxy_admitted = proxy_rejected = 0
     active: dict[str, Any] = {}
     peak = float("-inf")
     rejected_terminal = "PLACEMENT_FAILED"
@@ -207,12 +224,12 @@ def run_stateful_expert(
     def decide(
         cursor: StatefulChunkBackend, action: Action, continuation: bool
     ) -> tuple[ApplyResult, Action]:
-        nonlocal rejected_terminal
+        nonlocal rejected_terminal, proxy_admitted, proxy_rejected
         if cursor.decisions >= config.bounds.max_decisions:
             raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
         folder = directory / f"chunk-{cursor.decisions:04d}"
         folder.mkdir()
-        state, _ = observe(cursor.observation, folder / "observed-state.msgpack")
+        state, truth = observe(cursor.observation, folder / "observed-state.msgpack")
         index = 0
 
         def draw(_task: Any, _state: Any, _memory: Any, seed: int) -> ActionChunk:
@@ -245,7 +262,50 @@ def run_stateful_expert(
         pool = tuple(probe.propose(task, state, None))
         (generation,) = probe.observations
         rows, selected = fixture.assess_pool(state, cursor.observation, monitor, generation, pool)
-        if selected is not None and (scored or selected == 0):
+        proxy_record = None
+        cursor.active_prefix = cursor.horizon
+        if proxy is not None:
+            predictor, geometry = proxy
+            complete, _, goal = proxy_scene(state, truth, config)
+
+            def ik_accepts(candidate: Action) -> bool:
+                reference = cursor.waypoint.target_xyz_m
+                if reference is None:
+                    return True
+                if not isinstance(candidate, JointTarget):
+                    return False
+                vector = expert._full_joint_vector(  # noqa: PLC2701
+                    {**cursor.observation.robot.joint_pos, **candidate.q}
+                )
+                position, tilt = expert.kinematics.score(np.asarray(reference), vector)
+                return position <= _ik_tolerance_for_state(cursor.phase) and tilt <= MAX_TILT_DEG
+
+            decision, proxy_rows = rank_phase_pool(
+                complete,
+                pool,
+                cursor.waypoint,
+                predictor.predict_trajectory,
+                monitor,
+                geometry,
+                goal.as_array(),
+                config.verification.distance_tolerance_m,
+                ik_accepts,
+            )
+            selected = decision.selected_index
+            proxy_admitted += sum(row["admitted"] for row in proxy_rows)
+            proxy_rejected += sum(not row["admitted"] for row in proxy_rows)
+            proxy_record = {
+                "rationale": decision.rationale,
+                "assessments": proxy_rows,
+                "waypoint": asdict(cursor.waypoint),
+            }
+            rows = [
+                replace(row, disposition="eligible" if assessment["admitted"] else "rejected")
+                for row, assessment in zip(rows, proxy_rows, strict=True)
+            ]
+            if selected is not None:
+                cursor.active_prefix = proxy_rows[selected]["active_prefix_ticks"]
+        if selected is not None and (scored or proxy is not None or selected == 0):
             rows[selected] = replace(rows[selected], disposition="selected")
         else:
             selected = None
@@ -258,6 +318,7 @@ def run_stateful_expert(
                     "pool": [_row_data(row) for row in rows],
                     "selected": rows[selected].candidate_id if selected is not None else None,
                     "phase": cursor.phase,
+                    "proxy": proxy_record,
                     "continuation": continuation,
                     "episode_tick": cursor.ticks,
                     "observation": cursor.observation,
@@ -356,7 +417,7 @@ def run_stateful_expert(
         decide=decide,
         advance=advance,
         truth=session.client.get_ground_truth,
-        reobserve=reobserve if scored else None,
+        reobserve=reobserve if scored or proxy is not None else None,
     )
     result = None
     verdict = None
@@ -403,6 +464,8 @@ def run_stateful_expert(
             "scored": scored,
             "confirmed_observed_ticks": cursor.ticks,
             "chunks": cursor.decisions,
+            "proxy_candidates_admitted": proxy_admitted if proxy is not None else None,
+            "proxy_candidates_rejected": proxy_rejected if proxy is not None else None,
             "can_max_rise_m": max(0.0, peak - start_z),
             "verification_retries": int(cursor.verification_retry_used),
             "empty_set_recoveries": int(cursor.empty_recovery_used),
@@ -413,7 +476,7 @@ def run_stateful_expert(
     return terminal
 
 
-def run_live(output: Path, expected_head: str) -> str:
+def run_live(output: Path, expected_head: str, *, arm5: bool = False) -> str:
     """Run one owner-scoped clear VALIDATION diagnostic from a detached checkout."""
     import subprocess
     import sys
@@ -423,6 +486,7 @@ def run_live(output: Path, expected_head: str) -> str:
     from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2701
         _ROOT,
         _WORLD,
+        STATEFUL_PROXY_DIAGNOSTIC_SCOPE,
         _run_owned,
         _sha,
         _verified_head,
@@ -439,6 +503,7 @@ def run_live(output: Path, expected_head: str) -> str:
     if _sha(world.read_bytes()) != _WORLD or _sha(RUNTIME.read_bytes()) != RUNTIME_SHA:
         raise ValueError("stateful diagnostic world or executable pin mismatch")
 
+    scope = STATEFUL_PROXY_DIAGNOSTIC_SCOPE if arm5 else STATEFUL_DIAGNOSTIC_SCOPE
     output.mkdir(exist_ok=False)
     status = output / "controller-status.json"
     started = time.time()
@@ -447,7 +512,7 @@ def run_live(output: Path, expected_head: str) -> str:
         {
             "head": head,
             "episode": "validation-clear-i00-s0",
-            "scope": STATEFUL_DIAGNOSTIC_SCOPE,
+            "scope": scope,
             "scored": False,
             "started_at_epoch_s": started,
         },
@@ -475,7 +540,9 @@ def run_live(output: Path, expected_head: str) -> str:
             output / "episode",
             head,
             "validation-clear-i00-s0",
-            STATEFUL_DIAGNOSTIC_SCOPE,
+            scope,
+            "equal" if arm5 else None,
+            matched_clearance=arm5,
         )
     if session.process.poll() != 0 or (output / "episode/shutdown-failure.json").exists():
         raise RuntimeError("owned stateful session shutdown failed")
@@ -489,5 +556,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--arm5", action="store_true")
     args = parser.parse_args()
-    run_live(args.output.resolve(), args.expected_head)
+    run_live(args.output.resolve(), args.expected_head, arm5=args.arm5)

@@ -1,0 +1,119 @@
+import json
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from vlarobot.backends.fake import FakeBackend
+from vlarobot.core.types import (
+    ActionChunk,
+    GripperCmd,
+    JointTarget,
+    ObjectState,
+    Pose3D,
+    ScenarioSpec,
+    SceneState,
+    Vec3,
+    WorldState,
+)
+from vlarobot.execution.worldmind_stateful_proxy import Waypoint, rank_phase_pool
+from vlarobot.world_model.rollout import Trajectory
+
+Q = (0.0, 0.0, 0.0, 1.0)
+
+
+@pytest.fixture
+def fixture():
+    config = json.loads(
+        (
+            Path(__file__).resolve().parents[1] / "configs/worldmind_arm5_matched_clearance.json"
+        ).read_text()
+    )
+    robot = FakeBackend().reset(ScenarioSpec(), 0).robot
+    robot = replace(
+        robot,
+        base_pose_world=Pose3D(Vec3(0, 0, 0), Q),
+        ee_pose=Pose3D(Vec3(0, 0, 1), Q),
+        joint_pos={"joint": 0.0},
+    )
+    boxes = SceneState(
+        [
+            ObjectState(name, name, Pose3D(Vec3(i, 1, 1), Q), Vec3(0.1, 0.1, 0.1), 1)
+            for i, name in enumerate(("CAN", "HAM", "APP"), 1)
+        ]
+    )
+    return (
+        config,
+        WorldState(boxes, robot),
+        SimpleNamespace(limits=SimpleNamespace(joint_position={"joint": (-1.0, 1.0)})),
+    )
+
+
+def rank(fixture, waypoint, action, after, goal):
+    config, initial, monitor = fixture
+    chunk = ActionChunk([action] * 50, 0.032, "scripted")
+    return rank_phase_pool(
+        initial,
+        [chunk],
+        waypoint,
+        lambda state, _chunk: Trajectory((state, *([after] * 50)), 0.032, (), (), ()),
+        monitor,
+        config,
+        goal,
+        0.1,
+        lambda _cmd: True,
+    )
+
+
+def test_init_admits_without_fabricated_placement(fixture):
+    _, initial, _ = fixture
+    decision, (row,) = rank(
+        fixture, Waypoint("INIT", False, None, None), GripperCmd(0.045), initial, (3, 0, 1)
+    )
+    assert decision.selected_index == 0
+    assert row["placement"]["status"] == "not_applicable"
+    assert row["placement"]["accepted"] is None and row["components"][0] is None
+    assert row["active_prefix_ticks"] == 50
+
+
+def test_required_missing_and_out_of_tolerance_placement_veto(fixture):
+    _, initial, _ = fixture
+    action = JointTarget({"joint": 0.1})
+    point = (0.0, 0.0, 0.85089)
+    waypoint = Waypoint("PLACE_DESCEND", True, 0.01, point)
+    target = replace(initial, robot=replace(initial.robot, ee_pose=Pose3D(Vec3(*point), Q)))
+    decision, (row,) = rank(fixture, waypoint, action, target, point)
+    assert decision.selected_index is None and row["placement"]["status"] == "unavailable"
+    settled = replace(target, robot=replace(target.robot, joint_pos=action.q))
+    decision, (row,) = rank(fixture, waypoint, action, settled, (0.2, 0.0, point[2]))
+    assert decision.selected_index is None and row["placement"]["accepted"] is False
+    decision, (row,) = rank(fixture, waypoint, action, settled, point)
+    assert decision.selected_index == 0
+    assert row["active_prefix_ticks"] == row["placement"]["state_index"] == 1
+
+
+def test_clearance_applies_to_early_chunk_with_no_placement(fixture):
+    _, initial, _ = fixture
+    below = replace(initial, robot=replace(initial.robot, ee_pose=Pose3D(Vec3(0, 0, 0.74), Q)))
+    decision, (row,) = rank(
+        fixture, Waypoint("INIT", False, None, None), GripperCmd(0.045), below, (0, 0, 1)
+    )
+    assert decision.selected_index is None and row["checks"]["table_clearance"] is False
+    through_ham = replace(initial, robot=replace(initial.robot, ee_pose=Pose3D(Vec3(2, 1, 1), Q)))
+    decision, (row,) = rank(
+        fixture, Waypoint("INIT", False, None, None), GripperCmd(0.045), through_ham, (0, 0, 1)
+    )
+    assert decision.selected_index is None and row["checks"]["object_clearance"] is False
+
+
+def test_contact_endpoint_is_not_inferred_from_an_intermediate_waypoint(fixture):
+    _, initial, _ = fixture
+    waypoint = Waypoint("DESCEND", False, 0.01, (0.0, 0.0, 0.95))
+    target = replace(
+        initial,
+        robot=replace(initial.robot, ee_pose=Pose3D(Vec3(0, 0, 0.95), Q), joint_pos={"joint": 0.1}),
+    )
+    decision, (row,) = rank(fixture, waypoint, JointTarget({"joint": 0.1}), target, (0, 0, 1))
+    assert decision.selected_index == 0 and row["active_prefix_ticks"] == 1
+    assert row["checks"]["table_clearance"]

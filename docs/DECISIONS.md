@@ -3900,3 +3900,23 @@ retain their results and engineering interruptions.
 Arm 5 still needs a binding for the mandatory placement-stage input when an
 earlier chunk contains only the current waypoint. The matched-clearance
 configuration and original placement definition are preserved.
+
+### ADR-0030 addendum 7 — phase-aware WorldMind placement
+
+For stateful arm 5, the terminal PLACE_DESCEND waypoint requires a predicted
+settled state and the existing 0.10 m placement check. The state is the first
+predicted joint observation satisfying the existing waypoint settle predicate.
+Other chunks record placement and Jg as not applicable. Eq. 3.8 omits Jg from
+both sides of such a ranking comparison. Jl and Jr use the predicted executable
+prefix through waypoint completion or H, and Ju retains its approved zero weight.
+
+The matched clearance profile, frames and thresholds are unchanged. Evaluate
+contact height endpoints only at the corresponding predicted terminal DESCEND
+or PLACE_DESCEND waypoint. All other motion retains its phase floor and
+non-target clearance checks. The active suffix expires when the waypoint
+changes or when the predicted completion boundary is reached. The next
+prediction starts from the actual observation. Final placement verification
+still follows observed HOME.
+
+The arm-5 stateful profile SHA-256 is
+`9373777118cfe9966569889e887453afa2c913cd5af7fe4d71673f49490b1d5f`.

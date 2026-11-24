@@ -1682,6 +1682,7 @@ class ScriptedCanPolicy:
                 target_position=point,
                 ik_error=error,
                 ik_tilt=tilt,
+                phase_terminal=final,
             )
             if settled is None:
                 return None
@@ -1726,6 +1727,7 @@ class ScriptedCanPolicy:
         target_position: np.ndarray,
         ik_error: float | None,
         ik_tilt: float | None,
+        phase_terminal: bool | None = None,
     ) -> Observation | None:
         apply_started = perf_counter() if self.timing_enabled else None
         response = backend.apply(JointTarget(joint_target))

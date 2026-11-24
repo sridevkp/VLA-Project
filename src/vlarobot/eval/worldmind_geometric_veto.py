@@ -33,6 +33,8 @@ def geometric_margins(
     world_points_m: NDArray[np.float64],
     phases: Sequence[str],
     boxes: Mapping[str, tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]],
+    *,
+    contact_end_states: frozenset[int] | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, float]]:
     """Return signed slack by phase and box plus the two contact endpoint slacks."""
     if (
@@ -40,6 +42,10 @@ def geometric_margins(
         or world_points_m.shape != (len(phases) + 1, 3)
         or not np.isfinite(world_points_m).all()
         or set(boxes) != {"HAM", "APP"}
+        or (
+            contact_end_states is not None
+            and not contact_end_states <= set(range(1, len(phases) + 1))
+        )
     ):
         raise ValueError("complete aligned world points and non-target boxes required")
     table, objects, contacts = {}, {}, {}
@@ -49,7 +55,12 @@ def geometric_margins(
         floor = contact["path_lower_m"] if contact else config["table_margin_m"].get(phase, 0.0)
         slack = float(min(heights[i], heights[i + 1]) - floor)
         table[phase] = min(table.get(phase, math.inf), slack)
-        if contact and (i == len(phases) - 1 or phases[i + 1] != phase):
+        endpoint = (
+            i == len(phases) - 1 or phases[i + 1] != phase
+            if contact_end_states is None
+            else i + 1 in contact_end_states
+        )
+        if contact and endpoint:
             slack = float(
                 contact["tolerance_m"]
                 - abs(heights[i + 1] - contact["intended_height_above_top_m"])

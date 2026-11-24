@@ -88,8 +88,15 @@ def _matched_proxy_evidence(
     prediction: Trajectory,
     monitor: SafetyMonitor,
     settings: Mapping[str, Any],
+    *,
+    active_phase: str | None = None,
+    phase_terminal: bool = False,
 ) -> ProxyEvidence:
-    phases = [phase for phase, count in _CORRECTED_HOLD_STEPS.items() for _ in range(count)]
+    phases = (
+        [phase for phase, count in _CORRECTED_HOLD_STEPS.items() for _ in range(count)]
+        if active_phase is None
+        else [active_phase] * len(chunk.actions)
+    )
     if len(prediction.states) != len(phases) + 1 or len(chunk.actions) != len(phases):
         raise MissingObjectiveInput("matched geometry requires an aligned complete rollout")
     base = state.robot.base_pose_world
@@ -115,7 +122,10 @@ def _matched_proxy_evidence(
             ]
         )
         boxes[obj.object_id] = (local[:-1], local[1:], obj.dimensions.as_array() / 2)
-    margins, contact = geometric_margins(settings, world_points, phases, boxes)
+    ends = None if active_phase is None else frozenset({len(phases)} if phase_terminal else ())
+    margins, contact = geometric_margins(
+        settings, world_points, phases, boxes, contact_end_states=ends
+    )
     joint_pass = all(
         joint_limit_margin(
             item.robot.joint_pos,
@@ -138,23 +148,16 @@ def _matched_proxy_evidence(
             scene_complete=True,
         ),
         (
-            min(*margins["table"].values(), *contact.values()) >= 0,
+            min((*margins["table"].values(), *contact.values())) >= 0,
             min(margins["objects"].values()) >= 0,
         ),
     )
 
 
-def evaluate_proxy_pool(
-    state: WorldState,
-    truth: GroundTruth,
-    pool: Sequence[ActionChunk],
-    monitor: SafetyMonitor,
-    predictor: AnalyticSurrogate,
-    tables_world: Sequence[ObjectState],
-    config: Any,
-    matched_clearance: Mapping[str, Any] | None = None,
-) -> tuple[tuple[CandidateAssessment, ...], dict[str, tuple[int | None, ...]]]:
-    """Evaluate modelled CAN/HAM/APP and table geometry without a full-arm claim."""
+def proxy_scene(
+    state: WorldState, truth: GroundTruth, config: Any
+) -> tuple[WorldState, Pose3D, Vec3]:
+    """Bind observed scene boxes and the world-anchored placement goal in base axes."""
     base = state.robot.base_pose_world
     if base is None or set(truth.object_poses) != {"CAN", "HAM", "APP"}:
         raise MissingObjectiveInput("proxy scene requires exact CAN/HAM/APP and base pose")
@@ -170,11 +173,26 @@ def evaluate_proxy_pool(
         for name, (center, size) in _OBSTACLE_BOUNDS.items()
     ]
     complete = replace(state, scene=SceneState([*state.scene.objects, *obstacles]))
-    tables = [replace(table, pose=compose(world_to_base, table.pose)) for table in tables_world]
     destination = compose(
         world_to_base, Pose3D(Vec3(*config.verification.destination_world), _IDENTITY)
     ).position
     tool_goal = Vec3(destination.x, destination.y, destination.z + GRASP_Z + PLACE_CLEAR)
+    return complete, world_to_base, tool_goal
+
+
+def evaluate_proxy_pool(
+    state: WorldState,
+    truth: GroundTruth,
+    pool: Sequence[ActionChunk],
+    monitor: SafetyMonitor,
+    predictor: AnalyticSurrogate,
+    tables_world: Sequence[ObjectState],
+    config: Any,
+    matched_clearance: Mapping[str, Any] | None = None,
+) -> tuple[tuple[CandidateAssessment, ...], dict[str, tuple[int | None, ...]]]:
+    """Evaluate modelled CAN/HAM/APP and table geometry without a full-arm claim."""
+    complete, world_to_base, tool_goal = proxy_scene(state, truth, config)
+    tables = [replace(table, pose=compose(world_to_base, table.pose)) for table in tables_world]
     results = []
     for chunk in pool:
         prediction = predictor.predict_trajectory(state, chunk)

@@ -59,6 +59,10 @@ VALIDATION_SCOPE = "scored_arm3_validation"
 MATCHED_PROXY_PATH = "configs/worldmind_arm5_matched_clearance.json"
 MATCHED_PROXY_SHA = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
 STATEFUL_DIAGNOSTIC_SCOPE = "non_scored_stateful_candidate_00"
+STATEFUL_PROXY_DIAGNOSTIC_SCOPE = "non_scored_stateful_arm5_equal"
+STATEFUL_PROXY_VALIDATION_SCOPE = "scored_arm5_stateful_equal"
+STATEFUL_PROXY_PATH = "configs/worldmind_arm5_stateful.yaml"
+STATEFUL_PROXY_SHA = "9373777118cfe9966569889e887453afa2c913cd5af7fe4d71673f49490b1d5f"
 STATEFUL_VALIDATION_SCOPE = "scored_arm3_validation_stateful"
 STATEFUL_REGISTRATION = "calibration/urdf-base-train-v1.yaml"
 STATEFUL_REGISTRATION_SHA = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
@@ -72,6 +76,7 @@ _ARM5_TEST_SCOPE = "scored_arm5_proxy_test"
 _SCORED_SCOPES = frozenset(
     {
         STATEFUL_VALIDATION_SCOPE,
+        STATEFUL_PROXY_VALIDATION_SCOPE,
         VALIDATION_SCOPE,
         SETTLED_VALIDATION_SCOPE,
         PROXY_VALIDATION_SCOPE,
@@ -298,7 +303,12 @@ def _tick(
     _admit(
         after,
         finger_logging_only=scope in _SCORED_SCOPES
-        or scope in {"non_scored_expert_candidate_00_parity", STATEFUL_DIAGNOSTIC_SCOPE},
+        or scope
+        in {
+            "non_scored_expert_candidate_00_parity",
+            STATEFUL_DIAGNOSTIC_SCOPE,
+            STATEFUL_PROXY_DIAGNOSTIC_SCOPE,
+        },
     )
     if not math.isclose(after.t - before.t, FROZEN_CONTROL_DT_S):
         raise ValueError("post-tick observation time does not match one control tick")
@@ -437,6 +447,7 @@ def run_proxy_validation_episode(
     episode_id: str,
     policy_id: str,
     matched_clearance: bool = False,
+    stateful: bool = False,
 ) -> str:
     """Run one scoped arm-5 candidate policy on a frozen VALIDATION episode."""
     from datetime import date
@@ -454,7 +465,7 @@ def run_proxy_validation_episode(
         directory,
         expected_head,
         episode_id,
-        PROXY_VALIDATION_SCOPE,
+        STATEFUL_PROXY_VALIDATION_SCOPE if stateful else PROXY_VALIDATION_SCOPE,
         policy_id,
         matched_clearance=matched_clearance,
     )
@@ -505,13 +516,16 @@ def _run_owned(
     matched_clearance: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
-    stateful = scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
+    proxy_stateful = scope in {STATEFUL_PROXY_DIAGNOSTIC_SCOPE, STATEFUL_PROXY_VALIDATION_SCOPE}
+    stateful = proxy_stateful or scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
+    if scope == STATEFUL_PROXY_DIAGNOSTIC_SCOPE and episode_id != "validation-clear-i00-s0":
+        raise ValueError("stateful arm-5 diagnostic requires the frozen clear identity")
     if scope == STATEFUL_DIAGNOSTIC_SCOPE and (
         episode_id != "validation-clear-i00-s0" or proxy_policy or split != "validation"
     ):
         raise ValueError("stateful candidate-00 diagnostic requires the frozen clear identity")
     scored = scope in _SCORED_SCOPES
-    settled_init = scope == SETTLED_VALIDATION_SCOPE or matched_clearance
+    settled_init = (scope == SETTLED_VALIDATION_SCOPE or matched_clearance) and not stateful
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
     for path, digest in (
@@ -545,8 +559,12 @@ def _run_owned(
         or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
         != STATEFUL_REGISTRATION_SHA
         or split != "validation"
-        or proxy_policy
-        or _sha((_ROOT / STATEFUL_CONFIG_PATH).read_bytes()) != STATEFUL_CONFIG_SHA
+        or (proxy_stateful and (proxy_policy != "equal" or not matched_clearance))
+        or (not proxy_stateful and proxy_policy is not None)
+        or _sha(
+            (_ROOT / (STATEFUL_PROXY_PATH if proxy_stateful else STATEFUL_CONFIG_PATH)).read_bytes()
+        )
+        != (STATEFUL_PROXY_SHA if proxy_stateful else STATEFUL_CONFIG_SHA)
     ):
         raise ValueError("stateful executor scope or profile mismatch")
     plan = build_episode_plan(split, 0, allow_test=split == "test")
@@ -598,7 +616,9 @@ def _run_owned(
                 else "selected_chunk_with_expert_INIT_wait"
                 if settled_init
                 else ("first_action" if qualification else "selected_chunk"),
-                "executor_config_sha256": STATEFUL_CONFIG_SHA
+                "executor_config_sha256": (
+                    STATEFUL_PROXY_SHA if proxy_stateful else STATEFUL_CONFIG_SHA
+                )
                 if stateful
                 else (SETTLED_CONFIG_SHA if settled_init else None),
                 "expert_registration_sha256": STATEFUL_REGISTRATION_SHA if stateful else None,
@@ -696,6 +716,8 @@ def _run_owned(
                 task,
                 observe,
                 scored=scored,
+                proxy=(predictor, geometry) if proxy_stateful else None,
+                evidence_scope=scope,
             )
         no_safe = RecoveryState()
         confirmed = 0

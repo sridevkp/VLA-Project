@@ -239,3 +239,33 @@ def test_final_verifier_is_not_called_before_observed_home(tmp_path, monkeypatch
         == "PLACEMENT_FAILED"
     )
     assert list(tmp_path.glob("verification-*.json")) == []
+
+
+def test_feedback_missing_predicted_completion_replans_before_suffix():
+    backend = FakeBackend()
+    scene = ScenarioSpec()
+    initial = backend.reset(scene, 0)
+    plans = []
+
+    def decide(cursor, action, continuation):
+        plans.append((cursor.ticks, cursor.observation.t, continuation))
+        cursor.active_prefix = 1
+        return ApplyResult(True), action
+
+    cursor = StatefulChunkBackend(
+        initial,
+        scene,
+        0,
+        horizon=50,
+        max_ticks=10,
+        decide=decide,
+        advance=lambda _cursor: backend.step(1),
+        truth=backend.get_ground_truth,
+    )
+    cursor.reset(scene, 0)
+    cursor.apply(GripperCmd(0.04))
+    cursor.step(1)
+    # The expert asks for a second step because no observed completion occurred.
+    cursor.step(1)
+    assert plans[0][0] == 0 and plans[1][0] == 1
+    assert plans[1][2] and plans[1][1] > plans[0][1]

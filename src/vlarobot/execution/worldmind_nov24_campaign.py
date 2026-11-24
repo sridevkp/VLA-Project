@@ -30,6 +30,8 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     SETTLED_CONFIG_SHA,
     STATEFUL_CONFIG_PATH,
     STATEFUL_CONFIG_SHA,
+    STATEFUL_PROXY_PATH,
+    STATEFUL_PROXY_SHA,
     STATEFUL_REGISTRATION,
     STATEFUL_REGISTRATION_SHA,
     _sha,  # noqa: PLC2701
@@ -229,19 +231,20 @@ def run(
     if stateful:
         if (
             split != "validation"
-            or policy is not None
             or baseline
             or settled_init
-            or matched_clearance
+            or (policy, matched_clearance) not in {(None, False), ("equal", True)}
         ):
-            raise ValueError("stateful executor is scoped to arm-3 VALIDATION")
+            raise ValueError("stateful executor is scoped to arm-3 or arm-5 equal VALIDATION")
         branch = subprocess.run(
             ["git", "symbolic-ref", "-q", "HEAD"], cwd=_ROOT, check=False, capture_output=True
         )
         if branch.returncode != 1:
             raise ValueError("stateful VALIDATION requires a detached campaign worktree")
+        stateful_path = STATEFUL_PROXY_PATH if policy else STATEFUL_CONFIG_PATH
+        stateful_hash = STATEFUL_PROXY_SHA if policy else STATEFUL_CONFIG_SHA
         if (
-            _sha((_ROOT / STATEFUL_CONFIG_PATH).read_bytes()) != STATEFUL_CONFIG_SHA
+            _sha((_ROOT / stateful_path).read_bytes()) != stateful_hash
             or os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
             or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
             != STATEFUL_REGISTRATION_SHA
@@ -302,7 +305,7 @@ def run(
             else ("full_system" if policy else "vla_risk_veto"),
             "proxy_policy": policy,
             "executor_config_sha256": (
-                STATEFUL_CONFIG_SHA
+                stateful_hash
                 if stateful
                 else SETTLED_CONFIG_SHA
                 if settled_init or matched_clearance
@@ -388,7 +391,11 @@ def run(
                 )
             else:
                 terminal = run_proxy_validation_episode(
-                    owned, policy_id=policy, matched_clearance=matched_clearance, **arguments
+                    owned,
+                    policy_id=policy,
+                    matched_clearance=matched_clearance,
+                    stateful=stateful,
+                    **arguments,
                 )
         if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
             raise RuntimeError("owned episode shutdown failed")

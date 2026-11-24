@@ -269,3 +269,73 @@ def test_feedback_missing_predicted_completion_replans_before_suffix():
     cursor.step(1)
     assert plans[0][0] == 0 and plans[1][0] == 1
     assert plans[1][2] and plans[1][1] > plans[0][1]
+
+
+def test_vetoed_continuation_uses_three_rounds_without_a_tick_or_new_waypoint():
+    backend = FakeBackend()
+    scene = ScenarioSpec()
+    initial = backend.reset(scene, 0)
+    calls = []
+
+    def decide(cursor, action, continuation):
+        calls.append((cursor.waypoint_index, cursor.replacement_round, cursor.ticks))
+        if continuation:
+            return ApplyResult(False, "no eligible stateful candidate"), action
+        return backend.apply(action), action
+
+    cursor = StatefulChunkBackend(
+        initial,
+        scene,
+        0,
+        horizon=1,
+        max_ticks=10,
+        decide=decide,
+        advance=lambda _cursor: backend.step(1),
+        truth=backend.get_ground_truth,
+        max_replacements=3,
+        reobserve=lambda _cursor: pytest.fail("must not step with a vetoed held target"),
+    )
+    cursor.reset(scene, 0)
+    cursor.apply(GripperCmd(0.045))
+    cursor.step(1)
+    with pytest.raises(RuntimeError, match="NO_SAFE_SET"):
+        cursor.step(1)
+    assert calls == [(0, 0, 0), (0, 0, 1), (0, 1, 1), (0, 2, 1), (0, 3, 1)]
+    assert cursor.ticks == 1
+
+
+def test_accepted_replacement_becomes_target_without_resetting_waypoint_allowance():
+    backend = FakeBackend()
+    scene = ScenarioSpec()
+    initial = backend.reset(scene, 0)
+    replacement = GripperCmd(0.03)
+
+    def decide(cursor, action, continuation):
+        if not continuation:
+            return backend.apply(action), action
+        if cursor.replacement_round:
+            return backend.apply(replacement), replacement
+        return ApplyResult(False, "no eligible stateful candidate"), action
+
+    cursor = StatefulChunkBackend(
+        initial,
+        scene,
+        0,
+        horizon=1,
+        max_ticks=10,
+        decide=decide,
+        advance=lambda _cursor: backend.step(1),
+        truth=backend.get_ground_truth,
+        max_replacements=3,
+    )
+    cursor.reset(scene, 0)
+    initial_target = GripperCmd(0.045)
+    cursor.apply(initial_target)
+    cursor.step(1)
+    cursor.step(1)
+    assert cursor.target == replacement and cursor.waypoint_reference == initial_target
+    assert cursor.waypoint_index == 0 and cursor.replacements_used == 1
+    cursor.step(1)
+    assert cursor.replacements_used == 2
+    cursor.apply(GripperCmd(0.02))
+    assert cursor.waypoint_index == 1 and cursor.replacements_used == 0

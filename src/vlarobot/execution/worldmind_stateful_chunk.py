@@ -41,6 +41,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+MAX_REPLACEMENT_ROUNDS = 3
+
+
 def bounded_normal_target(
     value: float, lower: float, upper: float, std: float, radius: float, rng: np.random.Generator
 ) -> float:
@@ -55,6 +58,28 @@ def bounded_normal_target(
     if not lower <= drawn <= upper or abs(drawn - value) > radius:
         raise ValueError("conditional waypoint draw outside reviewed jitter support")
     return drawn
+
+
+def replacement_joint_target(
+    current: JointTarget,
+    reference: JointTarget,
+    limits: Any,
+    std: float,
+    radius: float,
+    rng: np.random.Generator,
+) -> dict[str, float]:
+    """Draw around the active target within the original waypoint jitter support."""
+    return {
+        name: bounded_normal_target(
+            value,
+            max(limits[name][0], reference.q[name] - radius),
+            min(limits[name][1], reference.q[name] + radius),
+            std,
+            radius,
+            rng,
+        )
+        for name, value in current.q.items()
+    }
 
 
 class TaskStop(RuntimeError):
@@ -80,12 +105,17 @@ class StatefulChunkBackend:
         advance: Any,
         truth: Any,
         reobserve: Any = None,
+        max_replacements: int = 0,
     ) -> None:
         self.observation = initial
         self.scenario, self.seed = scenario, seed
         self.horizon, self.max_ticks = horizon, max_ticks
         self.decide, self.advance, self.truth = decide, advance, truth
         self.reobserve = reobserve
+        self.max_replacements = max_replacements
+        self.waypoint_index = -1
+        self.replacements_used = self.replacement_round = 0
+        self.waypoint_reference: Action | None = None
         self.empty_recovery_used = False
         self.verification_retry_used = False
         self.ticks = self.decisions = self.used = 0
@@ -116,6 +146,9 @@ class StatefulChunkBackend:
         return self.truth()
 
     def apply(self, action: Action) -> ApplyResult:
+        self.waypoint_index += 1
+        self.waypoint_reference = action
+        self.replacements_used = 0
         return self._choose(action, continuation=False)
 
     def _choose(self, action: Action, *, continuation: bool) -> ApplyResult:
@@ -124,6 +157,18 @@ class StatefulChunkBackend:
         self.armed = False
         result, selected = self.decide(self, action, continuation)
         self.decisions += 1
+        if continuation and self.max_replacements:
+            while (
+                result.reason == "no eligible stateful candidate"
+                and self.replacements_used < self.max_replacements
+            ):
+                self.replacements_used += 1
+                self.replacement_round = self.replacements_used
+                result, selected = self.decide(self, action, continuation)
+                self.decisions += 1
+                self.replacement_round = 0
+            if result.reason == "no eligible stateful candidate":
+                raise TaskStop("NO_SAFE_SET")
         if (
             result.reason == "no eligible stateful candidate"
             and self.reobserve is not None
@@ -214,6 +259,7 @@ def run_stateful_expert(
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
     scope = evidence_scope or (STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE)
     proxy_admitted = proxy_rejected = 0
+    diverse_pools = identical_pools = 0
     active: dict[str, Any] = {}
     peak = float("-inf")
     rejected_terminal = "PLACEMENT_FAILED"
@@ -225,6 +271,7 @@ def run_stateful_expert(
         cursor: StatefulChunkBackend, action: Action, continuation: bool
     ) -> tuple[ApplyResult, Action]:
         nonlocal rejected_terminal, proxy_admitted, proxy_rejected
+        nonlocal diverse_pools, identical_pools
         if cursor.decisions >= config.bounds.max_decisions:
             raise TaskStop("WORLDMIND_BOUND_EXHAUSTED")
         folder = directory / f"chunk-{cursor.decisions:04d}"
@@ -235,14 +282,22 @@ def run_stateful_expert(
         def draw(_task: Any, _state: Any, _memory: Any, seed: int) -> ActionChunk:
             nonlocal index
             chosen = action
-            if index and not continuation and isinstance(action, JointTarget):
+            if (
+                index
+                and (not continuation or cursor.replacement_round)
+                and isinstance(action, JointTarget)
+            ):
                 rng = np.random.default_rng(seed)
-                joints = {
-                    name: bounded_normal_target(
-                        value, *limits[name], settings.joint_std_rad, settings.joint_limit_rad, rng
-                    )
-                    for name, value in action.q.items()
-                }
+                reference = cursor.waypoint_reference
+                assert isinstance(reference, JointTarget)
+                joints = replacement_joint_target(
+                    action,
+                    reference,
+                    limits,
+                    settings.joint_std_rad,
+                    settings.joint_limit_rad,
+                    rng,
+                )
                 chosen = JointTarget(joints)
             index += 1
             return ActionChunk(
@@ -261,6 +316,9 @@ def run_stateful_expert(
         )
         pool = tuple(probe.propose(task, state, None))
         (generation,) = probe.observations
+        unique = len({_encode({"action": chunk.actions[0]}, scope) for chunk in pool})
+        diverse_pools += int(unique > 1)
+        identical_pools += int(unique == 1)
         rows, selected = fixture.assess_pool(state, cursor.observation, monitor, generation, pool)
         proxy_record = None
         cursor.active_prefix = cursor.horizon
@@ -268,7 +326,7 @@ def run_stateful_expert(
             predictor, geometry = proxy
             complete, _, goal = proxy_scene(state, truth, config)
 
-            def ik_accepts(candidate: Action) -> bool:
+            def ik_accepts(candidate: Action) -> bool | tuple[bool, dict[str, float]]:
                 reference = cursor.waypoint.target_xyz_m
                 if reference is None:
                     return True
@@ -278,7 +336,11 @@ def run_stateful_expert(
                     {**cursor.observation.robot.joint_pos, **candidate.q}
                 )
                 position, tilt = expert.kinematics.score(np.asarray(reference), vector)
-                return position <= _ik_tolerance_for_state(cursor.phase) and tilt <= MAX_TILT_DEG
+                margins = {
+                    "position_m": _ik_tolerance_for_state(cursor.phase) - position,
+                    "tilt_deg": MAX_TILT_DEG - tilt,
+                }
+                return all(value >= 0 for value in margins.values()), margins
 
             decision, proxy_rows = rank_phase_pool(
                 complete,
@@ -296,7 +358,19 @@ def run_stateful_expert(
             proxy_rejected += sum(not row["admitted"] for row in proxy_rows)
             proxy_record = {
                 "rationale": decision.rationale,
-                "assessments": proxy_rows,
+                "assessments": [
+                    {
+                        **assessment,
+                        "candidate_id": row.candidate_id,
+                        "execution": None if assessment["admitted"] else False,
+                        "vetoes": {
+                            name: assessment["signed_margins"].get(name)
+                            for name, passed in assessment["checks"].items()
+                            if passed is not True
+                        },
+                    }
+                    for row, assessment in zip(rows, proxy_rows, strict=True)
+                ],
                 "waypoint": asdict(cursor.waypoint),
             }
             rows = [
@@ -320,6 +394,13 @@ def run_stateful_expert(
                     "phase": cursor.phase,
                     "proxy": proxy_record,
                     "continuation": continuation,
+                    "waypoint_index": cursor.waypoint_index,
+                    "waypoint_reference": cursor.waypoint_reference,
+                    "replacement_round": cursor.replacement_round,
+                    "replaces_vetoed_chunk": cursor.decisions - 1
+                    if cursor.replacement_round
+                    else None,
+                    "unique_candidate_payloads": unique,
                     "episode_tick": cursor.ticks,
                     "observation": cursor.observation,
                     "expiration": "earliest expert waypoint completion or horizon",
@@ -328,6 +409,15 @@ def run_stateful_expert(
             ),
         )
         if selected is None:
+            if proxy is not None:
+                _write_event(
+                    folder / "execution.json",
+                    {
+                        "candidate_id": None,
+                        "executed": False,
+                        "reason": "no_eligible_candidate",
+                    },
+                )
             return ApplyResult(False, "no eligible stateful candidate"), action
         action = pool[selected].actions[0]
         motor_verdict = monitor.validate(action, cursor.observation.robot)
@@ -342,9 +432,18 @@ def run_stateful_expert(
             ),
         )
         if not motor_verdict.accepted:
+            if proxy is not None:
+                _write_event(
+                    folder / "execution.json",
+                    {
+                        "candidate_id": rows[selected].candidate_id,
+                        "executed": False,
+                        "reason": "motor_veto",
+                    },
+                )
             rejected_terminal = "motor_veto"
             return motor_verdict, action
-        if continuation:
+        if continuation and action == cursor.target:
             # The persistent target was already submitted. Reconcile a fresh chunk without
             # resubmitting the unchanged command (and without resetting its settle timer).
             receipt_sha = active["receipt"]
@@ -369,8 +468,23 @@ def run_stateful_expert(
                 scope,
             )
         if result.accepted:
-            active.update(folder=folder, receipt=receipt_sha, decision=snapshot)
+            active.update(
+                folder=folder,
+                receipt=receipt_sha,
+                decision=snapshot,
+                selected=rows[selected].candidate_id,
+                replacement_round=cursor.replacement_round,
+            )
         else:
+            if proxy is not None:
+                _write_event(
+                    folder / "execution.json",
+                    {
+                        "candidate_id": rows[selected].candidate_id,
+                        "executed": False,
+                        "reason": "backend_rejected",
+                    },
+                )
             rejected_terminal = "backend_rejected"
         return result, action
 
@@ -392,6 +506,16 @@ def run_stateful_expert(
         )
         if after is None:
             raise RuntimeError(f"stateful chunk stopped: {status}")
+        if cursor.used == 0:
+            _write_event(
+                active["folder"] / "execution.json",
+                {
+                    "candidate_id": active["selected"],
+                    "replacement_round": active["replacement_round"],
+                    "executed": True,
+                    "first_confirmed_tick": cursor.ticks + 1,
+                },
+            )
         truth = session.client.get_ground_truth()
         height = truth.object_poses[task.target].position.z
         peak = max(peak, height)
@@ -418,6 +542,7 @@ def run_stateful_expert(
         advance=advance,
         truth=session.client.get_ground_truth,
         reobserve=reobserve if scored or proxy is not None else None,
+        max_replacements=MAX_REPLACEMENT_ROUNDS if proxy is not None else 0,
     )
     result = None
     verdict = None
@@ -464,6 +589,8 @@ def run_stateful_expert(
             "scored": scored,
             "confirmed_observed_ticks": cursor.ticks,
             "chunks": cursor.decisions,
+            "diverse_candidate_pools": diverse_pools,
+            "identical_candidate_pools": identical_pools,
             "proxy_candidates_admitted": proxy_admitted if proxy is not None else None,
             "proxy_candidates_rejected": proxy_rejected if proxy is not None else None,
             "can_max_rise_m": max(0.0, peak - start_z),

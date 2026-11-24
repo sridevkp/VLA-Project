@@ -53,6 +53,7 @@ class ProxyEvidence:
     table_clearance_m: tuple[float, ...] | None
     object_clearance_m: tuple[float, ...]
     geometric_hard_pass: tuple[bool, bool] | None = None
+    signed_margins: dict[str, float] | None = None
 
 
 def observe_proxy_clearance(

@@ -103,7 +103,7 @@ def rank_phase_pool(
     geometry: Mapping[str, Any],
     goal: Sequence[float],
     placement_tolerance_m: float,
-    ik_accepts: Callable[[Action], bool],
+    ik_accepts: Callable[[Action], bool | tuple[bool, dict[str, float]]],
 ) -> tuple[Decision, list[dict[str, Any]]]:
     """Run production geometric checks and Eq. 3.8 with only same-phase applicable terms."""
     if waypoint.phase not in _PHASES:
@@ -117,6 +117,7 @@ def rank_phase_pool(
         inactive_components=() if placement_required else (0,),
     )
     assessments, records = [], []
+    previous_action = None
     for chunk in pool:
         if (
             len(chunk.actions) != FROZEN_HORIZON_STEPS
@@ -125,6 +126,11 @@ def rank_phase_pool(
         ):
             raise ValueError("phase prediction requires an aligned H=50 held-command chunk")
         action = chunk.actions[0]
+        if action == previous_action:
+            assessments.append(assessments[-1])
+            records.append(records[-1])
+            continue
+        previous_action = action
         trajectory = predict(current, chunk)
         complete = (
             len(trajectory.states) == len(chunk.actions) + 1
@@ -138,6 +144,9 @@ def rank_phase_pool(
         consumed = completion or len(chunk.actions)
         checks: dict[str, bool | None] = {"prediction_complete": complete}
         components = (placement.error_m, None, None, 0.0)
+        margins: dict[str, Any] = {}
+        if placement.error_m is not None:
+            margins["placement_tolerance"] = placement_tolerance_m - placement.error_m
         if complete:
             prefix = replace(chunk, actions=chunk.actions[:consumed])
             states = trajectory.states[: consumed + 1]
@@ -151,12 +160,16 @@ def rank_phase_pool(
                 phase_terminal=waypoint.terminal and completion is not None,
             )
             table, objects = evidence.geometric_hard_pass
+            margins.update(evidence.signed_margins or {})
+            ik = ik_accepts(action)
+            if isinstance(ik, tuple):
+                ik, margins["ik_feasibility_and_residual"] = ik
             checks.update(
                 zip(
                     HARD_CHECKS[:4],
                     (
                         evidence.joint_limits_pass,
-                        evidence.ik_pass and ik_accepts(action),
+                        evidence.ik_pass and ik,
                         table,
                         objects,
                     ),
@@ -176,6 +189,7 @@ def rank_phase_pool(
         records.append(
             {
                 "checks": checks,
+                "signed_margins": margins,
                 "components": components,
                 "placement": asdict(placement),
                 "predicted_phase": waypoint.phase,

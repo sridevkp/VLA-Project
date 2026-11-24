@@ -1756,6 +1756,7 @@ class ScriptedCanPolicy:
             observation = backend.step(1)
             if step_started is not None:
                 self._add_timing(state, "backend_step_s", perf_counter() - step_started)
+            joint_target = self._accepted_joint_waypoint(backend, joint_target)
             self._last_observation = observation
             self._track_observation(observation, state=state)
             measured = observation.robot.joint_pos

@@ -3920,3 +3920,19 @@ still follows observed HOME.
 
 The arm-5 stateful profile SHA-256 is
 `9373777118cfe9966569889e887453afa2c913cd5af7fe4d71673f49490b1d5f`.
+
+### ADR-0030 addendum 8 — vetoed held continuation
+
+Stateful arm 5 may draw up to three replacement pools for a vetoed held
+continuation at the same waypoint, with the original jitter support, all
+existing hard checks and an independent motor verdict. There is no simulator
+tick between veto and replacement. The actual accepted replacement is the
+setpoint for the existing settle predicate. Exhaustion is an eligible
+NO_SAFE_SET outcome. The risk records identify each candidate, signed veto
+margin when available, source pool, selected replacement and execution receipt.
+Pool diversity counts use distinct command payloads, independent of draw IDs.
+
+The revised executor SHA-256 is
+`d716898ddd48dbfdee30f6a2d561c2e0e298c18c613e17a5c82f595e95f07538`.
+The objective and clearance profile are unchanged. November 29 remains the
+weight and threshold freeze date.

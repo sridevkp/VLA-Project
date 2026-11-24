@@ -126,18 +126,19 @@ def _matched_proxy_evidence(
     margins, contact = geometric_margins(
         settings, world_points, phases, boxes, contact_end_states=ends
     )
-    joint_pass = all(
+    joint_slack = min(
         joint_limit_margin(
             item.robot.joint_pos,
             monitor.limits.joint_position,
             settings["joint_limit_tolerance_rad"],
         )
-        >= 0
         for item in prediction.states
     )
+    table_slack = min((*margins["table"].values(), *contact.values()))
+    object_slack = min(margins["objects"].values())
     reasons = set(prediction.hard_reasons)
     return ProxyEvidence(
-        joint_pass and reasons.isdisjoint({"safety-monitor-veto", "ik-joint-safety-veto"}),
+        joint_slack >= 0 and reasons.isdisjoint({"safety-monitor-veto", "ik-joint-safety-veto"}),
         reasons.isdisjoint({"ik-unreachable", "ik-joint-safety-veto"}),
         None,
         tool_envelope_clearances(
@@ -147,10 +148,12 @@ def _matched_proxy_evidence(
             tool_radius_m=settings["tool_tip_radius_m"],
             scene_complete=True,
         ),
-        (
-            min((*margins["table"].values(), *contact.values())) >= 0,
-            min(margins["objects"].values()) >= 0,
-        ),
+        (table_slack >= 0, object_slack >= 0),
+        {
+            "joint_limit_margin": joint_slack,
+            "table_clearance": table_slack,
+            "object_clearance": object_slack,
+        },
     )
 
 

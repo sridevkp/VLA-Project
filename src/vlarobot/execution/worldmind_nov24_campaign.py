@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
@@ -336,7 +337,14 @@ def run(
                 "VLAROBOT_FINGER_IDLE_ONLY": "0",
                 "VLAROBOT_WORLD_SHA256": _WORLD,
                 "VLAROBOT_DIAGNOSTIC_STATUS_PATH": str(status),
-                **({"VLAROBOT_URDF_REGISTRATION_FILE": STATEFUL_REGISTRATION} if stateful else {}),
+                **(
+                    {
+                        "VLAROBOT_URDF_REGISTRATION_FILE": STATEFUL_REGISTRATION,
+                        "WEBOTS_PYTHON": sys.executable,
+                    }
+                    if stateful
+                    else {}
+                ),
             },
         ) as owned:
             arguments = dict(

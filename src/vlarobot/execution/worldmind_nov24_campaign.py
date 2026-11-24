@@ -146,9 +146,18 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
     """Verify eligible per-trial evidence and record the selected policy without touching TEST."""
     from vlarobot.execution.worldmind_idle_fingers import record
 
-    proxy_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
     if not date(2026, 11, 21) <= date.today() <= date(2026, 11, 29):
         raise ValueError("selection must finish in the authorized VALIDATION window")
+    if not runs:
+        raise ValueError("at least one completed VALIDATION campaign is required")
+    first = _read_event(runs[0] / "launch.json")
+    stateful = first["proxy_config_sha256"] == MATCHED_PROXY_SHA
+    if stateful and len(runs) != len(STATEFUL_PROXY_PROFILES):
+        raise ValueError("stateful freeze requires both approved equal and goal-heavy outcomes")
+    proxy_path = MATCHED_PROXY_PATH if stateful else "configs/worldmind_proxy_nov24.yaml"
+    proxy_hash = _sha((_ROOT / proxy_path).read_bytes())
+    if stateful and proxy_hash != MATCHED_PROXY_SHA:
+        raise ValueError("matched clearance profile pin mismatch")
     outcomes = {}
     sources = {}
     episode_ids = tuple(entry.scene.name for entry in build_episode_plan("validation", 0))
@@ -158,6 +167,17 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
         policy = launch["proxy_policy"]
         if (
             policy not in GRID | OPTIONAL_GRID
+            or launch["arm"] != "full_system"
+            or launch["split"] != "validation"
+            or (
+                stateful
+                and (
+                    policy not in STATEFUL_PROXY_PROFILES
+                    or launch["executor_config_sha256"] != STATEFUL_PROXY_PROFILES[policy][1]
+                    or _sha((_ROOT / STATEFUL_PROXY_PROFILES[policy][0]).read_bytes())
+                    != STATEFUL_PROXY_PROFILES[policy][1]
+                )
+            )
             or policy in sources
             or launch["proxy_config_sha256"] != proxy_hash
             or launch["config_sha256"] != _CONFIG
@@ -180,14 +200,25 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
             ):
                 raise ValueError("corrupt or unreliable trial blocks selection")
             outcomes[policy][episode] = row["success"]
-        sources[policy] = {"path": str(run_dir), "terminal_sha256": _sha(terminal.read_bytes())}
+        sources[policy] = {
+            "path": str(run_dir),
+            "terminal_sha256": _sha(terminal.read_bytes()),
+            **(
+                {
+                    "launch_sha256": _sha(launch_path.read_bytes()),
+                    "executor_config_sha256": launch["executor_config_sha256"],
+                }
+                if stateful
+                else {}
+            ),
+        }
     for policy in sources.keys() - {"equal"}:
         verify_policy_contrast(Path(sources["equal"]["path"]), policy, proxy_hash)
     winner, scores = select_policy(episode_ids, outcomes)
     record(
         out,
         {
-            "schema_version": 1,
+            "schema_version": 2 if stateful else 1,
             "selected_policy": winner,
             "scores": scores,
             "sources": sources,
@@ -195,6 +226,7 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
             "maximize": False,
             "split": "validation",
             "config_sha256": proxy_hash,
+            **({"executor_config_sha256": STATEFUL_PROXY_PROFILES[winner][1]} if stateful else {}),
             "plan_sha256": _PLAN,
             "interpretation": "same-set selection statistic",
         },
@@ -490,6 +522,21 @@ if __name__ == "__main__":
     parser.add_argument("--stateful", action="store_true")
     parser.add_argument("--world-model", action="store_true")
     args = parser.parse_args()
+    if args.freeze_from:
+        if (
+            args.split != "validation"
+            or args.policy
+            or args.contrast_evidence
+            or args.frozen_policy
+            or args.baseline
+            or args.settled_init
+            or args.matched_clearance
+            or args.stateful
+            or args.world_model
+        ):
+            parser.error("--freeze-from is offline and cannot be combined with run options")
+        print(freeze_validation(args.output.resolve(), args.freeze_from), flush=True)
+        raise SystemExit(0)
     head = (
         args.expected_head
         or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_ROOT, text=True).strip()

@@ -119,3 +119,55 @@ def test_finger_excursion_annotation_preserves_strict_qualification():
     assert not _raw(-7.142594888992681e-7)
     assert finger_log_status(-0.0002) == "outside_logging_tolerance"
     assert finger_log_status(float("nan")) == "invalid"
+
+
+def test_stateful_freeze_compares_two_eligible_full_system_campaigns(tmp_path, monkeypatch):
+    from datetime import date
+
+    from vlarobot.execution import worldmind_nov24_campaign as campaign
+    from vlarobot.execution.worldmind_idle_fingers import record
+
+    class ValidationDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 25)
+
+    monkeypatch.setattr(campaign, "date", ValidationDate)
+    checked = []
+    monkeypatch.setattr(campaign, "verify_policy_contrast", lambda *args: checked.append(args))
+    plan = campaign.build_episode_plan("validation", 0)
+    roots = []
+    for policy, capacity in (("equal", 11), ("goal_x2", 12)):
+        run = tmp_path / policy
+        roots.append(run)
+        run.mkdir()
+        record(
+            run / "launch.json",
+            {
+                "arm": "full_system",
+                "split": "validation",
+                "proxy_policy": policy,
+                "proxy_config_sha256": campaign.MATCHED_PROXY_SHA,
+                "executor_config_sha256": campaign.STATEFUL_PROXY_PROFILES[policy][1],
+                "plan_sha256": campaign._PLAN,
+                "config_sha256": campaign._CONFIG,
+            },
+        )
+        results = []
+        for index, entry in enumerate(plan):
+            row = {"episode_id": entry.scene.name, "eligible": True, "success": index < capacity}
+            folder = run / entry.scene.name
+            folder.mkdir()
+            record(folder / "result.json", row)
+            results.append(row)
+        record(run / "terminal.json", {"eligible": 18, "results": results})
+
+    with pytest.raises(ValueError, match="both approved"):
+        campaign.freeze_validation(tmp_path / "partial.json", roots[:1])
+    out = tmp_path / "freeze.json"
+    assert campaign.freeze_validation(out, roots) == "goal_x2"
+    assert checked == [(roots[0], "goal_x2", campaign.MATCHED_PROXY_SHA)]
+    payload = campaign._read_event(out)
+    assert payload["schema_version"] == 2
+    assert payload["executor_config_sha256"] == campaign.STATEFUL_PROXY_PROFILES["goal_x2"][1]
+    assert payload["scores"] == {"equal": 11 / 18, "goal_x2": 12 / 18}

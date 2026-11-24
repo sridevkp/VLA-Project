@@ -300,9 +300,13 @@ def run(
             if baseline
             else ("full_system" if policy else "vla_risk_veto"),
             "proxy_policy": policy,
-            "executor_config_sha256": SETTLED_CONFIG_SHA
-            if settled_init or matched_clearance
-            else None,
+            "executor_config_sha256": (
+                STATEFUL_CONFIG_SHA
+                if stateful
+                else SETTLED_CONFIG_SHA
+                if settled_init or matched_clearance
+                else None
+            ),
             "proxy_config_sha256": proxy_hash,
             "config_sha256": _CONFIG,
             "split": split,

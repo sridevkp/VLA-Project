@@ -58,6 +58,7 @@ _SCOPE = "non_scored_arm3_one_decision_qualification"
 VALIDATION_SCOPE = "scored_arm3_validation"
 MATCHED_PROXY_PATH = "configs/worldmind_arm5_matched_clearance.json"
 MATCHED_PROXY_SHA = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
+STATEFUL_DIAGNOSTIC_SCOPE = "non_scored_stateful_candidate_00"
 SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
 SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
@@ -178,6 +179,33 @@ def _operation(
     verdict_sha: str | None,
     scope: str,
 ) -> tuple[str, Observation | None]:
+    result, apply_sha = _journal_apply(
+        directory,
+        session,
+        session_id,
+        decision_path,
+        snapshot,
+        action,
+        action_index,
+        verdict_sha,
+        scope,
+    )
+    if not result.accepted:
+        return "backend_rejected", None
+    return _tick(directory, session, before, {"accepted_apply_sha256": apply_sha}, scope)
+
+
+def _journal_apply(
+    directory: Path,
+    session: WebotsSession,
+    session_id: dict[str, object],
+    decision_path: Path,
+    snapshot: str,
+    action: Action,
+    action_index: int,
+    verdict_sha: str | None,
+    scope: str,
+) -> tuple[ApplyResult, str]:
     client = session.client
     request = _encode({"action": action}, scope)
     intent = {
@@ -216,10 +244,8 @@ def _operation(
         directory / "apply-result.json",
         {"status": "accepted" if result.accepted else "rejected", "reason": result.reason},
     )
-    if not result.accepted:
-        return "backend_rejected", None
     _verify_event(directory / "apply-result.json", apply_sha)
-    return _tick(directory, session, before, {"accepted_apply_sha256": apply_sha}, scope)
+    return result, apply_sha
 
 
 def _tick(
@@ -266,7 +292,7 @@ def _tick(
     _admit(
         after,
         finger_logging_only=scope in _SCORED_SCOPES
-        or scope == "non_scored_expert_candidate_00_parity",
+        or scope in {"non_scored_expert_candidate_00_parity", STATEFUL_DIAGNOSTIC_SCOPE},
     )
     if not math.isclose(after.t - before.t, FROZEN_CONTROL_DT_S):
         raise ValueError("post-tick observation time does not match one control tick")
@@ -470,6 +496,11 @@ def _run_owned(
     matched_clearance: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
+    stateful = scope == STATEFUL_DIAGNOSTIC_SCOPE
+    if stateful and (
+        episode_id != "validation-clear-i00-s0" or proxy_policy or split != "validation"
+    ):
+        raise ValueError("stateful candidate-00 diagnostic requires the frozen clear identity")
     scored = scope in _SCORED_SCOPES
     settled_init = scope == SETTLED_VALIDATION_SCOPE or matched_clearance
     head = _verified_head(expected_head)
@@ -571,7 +602,7 @@ def _run_owned(
         )
         probe = session.client.inspect_fingers()
         _persist(directory / "pre-reset-fingers.msgpack", _encode(probe, scope))
-        _check_probe(probe, owned, finger_logging_only=scored)
+        _check_probe(probe, owned, finger_logging_only=scored or stateful)
         if scored:
             _write_event(
                 directory / "finger-telemetry.json",
@@ -605,7 +636,7 @@ def _run_owned(
         _persist(
             directory / "reset-observation.msgpack", _encode({"observation": observation}, scope)
         )
-        _admit(observation, finger_logging_only=scored)
+        _admit(observation, finger_logging_only=scored or stateful)
         task = TaskSpec(config.task.instruction, config.task.target, config.task.destination)
         required = {task.target} | {item["def"] for item in entry.scene.objects}
 
@@ -626,6 +657,22 @@ def _run_owned(
 
         state, truth = observe(observation, directory / "observed-state.msgpack")
         verifier = None if qualification else fixture.build_verifier(observation)
+        if stateful:
+            from vlarobot.execution.worldmind_stateful_chunk import run_candidate_zero
+
+            return run_candidate_zero(
+                session,
+                owned,
+                directory,
+                entry,
+                config,
+                fixture,
+                monitor,
+                observation,
+                verifier,
+                task,
+                observe,
+            )
         no_safe = RecoveryState()
         confirmed = 0
         terminal = "WORLDMIND_BOUND_EXHAUSTED"

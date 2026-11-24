@@ -106,6 +106,7 @@ class StatefulChunkBackend:
         truth: Any,
         reobserve: Any = None,
         max_replacements: int = 0,
+        empty_terminal: str = "NO_SAFE_SET",
     ) -> None:
         self.observation = initial
         self.scenario, self.seed = scenario, seed
@@ -113,6 +114,7 @@ class StatefulChunkBackend:
         self.decide, self.advance, self.truth = decide, advance, truth
         self.reobserve = reobserve
         self.max_replacements = max_replacements
+        self.empty_terminal = empty_terminal
         self.waypoint_index = -1
         self.replacements_used = self.replacement_round = 0
         self.waypoint_reference: Action | None = None
@@ -168,7 +170,7 @@ class StatefulChunkBackend:
                 self.decisions += 1
                 self.replacement_round = 0
             if result.reason == "no eligible stateful candidate":
-                raise TaskStop("NO_SAFE_SET")
+                raise TaskStop(self.empty_terminal)
         if (
             result.reason == "no eligible stateful candidate"
             and self.reobserve is not None
@@ -183,7 +185,7 @@ class StatefulChunkBackend:
             result, selected = self.decide(self, action, continuation)
             self.decisions += 1
         if result.reason == "no eligible stateful candidate" and self.reobserve is not None:
-            raise TaskStop("NO_SAFE_SET")
+            raise TaskStop(self.empty_terminal)
         self.used = 0
         if result.accepted:
             self.target = selected
@@ -256,6 +258,7 @@ def run_stateful_expert(
     proxy: tuple[Any, Any] | None = None,
     evidence_scope: str | None = None,
     ranking_policy: str = "equal",
+    predictive_veto: bool = True,
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
     scope = evidence_scope or (STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE)
@@ -354,6 +357,7 @@ def run_stateful_expert(
                 config.verification.distance_tolerance_m,
                 ik_accepts,
                 policy=ranking_policy,
+                veto=predictive_veto,
             )
             selected = decision.selected_index
             proxy_admitted += sum(row["admitted"] for row in proxy_rows)
@@ -361,6 +365,7 @@ def run_stateful_expert(
             proxy_record = {
                 "rationale": decision.rationale,
                 "ranking_policy": ranking_policy,
+                "predictive_veto": predictive_veto,
                 "assessments": [
                     {
                         **assessment,
@@ -370,7 +375,16 @@ def run_stateful_expert(
                             name: assessment["signed_margins"].get(name)
                             for name, passed in assessment["checks"].items()
                             if passed is not True
-                        },
+                        }
+                        if predictive_veto
+                        else {},
+                        "unrankable_reasons": []
+                        if predictive_veto
+                        else [
+                            name
+                            for name, passed in assessment["checks"].items()
+                            if passed is not True
+                        ],
                     }
                     for row, assessment in zip(rows, proxy_rows, strict=True)
                 ],
@@ -545,7 +559,10 @@ def run_stateful_expert(
         advance=advance,
         truth=session.client.get_ground_truth,
         reobserve=reobserve if scored or proxy is not None else None,
-        max_replacements=MAX_REPLACEMENT_ROUNDS if proxy is not None else 0,
+        max_replacements=MAX_REPLACEMENT_ROUNDS if proxy is not None and predictive_veto else 0,
+        empty_terminal="NO_RANKABLE_CANDIDATE"
+        if proxy is not None and not predictive_veto
+        else "NO_SAFE_SET",
     )
     result = None
     verdict = None
@@ -594,8 +611,18 @@ def run_stateful_expert(
             "chunks": cursor.decisions,
             "diverse_candidate_pools": diverse_pools,
             "identical_candidate_pools": identical_pools,
-            "proxy_candidates_admitted": proxy_admitted if proxy is not None else None,
-            "proxy_candidates_rejected": proxy_rejected if proxy is not None else None,
+            "proxy_candidates_admitted": proxy_admitted
+            if proxy is not None and predictive_veto
+            else None,
+            "prediction_rankable": proxy_admitted
+            if proxy is not None and not predictive_veto
+            else None,
+            "prediction_unrankable": proxy_rejected
+            if proxy is not None and not predictive_veto
+            else None,
+            "proxy_candidates_rejected": proxy_rejected
+            if proxy is not None and predictive_veto
+            else None,
             "can_max_rise_m": max(0.0, peak - start_z),
             "verification_retries": int(cursor.verification_retry_used),
             "empty_set_recoveries": int(cursor.empty_recovery_used),

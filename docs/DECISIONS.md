@@ -3936,3 +3936,19 @@ The revised executor SHA-256 is
 `d716898ddd48dbfdee30f6a2d561c2e0e298c18c613e17a5c82f595e95f07538`.
 The objective and clearance profile are unchanged. November 29 remains the
 weight and threshold freeze date.
+
+### ADR-0030 addendum 9 — stateful ranking comparisons
+
+Compare the approved equal and goal-heavy vectors in stateful arm 5 on the
+same VALIDATION18 identities. An archived equal-pool replay must establish
+a changed selected command payload before launching goal-heavy. Missing Jg
+outside terminal PLACE_DESCEND still omits that term under both vectors.
+
+Arm 4 uses the same stateful scripted proposer, analytic prediction, active
+prefix and approved equal weights for the pre-calibration VALIDATION comparison
+against arm 5 equal. It ranks finite applicable Eq. 3.8 inputs without calling
+RiskGate or enforcing predictive clearance and placement vetoes. It retains the
+expert's waypoint checks, independent SafetyMonitor and final observed verifier.
+Arm-5 veto-triggered replacement is absent when there is no predictive veto.
+The arm-4 profile is specific to VALIDATION. It does not declare a selected
+calibration or authorize TEST.

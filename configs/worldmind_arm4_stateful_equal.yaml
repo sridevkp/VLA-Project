@@ -1,0 +1,16 @@
+schema_version: 1
+arm: vla_world_model
+split: validation
+policy: equal
+policy_status: approved_pre_calibration_factor_matched_to_arm5_equal
+proposer: scripted_chunk_adapter
+candidate_count: 32
+horizon_steps: 50
+control_dt_s: 0.032
+prediction: analytic_nominal_velocity
+predictive_hard_veto: disabled
+independent_motor_veto: required
+soft_geometry_profile_sha256: 6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4
+placement_binding: terminal_place_descend_first_predicted_joint_settle
+early_goal_component: unavailable_excluded_from_equal_weight_sum
+path_and_risk: predicted_executable_prefix

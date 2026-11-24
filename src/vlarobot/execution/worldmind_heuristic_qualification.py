@@ -70,6 +70,11 @@ STATEFUL_PROXY_PROFILES = {
         "e740105921543a4895053d12bf796e0c185c54c5a3b51dc5fee8f0b63a004888",
     ),
 }
+STATEFUL_WORLD_MODEL_SCOPE = "scored_arm4_stateful_equal"
+STATEFUL_WORLD_MODEL_PROFILE = (
+    "configs/worldmind_arm4_stateful_equal.yaml",
+    "9474404c16e1b75209cfea38b6e10d9641238257729dbd7913ddccf14528e21d",
+)
 STATEFUL_VALIDATION_SCOPE = "scored_arm3_validation_stateful"
 STATEFUL_REGISTRATION = "calibration/urdf-base-train-v1.yaml"
 STATEFUL_REGISTRATION_SHA = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
@@ -84,6 +89,7 @@ _SCORED_SCOPES = frozenset(
     {
         STATEFUL_VALIDATION_SCOPE,
         STATEFUL_PROXY_VALIDATION_SCOPE,
+        STATEFUL_WORLD_MODEL_SCOPE,
         VALIDATION_SCOPE,
         SETTLED_VALIDATION_SCOPE,
         PROXY_VALIDATION_SCOPE,
@@ -455,12 +461,15 @@ def run_proxy_validation_episode(
     policy_id: str,
     matched_clearance: bool = False,
     stateful: bool = False,
+    world_model: bool = False,
 ) -> str:
     """Run one scoped arm-5 candidate policy on a frozen VALIDATION episode."""
     from datetime import date
 
     from vlarobot.eval.worldmind_proxy_policy import GRID, OPTIONAL_GRID
 
+    if world_model and (not stateful or not matched_clearance or policy_id != "equal"):
+        raise ValueError("arm-4 requires the matched equal VALIDATION profile")
     if policy_id not in GRID | OPTIONAL_GRID:
         raise ValueError("unknown November 24 candidate policy")
     if date.today() < date(2026, 11, 21):
@@ -472,7 +481,9 @@ def run_proxy_validation_episode(
         directory,
         expected_head,
         episode_id,
-        STATEFUL_PROXY_VALIDATION_SCOPE if stateful else PROXY_VALIDATION_SCOPE,
+        STATEFUL_WORLD_MODEL_SCOPE
+        if world_model
+        else (STATEFUL_PROXY_VALIDATION_SCOPE if stateful else PROXY_VALIDATION_SCOPE),
         policy_id,
         matched_clearance=matched_clearance,
     )
@@ -523,10 +534,16 @@ def _run_owned(
     matched_clearance: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
-    proxy_stateful = scope in {STATEFUL_PROXY_DIAGNOSTIC_SCOPE, STATEFUL_PROXY_VALIDATION_SCOPE}
+    world_model = scope == STATEFUL_WORLD_MODEL_SCOPE
+    proxy_stateful = world_model or scope in {
+        STATEFUL_PROXY_DIAGNOSTIC_SCOPE,
+        STATEFUL_PROXY_VALIDATION_SCOPE,
+    }
     stateful_path, stateful_sha = STATEFUL_PROXY_PROFILES.get(
         proxy_policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
     )
+    if world_model:
+        stateful_path, stateful_sha = STATEFUL_WORLD_MODEL_PROFILE
     stateful = proxy_stateful or scope in {STATEFUL_DIAGNOSTIC_SCOPE, STATEFUL_VALIDATION_SCOPE}
     if scope == STATEFUL_PROXY_DIAGNOSTIC_SCOPE and episode_id != "validation-clear-i00-s0":
         raise ValueError("stateful arm-5 diagnostic requires the frozen clear identity")
@@ -569,6 +586,7 @@ def _run_owned(
         or _sha((_ROOT / "configs" / STATEFUL_REGISTRATION).read_bytes())
         != STATEFUL_REGISTRATION_SHA
         or split != "validation"
+        or (world_model and proxy_policy != "equal")
         or (
             proxy_stateful
             and (proxy_policy not in STATEFUL_PROXY_PROFILES or not matched_clearance)
@@ -610,11 +628,18 @@ def _run_owned(
             directory / "scope.json",
             {
                 "scope": scope,
-                "arm": "full_system" if proxy_policy else "vla_risk_veto",
+                "arm": "vla_world_model"
+                if world_model
+                else ("full_system" if proxy_policy else "vla_risk_veto"),
+                "prediction_mode": "analytic" if proxy_policy else "none",
+                "predictive_veto": bool(proxy_policy and not world_model),
+                "policy_status": "approved_pre_calibration_equal" if world_model else None,
                 "actual_proposer": "scripted_chunk_adapter",
                 "selection_policy": proxy_policy or "first_eligible_in_draw_order",
                 "safety_scope": (
-                    "matched_clearance_proxy"
+                    "motor_safety"
+                    if world_model
+                    else "matched_clearance_proxy"
                     if matched_clearance
                     else "tool_envelope_proxy_v1"
                     if proxy_policy
@@ -727,6 +752,7 @@ def _run_owned(
                 proxy=(predictor, geometry) if proxy_stateful else None,
                 evidence_scope=scope,
                 ranking_policy=proxy_policy or "equal",
+                predictive_veto=not world_model,
             )
         no_safe = RecoveryState()
         confirmed = 0

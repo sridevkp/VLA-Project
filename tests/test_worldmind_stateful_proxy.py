@@ -139,3 +139,46 @@ def test_goal_heavy_changes_only_applicable_goal_ranking():
     early = [CandidateAssessment(checks, (None, row.components[1], 0.0, 0.0)) for row in measured]
     assert select_phase_assessments("equal", False, early).selected_index == 0
     assert select_phase_assessments("goal_x2", False, early).selected_index == 0
+
+
+def test_arm4_calls_prediction_and_ranks_without_riskgate_or_placement_veto(fixture, monkeypatch):
+    from vlarobot.risk.gate import RiskGate
+
+    def unexpected(*_args):
+        pytest.fail("no-veto arm reached a predictive hard gate")
+
+    monkeypatch.setattr(RiskGate, "select", unexpected)
+    geometry, initial, monitor = fixture
+    endpoint = (0.2, 0.0, 0.74)
+    waypoint = Waypoint("PLACE_DESCEND", True, 0.01, endpoint)
+    commands = [JointTarget({"joint": 0.1}), JointTarget({"joint": 0.2})]
+    chunks = [ActionChunk([command] * 50, 0.032, "scripted") for command in commands]
+    calls = []
+
+    def predict(state, chunk):
+        calls.append(chunk.actions[0])
+        position = endpoint if len(calls) == 1 else (0.4, 0.0, 0.74)
+        end = replace(
+            state,
+            robot=replace(
+                state.robot, joint_pos=chunk.actions[0].q, ee_pose=Pose3D(Vec3(*position), Q)
+            ),
+        )
+        return Trajectory((state, *([end] * 50)), 0.032, (), (), ())
+
+    decision, records = rank_phase_pool(
+        initial,
+        chunks,
+        waypoint,
+        predict,
+        monitor,
+        geometry,
+        (0.0, 0.0, 0.74),
+        0.1,
+        unexpected,
+        veto=False,
+    )
+    assert calls == commands and decision.selected_index == 0
+    assert all(r["admitted"] and r["placement"]["accepted"] is None for r in records)
+    assert all("placement_tolerance" not in r["checks"] for r in records)
+    assert records[0]["components"][0] == pytest.approx(0.2)

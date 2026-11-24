@@ -34,6 +34,7 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     STATEFUL_PROXY_SHA,
     STATEFUL_REGISTRATION,
     STATEFUL_REGISTRATION_SHA,
+    STATEFUL_WORLD_MODEL_PROFILE,
     _sha,  # noqa: PLC2701
     _verified_head,  # noqa: PLC2701
     run_frozen_test_episode,
@@ -48,6 +49,7 @@ _ELIGIBLE_TERMINALS = frozenset(
         "COMPLETE",
         "VERIFICATION_ABORT",
         "NO_SAFE_SET",
+        "NO_RANKABLE_CANDIDATE",
         "motor_veto",
         "backend_rejected",
         "IK_INFEASIBLE",
@@ -241,9 +243,14 @@ def run(
     settled_init: bool = False,
     matched_clearance: bool = False,
     stateful: bool = False,
+    world_model: bool = False,
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
+    if world_model and (
+        split != "validation" or not stateful or not matched_clearance or policy != "equal"
+    ):
+        raise ValueError("arm-4 is scoped to the matched equal VALIDATION profile")
     if split == "validation":
         if baseline or frozen_policy or date.today() < date(2026, 11, 21):
             raise ValueError("live VALIDATION is outside the approved scope or dates")
@@ -265,7 +272,9 @@ def run(
             or (policy, matched_clearance)
             not in {(None, False), ("equal", True), ("goal_x2", True)}
         ):
-            raise ValueError("stateful executor is scoped to arm-3 or approved arm-5 VALIDATION")
+            raise ValueError(
+                "stateful executor is scoped to approved arm-3, arm-4 or arm-5 VALIDATION"
+            )
         branch = subprocess.run(
             ["git", "symbolic-ref", "-q", "HEAD"], cwd=_ROOT, check=False, capture_output=True
         )
@@ -274,6 +283,8 @@ def run(
         stateful_path, stateful_hash = STATEFUL_PROXY_PROFILES.get(
             policy, (STATEFUL_CONFIG_PATH, STATEFUL_CONFIG_SHA)
         )
+        if world_model:
+            stateful_path, stateful_hash = STATEFUL_WORLD_MODEL_PROFILE
         if (
             _sha((_ROOT / stateful_path).read_bytes()) != stateful_hash
             or os.environ.get("VLAROBOT_URDF_REGISTRATION_FILE") != STATEFUL_REGISTRATION
@@ -337,7 +348,12 @@ def run(
         {
             "arm": "scripted_baseline"
             if baseline
-            else ("full_system" if policy else "vla_risk_veto"),
+            else (
+                "vla_world_model" if world_model else "full_system" if policy else "vla_risk_veto"
+            ),
+            "prediction_mode": "analytic" if policy else "none",
+            "predictive_veto": bool(policy and not world_model),
+            "policy_status": "approved_pre_calibration_equal" if world_model else None,
             "proxy_policy": policy,
             "executor_config_sha256": (
                 stateful_hash
@@ -430,6 +446,7 @@ def run(
                     policy_id=policy,
                     matched_clearance=matched_clearance,
                     stateful=stateful,
+                    world_model=world_model,
                     **arguments,
                 )
         if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
@@ -471,6 +488,7 @@ if __name__ == "__main__":
     parser.add_argument("--settled-init", action="store_true")
     parser.add_argument("--matched-clearance", action="store_true")
     parser.add_argument("--stateful", action="store_true")
+    parser.add_argument("--world-model", action="store_true")
     args = parser.parse_args()
     head = (
         args.expected_head
@@ -488,4 +506,5 @@ if __name__ == "__main__":
         settled_init=args.settled_init,
         matched_clearance=args.matched_clearance,
         stateful=args.stateful,
+        world_model=args.world_model,
     )

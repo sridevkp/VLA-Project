@@ -9,7 +9,7 @@ from typing import Any
 
 from vlarobot.core.types import Action, ActionChunk, Decision, JointTarget, WorldState
 from vlarobot.eval.worldmind_config import FROZEN_CONTROL_DT_S, FROZEN_HORIZON_STEPS
-from vlarobot.eval.worldmind_objectives import predicted_risk
+from vlarobot.eval.worldmind_objectives import predicted_risk, tool_envelope_clearances
 from vlarobot.eval.worldmind_proxy_policy import GRID, HARD_CHECKS, PROXY_MARGIN_M
 from vlarobot.execution.worldmind_proxy_binding import _matched_proxy_evidence  # noqa: PLC2701
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
@@ -76,7 +76,7 @@ def bind_placement(
     completion: int | None,
     states: Sequence[WorldState],
     goal: Sequence[float],
-    tolerance_m: float,
+    tolerance_m: float | None,
 ) -> PlacementBinding:
     if not waypoint.placement_required:
         return PlacementBinding(
@@ -84,13 +84,21 @@ def bind_placement(
         )
     if completion is None or not 0 < completion < len(states):
         return PlacementBinding(
-            "unavailable", "required_placement_not_predicted", None, None, False
+            "unavailable",
+            "required_placement_not_predicted",
+            None,
+            None,
+            False if tolerance_m is not None else None,
         )
     distance = math.dist(states[completion].robot.ee_pose.position.as_array(), goal)
     if not math.isfinite(distance):
         return PlacementBinding("invalid", "nonfinite_placement_state", completion, None, False)
     return PlacementBinding(
-        "measured", "terminal_place_descend", completion, distance, distance <= tolerance_m
+        "measured",
+        "terminal_place_descend",
+        completion,
+        distance,
+        None if tolerance_m is None else distance <= tolerance_m,
     )
 
 
@@ -118,6 +126,7 @@ def rank_phase_pool(
     ik_accepts: Callable[[Action], bool | tuple[bool, dict[str, float]]],
     *,
     policy: str = "equal",
+    veto: bool = True,
 ) -> tuple[Decision, list[dict[str, Any]]]:
     """Run production geometric checks and Eq. 3.8 with only same-phase applicable terms."""
     if waypoint.phase not in _PHASES:
@@ -147,52 +156,69 @@ def rank_phase_pool(
         )
         completion = predicted_completion(action, trajectory.states, waypoint) if complete else None
         placement = bind_placement(
-            waypoint, completion, trajectory.states, goal, placement_tolerance_m
+            waypoint, completion, trajectory.states, goal, placement_tolerance_m if veto else None
         )
         consumed = completion or len(chunk.actions)
         checks: dict[str, bool | None] = {"prediction_complete": complete}
         components = (placement.error_m, None, None, 0.0)
         margins: dict[str, Any] = {}
-        if placement.error_m is not None:
+        if veto and placement.error_m is not None:
             margins["placement_tolerance"] = placement_tolerance_m - placement.error_m
         if complete:
             prefix = replace(chunk, actions=chunk.actions[:consumed])
             states = trajectory.states[: consumed + 1]
-            evidence = _matched_proxy_evidence(
-                current,
-                prefix,
-                replace(trajectory, states=states),
-                monitor,
-                geometry,
-                active_phase=waypoint.phase,
-                phase_terminal=waypoint.terminal and completion is not None,
-            )
-            table, objects = evidence.geometric_hard_pass
-            margins.update(evidence.signed_margins or {})
-            ik = ik_accepts(action)
-            if isinstance(ik, tuple):
-                ik, margins["ik_feasibility_and_residual"] = ik
-            checks.update(
-                zip(
-                    HARD_CHECKS[:4],
-                    (
-                        evidence.joint_limits_pass,
-                        evidence.ik_pass and ik,
-                        table,
-                        objects,
-                    ),
-                    strict=True,
+            if veto:
+                evidence = _matched_proxy_evidence(
+                    current,
+                    prefix,
+                    replace(trajectory, states=states),
+                    monitor,
+                    geometry,
+                    active_phase=waypoint.phase,
+                    phase_terminal=waypoint.terminal and completion is not None,
                 )
-            )
+                table, objects = evidence.geometric_hard_pass
+                margins.update(evidence.signed_margins or {})
+                ik = ik_accepts(action)
+                if isinstance(ik, tuple):
+                    ik, margins["ik_feasibility_and_residual"] = ik
+                checks.update(
+                    zip(
+                        HARD_CHECKS[:4],
+                        (
+                            evidence.joint_limits_pass,
+                            evidence.ik_pass and ik,
+                            table,
+                            objects,
+                        ),
+                        strict=True,
+                    )
+                )
+                object_clearances = evidence.object_clearance_m
+            else:
+                object_clearances = tool_envelope_clearances(
+                    current,
+                    prefix,
+                    replace(trajectory, states=states),
+                    tool_radius_m=geometry["tool_tip_radius_m"],
+                    scene_complete=True,
+                )
             path = [state.robot.ee_pose.position.as_array() for state in states]
             components = (
                 placement.error_m,
                 sum(math.dist(a, b) for a, b in zip(path[:-1], path[1:], strict=True)),
-                predicted_risk(evidence.object_clearance_m, margin_m=PROXY_MARGIN_M),
+                predicted_risk(object_clearances, margin_m=PROXY_MARGIN_M),
                 0.0,
             )
-        if placement_required:
+        if veto and placement_required:
             checks["placement_tolerance"] = placement.accepted
+        if not veto:
+            checks["objective_inputs_complete"] = all(
+                value is None
+                if index == 0 and not placement_required
+                else value is not None and math.isfinite(value)
+                for index, value in enumerate(components)
+            )
         assessments.append(CandidateAssessment(tuple(checks.items()), components))
         records.append(
             {
@@ -205,9 +231,29 @@ def rank_phase_pool(
                 "active_prefix_ticks": consumed,
                 "predicted_completion": completion,
                 "admitted": all(
-                    checks.get(name) is True for name in (*required, "prediction_complete")
+                    checks.get(name) is True
+                    for name in ((*required, "prediction_complete") if veto else checks)
                 ),
                 "prediction_reasons": trajectory.hard_reasons,
             }
         )
-    return select_phase_assessments(policy, placement_required, assessments), records
+    if veto:
+        return select_phase_assessments(policy, placement_required, assessments), records
+    scores = [
+        (
+            sum(
+                weight * value
+                for weight, value in zip(GRID[policy], row.components, strict=True)
+                if value is not None
+            ),
+            index,
+        )
+        for index, row in enumerate(assessments)
+        if records[index]["admitted"]
+    ]
+    if not scores:
+        return Decision(None, "no candidates with available objective inputs"), records
+    score, selected = min(scores)
+    return Decision(
+        selected, f"candidate={selected}; J={score:.9g}; prediction ranking only"
+    ), records

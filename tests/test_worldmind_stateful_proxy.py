@@ -182,3 +182,21 @@ def test_arm4_calls_prediction_and_ranks_without_riskgate_or_placement_veto(fixt
     assert all(r["admitted"] and r["placement"]["accepted"] is None for r in records)
     assert all("placement_tolerance" not in r["checks"] for r in records)
     assert records[0]["components"][0] == pytest.approx(0.2)
+
+
+def test_verified_terminal_home_prediction_uses_canonical_inclusive_predicate(fixture):
+    from vlarobot.execution.worldmind_stateful_proxy import predicted_completion
+
+    _, initial, _ = fixture
+    # Matches the failure mode: a jittered command is already within its settle
+    # band but canonical HOME remains outside the same approved tolerance.
+    held = JointTarget({"joint": 0.00225})
+    premature = replace(initial, robot=replace(initial.robot, joint_pos={"joint": 0.02195}))
+    valid = replace(initial, robot=replace(initial.robot, joint_pos={"joint": 0.02}))
+    missing = replace(initial, robot=replace(initial.robot, joint_pos={}))
+    ordinary = Waypoint("HOME", False, 0.02, None)
+    canonical = Waypoint("HOME", False, 0.02, None, {"joint": 0.0}, 0.02)
+    states = (initial, premature, missing, valid)
+    assert predicted_completion(held, states, ordinary) == 1
+    assert predicted_completion(held, states, canonical) == 3
+    assert predicted_completion(held, states[:-1], canonical) is None

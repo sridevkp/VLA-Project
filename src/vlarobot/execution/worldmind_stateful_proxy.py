@@ -37,6 +37,8 @@ class Waypoint:
     terminal: bool
     settle_rad: float | None
     target_xyz_m: tuple[float, float, float] | None
+    home_reference: dict[str, float] | None = None
+    home_tolerance_rad: float | None = None
 
     @property
     def placement_required(self) -> bool:
@@ -52,23 +54,40 @@ class PlacementBinding:
     accepted: bool | None
 
 
+def home_joint_error(
+    joint_positions: Mapping[str, float], home_joints: Mapping[str, float]
+) -> float | None:
+    """Mirror the frozen verifier HOME error without altering the verifier."""
+    if not home_joints or any(
+        name not in joint_positions or not math.isfinite(joint_positions[name])
+        for name in home_joints
+    ):
+        return None
+    return max(abs(joint_positions[name] - value) for name, value in home_joints.items())
+
+
 def predicted_completion(
     action: Action, states: Sequence[WorldState], waypoint: Waypoint
 ) -> int | None:
     """First future state satisfying the live expert's strict joint settle predicate."""
     if not isinstance(action, JointTarget) or waypoint.settle_rad is None:
         return None
-    return next(
-        (
-            index
-            for index, state in enumerate(states[1:], 1)
-            if all(
-                abs(state.robot.joint_pos.get(name, math.inf) - target) < waypoint.settle_rad
-                for name, target in action.q.items()
-            )
-        ),
-        None,
-    )
+    for index, state in enumerate(states[1:], 1):
+        observed = state.robot.joint_pos
+        if waypoint.home_reference is not None:
+            error = home_joint_error(observed, waypoint.home_reference)
+            if (
+                error is not None
+                and waypoint.home_tolerance_rad is not None
+                and error <= waypoint.home_tolerance_rad
+            ):
+                return index
+        elif all(
+            abs(observed.get(name, math.inf) - target) < waypoint.settle_rad
+            for name, target in action.q.items()
+        ):
+            return index
+    return None
 
 
 def bind_placement(

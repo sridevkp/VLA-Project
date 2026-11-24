@@ -34,7 +34,7 @@ from vlarobot.execution.worldmind_heuristic_qualification import (  # noqa: PLC2
     _write_event,
 )
 from vlarobot.execution.worldmind_proxy_binding import proxy_scene
-from vlarobot.execution.worldmind_stateful_proxy import Waypoint, rank_phase_pool
+from vlarobot.execution.worldmind_stateful_proxy import Waypoint, home_joint_error, rank_phase_pool
 from vlarobot.planning.candidates import SeededCandidateGenerator
 
 if TYPE_CHECKING:
@@ -210,11 +210,52 @@ class StatefulChunkBackend:
 class ChunkExpert(ScriptedCanPolicy):
     """Expose the baseline's actual phase cursor to the chunk backend."""
 
+    def __init__(
+        self, *, verified_home: tuple[dict[str, float], float] | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(**kwargs)
+        self.verified_home = verified_home
+
+    def _move_to_joint_target(
+        self,
+        backend: StatefulChunkBackend,
+        current_q: np.ndarray,
+        target_q: np.ndarray,
+        state: str,
+    ) -> tuple[np.ndarray, Observation] | None:
+        if state == "HOME" and self.verified_home is not None:
+            target_q = target_q.copy()
+            for name, value in self.verified_home[0].items():
+                target_q[self.kinematics.idx[name]] = value
+        return super()._move_to_joint_target(backend, current_q, target_q, state)
+
+    def _joint_waypoint_settled(
+        self,
+        measured: dict[str, float],
+        commanded: dict[str, float],
+        tolerance: float,
+        *,
+        terminal_home: bool,
+    ) -> bool:
+        if terminal_home and self.verified_home is not None:
+            target, margin = self.verified_home
+            error = home_joint_error(measured, target)
+            return error is not None and error <= margin
+        return super()._joint_waypoint_settled(
+            measured, commanded, tolerance, terminal_home=terminal_home
+        )
+
     def _command_and_wait(self, backend, joint_target, state, **kwargs):
         terminal = kwargs.get("phase_terminal")
         target = tuple(map(float, kwargs["target_position"])) if terminal is not None else None
+        home = self.verified_home if kwargs.get("terminal_home") else None
         backend.waypoint = Waypoint(
-            backend.phase, terminal is True, kwargs["settle_tolerance"], target
+            backend.phase,
+            terminal is True,
+            kwargs["settle_tolerance"],
+            target,
+            home[0] if home is not None else None,
+            home[1] if home is not None else None,
         )
         return super()._command_and_wait(backend, joint_target, state, **kwargs)
 
@@ -259,6 +300,7 @@ def run_stateful_expert(
     evidence_scope: str | None = None,
     ranking_policy: str = "equal",
     predictive_veto: bool = True,
+    verified_home: bool = False,
 ) -> str:
     """Execute the real WorldMind selection/receipt path with the live expert cursor."""
     scope = evidence_scope or (STATEFUL_VALIDATION_SCOPE if scored else STATEFUL_DIAGNOSTIC_SCOPE)
@@ -570,7 +612,9 @@ def run_stateful_expert(
     try:
         for attempt in range(2 if scored else 1):
             expert = ChunkExpert(
-                scenario=entry.scene, trace_path=directory / f"expert-phases-{attempt}.jsonl"
+                scenario=entry.scene,
+                trace_path=directory / f"expert-phases-{attempt}.jsonl",
+                **({"verified_home": (verifier.home, verifier.home_tol)} if verified_home else {}),
             )
             result = expert.execute(cursor, entry.seed)
             if not result.home_reached or cursor.phase != "HOME":

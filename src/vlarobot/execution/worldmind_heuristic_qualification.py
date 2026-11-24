@@ -80,6 +80,8 @@ STATEFUL_REGISTRATION = "calibration/urdf-base-train-v1.yaml"
 STATEFUL_REGISTRATION_SHA = "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
 STATEFUL_CONFIG_PATH = "configs/worldmind_arm3_stateful.yaml"
 STATEFUL_CONFIG_SHA = "585ea6ef1ef850f2c0251b4fa797cb5a4032376a2ddca370144b0d35bf22c58b"
+VERIFIED_HOME_PROFILE_PATH = "configs/worldmind_stateful_verified_home.yaml"
+VERIFIED_HOME_PROFILE_SHA = "2a014f1e38e28e56d43c5ec0127aa9030ef59e2af4dbf180ffc2640cba486e85"
 SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
 SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
@@ -98,6 +100,13 @@ _SCORED_SCOPES = frozenset(
     }
 )
 FINGER_LOG_TOLERANCE_M = 1e-4
+
+
+def executor_profile_sha(base_sha: str, verified_home: bool) -> str:
+    """Bind the independently pinned HOME change to the existing arm profile."""
+    if not verified_home:
+        return base_sha
+    return _sha(f"{base_sha}:{VERIFIED_HOME_PROFILE_SHA}".encode("ascii"))
 
 
 def _sha(data: bytes) -> str:
@@ -431,6 +440,7 @@ def run_heuristic_validation_episode(
     episode_id: str,
     settled_init: bool = False,
     stateful: bool = False,
+    verified_home: bool = False,
 ) -> str:
     """Run one scored episode from the frozen VALIDATION plan in an owned session."""
     from datetime import date
@@ -447,6 +457,7 @@ def run_heuristic_validation_episode(
         STATEFUL_VALIDATION_SCOPE
         if stateful
         else (SETTLED_VALIDATION_SCOPE if settled_init else VALIDATION_SCOPE),
+        verified_home=verified_home,
     )
 
 
@@ -461,6 +472,7 @@ def run_proxy_validation_episode(
     policy_id: str,
     matched_clearance: bool = False,
     stateful: bool = False,
+    verified_home: bool = False,
     world_model: bool = False,
 ) -> str:
     """Run one scoped arm-5 candidate policy on a frozen VALIDATION episode."""
@@ -486,6 +498,7 @@ def run_proxy_validation_episode(
         else (STATEFUL_PROXY_VALIDATION_SCOPE if stateful else PROXY_VALIDATION_SCOPE),
         policy_id,
         matched_clearance=matched_clearance,
+        verified_home=verified_home,
     )
 
 
@@ -532,6 +545,7 @@ def _run_owned(
     split: str = "validation",
     *,
     matched_clearance: bool = False,
+    verified_home: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
     world_model = scope == STATEFUL_WORLD_MODEL_SCOPE
@@ -552,6 +566,13 @@ def _run_owned(
     ):
         raise ValueError("stateful candidate-00 diagnostic requires the frozen clear identity")
     scored = scope in _SCORED_SCOPES
+    if verified_home and (
+        not stateful
+        or not scored
+        or split != "validation"
+        or _sha((_ROOT / VERIFIED_HOME_PROFILE_PATH).read_bytes()) != VERIFIED_HOME_PROFILE_SHA
+    ):
+        raise ValueError("verified HOME requires pinned stateful VALIDATION")
     settled_init = (scope == SETTLED_VALIDATION_SCOPE or matched_clearance) and not stateful
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
@@ -651,9 +672,10 @@ def _run_owned(
                 else "selected_chunk_with_expert_INIT_wait"
                 if settled_init
                 else ("first_action" if qualification else "selected_chunk"),
-                "executor_config_sha256": (stateful_sha)
+                "executor_config_sha256": executor_profile_sha(stateful_sha, verified_home)
                 if stateful
                 else (SETTLED_CONFIG_SHA if settled_init else None),
+                "home_profile_sha256": VERIFIED_HOME_PROFILE_SHA if verified_home else None,
                 "expert_registration_sha256": STATEFUL_REGISTRATION_SHA if stateful else None,
                 "source_commit": head,
                 "episode": episode_id,
@@ -753,6 +775,7 @@ def _run_owned(
                 evidence_scope=scope,
                 ranking_policy=proxy_policy or "equal",
                 predictive_veto=not world_model,
+                verified_home=verified_home,
             )
         no_safe = RecoveryState()
         confirmed = 0

@@ -121,7 +121,10 @@ def test_finger_excursion_annotation_preserves_strict_qualification():
     assert finger_log_status(float("nan")) == "invalid"
 
 
-def test_stateful_freeze_compares_two_eligible_full_system_campaigns(tmp_path, monkeypatch):
+@pytest.mark.parametrize("profiles", [(False, False), (True, True), (False, True)])
+def test_stateful_freeze_compares_two_eligible_full_system_campaigns(
+    tmp_path, monkeypatch, profiles
+):
     from datetime import date
 
     from vlarobot.execution import worldmind_nov24_campaign as campaign
@@ -137,7 +140,7 @@ def test_stateful_freeze_compares_two_eligible_full_system_campaigns(tmp_path, m
     monkeypatch.setattr(campaign, "verify_policy_contrast", lambda *args: checked.append(args))
     plan = campaign.build_episode_plan("validation", 0)
     roots = []
-    for policy, capacity in (("equal", 11), ("goal_x2", 12)):
+    for (policy, capacity), home in zip((("equal", 11), ("goal_x2", 12)), profiles, strict=True):
         run = tmp_path / policy
         roots.append(run)
         run.mkdir()
@@ -148,7 +151,10 @@ def test_stateful_freeze_compares_two_eligible_full_system_campaigns(tmp_path, m
                 "split": "validation",
                 "proxy_policy": policy,
                 "proxy_config_sha256": campaign.MATCHED_PROXY_SHA,
-                "executor_config_sha256": campaign.STATEFUL_PROXY_PROFILES[policy][1],
+                "executor_config_sha256": campaign.executor_profile_sha(
+                    campaign.STATEFUL_PROXY_PROFILES[policy][1], home
+                ),
+                "home_profile_sha256": campaign.VERIFIED_HOME_PROFILE_SHA if home else None,
                 "plan_sha256": campaign._PLAN,
                 "config_sha256": campaign._CONFIG,
             },
@@ -165,9 +171,16 @@ def test_stateful_freeze_compares_two_eligible_full_system_campaigns(tmp_path, m
     with pytest.raises(ValueError, match="both approved"):
         campaign.freeze_validation(tmp_path / "partial.json", roots[:1])
     out = tmp_path / "freeze.json"
+    if profiles[0] != profiles[1]:
+        with pytest.raises(ValueError, match="incompatible"):
+            campaign.freeze_validation(out, roots)
+        assert not out.exists()
+        return
     assert campaign.freeze_validation(out, roots) == "goal_x2"
     assert checked == [(roots[0], "goal_x2", campaign.MATCHED_PROXY_SHA)]
     payload = campaign._read_event(out)
     assert payload["schema_version"] == 2
-    assert payload["executor_config_sha256"] == campaign.STATEFUL_PROXY_PROFILES["goal_x2"][1]
+    assert payload["executor_config_sha256"] == campaign.executor_profile_sha(
+        campaign.STATEFUL_PROXY_PROFILES["goal_x2"][1], profiles[1]
+    )
     assert payload["scores"] == {"equal": 11 / 18, "goal_x2": 12 / 18}

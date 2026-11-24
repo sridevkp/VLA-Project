@@ -1715,6 +1715,16 @@ class ScriptedCanPolicy:
         """Return the accepted target used by the waypoint completion check."""
         return requested
 
+    def _joint_waypoint_settled(
+        self,
+        measured: dict[str, float],
+        commanded: dict[str, float],
+        tolerance: float,
+        *,
+        terminal_home: bool,
+    ) -> bool:
+        return max(abs(commanded[name] - measured[name]) for name in ARM_JOINTS) < tolerance
+
     def _command_and_wait(
         self,
         backend,
@@ -1728,6 +1738,7 @@ class ScriptedCanPolicy:
         ik_error: float | None,
         ik_tilt: float | None,
         phase_terminal: bool | None = None,
+        terminal_home: bool = False,
     ) -> Observation | None:
         apply_started = perf_counter() if self.timing_enabled else None
         response = backend.apply(JointTarget(joint_target))
@@ -1760,7 +1771,6 @@ class ScriptedCanPolicy:
             self._last_observation = observation
             self._track_observation(observation, state=state)
             measured = observation.robot.joint_pos
-            errors = {name: abs(joint_target[name] - measured[name]) for name in ARM_JOINTS}
             diagnostics = observation.robot.diagnostics
             contacts = diagnostics.get("contact_nodes", [])
             if state == "PREGRASP" and isinstance(contacts, list):
@@ -1780,7 +1790,9 @@ class ScriptedCanPolicy:
             if self._base_moved(observation, state):
                 self._add_settle_duration(state, observation.t - start_time)
                 return None
-            if max(errors.values(), default=0.0) < settle_tolerance:
+            if self._joint_waypoint_settled(
+                measured, joint_target, settle_tolerance, terminal_home=terminal_home
+            ):
                 self._add_settle_duration(state, observation.t - start_time)
                 return observation
             progress = max(
@@ -1834,9 +1846,10 @@ class ScriptedCanPolicy:
         target_position = self.kinematics.forward(target_q)[:3, 3]
         observation = None
         previous_q = current_q
-        for waypoint in self.kinematics.interpolate_joint_path(
+        waypoints = self.kinematics.interpolate_joint_path(
             current_q, target_q, MAX_JOINT_STEP_RAD, min_steps=2
-        ):
+        )
+        for index, waypoint in enumerate(waypoints):
             joint_target = {name: float(waypoint[self.kinematics.idx[name]]) for name in ARM_JOINTS}
             settled = self._command_and_wait(
                 backend,
@@ -1851,6 +1864,7 @@ class ScriptedCanPolicy:
                 target_position=target_position,
                 ik_error=0.0,
                 ik_tilt=None,
+                terminal_home=state == "HOME" and index == len(waypoints) - 1,
             )
             if settled is None:
                 return None

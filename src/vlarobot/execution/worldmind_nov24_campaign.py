@@ -35,8 +35,11 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     STATEFUL_REGISTRATION,
     STATEFUL_REGISTRATION_SHA,
     STATEFUL_WORLD_MODEL_PROFILE,
+    VERIFIED_HOME_PROFILE_PATH,
+    VERIFIED_HOME_PROFILE_SHA,
     _sha,  # noqa: PLC2701
     _verified_head,  # noqa: PLC2701
+    executor_profile_sha,
     run_frozen_test_episode,
     run_heuristic_validation_episode,
     run_proxy_validation_episode,
@@ -106,7 +109,12 @@ def verify_policy_contrast(reference: Path, policy: str, proxy_hash: str) -> Non
         or launch["plan_sha256"] != _PLAN
     ):
         raise ValueError("policy contrast requires the matching equal-policy VALIDATION campaign")
-    if launch.get("executor_config_sha256") == STATEFUL_PROXY_SHA:
+    home_profile = launch.get("home_profile_sha256")
+    if home_profile not in (None, VERIFIED_HOME_PROFILE_SHA):
+        raise ValueError("unapproved HOME contrast profile")
+    if launch.get("executor_config_sha256") == executor_profile_sha(
+        STATEFUL_PROXY_SHA, home_profile is not None
+    ):
         from vlarobot.execution.worldmind_stateful_proxy import select_phase_assessments
         from vlarobot.risk.gate import CandidateAssessment
 
@@ -152,6 +160,14 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
         raise ValueError("at least one completed VALIDATION campaign is required")
     first = _read_event(runs[0] / "launch.json")
     stateful = first["proxy_config_sha256"] == MATCHED_PROXY_SHA
+    home_profile = first.get("home_profile_sha256")
+    if home_profile is not None and (
+        not stateful
+        or home_profile != VERIFIED_HOME_PROFILE_SHA
+        or _sha((_ROOT / VERIFIED_HOME_PROFILE_PATH).read_bytes()) != VERIFIED_HOME_PROFILE_SHA
+    ):
+        raise ValueError("unapproved HOME freeze profile")
+    verified_home = home_profile is not None
     if stateful and len(runs) != len(STATEFUL_PROXY_PROFILES):
         raise ValueError("stateful freeze requires both approved equal and goal-heavy outcomes")
     proxy_path = MATCHED_PROXY_PATH if stateful else "configs/worldmind_proxy_nov24.yaml"
@@ -173,7 +189,9 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
                 stateful
                 and (
                     policy not in STATEFUL_PROXY_PROFILES
-                    or launch["executor_config_sha256"] != STATEFUL_PROXY_PROFILES[policy][1]
+                    or launch.get("home_profile_sha256") != home_profile
+                    or launch["executor_config_sha256"]
+                    != executor_profile_sha(STATEFUL_PROXY_PROFILES[policy][1], verified_home)
                     or _sha((_ROOT / STATEFUL_PROXY_PROFILES[policy][0]).read_bytes())
                     != STATEFUL_PROXY_PROFILES[policy][1]
                 )
@@ -226,7 +244,16 @@ def freeze_validation(out: Path, runs: list[Path]) -> str:
             "maximize": False,
             "split": "validation",
             "config_sha256": proxy_hash,
-            **({"executor_config_sha256": STATEFUL_PROXY_PROFILES[winner][1]} if stateful else {}),
+            **(
+                {
+                    "executor_config_sha256": executor_profile_sha(
+                        STATEFUL_PROXY_PROFILES[winner][1], verified_home
+                    ),
+                    "home_profile_sha256": home_profile,
+                }
+                if stateful
+                else {}
+            ),
             "plan_sha256": _PLAN,
             "interpretation": "same-set selection statistic",
         },
@@ -276,9 +303,16 @@ def run(
     matched_clearance: bool = False,
     stateful: bool = False,
     world_model: bool = False,
+    verified_home: bool = False,
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
+    if verified_home and (
+        not stateful
+        or split != "validation"
+        or _sha((_ROOT / VERIFIED_HOME_PROFILE_PATH).read_bytes()) != VERIFIED_HOME_PROFILE_SHA
+    ):
+        raise ValueError("verified HOME requires pinned stateful VALIDATION")
     if world_model and (
         split != "validation" or not stateful or not matched_clearance or policy != "equal"
     ):
@@ -388,13 +422,14 @@ def run(
             "policy_status": "approved_pre_calibration_equal" if world_model else None,
             "proxy_policy": policy,
             "executor_config_sha256": (
-                stateful_hash
+                executor_profile_sha(stateful_hash, verified_home)
                 if stateful
                 else SETTLED_CONFIG_SHA
                 if settled_init or matched_clearance
                 else None
             ),
             "proxy_config_sha256": proxy_hash,
+            "home_profile_sha256": VERIFIED_HOME_PROFILE_SHA if verified_home else None,
             "config_sha256": _CONFIG,
             "split": split,
             "trials": len(plan),
@@ -470,7 +505,11 @@ def run(
                 terminal = run_frozen_test_episode(owned, frozen_policy=frozen_policy, **arguments)
             elif policy is None:
                 terminal = run_heuristic_validation_episode(
-                    owned, settled_init=settled_init, stateful=stateful, **arguments
+                    owned,
+                    settled_init=settled_init,
+                    stateful=stateful,
+                    verified_home=verified_home,
+                    **arguments,
                 )
             else:
                 terminal = run_proxy_validation_episode(
@@ -479,6 +518,7 @@ def run(
                     matched_clearance=matched_clearance,
                     stateful=stateful,
                     world_model=world_model,
+                    verified_home=verified_home,
                     **arguments,
                 )
         if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
@@ -521,6 +561,7 @@ if __name__ == "__main__":
     parser.add_argument("--matched-clearance", action="store_true")
     parser.add_argument("--stateful", action="store_true")
     parser.add_argument("--world-model", action="store_true")
+    parser.add_argument("--verified-home", action="store_true")
     args = parser.parse_args()
     if args.freeze_from:
         if (
@@ -533,6 +574,7 @@ if __name__ == "__main__":
             or args.matched_clearance
             or args.stateful
             or args.world_model
+            or args.verified_home
         ):
             parser.error("--freeze-from is offline and cannot be combined with run options")
         print(freeze_validation(args.output.resolve(), args.freeze_from), flush=True)
@@ -554,4 +596,5 @@ if __name__ == "__main__":
         matched_clearance=args.matched_clearance,
         stateful=args.stateful,
         world_model=args.world_model,
+        verified_home=args.verified_home,
     )

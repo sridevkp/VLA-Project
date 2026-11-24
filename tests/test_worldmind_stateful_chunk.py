@@ -339,3 +339,39 @@ def test_accepted_replacement_becomes_target_without_resetting_waypoint_allowanc
     assert cursor.replacements_used == 2
     cursor.apply(GripperCmd(0.02))
     assert cursor.waypoint_index == 1 and cursor.replacements_used == 0
+
+
+def test_live_terminal_home_matches_verifier_and_leaves_intermediate_settle_unchanged():
+    from vlarobot.backends.webots.config import ARM_JOINTS
+    from vlarobot.core.types import ObjectState, Pose3D, SceneState, TaskSpec, Vec3, WorldState
+    from vlarobot.execution.worldmind_stateful_chunk import ChunkExpert
+    from vlarobot.planning.verification import PlacementVerifier
+
+    q = dict.fromkeys(ARM_JOINTS, 0.0)
+    expert = object.__new__(ChunkExpert)
+    expert.verified_home = (q, 0.02)
+    command = {**q, ARM_JOINTS[0]: 0.00225}
+    pose = Pose3D(Vec3(0, 0, 1), (0.0, 0.0, 0.0, 1.0))
+    verifier = PlacementVerifier(
+        destination_base=pose,
+        rest_center_base=pose,
+        up_axis_base=(0.0, 0.0, 1.0),
+        home_joints=q,
+        distance_tolerance_m=0.1,
+        height_tolerance_m=0.02,
+        tilt_limit_rad=0.2,
+        home_tolerance_rad=0.02,
+    )
+    robot = FakeBackend().reset(ScenarioSpec(), 0).robot
+    scene = SceneState([ObjectState("CAN", "can", pose, Vec3(0.06, 0.06, 0.12), 1.0)])
+    for value, expected in ((0.02195, False), (0.02, True), (0.019, True), (float("nan"), False)):
+        measured = {**q, ARM_JOINTS[0]: value}
+        robot.joint_pos = measured
+        observed = WorldState(scene, robot)
+        result = expert._joint_waypoint_settled(measured, command, 0.02, terminal_home=True)
+        assert result is expected
+        assert (
+            verifier.check_observed(TaskSpec("place", "CAN", "goal"), observed).success is expected
+        )
+    measured = {**q, ARM_JOINTS[0]: 0.02195}
+    assert expert._joint_waypoint_settled(measured, command, 0.02, terminal_home=False)

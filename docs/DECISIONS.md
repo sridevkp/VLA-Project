@@ -3952,3 +3952,19 @@ expert's waypoint checks, independent SafetyMonitor and final observed verifier.
 Arm-5 veto-triggered replacement is absent when there is no predictive veto.
 The arm-4 profile is specific to VALIDATION. It does not declare a selected
 calibration or authorize TEST.
+
+### ADR-0030 addendum 10 — terminal HOME reference alignment
+
+On stateful VALIDATION, the optional verified-HOME profile requests the
+frozen verifier's configured HOME vector for the expert's terminal HOME
+waypoint. It waits for finite joint feedback within the same inclusive
+tolerance used by the observed verifier. The waypoint predictor uses the
+same terminal predicate. Intermediate waypoint completion, motor limits,
+placement criteria, timeout and episode ceilings retain their values.
+The baseline's HOME behavior is unchanged.
+
+The prior `clear-i03-s2` trace was within 0.019699 rad of the selected
+command and 0.021947 rad from the verifier's HOME. This mismatch triggered
+a full task retry. The new stateful profile hash incorporates HOME profile
+SHA-256 `2a014f1e38e28e56d43c5ec0127aa9030ef59e2af4dbf180ffc2640cba486e85`.
+Do not mix old and corrected HOME profiles in policy selection.

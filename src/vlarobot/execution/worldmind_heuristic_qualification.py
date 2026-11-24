@@ -6,6 +6,7 @@ The caller owns the launch context and its process cleanup. This module register
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import subprocess
@@ -55,6 +56,8 @@ _EPISODE = "validation-clear-i00-s0"
 _FINGERS = ("gripper_left_finger_joint", "gripper_right_finger_joint")
 _SCOPE = "non_scored_arm3_one_decision_qualification"
 VALIDATION_SCOPE = "scored_arm3_validation"
+MATCHED_PROXY_PATH = "configs/worldmind_arm5_matched_clearance.json"
+MATCHED_PROXY_SHA = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
 SETTLED_VALIDATION_SCOPE = "scored_arm3_validation_settled_init"
 SETTLED_CONFIG_SHA = "98eb1ec19b3e322e32554cf9f6b6c004d9ebce96d1ea4849657c1d90360fb6e4"
 PROXY_VALIDATION_SCOPE = "scored_arm5_proxy_validation"
@@ -398,6 +401,7 @@ def run_proxy_validation_episode(
     expected_head: str,
     episode_id: str,
     policy_id: str,
+    matched_clearance: bool = False,
 ) -> str:
     """Run one scoped arm-5 candidate policy on a frozen VALIDATION episode."""
     from datetime import date
@@ -417,6 +421,7 @@ def run_proxy_validation_episode(
         episode_id,
         PROXY_VALIDATION_SCOPE,
         policy_id,
+        matched_clearance=matched_clearance,
     )
 
 
@@ -461,10 +466,12 @@ def _run_owned(
     scope: str,
     proxy_policy: str | None = None,
     split: str = "validation",
+    *,
+    matched_clearance: bool = False,
 ) -> str:
     qualification = scope == _SCOPE
     scored = scope in _SCORED_SCOPES
-    settled_init = scope == SETTLED_VALIDATION_SCOPE
+    settled_init = scope == SETTLED_VALIDATION_SCOPE or matched_clearance
     head = _verified_head(expected_head)
     config_path = _ROOT / "configs/worldmind_diagnostic.approved.yaml"
     for path, digest in (
@@ -476,11 +483,17 @@ def _run_owned(
     ):
         if _sha(path.read_bytes()) != digest:
             raise ValueError(f"qualification pin mismatch: {path}")
-    if (
-        proxy_policy
-        and _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes()) != _PROXY_CONFIG
-    ):
-        raise ValueError("November 24 proxy config pin mismatch")
+    proxy_path = _ROOT / (
+        MATCHED_PROXY_PATH if matched_clearance else "configs/worldmind_proxy_nov24.yaml"
+    )
+    proxy_pin = MATCHED_PROXY_SHA if matched_clearance else _PROXY_CONFIG
+    geometry = None
+    if proxy_policy:
+        raw = proxy_path.read_bytes()
+        if _sha(raw) != proxy_pin:
+            raise ValueError("November 24 proxy config pin mismatch")
+        if matched_clearance:
+            geometry = json.loads(raw)
     if (
         settled_init
         and _sha((_ROOT / "configs/worldmind_arm3_settled_init.yaml").read_bytes())
@@ -523,12 +536,14 @@ def _run_owned(
                 "arm": "full_system" if proxy_policy else "vla_risk_veto",
                 "actual_proposer": "scripted_chunk_adapter",
                 "selection_policy": proxy_policy or "first_eligible_in_draw_order",
-                "safety_scope": "tool_envelope_proxy_v1" if proxy_policy else "motor_safety",
-                "proxy_config_sha256": _sha(
-                    (_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes()
-                )
-                if proxy_policy
-                else None,
+                "safety_scope": (
+                    "matched_clearance_proxy"
+                    if matched_clearance
+                    else "tool_envelope_proxy_v1"
+                    if proxy_policy
+                    else "motor_safety"
+                ),
+                "proxy_config_sha256": proxy_pin if proxy_policy else None,
                 "execution_policy": "selected_chunk_with_expert_INIT_wait"
                 if settled_init
                 else ("first_action" if qualification else "selected_chunk"),
@@ -653,7 +668,7 @@ def _run_owned(
                 from vlarobot.execution.worldmind_proxy_binding import evaluate_proxy_pool
 
                 assessments, policy_choices = evaluate_proxy_pool(
-                    state, truth, pool, monitor, predictor, tables, config
+                    state, truth, pool, monitor, predictor, tables, config, geometry
                 )
                 selected = policy_choices[proxy_policy][0]
                 proxy_records = {

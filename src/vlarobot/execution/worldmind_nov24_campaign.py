@@ -23,6 +23,8 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
     _ROOT,  # noqa: PLC2701
     _SCENARIOS,  # noqa: PLC2701
     _WORLD,  # noqa: PLC2701
+    MATCHED_PROXY_PATH,
+    MATCHED_PROXY_SHA,
     SETTLED_CONFIG_SHA,
     _sha,  # noqa: PLC2701
     _verified_head,  # noqa: PLC2701
@@ -200,6 +202,7 @@ def run(
     frozen_policy: Path | None = None,
     baseline: bool = False,
     settled_init: bool = False,
+    matched_clearance: bool = False,
 ) -> None:
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
@@ -216,6 +219,8 @@ def run(
         raise ValueError("only authorized VALIDATION and TEST are supported")
     if not 1 <= workers <= 3:
         raise ValueError("use one to three isolated workers")
+    if matched_clearance and (split != "validation" or policy != "equal" or settled_init):
+        raise ValueError("matched clearance is scoped to arm-5 equal VALIDATION")
     if settled_init and (split != "validation" or policy is not None or baseline):
         raise ValueError("settled INIT is the corrected arm-3 VALIDATION executor")
     if (
@@ -243,8 +248,11 @@ def run(
         from vlarobot.execution.worldmind_proxy_binding import verified_table_world
 
         verified_table_world(_ROOT)
-        proxy_hash = _sha((_ROOT / "configs/worldmind_proxy_nov24.yaml").read_bytes())
-        if proxy_hash != _PROXY_CONFIG:
+        proxy_path = (
+            MATCHED_PROXY_PATH if matched_clearance else "configs/worldmind_proxy_nov24.yaml"
+        )
+        proxy_hash = _sha((_ROOT / proxy_path).read_bytes())
+        if proxy_hash != (MATCHED_PROXY_SHA if matched_clearance else _PROXY_CONFIG):
             raise ValueError("November 24 proxy configuration pin mismatch")
         if policy != "equal" and split == "validation":
             if contrast_evidence is None:
@@ -265,7 +273,9 @@ def run(
             if baseline
             else ("full_system" if policy else "vla_risk_veto"),
             "proxy_policy": policy,
-            "executor_config_sha256": SETTLED_CONFIG_SHA if settled_init else None,
+            "executor_config_sha256": SETTLED_CONFIG_SHA
+            if settled_init or matched_clearance
+            else None,
             "proxy_config_sha256": proxy_hash,
             "config_sha256": _CONFIG,
             "split": split,
@@ -337,7 +347,9 @@ def run(
                     owned, settled_init=settled_init, **arguments
                 )
             else:
-                terminal = run_proxy_validation_episode(owned, policy_id=policy, **arguments)
+                terminal = run_proxy_validation_episode(
+                    owned, policy_id=policy, matched_clearance=matched_clearance, **arguments
+                )
         if owned.process.poll() != 0 or (path / "episode/shutdown-failure.json").exists():
             raise RuntimeError("owned episode shutdown failed")
         return terminal
@@ -375,6 +387,7 @@ if __name__ == "__main__":
     parser.add_argument("--frozen-policy", type=Path)
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--settled-init", action="store_true")
+    parser.add_argument("--matched-clearance", action="store_true")
     args = parser.parse_args()
     head = (
         args.expected_head
@@ -390,4 +403,5 @@ if __name__ == "__main__":
         frozen_policy=args.frozen_policy,
         baseline=args.baseline,
         settled_init=args.settled_init,
+        matched_clearance=args.matched_clearance,
     )

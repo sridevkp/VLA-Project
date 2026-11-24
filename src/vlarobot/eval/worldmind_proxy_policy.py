@@ -50,8 +50,9 @@ class ProxyEvidence:
     joint_limits_pass: bool
     ik_pass: bool
     # One signed clearance per predicted transition in each channel.
-    table_clearance_m: tuple[float, ...]
+    table_clearance_m: tuple[float, ...] | None
     object_clearance_m: tuple[float, ...]
+    geometric_hard_pass: tuple[bool, bool] | None = None
 
 
 def observe_proxy_clearance(
@@ -140,15 +141,21 @@ def assess_proxy(
         raise MissingObjectiveInput("nonfinite tool path or goal")
     table, objects = evidence.table_clearance_m, evidence.object_clearance_m
     if any(
-        len(clearances) != count or not all(math.isfinite(c) for c in clearances)
-        for clearances in (table, objects)
+        clearances is None
+        or len(clearances) != count
+        or not all(math.isfinite(c) for c in clearances)
+        for clearances in ((table, objects) if evidence.geometric_hard_pass is None else (objects,))
     ):
         raise MissingObjectiveInput("each clearance channel requires H=50 finite values")
+    table_pass, object_pass = evidence.geometric_hard_pass or (
+        table is not None and min(table) > 0,
+        min(objects) > 0,
+    )
     flags = (
         evidence.joint_limits_pass is True,
         evidence.ik_pass is True,
-        min(table) > 0,
-        min(objects) > 0,
+        table_pass,
+        object_pass,
         jg <= placement_tolerance_m,
     )
     return CandidateAssessment(

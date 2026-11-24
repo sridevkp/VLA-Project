@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from vlarobot.backends.worldmind_bindings import GRASP_Z, PLACE_CLEAR
+import numpy as np
+
+from vlarobot.backends.worldmind_bindings import _CORRECTED_HOLD_STEPS, GRASP_Z, PLACE_CLEAR  # noqa: PLC2701
 from vlarobot.core.types import (
     ActionChunk,
     GroundTruth,
@@ -20,8 +22,10 @@ from vlarobot.core.types import (
     Vec3,
     WorldState,
 )
-from vlarobot.eval.worldmind_objectives import MissingObjectiveInput
+from vlarobot.eval.worldmind_geometric_veto import geometric_margins, joint_limit_margin
+from vlarobot.eval.worldmind_objectives import MissingObjectiveInput, tool_envelope_clearances
 from vlarobot.eval.worldmind_proxy_policy import (
+    ProxyEvidence,
     assess_proxy,
     observe_proxy_clearance,
     selections_by_policy,
@@ -29,7 +33,7 @@ from vlarobot.eval.worldmind_proxy_policy import (
 from vlarobot.execution.safety_monitor import SafetyMonitor
 from vlarobot.execution.worldmind_pipeline import _inverse_pose  # noqa: PLC2701
 from vlarobot.risk.gate import CandidateAssessment
-from vlarobot.world_model.rollout import AnalyticSurrogate, compose
+from vlarobot.world_model.rollout import AnalyticSurrogate, Trajectory, compose, rotate
 
 _MODEL_PINS = {
     "TiagoGripper.proto": "2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9",
@@ -78,6 +82,68 @@ def verified_table_world(root: Path) -> tuple[ObjectState, ...]:
     )
 
 
+def _matched_proxy_evidence(
+    state: WorldState,
+    chunk: ActionChunk,
+    prediction: Trajectory,
+    monitor: SafetyMonitor,
+    settings: Mapping[str, Any],
+) -> ProxyEvidence:
+    phases = [phase for phase, count in _CORRECTED_HOLD_STEPS.items() for _ in range(count)]
+    if len(prediction.states) != len(phases) + 1 or len(chunk.actions) != len(phases):
+        raise MissingObjectiveInput("matched geometry requires an aligned complete rollout")
+    base = state.robot.base_pose_world
+    if base is None or sorted(obj.object_id for obj in state.scene.objects) != [
+        "APP",
+        "CAN",
+        "HAM",
+    ]:
+        raise MissingObjectiveInput("matched geometry requires exact scene identity and base pose")
+    points = np.array([item.robot.ee_pose.position.as_array() for item in prediction.states])
+    world_points = np.array(
+        [base.position.as_array() + rotate(np.asarray(base.orientation), point) for point in points]
+    )
+    boxes = {}
+    for obj in state.scene.objects:
+        if obj.object_id == "CAN":
+            continue
+        inverse = _inverse_pose(obj.pose)
+        local = np.array(
+            [
+                inverse.position.as_array() + rotate(np.asarray(inverse.orientation), p)
+                for p in points
+            ]
+        )
+        boxes[obj.object_id] = (local[:-1], local[1:], obj.dimensions.as_array() / 2)
+    margins, contact = geometric_margins(settings, world_points, phases, boxes)
+    joint_pass = all(
+        joint_limit_margin(
+            item.robot.joint_pos,
+            monitor.limits.joint_position,
+            settings["joint_limit_tolerance_rad"],
+        )
+        >= 0
+        for item in prediction.states
+    )
+    reasons = set(prediction.hard_reasons)
+    return ProxyEvidence(
+        joint_pass and reasons.isdisjoint({"safety-monitor-veto", "ik-joint-safety-veto"}),
+        reasons.isdisjoint({"ik-unreachable", "ik-joint-safety-veto"}),
+        None,
+        tool_envelope_clearances(
+            state,
+            chunk,
+            prediction,
+            tool_radius_m=settings["tool_tip_radius_m"],
+            scene_complete=True,
+        ),
+        (
+            min(*margins["table"].values(), *contact.values()) >= 0,
+            min(margins["objects"].values()) >= 0,
+        ),
+    )
+
+
 def evaluate_proxy_pool(
     state: WorldState,
     truth: GroundTruth,
@@ -86,6 +152,7 @@ def evaluate_proxy_pool(
     predictor: AnalyticSurrogate,
     tables_world: Sequence[ObjectState],
     config: Any,
+    matched_clearance: Mapping[str, Any] | None = None,
 ) -> tuple[tuple[CandidateAssessment, ...], dict[str, tuple[int | None, ...]]]:
     """Evaluate modelled CAN/HAM/APP and table geometry without a full-arm claim."""
     base = state.robot.base_pose_world
@@ -119,15 +186,19 @@ def evaluate_proxy_pool(
                 for joints in positions
                 for name, (lo, hi) in limits.items()
             )
-            evidence = observe_proxy_clearance(
-                complete,
-                chunk,
-                prediction,
-                table_boxes=tables,
-                expected_object_ids=frozenset({"CAN", "HAM", "APP"}),
-                joint_limits_pass=joint_pass,
-                # Pool generation completed the existing waypoint IK/residual gates.
-                ik_pass=True,
+            evidence = (
+                _matched_proxy_evidence(complete, chunk, prediction, monitor, matched_clearance)
+                if matched_clearance is not None
+                else observe_proxy_clearance(
+                    complete,
+                    chunk,
+                    prediction,
+                    table_boxes=tables,
+                    expected_object_ids=frozenset({"CAN", "HAM", "APP"}),
+                    joint_limits_pass=joint_pass,
+                    # Pool generation completed the existing waypoint IK/residual gates.
+                    ik_pass=True,
+                )
             )
             assessment = assess_proxy(
                 complete,

@@ -3863,3 +3863,21 @@ TEST/TRAIN access is included. Motion remains `NO-GO` / `NOT_READY`; `full_syste
   The prediction replay gives an upper bound of 6/15 because nine traces
   fail the geometric veto before any uncertainty about archived full-pose IK
   could affect the result. This configuration is retained as offline evidence.
+
+### ADR-0030 addendum 5 — matched-prediction arm-5 clearance
+
+Arm 5 equal VALIDATION uses the hash-pinned matched table half-space and
+non-target oriented-box profile. Lower the affected fitted floors to the
+corresponding minima of the archived expert commands propagated with the
+registered velocity-limited predictor. Keep the physical tabletop floor and
+box-penetration veto, the approved joint-slack allowance, live IK, placement,
+and independent pre-apply motor checks. The same contacts and phase identities
+apply during fitting and ranking, with the recorded expert timing in replay
+and the frozen H=50 schedule in ranking. This is an in-sample control.
+
+The expert-command replay passes all 15 recorded VALIDATION controls on
+available inputs. An unexecuted full-pose solve on archived commands is not
+a release condition. The deliberately crossing table and non-target controls
+remain vetoed. The live executor uses the existing observed INIT opening
+criterion. The arm-5 profile SHA-256 is
+`6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4`.

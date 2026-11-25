@@ -6,9 +6,10 @@ import itertools
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from vlarobot.core.types import Pose3D, WorldState
 from vlarobot.world_model.rollout import rotate
@@ -183,14 +184,14 @@ def box_corners(box: BoxPrimitive) -> np.ndarray:
     return local @ axes + np.asarray(box.center, dtype=float)
 
 
-def point_box_distance(point: Sequence[float], box: BoxPrimitive) -> float:
+def point_box_distance(point: ArrayLike, box: BoxPrimitive) -> float:
     axes = np.asarray(box.axes, dtype=float)
     half = np.asarray(box.half_extents, dtype=float)
     local = axes @ (np.asarray(point, dtype=float) - np.asarray(box.center, dtype=float))
     return float(np.linalg.norm(local - np.clip(local, -half, half)))
 
 
-def segment_box_distance(start: Sequence[float], end: Sequence[float], box: BoxPrimitive) -> float:
+def segment_box_distance(start: ArrayLike, end: ArrayLike, box: BoxPrimitive) -> float:
     """Exact distance between a segment and an oriented box via convex ternary search.
 
     The distance from a linearly moving point to a convex set is a convex function of the
@@ -269,6 +270,11 @@ def oriented_boxes_intersect(first: BoxPrimitive, second: BoxPrimitive) -> bool:
     return True
 
 
+def _float_triplet(values: Sequence[float] | np.ndarray) -> tuple[float, float, float]:
+    """Preserve values from a three-axis geometry vector."""
+    return cast(tuple[float, float, float], tuple(float(value) for value in values))
+
+
 def static_box_primitive(box: StaticBox) -> BoxPrimitive:
     """Collider for a pinned scene box (zero speed by construction).
 
@@ -276,15 +282,17 @@ def static_box_primitive(box: StaticBox) -> BoxPrimitive:
     conservative axis-aligned bound so older/synthetic callers keep working.
     """
     if box.exact:
-        axes = tuple(tuple(float(value) for value in row) for row in box.axes_base)
-        half = tuple(float(value) for value in box.half_extents)
+        axes = cast(tuple[tuple[float, float, float], ...], box.axes_base)
+        half = cast(tuple[float, float, float], box.half_extents)
+        axes = tuple(_float_triplet(row) for row in axes)
+        half = _float_triplet(half)
     else:
         axes = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
-        half = tuple(float(value) for value in box.half_base)
+        half = _float_triplet(box.half_base)
     return BoxPrimitive(
         name=box.name,
         body=box.name,
-        center=tuple(float(value) for value in box.center_base),
+        center=_float_triplet(box.center_base),
         axes=axes,
         half_extents=half,
         max_point_speed_m_s=0.0,
@@ -1018,9 +1026,12 @@ def _object_box(obj: Any) -> BoxPrimitive:
     return BoxPrimitive(
         name=f"object:{obj.object_id}",
         body=obj.object_id,
-        center=tuple(float(value) for value in obj.pose.position.as_array()),
-        axes=tuple(tuple(float(value) for value in row) for row in rotation.T),
-        half_extents=tuple(float(value) / 2.0 for value in obj.dimensions.as_array()),
+        center=_float_triplet(obj.pose.position.as_array()),
+        axes=tuple(_float_triplet(row) for row in rotation.T),
+        half_extents=cast(
+            tuple[float, float, float],
+            tuple(float(value) / 2.0 for value in obj.dimensions.as_array()),
+        ),
         max_point_speed_m_s=0.0,
         clearance_m=0.0,
     )

@@ -73,6 +73,7 @@ def eval_vla(
     webots: str | None = None,
     resume: bool = False,
     recovery_v2: bool = False,
+    recovery_ik: bool = False,
     diagnostic_index: Annotated[list[int] | None, typer.Option()] = None,
 ) -> None:
     """Run actual frozen TRAIN 8×3 VLA-only evaluation; never use compatibility fixtures."""
@@ -89,6 +90,7 @@ def eval_vla(
             webots=resolve_webots(webots),
             resume=resume,
             recovery_v2=recovery_v2,
+            recovery_ik=recovery_ik,
             diagnostic_indices=tuple(diagnostic_index or ()),
         )
     finally:

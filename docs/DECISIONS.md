@@ -4011,3 +4011,12 @@ evidence only. Its outcome cannot decide admission.
 
 The V2 held-out commitment publishes a hash and trial count, with the fresh
 scene and seed manifest stored privately and unopened for recovery evaluation.
+
+ADR-0085 follow-up: the first V2 TRAIN diagnostic (three frozen seed-0 scenes)
+passed 44 actions per scene, then the same original-pose-solver translation
+residual exceeded 5 mm. A measured rejected target had a bounded feasibility
+witness at 1.54 mm using residuals divided by the existing per-quantity limits.
+The opt-in V2 IK fallback uses that normalization from the observed joint seed
+only after a residual miss. It retains the existing trust region and motor
+checks. This is an execution correction, with the first diagnostic evidence
+preserved and the comparison repeated in a new directory.

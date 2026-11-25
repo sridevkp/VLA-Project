@@ -34,7 +34,7 @@ def observation_rows(dataset: Path, episode: int) -> list[dict]:
     return rows
 
 
-def run(export: Path, data: Path, demo: Path, output: Path, index: int) -> None:
+def run(export: Path, data: Path, demo: Path, output: Path, index: int, release_only: bool) -> None:
     """Compare trained checkpoint outputs with recorded expert labels and bounded IK."""
     trace = demo / "policy.jsonl"
     phase_rows = [
@@ -56,6 +56,15 @@ def run(export: Path, data: Path, demo: Path, output: Path, index: int) -> None:
         joints = steps["joint_pos"]
     if len(timestamps) != len(rows):
         raise ValueError("dataset and native recordings differ")
+    if release_only:
+        release = next(r["sim_time_s"] for r in phase_rows if r["state"] == "RELEASE")
+        retreat = next(r["sim_time_s"] for r in phase_rows if r["state"] == "RETREAT")
+        frame = next(
+            i
+            for i, (t, row) in enumerate(zip(timestamps, rows, strict=True))
+            if release <= t <= retreat and row["action"][6] >= np.float32(0.045)
+        )
+        phase_rows = [{"state": "RELEASE_FIRST_OPEN", "sim_time_s": timestamps[frame]}]
 
     def ik(values: np.ndarray, state: RobotState) -> dict:
         try:
@@ -136,5 +145,6 @@ if __name__ == "__main__":
     for name in ("export", "data", "demo", "output"):
         parser.add_argument(name, type=Path)
     parser.add_argument("--index", type=int, default=0)
+    parser.add_argument("--release-only", action="store_true")
     args = parser.parse_args()
-    run(args.export, args.data, args.demo, args.output, args.index)
+    run(args.export, args.data, args.demo, args.output, args.index, args.release_only)

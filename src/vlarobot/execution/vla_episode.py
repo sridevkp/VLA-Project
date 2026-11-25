@@ -90,6 +90,7 @@ class VLAEpisodePolicy:
     def execute(self, backend: Any, seed: int) -> dict[str, Any]:
         import json
 
+        fallback_at_start = getattr(self.adapter.solver, "fallback_solutions", 0)
         observation = backend.reset(self.scene, seed)
         if self.begin_metrics is not None:
             self.begin_metrics(backend)
@@ -209,7 +210,16 @@ class VLAEpisodePolicy:
         return {
             **outcome,
             "model_chunks": chunks,
-            **({"home_completion_candidates": home_candidates} if self.recovery_v2 else {}),
+            **(
+                {
+                    "home_completion_candidates": home_candidates,
+                    "ik_fallback_solutions": (
+                        getattr(self.adapter.solver, "fallback_solutions", 0) - fallback_at_start
+                    ),
+                }
+                if self.recovery_v2
+                else {}
+            ),
             "executed_actions": executed,
             "max_episode_steps": self.max_steps,
             "learned_input_state_source": "robot_rgb",

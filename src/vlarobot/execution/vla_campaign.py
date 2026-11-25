@@ -35,13 +35,15 @@ from vlarobot.vla.model_service import ModelClient
 from vlarobot.vla.settings import load_vla_settings
 
 
-def make_vla_adapter(expected_registration_sha256: str | None = None) -> ActionAdapter:
+def make_vla_adapter(
+    expected_registration_sha256: str | None = None, *, recovery_ik: bool = False
+) -> ActionAdapter:
     """Use registered bounded full-pose IK, with the backend retaining its live motor veto."""
     import xml.etree.ElementTree as ET
 
     from vlarobot.backends.webots.config import SAFETY_PROFILE, URDF_PATH
     from vlarobot.backends.webots.kinematics import Kinematics
-    from vlarobot.backends.webots.pose_solver import BoundedPoseSolver
+    from vlarobot.backends.webots.pose_solver import BoundedPoseSolver, GateNormalizedPoseSolver
     from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
 
     kin = Kinematics()
@@ -68,8 +70,18 @@ def make_vla_adapter(expected_registration_sha256: str | None = None) -> ActionA
         command_horizon=SETTINGS.safety_command_horizon,
     )
     settings = load_vla_settings()
+    solver = (
+        GateNormalizedPoseSolver(
+            kin,
+            max_joint_step_rad=SETTINGS.max_joint_step_rad,
+            position_tolerance_m=settings.ik_position_tolerance_m,
+            orientation_tolerance_rad=settings.ik_orientation_tolerance_rad,
+        )
+        if recovery_ik
+        else BoundedPoseSolver(kin, max_joint_step_rad=SETTINGS.max_joint_step_rad)
+    )
     return ActionAdapter(
-        BoundedPoseSolver(kin, max_joint_step_rad=SETTINGS.max_joint_step_rad),
+        solver,
         SafetyMonitor(limits),
         position_tolerance_m=settings.ik_position_tolerance_m,
         orientation_tolerance_rad=settings.ik_orientation_tolerance_rad,
@@ -118,8 +130,11 @@ def run_vla_campaign(
     resume: bool = False,
     recovery_v2: bool = False,
     diagnostic_indices: tuple[int, ...] = (),
+    recovery_ik: bool = False,
 ) -> dict[str, Any]:
     """Run all TRAIN 8×3 pairs; refuse untrained fixtures and preserve every completed episode."""
+    if recovery_ik and not recovery_v2:
+        raise ValueError("recovery IK requires V2 execution")
     approval = require_trained_export(export)
     baseline_provenance = json.loads((baseline / "provenance.json").read_text(encoding="utf-8"))
     project = SETTINGS_PATH.parent.parent
@@ -138,7 +153,8 @@ def run_vla_campaign(
         ):
             raise ValueError(f"frozen baseline source changed before VLA evaluation: {name}")
     adapter = make_vla_adapter(
-        baseline_provenance["files_sha256"]["configs/calibration/urdf-base-train-v1.yaml"]
+        baseline_provenance["files_sha256"]["configs/calibration/urdf-base-train-v1.yaml"],
+        recovery_ik=recovery_ik,
     )
     original = json.loads((baseline / "summary.json").read_text(encoding="utf-8"))
     baseline_plan = json.loads((baseline / "plan.json").read_text(encoding="utf-8"))
@@ -164,6 +180,7 @@ def run_vla_campaign(
             {
                 "execution_profile": "v2_bounded_gripper_verified_home",
                 "diagnostic_indices": list(diagnostic_indices),
+                "gate_normalized_ik_fallback": recovery_ik,
             }
             if recovery_v2
             else {}

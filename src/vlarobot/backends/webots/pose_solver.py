@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from scipy.optimize import least_squares
+from scipy.spatial.transform import Rotation
 
 from vlarobot.backends.webots.config import ARM_JOINTS
 from vlarobot.backends.webots.kinematics import Kinematics
@@ -54,3 +56,67 @@ class BoundedPoseSolver:
             float(np.linalg.norm(actual[:3, 3] - pose.position.as_array())),
             orientation_error,
         )
+
+
+class GateNormalizedPoseSolver(BoundedPoseSolver):
+    """V2 fallback when an otherwise bounded solve misses a pose residual gate."""
+
+    def __init__(
+        self,
+        kinematics: Kinematics,
+        *,
+        max_joint_step_rad: float,
+        position_tolerance_m: float,
+        orientation_tolerance_rad: float,
+    ) -> None:
+        super().__init__(kinematics, max_joint_step_rad=max_joint_step_rad)
+        self.position_tolerance_m = position_tolerance_m
+        self.orientation_tolerance_rad = orientation_tolerance_rad
+        self.fallback_solutions = 0
+
+    def solve(self, pose: Pose3D, state: RobotState) -> PoseSolution:
+        original = super().solve(pose, state)
+        if (
+            original.position_error_m <= self.position_tolerance_m
+            and original.orientation_error_rad <= self.orientation_tolerance_rad
+        ):
+            return original
+
+        kin = self.kinematics
+        current = np.asarray([state.joint_pos[name] for name in ARM_JOINTS])
+        bounds = np.asarray([kin.bounds(name) for name in ARM_JOINTS])
+        lower = np.maximum(bounds[:, 0], current - self.max_joint_step_rad)
+        upper = np.minimum(bounds[:, 1], current + self.max_joint_step_rad)
+        if np.any(lower >= upper):
+            return original
+        initial = np.zeros(len(kin.chain.links))
+        for name, value in state.joint_pos.items():
+            if name in kin.idx:
+                initial[kin.idx[name]] = value
+        indices = [kin.idx[name] for name in ARM_JOINTS]
+        position = pose.position.as_array()
+        rotation = quaternion_matrix(pose.orientation)
+
+        def residual(joints: np.ndarray) -> np.ndarray:
+            full = initial.copy()
+            full[indices] = joints
+            actual = kin.forward(full)
+            return np.r_[
+                (actual[:3, 3] - position) / self.position_tolerance_m,
+                Rotation.from_matrix(rotation @ actual[:3, :3].T).as_rotvec()
+                / self.orientation_tolerance_rad,
+            ]
+
+        candidate = least_squares(residual, np.clip(current, lower, upper), bounds=(lower, upper))
+        error = residual(candidate.x)
+        pos = float(np.linalg.norm(error[:3]) * self.position_tolerance_m)
+        rot = float(np.linalg.norm(error[3:]) * self.orientation_tolerance_rad)
+        if not (
+            np.all(candidate.x >= lower)
+            and np.all(candidate.x <= upper)
+            and pos <= self.position_tolerance_m
+            and rot <= self.orientation_tolerance_rad
+        ):
+            return original
+        self.fallback_solutions += 1
+        return PoseSolution(dict(zip(ARM_JOINTS, map(float, candidate.x), strict=True)), pos, rot)

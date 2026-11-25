@@ -4043,3 +4043,26 @@ Eq. 3.2 claim is made. Activation after admission is a separate decision.
 fields from raw episode artifacts with the same calculation used for the
 endpoint-decoder baseline. It is a read-only measurement tool; it supplies no
 policy input or admission criterion.
+
+### Owner time-box for VLA V2 recovery — 2026-11-25
+
+The owner authorized V2 recovery as a time-boxed side-track under these
+controlling rules, which supersede the broader recovery schedule where they
+differ:
+
+1. V1 results (VLA-only TRAIN 0/24 and the frozen TEST campaign) are not
+   modified. V2 is reported separately with its own receipts.
+2. The admission criterion is unchanged: at least 10 successes out of the 24
+   original TRAIN identities. No gate or threshold is lowered.
+3. The fresh V2 holdout stays sealed until a checkpoint passes TRAIN admission.
+   No held-out identity, plan or outcome is accessed before that gate.
+4. The three-scene diagnostic is due by 2026-11-27. If it warrants admission,
+   run the 24-trial admission by 2026-12-01. Otherwise stop the side-track.
+5. Recovery evidence is an autonomous close, lift and transport verified by the
+   independent task verifier. Model-query counts and accepted tick counts are
+   not recovery evidence.
+6. If the three-scene diagnostic is 0/3 with only open-endpoint gripper commands,
+   stop and write the V2 negative result. No further decoder or safety changes.
+7. The frozen-arm numbers in `docs/RESULTS.md` are not edited.
+
+Daily status reports are five lines while this side-track is active.

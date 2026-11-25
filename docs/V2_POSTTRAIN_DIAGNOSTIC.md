@@ -120,10 +120,22 @@ are not recovery. A 0/3 result with only open-endpoint commands repeats the
 known learned-behavior failure and requires a measured training decision, not
 another decoder or safety change.
 
-## 4. Gate before the full admission campaign
+## 4. Owner time-box and gate before the full admission campaign
+
+The owner authorized this as a time-boxed side-track on 2026-11-25. The
+three-scene diagnostic is due by **2026-11-27**; if it warrants admission, the
+24-trial campaign must be run by **2026-12-01**. Otherwise the side-track stops.
+V1 results and the frozen `docs/RESULTS.md` numbers are not touched, the sealed
+V2 holdout stays sealed until a checkpoint passes TRAIN admission, and no gate
+or threshold is changed.
 
 The admission plan remains all 24 original TRAIN identities with the unchanged
 success threshold of at least 10/24. A successful diagnostic does not bypass
-that gate. Before admission, preserve a frozen checkpoint receipt and confirm
-that the diagnostic execution configuration has not changed. Run the full
-plan only if the three scenes show real manipulation progress.
+that gate. Recovery evidence is an autonomous close, lift and transport
+confirmed by the independent task verifier; model queries and accepted ticks
+alone are not evidence. Before admission, preserve a frozen checkpoint receipt
+and confirm that the diagnostic execution configuration has not changed.
+
+If the three scenes are 0/3 with only open-endpoint gripper commands, stop and
+write the V2 negative result with all receipts. Do not make further decoder or
+safety changes under this authorization.

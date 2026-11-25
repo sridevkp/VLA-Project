@@ -187,3 +187,35 @@ def test_compatibility_export_cannot_be_evaluated_as_trained(tmp_path):
     )
     with pytest.raises(ValueError, match="optimizer-step"):
         require_trained_export(tmp_path)
+
+
+def test_recovery_projection_never_changes_pose_and_rejects_malformed_values():
+    from vlarobot.execution.vla_episode import project_recovery_chunk
+
+    values = np.array([[0.01, 0, 0, 0, 0, 0, 0.04579], [0, 0, 0, 0, 0, 0, -0.0003]])
+    projected = project_recovery_chunk(values, (0.0, 0.045))
+    np.testing.assert_array_equal(projected[:, :6], values[:, :6])
+    np.testing.assert_array_equal(projected[:, 6], [0.045, 0.0])
+    for bad in (2.0, float("nan"), 0.0461):
+        values[0, 6] = bad
+        with pytest.raises(ValueError):
+            project_recovery_chunk(values, (0.0, 0.045))
+
+
+def test_v2_ignores_unverified_home_and_requeries_model(tmp_path):
+    actions = [[0.01, 0, 0, 0, 0, 0, 0.04579], [-0.01, 0, 0, 0, 0, 0, 0.045]]
+    control, model = policy(tmp_path, actions, max_steps=4)
+    control.recovery_v2 = True
+    backend = Backend()
+    control.score = lambda backend, obs, home, state, reason: {
+        "success": home and backend.steps == 4,
+        "failure_state": state,
+    }
+    result = control.execute(backend, 12)
+    assert result["success"] and result["executed_actions"] == 4
+    assert result["home_completion_candidates"] == 2 and model.calls == 2
+    trace = [json.loads(line) for line in control.trace.read_text().splitlines()]
+    assert trace[0]["projected_count"] == 2  # Includes the float32 representation of 45 mm.
+    assert trace[0]["actions"][0][6] > 0.045
+    assert trace[0]["projected_gripper_m"] == [0.045, 0.045]
+    assert all(c.opening <= 0.045 for c in backend.commands if hasattr(c, "opening"))

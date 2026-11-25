@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "purpose": "V2 independent evaluation only after freeze",
+  "policy_outcomes_accessed": false,
+  "generator_profile": "existing scenario families and TEST geometry distribution with fresh private seed triplet",
+  "trial_count": 30,
+  "scene_slots": 10,
+  "seeds_per_slot": 3,
+  "sha256": "956a13aa5ef2522e3920c0d586339220584cc3dbf6dd1213a6025a08e7f9ff9c"
+}

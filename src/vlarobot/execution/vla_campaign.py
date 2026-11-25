@@ -116,13 +116,26 @@ def run_vla_campaign(
     model_python: Path,
     webots: str,
     resume: bool = False,
+    recovery_v2: bool = False,
+    diagnostic_indices: tuple[int, ...] = (),
 ) -> dict[str, Any]:
     """Run all TRAIN 8×3 pairs; refuse untrained fixtures and preserve every completed episode."""
     approval = require_trained_export(export)
     baseline_provenance = json.loads((baseline / "provenance.json").read_text(encoding="utf-8"))
     project = SETTINGS_PATH.parent.parent
+    if diagnostic_indices and (not recovery_v2 or resume):
+        raise ValueError("TRAIN subset requires the explicitly versioned V2 diagnostic")
+    evaluated_backend = "b1db6494ef0cb086c0c832622034b423932f3e3984df6d4d35355112984047cf"
+    evaluated_expert = "921da033d497b86bb1a4f3dd9b3005dfaf733a7ac3fef245df3cc367bf8d0857"
+    v1_source_pins = {
+        "src/vlarobot/backends/webots/backend.py": evaluated_backend,
+        "src/vlarobot/execution/scripted_can.py": evaluated_expert,
+    }
     for name, expected_hash in baseline_provenance["files_sha256"].items():
-        if hashlib.sha256((project / name).read_bytes()).hexdigest() != expected_hash:
+        current_hash = hashlib.sha256((project / name).read_bytes()).hexdigest()
+        if current_hash != expected_hash and (
+            not recovery_v2 or current_hash != v1_source_pins.get(name)
+        ):
             raise ValueError(f"frozen baseline source changed before VLA evaluation: {name}")
     adapter = make_vla_adapter(
         baseline_provenance["files_sha256"]["configs/calibration/urdf-base-train-v1.yaml"]
@@ -135,10 +148,26 @@ def run_vla_campaign(
     )
     if baseline_plan["episodes"] != expected or original["success"]["successes"] == 0:
         raise ValueError("paired repaired baseline required before VLA gate")
+    if diagnostic_indices and (
+        len(set(diagnostic_indices)) != len(diagnostic_indices)
+        or not set(diagnostic_indices) <= {e.index for e in plan}
+    ):
+        raise ValueError("diagnostic indices must be distinct frozen TRAIN trial indices")
+    active_plan = (
+        tuple(e for e in plan if e.index in diagnostic_indices) if diagnostic_indices else plan
+    )
     manifest_sha = hashlib.sha256((export / "export-manifest.json").read_bytes()).hexdigest()
     horizon = max(approval["episode_frame_counts"]) - 1
     identity = {
         "pipeline": "vla_only",
+        **(
+            {
+                "execution_profile": "v2_bounded_gripper_verified_home",
+                "diagnostic_indices": list(diagnostic_indices),
+            }
+            if recovery_v2
+            else {}
+        ),
         "model_manifest_sha256": manifest_sha,
         "plan": expected,
         "max_episode_steps": horizon,
@@ -210,7 +239,8 @@ def run_vla_campaign(
                 record_frames=True,
                 frame_hz=1.0,
             )
-            for entry in plan:
+            diagnostic_rows = []
+            for entry in active_plan:
                 if resume and _completed_recording(out, entry, "vla_only") is not None:
                     continue
                 trace = out / f"episode-{entry.index:02d}.latency.jsonl"
@@ -234,6 +264,7 @@ def run_vla_campaign(
                         trace=trace,
                         score=scorer,
                         begin_metrics=scorer.begin,
+                        recovery_v2=recovery_v2,
                     )
 
                 with launch_webots_session(
@@ -243,7 +274,23 @@ def run_vla_campaign(
                     trace_prefix=f"vla-ep{entry.index:02d}",
                     headless=False,
                 ) as session:
-                    run_evaluation([entry], session.client, config, policy_factory=factory)
+                    report = run_evaluation([entry], session.client, config, policy_factory=factory)
+                    if diagnostic_indices:
+                        diagnostic_rows.extend(report.rows)
+                        write_json(
+                            out / "diagnostic-results.json",
+                            {
+                                "scope": "V2 TRAIN diagnostic, not a gate result",
+                                "rows": diagnostic_rows,
+                            },
+                        )
+            if diagnostic_indices:
+                return {
+                    "status": "diagnostic_completed",
+                    "trials": len(diagnostic_rows),
+                    "successes": sum(row["success"] is True for row in diagnostic_rows),
+                }
+
             if any(_completed_recording(out, e, "vla_only") is None for e in plan):
                 raise ValueError("no gate decision without all 24 physical recordings")
 

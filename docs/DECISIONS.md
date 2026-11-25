@@ -3993,3 +3993,21 @@ The prior profiles and their results remain engineering-development evidence.
 The owner moved the earliest TEST date to November 25 and made arm 4 mandatory.
 Run the frozen 30 identities in arms 1, 3, 5 and 4. Arm 2 remains excluded.
 The November 25 freeze, policy, thresholds, scene identities and seeds are unchanged.
+
+### ADR-0085 — V2 learned TRAIN recovery profile, 2026-11-25
+
+The recovery profile leaves V1 and the default historical VLA runner intact.
+Learned proposals within 1 mm outside the per-finger target range may be
+projected onto [0, 0.045] m. The envelope covers the observed 0.793 mm training
+checkpoint overshoot. It applies to proposals alone. Larger or malformed
+outputs fail closed. Raw and projected values and their differences are saved.
+Independent SafetyMonitor and IK bounds are unchanged.
+
+Returning to HOME becomes terminal only when the existing independent evaluator
+confirms task success. That verdict gates episode termination. It supplies no
+model input, phase commands or fallback actions. The original TRAIN horizon and
+24-trial admission criterion are retained. A named TRAIN subset is diagnostic
+evidence only. Its outcome cannot decide admission.
+
+The V2 held-out commitment publishes a hash and trial count, with the fresh
+scene and seed manifest stored privately and unopened for recovery evaluation.

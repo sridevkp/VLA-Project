@@ -72,6 +72,8 @@ def eval_vla(
     baseline: Path = Path("runs/eval/baseline-train-s0-fresh-v2-registered"),
     webots: str | None = None,
     resume: bool = False,
+    recovery_v2: bool = False,
+    diagnostic_index: Annotated[list[int] | None, typer.Option()] = None,
 ) -> None:
     """Run actual frozen TRAIN 8×3 VLA-only evaluation; never use compatibility fixtures."""
     from vlarobot.execution.vla_campaign import run_vla_campaign
@@ -86,6 +88,8 @@ def eval_vla(
             model_python=model_python,
             webots=resolve_webots(webots),
             resume=resume,
+            recovery_v2=recovery_v2,
+            diagnostic_indices=tuple(diagnostic_index or ()),
         )
     finally:
         if previous is None:

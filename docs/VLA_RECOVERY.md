@@ -94,3 +94,74 @@ Parallel dependencies: reserve the split and back up V1 while investigating
 the checkpoint. Prepare perception evidence and final report crosswalk without
 touching held-out outcomes. The gate for scientific VLA-primary integration is
 competent learned control under the approved protocol.
+
+## November 25 V2 execution evidence
+
+The held-out commitment reserves 30 fresh scene/seed identities. It records
+the digest while the private plan is withheld. No held-out outcomes were
+obtained. The full TRAIN gate remains 10 successes out of the original 24
+paired identities, from the existing 40% criterion and 23/24 baseline.
+[Sealed plan commitment](evidence/worldmind-v2-holdout-commitment.json)
+
+The same step-20000 checkpoint was probed at 21 archived observations from
+successful TRAIN demonstrations. The two scenes were clear and cluttered.
+Each sampled phase used the original JPEG pixels, state, and expert labels
+in the original base-frame residual representation. The independent probe
+also sampled the first actual open label during RELEASE. These are
+teacher-forced comparisons. Later actions in each predicted chunk are
+compared to the expert tape, without claiming the model would reach those
+observations autonomously. [Phase evidence](../runs/worldmind/v2-phase-probe/)
+
+- The checkpoint produced mostly near-closed targets in LIFT and TRANSIT
+  and an open-like release for 49/50 proposals at the actual opening boundary.
+  During two CLOSE observations with 50 closed expert labels each, it emitted
+  1 and 6 open-like proposals. The 22.5 mm midpoint is descriptive only.
+  Learned translation error against the expert was 12.28–13.37 mm in LIFT
+  and 10.79–13.33 mm in TRANSIT. Command consistency remains a learned gap.
+- The V2 projection maps all 761 historical out-of-range targets into
+  the motor domain, holding pose components fixed. Some newly measured
+  chunks remain outside the distinct projection envelope and fail closed.
+- The first three closed-loop trials passed 44 actions each. V1 had
+  accepted 1, 0 and 0 actions on those identities. All three V2 trials
+  stopped on an IK translation residual. An exact observed witness reduced
+  the residual from 9.22 mm to 1.54 mm, with 0.01985 rad orientation error,
+  inside the same 0.15 rad joint trust region and independent admission.
+  This demonstrates a mixed-objective solver trade-off on that input.
+- The second three-scene run used the bounded fallback and reached a
+  second model call in all three cases. Each accepted 50 actions and moved
+  the TCP 72.6–74.3 mm net. Then all three failed closed on second-chunk
+  gripper proposals, with maxima of 46.08–46.76 mm. Maximum observed CAN
+  climb was about 2.1 μm. There was no observed grasp, lift, transport,
+  placement, release or successful HOME in either diagnostic.
+  Both results are **0/3 diagnostic**, with no full TRAIN gate run.
+
+The next targeted comparison is an endpoint-native learned gripper output
+on TRAIN-only phase windows, with independent motor limits and malformed-output
+checks retained. Measure timing, reopening and residual behavior before
+deciding whether a bounded output head or more extensive fine-tuning is
+needed. One successful second query does not establish learned competence.
+Expanding the decoder envelope to cover these particular failures does not
+address the observed reopening during CLOSE. Eq. 3.2 integration remains
+downstream of the admission gate.
+
+## Integration and PR access
+
+PR #2 remains bound to evaluated V1. Both official CI jobs failed at
+`uv run ty check src`. The separate `work/v1-integration-fixes` branch
+has a first behavior-preserving narrowing patch and nine passing focused
+tests. The same local type-check command still reports 93 diagnostics,
+down from 98. It is not ready to advance PR #2. The notebook-helper SHA
+mismatch is separate.
+
+From a machine with GitHub CLI and repository permissions, authenticate
+without pasting a token into a shell command, then edit the existing PR.
+
+```text
+gh auth login --hostname github.com --web --git-protocol ssh
+gh auth status --hostname github.com
+gh pr edit 2 --repo sridevkp/VLA-Project --title "WorldMind V1: completed implementation, frozen evaluation and research findings" --body-file runs/worldmind/v2-train-admission-audit/v1-pr-description.md
+```
+
+Alternatively, sign in to GitHub, open PR #2, use the title and description
+edit controls, and save the draft text from that file. No API credential
+was available in this session. SSH branch pushes succeeded.

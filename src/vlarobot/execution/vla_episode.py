@@ -125,25 +125,22 @@ class VLAEpisodePolicy:
                     failure_state, failure_reason = "MODEL", "invalid inference timing telemetry"
                     break
                 raw_actions = actions
+                projection: dict[str, Any] = {}
                 if self.recovery_v2:
                     try:
                         actions = project_recovery_chunk(
                             raw_actions, self.adapter.safety_monitor.limits.gripper_opening
                         )
                     except ValueError as error:
-                        stream.write(
-                            json.dumps(
-                                {
-                                    "chunk": chunks,
-                                    "t": observation.t,
-                                    "projection_error": str(error),
-                                    "actions": raw_actions.tolist(),
-                                }
-                            )
-                            + "\n"
-                        )
+                        projection = {"projection_error": str(error)}
                         failure_state, failure_reason = "MODEL", str(error)
-                        break
+                    else:
+                        delta = actions[:, 6] - raw_actions[:, 6]
+                        projection = {
+                            "projected_gripper_m": actions[:, 6].tolist(),
+                            "projection_delta_m": delta.tolist(),
+                            "projected_count": int(np.count_nonzero(delta)),
+                        }
                 image_path = inputs / f"{chunks:06d}.png"
                 Image.fromarray(observation.rgb).save(image_path)
                 stream.write(
@@ -157,25 +154,15 @@ class VLAEpisodePolicy:
                             "gripper_mean_m": observation.robot.gripper_opening,
                             "rgb_hwc_sha256": hashlib.sha256(observation.rgb.tobytes()).hexdigest(),
                             "actions": raw_actions.tolist(),
-                            **(
-                                {
-                                    "projected_gripper_m": actions[:, 6].tolist(),
-                                    "projection_delta_m": (
-                                        actions[:, 6] - raw_actions[:, 6]
-                                    ).tolist(),
-                                    "projected_count": int(
-                                        np.count_nonzero(actions[:, 6] != raw_actions[:, 6])
-                                    ),
-                                }
-                                if self.recovery_v2
-                                else {}
-                            ),
+                            **projection,
                             "instruction": self.instruction,
                         },
                         allow_nan=False,
                     )
                     + "\n"
                 )
+                if failure_state is not None:
+                    break
                 for values in actions[: self.max_steps - executed]:
                     result = self.adapter.apply(actuator, values, observation.robot)
                     if not result.accepted:

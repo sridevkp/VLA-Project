@@ -2,6 +2,7 @@
 
 import copy
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -219,3 +220,15 @@ def test_v2_ignores_unverified_home_and_requeries_model(tmp_path):
     assert trace[0]["actions"][0][6] > 0.045
     assert trace[0]["projected_gripper_m"] == [0.045, 0.045]
     assert all(c.opening <= 0.045 for c in backend.commands if hasattr(c, "opening"))
+
+
+def test_recovery_projection_rejection_preserves_the_model_input_without_apply(tmp_path):
+    control, _ = policy(tmp_path, [[0, 0, 0, 0, 0, 0, 0.047]])
+    control.recovery_v2 = True
+    backend = Backend()
+    result = control.execute(backend, 0)
+    trace = json.loads(control.trace.read_text())
+    assert result["failure_state"] == "MODEL"
+    assert trace["projection_error"] and trace["actions"][0][6] > 0.046
+    assert Path(trace["input_image"]).is_file()
+    assert not backend.commands and backend.steps == 0

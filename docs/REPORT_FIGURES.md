@@ -42,4 +42,4 @@ camera composites retain the recorded RGB pixels with timestamp captions.
 
 ## Independent TEST figure
 
-[TEST family results](figures/test-family-success.pdf) uses the frozen independent cohorts.
+[TEST family results](figures/test-family-success.pdf) uses the frozen independent cohorts. See the [TEST provenance ledger](figures/test-provenance.json).

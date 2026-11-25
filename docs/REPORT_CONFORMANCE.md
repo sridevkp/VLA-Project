@@ -18,7 +18,7 @@ claims. All 120 frozen TEST identities produced eligible outcomes.
 | §3.4.4, §4.5 future-state model | **Implemented and measured on aligned simulated prefixes.** The analytic model replaced the earlier MuJoCo plan. No learned residual, calibrated outcome-probability model or contact dynamics are claimed. |
 | §3.4.5, §4.6 risk and selection | **Implemented and measured within the approved geometric scope.** Arm 5 applies predictive hard checks ahead of Eq. 3.8. Arm 4 removes that veto. The ADR-0084 arm 3 uses a prediction-free prefilter and draw-order selection. |
 | §3.4.6, §4.7 control | **Implemented and verified in recorded simulation.** Stateful phase progress, bounded verification recovery, independent command admission and configured HOME verification. Full-body sweep certification and real-robot transfer are **unmeasured**. |
-| §3.4.7, §§4.8–4.9 feedback and integration | **Implemented and measured.** Decisions, commands, simulator receipts, observations, timing, failures and verification are recorded. Some joint finger coordinates read around 10⁻⁶ m outside the motor range. Logging classifies the numerical excursions under the approved 10⁻⁴ m logging allowance. Motor, task and safety thresholds retain their original meaning. |
+| §3.4.7, §§4.8–4.9 feedback and integration | **Implemented and measured.** Decisions, commands, simulator receipts, observations, timing, failures and verification are recorded. Some raw finger coordinates read around 10⁻⁶ m outside the motor range. Logging classifies the numerical excursions under the approved 10⁻⁴ m logging allowance. Motor, task and safety thresholds retain their original meaning. |
 
 ## Chapter 5 and Table 5.1
 
@@ -56,3 +56,20 @@ task. Its evidence cannot establish improved performance over a competent VLA.
 
 See [Results](RESULTS.md#test-independent-evaluation) for eligible and planned outcomes,
 measurement coverage, unreliability, and the scene-level statistical comparison.
+
+## Remaining scope limits
+
+The analytic surrogate made no calibrated probability or model-uncertainty claim.
+The owner approved zero uncertainty weight in the absence of a justified scale
+bundle. The 10⁻⁴ rad predictive joint tolerance applies only inside RiskGate.
+The separate 10⁻⁴ m finger allowance is for logging. Independent motor checks
+retain their original thresholds. Failed startup attempts and interrupted
+records are archived. The observed trial reliability covers this simulator
+protocol and sample. Long-term reliability, robustness on a physical robot,
+and perception-based state estimation remain unmeasured.
+
+The scored TEST baseline used the scripted expert with the same frozen
+30 identities and pinned factory runtime as the comparison arms. The
+VALIDATION baseline is the earlier canonical recording under the scripted
+expert. Its inner execution wall time and the stateful attempts' lifecycle
+wall time cover different intervals.

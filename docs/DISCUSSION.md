@@ -40,8 +40,16 @@ policy, limiting attribution to prediction alone.
 
 ## TEST independent interpretation
 
-Frozen WorldMind completed 23 of 30 eligible trials. The scripted baseline completed 24 of 30.
-The scene-level exact sign test gave p = 1.0000 on 10 paired scene units.
-Task success concerns the frozen simulated pick-and-place protocol. The scripted-primary
-allocation does not establish performance relative to a competent VLA. Geometric proxy
-and backend contact measurements retain separate interpretations.
+Frozen WorldMind achieved 23/30 versus the scripted baseline's 24/30.
+It succeeded on one identity the baseline missed and failed on two identities
+the baseline passed. The scene-level exact sign test gave p = 1.00 across ten
+paired scene units. No statistically significant improvement was detected.
+Statistical equivalence has not been established. The three 23/30 totals for
+arms 3, 4 and 5 conceal different paired outcomes.
+
+The TEST hard veto rejected 196 of 347,616 evaluated candidates (0.0564%).
+One TEST LIFT exception recovered on the first observed tick. The three
+successful VALIDATION LIFT recovery events are a separate observation set.
+No collision reduction was measured. Improvement over a competent VLA was
+not established. The VLA-only TRAIN result remains 0/24.
+[TEST observations](RESULTS.md#test-independent-evaluation)

@@ -102,12 +102,35 @@ reported arm-4 throughput is for newly eligible trials after resumption.
 Identities are paired only when both outcomes are eligible. Repeated seeds share
 scene geometry. The scene-level sign test is cluster-aware.
 
+| Arm | Clear | Cluttered | Reach-limited |
+|---|---:|---:|---:|
+| Arm 1 baseline | 12/12 | 8/9 | 4/9 |
+| Arm 3 heuristic | 12/12 | 8/9 | 3/9 |
+| Arm 4 ranking | 12/12 | 7/9 | 4/9 |
+| Arm 5 WorldMind | 11/12 | 8/9 | 4/9 |
+
+Arms 3, 4 and 5 tie at 23/30. Arm 5 has two unique successes and two unique
+failures against each of arms 3 and 4. Their paired outcomes differ.
+
 | Arm | Decision p50 / p95 ms | Hard-vetoed / evaluated | Valid predicted steps | Backend contact episodes |
 |---|---:|---:|---:|---:|
 | Arm 1 baseline | Unavailable | Not applicable | 0 | 0 |
 | Arm 3 heuristic | 14.2 / 21.8 | 0 / 57312 | 0 | 0 |
 | Arm 4 ranking | 44.8 / 1093.8 | Not applicable | 17901 | 0 |
 | Arm 5 WorldMind | 47.1 / 1166.2 | 196 / 347616 | 16282 | 0 |
+
+| Arm | TCP RMSE / MAE (mm) | Joint RMSE / MAE (rad) | Object-position RMSE (mm) | Object-angle RMSE (rad) |
+|---|---:|---:|---:|---:|
+| Arm 4 ranking | 20.51 / 11.33 | 0.02714 / 0.01416 | 68.64 | 0.25734 |
+| Arm 5 WorldMind | 21.19 / 11.93 | 0.02757 / 0.01466 | 66.85 | 0.22662 |
+
+TEST errors pool aligned steps from complete executable prefixes. They are
+separate from the VALIDATION one-tick estimates. Arm 4 excluded 85 prefixes and
+arm 5 excluded 81. Prediction error is inapplicable in arms 1 and 3.
+The confirmed TEST LIFT exception occurred once, in cluttered-i01-s0.
+The initial, first predicted and first observed heights above the table were
+78.98, 108.71 and 87.74 mm, respectively. The observation cleared the 80.17 mm
+floor at tick 270. Those data are separate from the three VALIDATION recoveries.
 
 | Arm | Path all / success (m) | Simulated all / success (s) | Final CAN error all / success (mm) | Attempt wall time (s) | Displacement/tilt proxy |
 |---|---:|---:|---:|---:|---:|
@@ -120,7 +143,7 @@ The displacement/tilt proxy is a separate geometric measurement. Backend contact
 cannot establish complete collision coverage. Prediction-error values, coverage and
 all terminal categories are recorded in the linked ledger. All 30 episodes per arm
 exceeded the displacement/tilt proxy threshold. The contact channel logged zero
-nonrobot contacts. Collision reduction was not measured.
+nonrobot contacts across 82,305 recorded contact-channel samples. Collision reduction was not measured.
 
 
 [TEST outcome figure](figures/test-family-success.pdf) · [Per-episode evidence and metric ledger](../runs/worldmind/nov25-test-analysis/analysis.json)

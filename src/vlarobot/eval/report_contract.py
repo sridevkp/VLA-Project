@@ -8,7 +8,7 @@ import math
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 COMPONENTS = ("Jg", "Jl", "Jr", "Ju")
 TABLE51_NAMES = (
@@ -114,7 +114,7 @@ class Table51MetricValue:
         if self.status not in ("measured", "unavailable", "not_applicable"):
             raise ValueError("unknown Table 5.1 metric status")
         if self.status == "measured":
-            if type(self.value) not in (int, float) or not math.isfinite(self.value):
+            if type(self.value) not in (int, float) or not math.isfinite(cast("float", self.value)):
                 raise ValueError("measured Table 5.1 values must be finite")
             if self.reason is not None or self.denominator == 0 or self.valid_paired_steps == 0:
                 raise ValueError("measured Table 5.1 values require valid evidence")

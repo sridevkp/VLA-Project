@@ -116,7 +116,7 @@ class FakeBackend:
         if self.gripper_rate_limited and self._gripper_target is not None:
             current = float(self._robot_state.gripper_opening)
             target = float(self._gripper_target)
-            travel = float(self.finger_speed_m_s) * self.step_duration * n_steps
+            travel = float(cast("float", self.finger_speed_m_s)) * self.step_duration * n_steps
             if current < target:
                 self._robot_state.gripper_opening = min(target, current + travel)
             elif current > target:

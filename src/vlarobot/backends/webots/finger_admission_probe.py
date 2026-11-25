@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 from vlarobot.backends.webots.config import SETTINGS
 
 
 def _bound(value: object, lower: float, upper: float) -> str:
-    if type(value) not in (int, float) or not math.isfinite(value):
+    numeric = cast("int | float", value)
+    if type(value) not in (int, float) or not math.isfinite(numeric):
         return "invalid_or_nonfinite"
-    return "in_bounds" if lower <= value <= upper else "outside_reviewed_limits"
+    return "in_bounds" if lower <= numeric <= upper else "outside_reviewed_limits"
 
 
 def capture_finger_admission(backend: Any) -> dict[str, Any]:

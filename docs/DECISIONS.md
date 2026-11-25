@@ -4020,3 +4020,26 @@ The opt-in V2 IK fallback uses that normalization from the observed joint seed
 only after a residual miss. It retains the existing trust region and motor
 checks. This is an execution correction, with the first diagnostic evidence
 preserved and the comparison repeated in a new directory.
+
+### ADR-0086 — Prepared Eq. 3.2 conditioning interface, 2026-11-25
+
+A minimal learned decision head is added as
+`src/vlarobot/planning/prediction_conditioned.py`. It consumes explicit learned
+observation features, a language task identifier, candidate action payloads and
+a numeric context vector extracted from each candidate's predicted state
+sequence. Seeded softmax weights are fitted on recorded TRAIN decisions; only
+finite, valid predictions are accepted. Its rationale is numeric. No ground
+truth, expert phase or scripted decision reaches the head, and no core public
+interface is changed.
+
+This is preparation, not activation: the head is not wired into any scored
+campaign while learned TRAIN admission is pending. External Eq. 3.8 ranking
+remains the evaluated V1 mechanism and is not claimed as prediction
+conditioning. Controlled TRAIN evidence must show that changing only predicted
+context, with other inputs fixed, changes the learned selection before any
+Eq. 3.2 claim is made. Activation after admission is a separate decision.
+
+`tools/v2_diagnostic_metrics.py` reproduces the recorded three-scene diagnostic
+fields from raw episode artifacts with the same calculation used for the
+endpoint-decoder baseline. It is a read-only measurement tool; it supplies no
+policy input or admission criterion.

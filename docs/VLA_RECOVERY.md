@@ -189,6 +189,29 @@ and candidate payloads fixed, and test whether changing only the predicted
 context can change the learned decision. Report this conditioned decision
 separately from external objective ranking.
 
+### Minimum conditioning interface (prepared, not activated)
+
+The prepared mechanism is `PredictionConditionedDecision` in
+`src/vlarobot/planning/prediction_conditioned.py`. It accepts explicit
+observation features, a language task identifier, learned action payloads and
+a `PredictedContext` vector extracted from each candidate's world-model
+rollout. A seeded softmax head is fitted on recorded TRAIN decisions and
+returns a numeric rationale derived from its scores and the supplied predicted
+features. Missing or nonfinite predictions fail closed, so no path reduces to
+action-only ranking while claiming prediction conditioning.
+[Unit evidence](../tests/test_prediction_conditioned.py) includes a controlled
+comparison that changes only the predicted context with observation, language
+and actions held fixed and observes a different selected index. This is a
+mechanism test, not experimental evidence of task benefit.
+
+Activation remains gated on learned TRAIN admission. The minimal experiment
+after admission is TRAIN-only: fit on recorded decisions, then hold images,
+state, language and candidate payloads fixed while varying the rollout context
+and report the changed decisions separately from Eq. 3.8 ranking.
+
+Post-training checkpoint import, the unchanged three-scene diagnostic and the
+comparison procedure are specified in [V2 post-training diagnostic](V2_POSTTRAIN_DIAGNOSTIC.md).
+
 ## Integration and PR access
 
 PR #2 remains bound to evaluated V1. Both official CI jobs failed at

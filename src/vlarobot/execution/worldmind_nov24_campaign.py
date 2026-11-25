@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from vlarobot.core.wire import decode_message
 from vlarobot.eval.runner import build_episode_plan
@@ -48,6 +48,15 @@ from vlarobot.execution.worldmind_heuristic_qualification import (
 )
 from vlarobot.execution.worldmind_offline_boundary import _verify_event  # noqa: PLC2701
 from vlarobot.execution.worldmind_stage1_pipeline import _plan_sha256  # noqa: PLC2701
+
+
+class _EpisodeArguments(TypedDict):
+    status_path: Path
+    launch_started_at_s: float
+    directory: Path
+    expected_head: str
+    episode_id: str
+
 
 _ELIGIBLE_TERMINALS = frozenset(
     {
@@ -519,7 +528,7 @@ def run(
                 ),
             },
         ) as owned:
-            arguments = dict(
+            arguments: _EpisodeArguments = dict(
                 status_path=status,
                 launch_started_at_s=launch_started_at_s,
                 directory=path / "episode",

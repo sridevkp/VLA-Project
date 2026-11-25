@@ -58,6 +58,7 @@ from vlarobot.eval.worldmind_config import (
     GATE_CALL_POLICY,
     WorldMindBindings,
     WorldMindConfig,
+    WorldMindDiagnosticConfig,
 )
 from vlarobot.eval.worldmind_evidence import WorldMindEvidenceWriter, build_instrumentation
 from vlarobot.execution.scripted_chunk_adapter import (
@@ -106,7 +107,7 @@ def _world_pose(ground_truth: GroundTruth, target: str) -> Pose3D:
 def _world_state(
     observation: Observation,
     ground_truth: GroundTruth,
-    config: WorldMindConfig,
+    config: WorldMindConfig | WorldMindDiagnosticConfig,
     *,
     target: str,
 ) -> WorldState:
@@ -320,7 +321,7 @@ def _provenance(config: WorldMindConfig, plan: Sequence[Any]) -> dict[str, str]:
     }
 
 
-def _home_reached(config: WorldMindConfig, robot: RobotState) -> bool:
+def _home_reached(config: WorldMindConfig | WorldMindDiagnosticConfig, robot: RobotState) -> bool:
     return all(
         name in robot.joint_pos
         and math.isfinite(float(robot.joint_pos[name]))
@@ -337,7 +338,7 @@ def _outcome(
     initial_world: Pose3D,
     final_world: Pose3D,
     home_reached: bool,
-    config: WorldMindConfig,
+    config: WorldMindConfig | WorldMindDiagnosticConfig,
     rejections: int,
     steps: int,
 ) -> dict[str, Any]:

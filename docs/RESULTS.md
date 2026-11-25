@@ -73,16 +73,54 @@ attribute its cause. **Collision reduction was not measured.**
 
 ## TEST independent evaluation
 
-**Results pending.** No TEST scene was accessed. Launch is authorized from
-November 30, 2026. The frozen 30-trial plan applies to arms 1, 3 and 5, and to
-arm 4 if throughput permits. Arm 2 is excluded.
+The frozen TEST plan assigns 30 trials to each of four arms. All four campaigns used
+the same 10 scenes and three seeds. The policy remained fixed throughout TEST.
 
-| Arm | Eligible trials | Successes | Table 5.1 measurements |
-|---|---:|---:|---|
-| 1 · Scripted baseline | Pending | Pending | Pending |
-| 3 · Heuristic prefilter | Pending | Pending | Pending |
-| 5 · Frozen WorldMind equal | Pending | Pending | Pending |
-| 4 · Analytic ranking | Conditional | Pending | Pending |
+| Arm | Successes / eligible | Wilson 95% | Planned | Eligible episodes/hour | Unreliable attempts |
+|---|---:|---:|---:|---:|---:|
+| Arm 1 baseline | 24/30 | 62.7%–90.5% | 30 | 20.27 | 0 |
+| Arm 3 heuristic | 23/30 | 59.1%–88.2% | 30 | 21.30 | 0 |
+| Arm 4 ranking | 23/30 | 59.1%–88.2% | 30 | 15.37 | 3 |
+| Arm 5 WorldMind | 23/30 | 59.1%–88.2% | 30 | 17.17 | 0 |
 
-The independent report will use frozen matched identities, Wilson intervals,
-paired comparisons, reported unreliable attempts, and metric applicability.
+The superseded baseline launch stopped before controller startup because its
+detached worktree used system Python without NumPy. That launch is retained separately.
+Its same-seed replacement explicitly used the pinned project interpreter. Arm 4
+retained three eligible pre-reboot outcomes. Its 27 remaining identities completed
+after resumption, including three interrupted attempts with unknown wall time. The
+reported arm-4 throughput is for newly eligible trials after resumption.
+
+| Contrast | Matched trials | First-only / second-only successes | Descriptive exact McNemar p | Scene-level exact sign p |
+|---|---:|---:|---:|---:|
+| arm3 vs arm1 | 30 | 0 / 1 | 1.0000 | 1.0000 |
+| arm4 vs arm1 | 30 | 0 / 1 | 1.0000 | 1.0000 |
+| arm4 vs arm3 | 30 | 1 / 1 | 1.0000 | 1.0000 |
+| arm5 vs arm1 | 30 | 1 / 2 | 1.0000 | 1.0000 |
+| arm5 vs arm3 | 30 | 2 / 2 | 1.0000 | 1.0000 |
+| arm5 vs arm4 | 30 | 2 / 2 | 1.0000 | 1.0000 |
+
+Identities are paired only when both outcomes are eligible. Repeated seeds share
+scene geometry. The scene-level sign test is cluster-aware.
+
+| Arm | Decision p50 / p95 ms | Hard-vetoed / evaluated | Valid predicted steps | Backend contact episodes |
+|---|---:|---:|---:|---:|
+| Arm 1 baseline | Unavailable | Not applicable | 0 | 0 |
+| Arm 3 heuristic | 14.2 / 21.8 | 0 / 57312 | 0 | 0 |
+| Arm 4 ranking | 44.8 / 1093.8 | Not applicable | 17901 | 0 |
+| Arm 5 WorldMind | 47.1 / 1166.2 | 196 / 347616 | 16282 | 0 |
+
+| Arm | Path all / success (m) | Simulated all / success (s) | Final CAN error all / success (mm) | Attempt wall time (s) | Displacement/tilt proxy |
+|---|---:|---:|---:|---:|---:|
+| Arm 1 baseline | 2.40 / 2.75 | 22.35 / 25.34 | 50.58 / 14.77 | 498.30 | 30/30 observed |
+| Arm 3 heuristic | 2.43 / 2.76 | 21.40 / 23.52 | 47.56 / 14.70 | 484.62 | 30/30 observed |
+| Arm 4 ranking | 2.44 / 2.75 | 22.86 / 25.35 | 47.87 / 14.72 | 676.94 | 30/30 observed |
+| Arm 5 WorldMind | 2.35 / 2.74 | 21.05 / 24.27 | 43.56 / 14.61 | 621.15 | 30/30 observed |
+
+The displacement/tilt proxy is a separate geometric measurement. Backend contacts
+cannot establish complete collision coverage. Prediction-error values, coverage and
+all terminal categories are recorded in the linked ledger. All 30 episodes per arm
+exceeded the displacement/tilt proxy threshold. The contact channel logged zero
+nonrobot contacts. Collision reduction was not measured.
+
+
+[TEST outcome figure](figures/test-family-success.pdf) · [Per-episode evidence and metric ledger](../runs/worldmind/nov25-test-analysis/analysis.json)

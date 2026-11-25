@@ -38,9 +38,10 @@ versus arm-4 contrast differs in both prediction availability and selection
 policy, limiting attribution to prediction alone.
 [VALIDATION observations](RESULTS.md)
 
-## TEST interpretation pending independent results
+## TEST independent interpretation
 
-Independent TEST effects and generalization conclusions remain pending.
-Interpretation will account for paired identities, execution reliability,
-measurement coverage and sampling uncertainty. The development results do
-not answer the independent evaluation question.
+Frozen WorldMind completed 23 of 30 eligible trials. The scripted baseline completed 24 of 30.
+The scene-level exact sign test gave p = 1.0000 on 10 paired scene units.
+Task success concerns the frozen simulated pick-and-place protocol. The scripted-primary
+allocation does not establish performance relative to a competent VLA. Geometric proxy
+and backend contact measurements retain separate interpretations.

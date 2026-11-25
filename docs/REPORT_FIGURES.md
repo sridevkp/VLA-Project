@@ -39,3 +39,7 @@ uv run --offline python tools/render_worldmind_report.py runs/worldmind/nov25-va
 
 PDFs are vector exports. PNGs are previews and presentation assets. The
 camera composites retain the recorded RGB pixels with timestamp captions.
+
+## Independent TEST figure
+
+[TEST family results](figures/test-family-success.pdf) uses the frozen independent cohorts.

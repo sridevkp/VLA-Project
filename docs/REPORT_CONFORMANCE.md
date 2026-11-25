@@ -6,7 +6,7 @@ The report's Chapters 3–6 define the comparison, model, planned evaluation and
 milestones. ADR-0029 and its later owner decisions bound the evaluated design.
 Terms used here are **OBSERVED** for recorded values, **INFERRED** for conclusions
 supported by implementation or trace structure, and **UNKNOWN** for unmeasured
-claims. TEST is pending.
+claims. All 120 frozen TEST identities produced eligible outcomes.
 
 ## Chapter 3 architecture and Chapter 4 implementation
 
@@ -35,19 +35,24 @@ claims. TEST is pending.
 
 The §5.5 supplemental minimum-clearance and no-acceptable-candidate measures appear
 in the [VALIDATION evidence report](RESULTS.md). The success, metric and paired
-results are split-specific. Independent TEST observations are pending. A zero
+results are split-specific. Independent TEST observations are reported in the Results chapter. A zero
 observation count or unsupported quantity carries its missingness explicitly.
 
 ## Chapter 6 milestones and limitations
 
 The reproducible world, task-state module, scripted baseline, measurable world-model
 predictions, integrated selection, logged closed-loop execution and development
-comparison are evidenced. The independent final comparison remains pending. The
+comparison are evidenced. The independent four-arm TEST comparison is complete. The
 Phase I twelve-week Gantt was replaced operationally by the owner schedule, with
-frozen TEST authorized from November 30 and report completion by December 12.
+frozen TEST launch advanced by owner decision to November 25 and report completion due by December 12.
 
 Figures 4.1–4.7 are remapped to real recorded images, traces or evidence summaries
 in [REPORT_FIGURES.md](REPORT_FIGURES.md). Equations and operating limits are in
 [MATH.md](MATH.md). Phase I proposed a general world-model-based VLA framework.
 The actual experiment tests a scripted-primary comparison in a single simulated
 task. Its evidence cannot establish improved performance over a competent VLA.
+
+## Independent TEST completion
+
+See [Results](RESULTS.md#test-independent-evaluation) for eligible and planned outcomes,
+measurement coverage, unreliability, and the scene-level statistical comparison.

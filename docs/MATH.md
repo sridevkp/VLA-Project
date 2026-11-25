@@ -1,75 +1,121 @@
-# MATH.md — report equations mapped to implementation (DRAFT)
+# WorldMind equations and frozen implementation
 
-Primary status classes: **Implemented and verified** (code plus hash-pinned recorded
-evidence or inert verification), **Implemented but not physically validated** (code/inert
-tests only), **Missing**, **Blocked**, and **Explicitly waived by approved decision**.
-ADR-0029 evidence qualifiers remain: **MEASURED** (recorded evidence exists), **INFERRED**
-(structural correspondence argued from code), **UNVERIFIED** (no evidence yet), and
-**PENDING-AUTHORIZATION**.
+The controlling Phase I report, *WorldMind: World Model-Based Robot Simulation*, has SHA-256
+`23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`.
+The frozen execution [manifest](../configs/worldmind_frozen_execution.json), committed as
+`e6cc0bb`, has SHA-256
+`d6e5e7e7cc767d8784b208be9ba2f49d292935d8285f2954ae55c15baf027176`.
+The submitted PDF numbers equations 3.1–3.8. The additional numbers mentioned in the
+steering notes have no counterpart in that PDF.
 
-The controlling source is the confirmed submitted Phase I report
-("WorldMind: World Model-Based Robot Simulation", SHA-256
-`23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b`) and ADR-0029
-(`docs/DECISIONS.md`). Equation wording below is quoted from the report text extraction.
+| Eq. | Mathematical role | Evaluated implementation |
+|---|---|---|
+| 3.1 | Predict future states from a current state and an action sequence | [AnalyticSurrogate](../src/vlarobot/world_model/rollout.py) emits initial state plus future states for each complete rollout |
+| 3.2 | VLA policy conditioned on imagery, language, context and prediction | ADR-0029 replaces policy-internal prediction with external propose-and-evaluate. After the 0/24 VLA-only TRAIN gate, the actual proposer in arms 3–5 is the scripted chunk adapter |
+| 3.3 | Turn selected actions into controls | The [stateful caller](../src/vlarobot/execution/worldmind_stateful_chunk.py) follows expert phase and waypoint feedback, and independently validates a command before apply |
+| 3.4 | Compare prediction to observation | [Prediction errors](../src/vlarobot/world_model/evaluation.py) use timestamp-aligned confirmed prefixes and matched state identities |
+| 3.5 | Construct state from observations | [Oracle binding](../src/vlarobot/execution/worldmind_pipeline.py) builds the task state with the full observed base transform |
+| 3.6–3.7 | Generate candidates and evaluate predicted trajectories | [Seeded generator](../src/vlarobot/planning/candidates.py) preserves draw order. The [phase-aware scorer](../src/vlarobot/execution/worldmind_stateful_proxy.py) evaluates held-waypoint chunks |
+| 3.8 | Combine goal, path, risk and uncertainty costs subject to hard constraints | [RiskGate](../src/vlarobot/risk/gate.py) applies hard checks before minimizing the applicable weighted components. Ties preserve draw order |
 
-## Equations of the submitted report (3.1–3.8)
+## Analytic prediction and execution
 
-| Eq | Report statement | Implementation | Status |
-|---|---|---|---|
-| 3.1 | `ŝ_{t+1:t+H} = W(s_t, a_{t:t+H−1})` — world model predicts future states from current state and an action sequence | `src/vlarobot/world_model/rollout.py::AnalyticSurrogate.predict_trajectory` (per-chunk state trajectory; velocity-limited tracking, conditional attachment, release/settling, fail-closed hard reasons) | INFERRED (mechanism complete; scored-arm prediction error pending week 3/4) |
-| 3.2 | `a_{t:t+H−1} = πθ(I_t, L, ŝ_{t+1:t+H}, c_t)` — VLA policy consumes instruction, observation, *predicted future state*, context | **Documented deviation (ADR-0029):** SmolVLA cannot consume a predicted state; the architecture is propose-and-evaluate. Proposer: `src/vlarobot/vla/action_adapter.py` + `src/vlarobot/vla/model_service.py` via `planning/candidates.py`; evaluation of each proposed chunk replaces policy-internal conditioning | MEASURED deviation (frozen VLA-only campaign, 0/24) |
-| 3.3 | `u_t = C(a_t, q_t)` — control mapping of selected action to robot commands | `src/vlarobot/backends/webots/kinematics.py` (registered IK), `execution/safety_monitor.py` validation, `planning/execution.py::execute_first` (one control tick, re-validated before `backend.apply()`) | INFERRED |
-| 3.4 | `e_t = d(s_{t+1}, ŝ_{t+1})` — prediction error vs actual outcome | `src/vlarobot/world_model/evaluation.py::prediction_errors` (quantity-separated TCP/joint/object errors; never probabilities) + recorded replay evidence (`docs/WORLDMIND_DEVELOPMENT_CHECKPOINT.md`, TCP RMSE 4.48–6.69 mm overall across families at 1/50 ticks (clear-family subset: 4.62/6.69 mm)) | MEASURED (read-only replay conditioning; not autonomous-task claims) |
-| 3.5 | `s_t = P(o_t)` — perception/state representation | Oracle state with provenance flags (report 4.3 allowance; ADR-0029): `backends` observations + `get_ground_truth()` restricted to eval/debug/oracle mode; per-episode `state_source` provenance in `eval/recorder.py` meta | INFERRED |
-| 3.6 | `τ_i = {s^{(i)}_{t+1}, …, s^{(i)}_{t+H}}` — candidate trajectories | `src/vlarobot/planning/candidates.py::SeededCandidateGenerator` (seeded draws, all draw seeds logged) + `risk/comparison.py::sampled_candidates` | INFERRED |
-| 3.7 | `ŝ^{(i)}_{t+1:t+H} = W(s_t, τ_i)` — per-candidate prediction | `predict` callable injected into `risk/comparison.py::ComparisonPlanner` (comparison.py:51), backed by the analytic surrogate | INFERRED |
-| 3.8 | `J(τ_i) = wg·Jg + wl·Jl + wr·Jr + wu·Ju` with hard-constraint precedence: "The picked candidate should fulfill hard safety constraints … A low combined cost must not be applied for the explanation of a trajectory that violates a mandatory restriction." | `src/vlarobot/risk/gate.py::RiskGate.select` — hard checks fail closed *before* any J ranking; nonfinite/missing/duplicated checks rejected; rationale embeds actual components and weights | INFERRED (mechanism complete + unit-tested; **weights not yet calibrated on VALIDATION — ADR-0029 week 3 pending; no weights are claimed**) |
+Each pool has 32 ordered candidates. A complete candidate has 50 actions at 32 ms
+(1.60 s), with 51 predicted states including the initial state. The commands in a
+chunk hold the same waypoint target. For each joint, the model computes
 
-## Component definitions (report wording)
+```text
+Δqⱼ = clip(q*ⱼ − qⱼ, −vⱼ Δt, +vⱼ Δt)
+qⱼ′ = qⱼ + Δqⱼ,     q̇ⱼ′ = Δqⱼ / Δt
+T_base,tool′ = FK(q′)
+```
 
-- `Jg` — goal error.
-- `Jl` — trajectory length or execution cost.
-- `Jr` — forecast risk.
-- `Ju` — uncertainty or prediction-related penalties.
-- `wg, wl, wr, wu` — "normally configuration parameters".
+The tracking velocities come from registered URDF bindings. The gripper uses a
+bounded approach to its commanded opening, clipping the increment to
+±0.03 m/s × Δt. For objects with a configured support, the ballistic update uses
+`p′ = p + v Δt − (g Δt² / 2) ẑ` with `g = 9.81 m/s²`, then applies an
+inelastic support clamp. The binding supplies support for CAN. Unknown-support
+objects retain their poses and emit a reason. The model can propagate an explicitly
+supplied rigid attachment until release, but the evaluated phase-ranking call supplies
+no attachment and never infers a new grasp. It does not simulate contacts, friction,
+attachment acquisition or released angular dynamics. [Bindings](../src/vlarobot/backends/worldmind_bindings.py)
 
-`configs/world_model.yaml` is packaged but has **no code consumer yet**; it is the intended
-home for the Eq 3.8 weights once they are chosen on VALIDATION only (ADR-0029 week 3).
-No weights are invented or claimed in this draft.
+The current expert phase persists across chunks. The scorer uses the executable
+prefix ending at predicted waypoint completion or tick 50. Execution can finish
+the waypoint earlier or replan at prefix expiry from a fresh observation. The 50-action
+horizon and the 1,059-tick episode ceiling serve different purposes. Terminal HOME
+uses the configured verification joint vector and a finite inclusive maximum error
+of 0.02 rad. Final verification uses CAN position error ≤0.10 m, absolute height error
+≤0.02 m, tilt <15°, and the same HOME limit. [Frozen settings](../configs/worldmind_diagnostic.approved.yaml)
 
-## Supplemental trajectory definitions (not report equations)
+## Frozen objective
 
-These deterministic derivations supplement, but do not replace or redefine, Table 5.1.
-They are implemented in `src/vlarobot/eval/derived_metrics.py` and add no public metric
-field to `summary.json` or any other frozen artifact.
+```text
+J = 1 Jg + 1 Jl + 1 Jr + 0 Ju   (minimize)
+Jg = ||p_tool(k_place) − p_tool,goal||₂
+Jl = Σ ||p_tool(k) − p_tool(k−1)||₂ over the active prefix
+Jr = mean(clip((0.03 m − d_k) / 0.03 m, 0, 1))
+```
 
-- End-effector path length in the robot base frame:
-  `L_EE = Σ_{i=1}^{n−1} ||p_ee[i] − p_ee[i−1]||₂`, where `p_ee` is the recorded `ee_xyz`
-  stream in metres. `ee_xyz` is written from `RobotState.ee_pose.position`; the NPZ stores
-  no frame or unit metadata, so callers must explicitly confirm `frame="base"` and
-  `units="m"`. Empty input is rejected as undefined; one sample gives `0.0`; non-finite
-  coordinates are rejected.
-- Simulation duration: `T_sim = t[n−1] − t[0]` in seconds, requiring finite, strictly
-  increasing timestamps. Empty input is rejected as undefined; one sample gives `0.0`.
-  `T_sim` is not wall-clock execution time and the two are never interchanged.
+- **Jg** uses metres without further normalization. The goal is the frozen placement
+  destination expressed in base axes with the scripted tool-height offset. The
+  binding is the first predicted joint settle at terminal `PLACE_DESCEND`. Earlier
+  chunks omit the component. Arm 5 vetoes missing required placement evidence or
+  predicted tool error above 0.10 m. This is separate from final observed CAN verification.
+- **Jl** uses metres without further normalization. The time coefficient is zero
+  under the approved binding. A common nominal time term at fixed H could not
+  reorder the candidate pool.
+- **Jr** is dimensionless. The implemented soft envelope samples distances to
+  scene boxes in the base-frame proxy used by
+  [worldmind_objectives.py](../src/vlarobot/eval/worldmind_objectives.py).
+  This soft path includes the target CAN. The separate hard geometry excludes CAN
+  as the declared grasp target. The 0.03 m divisor is the soft deficit scale.
+- **Ju** has weight zero because no independently justified uncertainty-scale bundle
+  was approved. The analytic rollout is deterministic, and its measured errors
+  are reported separately. A zero contribution does not establish zero uncertainty.
 
-`Jg`, `Jl`, `Jr`, `Ju`, `wg`, `wl`, `wr`, and `wu` above remain the report's equation.
-No new component formula, weight, threshold, probability, or experimental result is
-introduced by these supplemental definitions.
+Calibration used observed success across all 18 frozen VALIDATION trials per
+induced policy. `equal` and `goal_x2` each scored 14/18. The approved deterministic
+policy-ID tie-break selected `equal`. These same-set rates are development evidence.
+Arm 4 minimizes the phase objective without the predictive veto. Arm 3 uses
+`finite_chunk_v1` and first-command admissibility, then selects the first eligible
+draw without prediction or Eq. 3.8 ranking. Its comparison with arm 4 changes both
+prediction availability and selection rule.
 
-## Discrepancy: equations 3.9–3.12, 4.1, 5.1
+## Hard veto, geometry and LIFT
 
-ADR-0029's week-4 documentation item references "`docs/MATH.md` (Eqs 3.1-3.12, 4.1, 5.1 →
-code)". The confirmed submitted report contains **only Eqs 3.1–3.8** (plus Tables 2.1, 3.1,
-3.2, 5.1, 5.2, 6.1). Equation numbers 3.9–3.12, 4.1 and 5.1 do not exist in this PDF.
-**This is recorded as a discrepancy**: those numbers must originate in the Steering
-Directive (or a later report revision). Pending owner/steering-directive input, this file
-maps exactly what the confirmed report contains. UNVERIFIED — not resolvable from the
-repository at this time.
+For arm 5, a complete rollout must satisfy these applicable checks before ranking.
 
-## Report Tables
+| Check | Frozen implementation |
+|---|---|
+| Joint limit | Minimum distance to lower/upper limits over predicted states, plus 0.0001 rad numerical allowance in RiskGate only |
+| IK | Existing phase-specific feasibility, position residual and tilt limit. The expert may reject an unreachable waypoint before a pool exists |
+| Table | World-frame tool-tip height above the 0.75 m table plane. PREGRASP, LIFT, TRANSIT and RETREAT use their phase floors. DESCEND and PLACE_DESCEND use path floors and, at applicable terminal states, contact-height windows |
+| Non-target boxes | Tool segments transformed into each oriented HAM/APP box frame. Clearance of the 3.8 mm tip envelope must meet the 22.4484 mm operating margin |
+| Placement | Applicable at terminal PLACE_DESCEND. Required evidence must exist and meet the predictive 0.10 m tolerance |
 
-- **Table 5.1** (planned evaluation criteria) → `docs/REPORT_CONFORMANCE.md`.
-- **Table 5.2** (results template) → week-4 deliverable; actual measurements only.
-- **Table 6.1** (twelve-week schedule) → superseded operationally by ADR-0029's
-  four-week campaign; the report's own milestones (§6.2) remain the conformance targets.
+The [clearance profile](../configs/worldmind_arm5_matched_clearance.json) contains the
+exact phase floors and windows. It grounds the table frame in the verified table
+geometry. The tool-envelope scope excludes other arm links, background world geometry
+and certified collision coverage. The independent motor SafetyMonitor remains in force.
+
+Only the first LIFT waypoint after CLOSE can use the
+[LIFT exception](../configs/worldmind_stateful_lift_recovery.yaml). Its initial height
+must be strictly above the geometric plane. A below-floor start may proceed only
+when predicted tick one and every remaining prefix endpoint reach the unchanged
+80.1658 mm LIFT floor and all other checks pass. The confirmed first observation
+must reach that floor with no reported contact. Failure terminates the episode.
+There is no second exception for that waypoint. Three live VALIDATION attempts
+met this observed criterion. This establishes the reported simulation behavior
+within the geometric proxy scope.
+
+## Measured errors and costs
+
+Per-quantity RMSE is `sqrt(mean(e²))` and MAE is `mean(|e|)`. Units are metres
+for tool and object translation and radians for joint and object angle. Object
+translation uses the RMS across matched object identities at each step, and angular
+error uses the shortest quaternion angle. The VALIDATION horizon tables only retain
+confirmed, aligned, complete executable prefixes. Executed tool path is the sum of
+consecutive base-frame TCP distances. Simulated duration is final minus initial
+simulator time. Wall time and decision latency are reported separately.
+[Results and interpretation](RESULTS.md)

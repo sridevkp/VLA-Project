@@ -1,0 +1,61 @@
+{
+  "camera_frames": [
+    {
+      "phase": "Reset",
+      "simulation_s": 0.03200000000000003
+    },
+    {
+      "phase": "PREGRASP",
+      "simulation_s": 1.504
+    },
+    {
+      "phase": "CLOSE",
+      "simulation_s": 8.448
+    },
+    {
+      "phase": "LIFT",
+      "simulation_s": 9.824
+    },
+    {
+      "phase": "TRANSIT",
+      "simulation_s": 10.56
+    },
+    {
+      "phase": "RELEASE",
+      "simulation_s": 13.312
+    },
+    {
+      "phase": "HOME",
+      "simulation_s": 17.28
+    }
+  ],
+  "candidate_pool_source": "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0038/decision.msgpack",
+  "prediction_prefix": "chunk-0001 / PREGRASP / candidate-01",
+  "scope": "VALIDATION development evidence",
+  "sources_sha256": {
+    "runs/worldmind/nov24-matched-analysis/completed.json": "db8f6263bad052fa3eb483f6293b4f35fc246967eac2231501b8eca7d8bbb627",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0000/selected-prediction.msgpack": "47b5588580f12520e50c3a6c28c6d3e99fda2bf5316027ec6afaca6b686140b4",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0001/decision.msgpack": "3ee0bf0ed085e04f9319612a3594f95f61c0937265d93b81960bcfa450b52cf2",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0001/selected-prediction.msgpack": "3a2aed281049c3d88a06ada15800dd1cb5f48df9a84002ee3dd3a9ef16158bcf",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0001/tick-00/post-tick.msgpack": "94c05e873ed7d404fd6c8c079308a7a40b527375eff51d10a0aa8f751f97cb97",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0001/tick-01/post-tick.msgpack": "4cfb7c18d897d40012522985906566991dda203b03cd07bfcc59e9d3b4fb9da6",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0001/tick-02/post-tick.msgpack": "69ee69eb9cb84ce813f16e44d968ca28332165a976aca16decf0d9c1cc53e73f",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0038/decision.msgpack": "89807e72d764c4828647181ab437578b570fa72af91d5c4d8fc7107a84559a1d",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0150/decision.msgpack": "49da686e4cdef6c30b7e952d4bfd7d005ea53f8360edeef7c2a2ec4d2a412efb",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0150/selected-prediction.msgpack": "a380e401d39160fcb6841828c6ce9148540ab75fba03386dcc03be89a9da3e3b",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0150/tick-00/post-tick.msgpack": "7a82958deee92d285967e31ebdc0e08f53969ee04993252b2cbd8df3dd111ae0",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0151/decision.msgpack": "5d112d2543b4ad8be982f567775601a3ac908f5c6d4fcc4ddc0ffef4e579aa9e",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0151/tick-00/post-tick.msgpack": "52ca5c973fbb2bf88e4286e09bd6780736d4fe1315bac3ec11d29e91df17a01b",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0167/decision.msgpack": "c991caad2e7ba64c2482d126cbd82b8cf5df44ab9b6082dc42dd2961261b8be8",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0167/tick-00/post-tick.msgpack": "4e92c524a0c0a0d71b873582ded5ccbe94544dcd6437f81cf31e82f5451c2bd7",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0227/decision.msgpack": "bdeb0b7f9bde050f2aa0e275014ec0017b215e5d33b3dc4ac05fd6ac57f5f96f",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0227/tick-00/post-tick.msgpack": "dbe973fb30d8a4a3cc4281f8b1e5820d6602f53debe21428ab5e3b6243ad8658",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0277/selected-prediction.msgpack": "ce05ec0d3a7b7c02de8fd6b62944bf3245b7f9f072a9f2df551885dde00fa69a",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0296/decision.msgpack": "4220e0a477e5b9e503cd56b06ecf58e9ab61bb103f7532689a122864611bc79e",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/chunk-0296/tick-00/post-tick.msgpack": "3da68fdcec5cd18b933970eea5773a8ee7eb70b354b506506157bfa5f47e09ce",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/observed-state.msgpack": "25012a634ec676365e165f80705d52b2e52196dd27e6f725e2db8daa2507289e",
+    "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode/reset-observation.msgpack": "bb4c08774a1233e8de9b1048197fd189b45a232ec5f077492be2eade57ce0ee5",
+    "runs/worldmind/nov25-validation-report/analysis.json": "63f6a1700b1d56a678e1b84dcfcbc8636e34f4aa2c46cb41b3516783690974fd",
+    "runs/worldmind/nov25-validation-report/arm3-repair-metrics.json": "bab3d548cee71884928f778d35b04fb8af0968e24c68e303bca4f3a5f0a72d2f"
+  }
+}

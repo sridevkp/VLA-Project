@@ -1,0 +1,514 @@
+[
+  {
+    "candidate_id": "candidate-00",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 4.942976015212541e-05,
+      "object_clearance": 1.0248255223403284
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-01",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0007634147971525007,
+      "object_clearance": 1.0255654956699016
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-02",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0008241015650675976,
+      "object_clearance": 1.024635324279717
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-03",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0001469485350591715,
+      "object_clearance": 1.0251220085050265
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-04",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0010157985552885773,
+      "object_clearance": 1.0253232090093563
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-05",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0005605604611791659,
+      "object_clearance": 1.0255865984594923
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-06",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.00015649261751951582,
+      "object_clearance": 1.0245529008488246
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-07",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0008128530314994997,
+      "object_clearance": 1.0256249713929808
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-08",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0011722687173801039,
+      "object_clearance": 1.0248907928150377
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-09",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0013521072658986555,
+      "object_clearance": 1.025469992430125
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-10",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0012933497971536478,
+      "object_clearance": 1.0237728101508108
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-11",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 3.214237085893967e-05,
+      "object_clearance": 1.0244440484556747
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-12",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.002082749466010919,
+      "object_clearance": 1.0239074248551838
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-13",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0006556353149033967,
+      "object_clearance": 1.0256050193202946
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-14",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.00020768681115421184,
+      "object_clearance": 1.0249343482669808
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-15",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.00017508135767904665,
+      "object_clearance": 1.0248619592872448
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-16",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0012388600971917907,
+      "object_clearance": 1.0239865219893403
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-17",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.001337366111691135,
+      "object_clearance": 1.0248826942903488
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-18",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0008770820997203443,
+      "object_clearance": 1.0246313648266872
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-19",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 2.890409992598042e-05,
+      "object_clearance": 1.0251525568824191
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-20",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -6.859230660369309e-05,
+      "object_clearance": 1.0252203025435955
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-21",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -9.867279023009767e-05,
+      "object_clearance": 1.024922645959103
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-22",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.002106038995836529,
+      "object_clearance": 1.026040399541137
+    },
+    "disposition": "selected"
+  },
+  {
+    "candidate_id": "candidate-23",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.00042454802821015325,
+      "object_clearance": 1.0251999145552728
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-24",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0010983215622843712,
+      "object_clearance": 1.0245783965414013
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-25",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0012371668458846241,
+      "object_clearance": 1.0261337251263412
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-26",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0007966005433119594,
+      "object_clearance": 1.024094937675
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-27",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 0.0006107293594963814,
+      "object_clearance": 1.0253871499436822
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-28",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0013696889018934566,
+      "object_clearance": 1.0248529274967009
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-29",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": true,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": 8.380777830191422e-06,
+      "object_clearance": 1.0253084210217953
+    },
+    "disposition": "admitted"
+  },
+  {
+    "candidate_id": "candidate-30",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.00017291442330111262,
+      "object_clearance": 1.0257063149841374
+    },
+    "disposition": "vetoed"
+  },
+  {
+    "candidate_id": "candidate-31",
+    "checks": {
+      "prediction_complete": true,
+      "joint_limit_margin": true,
+      "ik_feasibility_and_residual": true,
+      "table_clearance": false,
+      "object_clearance": true
+    },
+    "signed_margins": {
+      "joint_limit_margin": 0.33719154402981083,
+      "table_clearance": -0.0002835287148299226,
+      "object_clearance": 1.0234319890714945
+    },
+    "disposition": "vetoed"
+  }
+]

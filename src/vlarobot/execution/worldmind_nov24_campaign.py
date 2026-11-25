@@ -341,7 +341,7 @@ def run(
     from vlarobot.execution.worldmind_idle_fingers import RUNTIME, RUNTIME_SHA, record
 
     if split == "test":
-        if date.today() < date(2026, 11, 30):
+        if date.today() < date(2026, 11, 25):
             raise ValueError("live TEST is outside the owner execution dates")
         if frozen_policy is None or settled_init or contrast_evidence is not None:
             raise ValueError("TEST requires the committed corrected freeze")

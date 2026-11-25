@@ -3987,3 +3987,9 @@ This is geometric-proxy evidence, with no independently certified safety claim.
 Both matched arm-5 profiles use the same pinned exception. All four stateful
 VALIDATION profiles use the configured HOME reference introduced in addendum 10.
 The prior profiles and their results remain engineering-development evidence.
+
+### ADR-0030 addendum 12 — Early frozen TEST, 2026-11-25
+
+The owner moved the earliest TEST date to November 25 and made arm 4 mandatory.
+Run the frozen 30 identities in arms 1, 3, 5 and 4. Arm 2 remains excluded.
+The November 25 freeze, policy, thresholds, scene identities and seeds are unchanged.

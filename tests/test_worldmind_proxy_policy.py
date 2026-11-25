@@ -206,7 +206,7 @@ def test_scheduled_test_dispatch_uses_the_corrected_frozen_profile(
     class AuthorizedDate(datetime.date):
         @classmethod
         def today(cls):
-            return cls(2026, 11, 30)
+            return cls(2026, 11, 25)
 
     monkeypatch.setattr(datetime, "date", AuthorizedDate)
     monkeypatch.setattr(campaign, "committed_test_policy", lambda path: "equal")
@@ -241,7 +241,7 @@ def test_test_date_guard_precedes_freeze_and_plan_access(monkeypatch, tmp_path):
     class EarlyDate(date):
         @classmethod
         def today(cls):
-            return cls(2026, 11, 29)
+            return cls(2026, 11, 24)
 
     monkeypatch.setattr(campaign, "date", EarlyDate)
     with pytest.raises(ValueError, match="outside the owner execution dates"):

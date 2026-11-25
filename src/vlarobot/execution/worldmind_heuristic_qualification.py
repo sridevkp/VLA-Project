@@ -526,7 +526,7 @@ def run_frozen_test_episode(
 
     from vlarobot.execution.worldmind_nov24_campaign import committed_test_policy
 
-    if date.today() < date(2026, 11, 30):
+    if date.today() < date(2026, 11, 25):
         raise ValueError("live TEST is outside the owner execution dates")
     if frozen_policy is None:
         raise ValueError("TEST requires the committed corrected freeze")

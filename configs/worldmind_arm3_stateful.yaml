@@ -1,0 +1,14 @@
+schema_version: 1
+arm: vla_risk_veto
+split: validation
+proposer: scripted_chunk_adapter
+candidate_count: 32
+horizon_steps: 50
+control_dt_s: 0.032
+execution:
+  waypoint_progression: existing_scripted_expert_observed_completion
+  chunk_expiration: earliest_command_completion_or_prediction_horizon
+  selection: first_eligible_in_draw_order
+  control_budget: shared_existing_1059_ticks
+  verification: existing_placement_verifier_after_home
+  prediction_error: not_applicable

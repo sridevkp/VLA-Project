@@ -1,0 +1,534 @@
+{
+  "schema_version": 1,
+  "identity": "A-D1-train-clear-i00-s100-frame0-v1",
+  "scene": "train-clear-i00-s100",
+  "seed": 100,
+  "frame": [
+    0,
+    0
+  ],
+  "targets": {
+    "A": [
+      0.07103975613359034,
+      -5.6330103023860545e-05,
+      -2.289653672216385e-05,
+      2.1903720995360823e-05,
+      -5.50120551103984e-06,
+      1.8481290345948952e-06,
+      -1.680523213603215e-06
+    ],
+    "B": [
+      0.07103975613359034,
+      -5.6330103023860545e-05,
+      -2.289653672216385e-05,
+      2.1903720995360823e-05,
+      -5.50120551103984e-06,
+      1.8481290345948952e-06,
+      -1.680523213603215e-06
+    ],
+    "C": [
+      0.07000000000000002,
+      -0.0015776230243764139,
+      -0.15002289653672213,
+      -0.002329658044912425,
+      -0.15000548310097536,
+      0.0061974754183294345,
+      -0.0014491773677773425
+    ]
+  },
+  "files": {
+    "native": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/native-snapshot.json",
+      "bytes": 984,
+      "sha256": "5a2c58a69843fb6ad9aaaad76342a2a26db0568dfb0da79016e15864b735b9e0"
+    },
+    "result": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/result.json",
+      "bytes": 22115,
+      "sha256": "391baecb2dbc37d32a83876c8b9ef213086cb16b3ba0433f553d9bb1642a0f28"
+    },
+    "provenance": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/provenance.json",
+      "bytes": 11844,
+      "sha256": "b8c61fe030573ae12561f8cc9e8ca05b28f98c505b9c8bd19a47d3470da3d09c"
+    },
+    "B": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/case-B.json",
+      "bytes": 1634,
+      "sha256": "3b3b021b477a06ae5cb5ed103b99c3fcb2be622393d22cdc30648b8c86caa347"
+    },
+    "C": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/case-C.json",
+      "bytes": 1832,
+      "sha256": "9ed0422ff617775b8f76329cc61fd159ab1d04a1eec26e95e63cb32800c1dc13"
+    },
+    "ad1_seal": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/files.sha256.json",
+      "bytes": 1548,
+      "sha256": "a56d4c24fa9ada03a9ebe8dce67d6ec107c7dbe5d09b4310dee8dea8578c80a0"
+    },
+    "solve_ledger": {
+      "root": "analytic",
+      "path": "runs/ad1-train-clear-i00-s100-frame0-v1/solve-ledger.json",
+      "bytes": 2180,
+      "sha256": "af7dd8172b546076f599f26399ea1003003737d32e13d20863406436407718f0"
+    },
+    "input_001": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/processor-action-audit.json",
+      "bytes": 4957,
+      "sha256": "b24c1b310cec549a0468fc24236674802002328db4e9d26647d49a7df93bde9c"
+    },
+    "input_002": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/existing-import/import-validation.json",
+      "bytes": 1013,
+      "sha256": "4f7b6172cdc7d450e5bf6ce7d489a6fe086c83fbbcaf408503a2bdb8c1c56d22"
+    },
+    "input_003": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/existing-import/physical-action-chunk.npy",
+      "bytes": 1528,
+      "sha256": "ad048c0b963747f7eec2b4f89a285ecd10530724efec630151efc9ac494b5e0c"
+    },
+    "input_004": {
+      "root": "main",
+      "path": "runs/datasets/tiago-train-v1/training_approval.json",
+      "bytes": 30450,
+      "sha256": "21904aa4007bd1ab2d8276913255c9d2f8e65f5f9c02239463f521eb9f8bf20a"
+    },
+    "input_005": {
+      "root": "main",
+      "path": "runs/datasets/tiago-train-v1/source-provenance.json",
+      "bytes": 423626,
+      "sha256": "de7aff693700bbb0c8f0abb0b5a41564e52a6d1b17fb838f4590cef39564f602"
+    },
+    "input_006": {
+      "root": "main",
+      "path": "runs/datasets/tiago-train-v1/dataset-integrity.json",
+      "bytes": 10013,
+      "sha256": "b8f529a9371ab10d5afb663e3e11dd08f8c4ddb57c03ee4d081ac02b0dfc0770"
+    },
+    "input_007": {
+      "root": "main",
+      "path": "runs/datasets/tiago-train-v1/data/chunk-000/file-000.parquet",
+      "bytes": 51092750,
+      "sha256": "33db29df8076407c8ece501a26b3bdfc2fc92fc54d89ec42f2ab064100f08ddc"
+    },
+    "input_008": {
+      "root": "main",
+      "path": "runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz",
+      "bytes": 271773,
+      "sha256": "dd56d7c9d5a05a5e8d4633f22311c259def08088bfed456cc32ec8ae053126e7"
+    },
+    "input_009": {
+      "root": "main",
+      "path": "runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.actions.jsonl",
+      "bytes": 27363,
+      "sha256": "1128399c0418681a5fe6e6894ef5fe8d607a47890ca73df358ce94c18423e03d"
+    },
+    "meta": {
+      "root": "main",
+      "path": "runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json",
+      "bytes": 1851,
+      "sha256": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3"
+    },
+    "input_011": {
+      "root": "main",
+      "path": "runs/demos/train-s100-registered-v1/attempts/attempt-0000/policy.jsonl",
+      "bytes": 784281,
+      "sha256": "cea3ba43257b961d7f3a8133586e4f3e03c8f00abe84fd25746b7b3ffd4a637e"
+    },
+    "input_012": {
+      "root": "main",
+      "path": "runs/demos/train-s100-registered-v1/attempts/attempt-0000/frames/episode-00/000000.jpg",
+      "bytes": 54122,
+      "sha256": "5c03d6c882e0e186e53703897c4061f6e53d7fbb9ffa31d96ac7a5c6da2ba214"
+    },
+    "input_013": {
+      "root": "main",
+      "path": "configs/robot.yaml",
+      "bytes": 8294,
+      "sha256": "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d"
+    },
+    "input_014": {
+      "root": "main",
+      "path": "configs/safety.yaml",
+      "bytes": 353,
+      "sha256": "a54ace2a04021ad3c4a517ba93555ed73c3d5fe045659f67ab67578d5d2a511f"
+    },
+    "input_015": {
+      "root": "main",
+      "path": "configs/eval.yaml",
+      "bytes": 1272,
+      "sha256": "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f"
+    },
+    "input_016": {
+      "root": "main",
+      "path": "configs/scenarios.yaml",
+      "bytes": 2545,
+      "sha256": "e519dc59d09012ad94fb2ba10a269bdcda847272a607113990c1f22ffdefebfa"
+    },
+    "input_017": {
+      "root": "main",
+      "path": "configs/calibration/urdf-base-train-v1.yaml",
+      "bytes": 546,
+      "sha256": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+    },
+    "input_018": {
+      "root": "main",
+      "path": "worlds/factory.wbt",
+      "bytes": 10591,
+      "sha256": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+    },
+    "input_019": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/kinematics.py",
+      "bytes": 11084,
+      "sha256": "cd564d9acd030ee19e8c4de80b9d96f2bff8811b73b5cef7c40be12ae538e69a"
+    },
+    "input_020": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/urdf_registration.py",
+      "bytes": 2533,
+      "sha256": "40b82d6feaff21d70229c0f952998fe7890b7dd7f20b670b3a5a2c4547224f64"
+    },
+    "input_021": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/images.py",
+      "bytes": 699,
+      "sha256": "1533d84b79fb235428e90c645e113d4ee1f82cd24a4fce7388eaaf24a6c96ec2"
+    },
+    "input_022": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/backend.py",
+      "bytes": 50617,
+      "sha256": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05"
+    },
+    "input_023": {
+      "root": "main",
+      "path": "src/vlarobot/execution/scripted_can.py",
+      "bytes": 116033,
+      "sha256": "d89b7eb6c3b00b14df6686325d2c2742ae6588e92f045af072fb07f391f608a3"
+    },
+    "input_024": {
+      "root": "main",
+      "path": "src/vlarobot/execution/scripted_baseline.py",
+      "bytes": 2826,
+      "sha256": "d304fef311e6ec7fc5464745fd3fc4f1cbb90439e159dc9c272f068e79869671"
+    },
+    "input_025": {
+      "root": "main",
+      "path": "runs/eval/vla-train-s0-step20000-recovered-v1/summary.json",
+      "bytes": 3617,
+      "sha256": "9695b1da66a2ec38dceba4b012e049cdd1c8412cc3c8aca7f0d4b076e7a3a416"
+    },
+    "input_026": {
+      "root": "main",
+      "path": "runs/eval/vla-train-s0-step20000-recovered-v1/vla-gate.json",
+      "bytes": 559,
+      "sha256": "a97f646229b57ec2d658183c9758353d47883cd4d681bb12c9b52f7878136822"
+    },
+    "input_027": {
+      "root": "main",
+      "path": "runs/eval/vla-train-s0-step20000-recovered-v1/proposer-role.json",
+      "bytes": 174,
+      "sha256": "d46bffae1d8828f950403ac507b6d02bcf99298f914fb4074bb2c847cab82f7a"
+    },
+    "input_028": {
+      "root": "main",
+      "path": "runs/eval/vla-train-s0-step20000-recovered-v1/provenance.json",
+      "bytes": 22098,
+      "sha256": "2375d2ab188406f1bcd600eb7cede307af226222a248236a79fdad27545f8b02"
+    },
+    "input_029": {
+      "root": "main",
+      "path": "src/vlarobot/execution/vla_episode.py",
+      "bytes": 6303,
+      "sha256": "ffb73839499392e6a8ed3ee7f1e9be5daef41502be01954e73f23f4b959eb9eb"
+    },
+    "input_030": {
+      "root": "main",
+      "path": "src/vlarobot/execution/vla_campaign.py",
+      "bytes": 12140,
+      "sha256": "793de9b859d12ec0de022775d463c99b7b3db18aad5731a9c0aff34df3fb9d39"
+    },
+    "input_031": {
+      "root": "main",
+      "path": "src/vlarobot/vla/action_adapter.py",
+      "bytes": 7785,
+      "sha256": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add"
+    },
+    "input_032": {
+      "root": "main",
+      "path": "src/vlarobot/vla/model_service.py",
+      "bytes": 8717,
+      "sha256": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9"
+    },
+    "input_033": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/pose_solver.py",
+      "bytes": 2125,
+      "sha256": "527550b2ff801b3a555050e8cde03b1dbc32a0f66f0101a64ef9c4a3ea949391"
+    },
+    "input_034": {
+      "root": "main",
+      "path": "src/vlarobot/vla/checkpoint_export.py",
+      "bytes": 5397,
+      "sha256": "bbb6c72e8032a202331fcae1917227bb18ab300ed325dfad3335976b9ceef3b9"
+    },
+    "input_035": {
+      "root": "main",
+      "path": "src/vlarobot/vla/schema.py",
+      "bytes": 2439,
+      "sha256": "71283d4427264798ab6865931ebbe11b87f1daf76eb79b3c8ce37bf3508e5206"
+    },
+    "input_036": {
+      "root": "main",
+      "path": "src/vlarobot/execution/safety_monitor.py",
+      "bytes": 9257,
+      "sha256": "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a"
+    },
+    "input_037": {
+      "root": "main",
+      "path": "runs/week2-progress-v1/validate-import.py",
+      "bytes": 2134,
+      "sha256": "13fb97b77544bdd96f6b00aa8929832065754124d7ff83691cf0c4bf6d61fc2d"
+    },
+    "input_038": {
+      "root": "analytic",
+      "path": "tools/recovery/local_import_gate.py",
+      "bytes": 2599,
+      "sha256": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e"
+    },
+    "input_039": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/audit-readonly.py",
+      "bytes": 6326,
+      "sha256": "7fce774fd0f6f96041d7f0d1d6d5d02a059fb682f3b96ecabd08b5733a4ff42b"
+    },
+    "input_040": {
+      "root": "main",
+      "path": "runs/colab-prep-v3/source.zip",
+      "bytes": 588420,
+      "sha256": "2d3cb4bd06ac8313b1bb3cdb5aae7f916c2b614dd3884172c4570be9ff36b2f5"
+    },
+    "input_041": {
+      "root": "main",
+      "path": "src/vlarobot/backends/webots/tiago.urdf",
+      "bytes": 35253,
+      "sha256": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b"
+    },
+    "input_042": {
+      "root": "main",
+      "path": "src/vlarobot/vla/dataset_export.py",
+      "bytes": 9616,
+      "sha256": "d4853484517b3024aa54ff4d25a047eefe9eb647d0c26dd47629ce649ee84b02"
+    },
+    "input_043": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/model.safetensors",
+      "bytes": 1197789224,
+      "sha256": "7531991e27719e6fee402344aadbe43b2fc4ac858a87ae5ec77809c8efe385d8"
+    },
+    "input_044": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/optimizer-steps.jsonl",
+      "bytes": 24511,
+      "sha256": "6d114043cb660eecb79e5064707f77b1300e5080633819fc1d395ba7b872b36f"
+    },
+    "input_045": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/train_config.json",
+      "bytes": 6252,
+      "sha256": "63f4b7305f437bc01cb0d12fcfef2241f9c0251e2089322be31539fefea6b82f"
+    },
+    "input_046": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/policy_preprocessor_step_5_normalizer_processor.safetensors",
+      "bytes": 7672,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    "input_047": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/policy_postprocessor.json",
+      "bytes": 660,
+      "sha256": "3b51f092c70c710ce0213ee1b63bf51b4878ec67828dd2d67daf9ef51081a41a"
+    },
+    "input_048": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/config.json",
+      "bytes": 2113,
+      "sha256": "4b03cc3cb3257ec32491bb56d44566590bb9cd6aceb4b02ab8e3cef25cb119f4"
+    },
+    "input_049": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/policy_preprocessor.json",
+      "bytes": 1558,
+      "sha256": "622c61c6ed6bd26bc741e1cef7eaa36e037f06665f1f218c5e1962b965bcf605"
+    },
+    "input_050": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/policy_postprocessor_step_0_unnormalizer_processor.safetensors",
+      "bytes": 7672,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    "input_051": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/training-approval.json",
+      "bytes": 30450,
+      "sha256": "21904aa4007bd1ab2d8276913255c9d2f8e65f5f9c02239463f521eb9f8bf20a"
+    },
+    "input_052": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/special_tokens_map.json",
+      "bytes": 868,
+      "sha256": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60"
+    },
+    "input_053": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/vocab.json",
+      "bytes": 800662,
+      "sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"
+    },
+    "input_054": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/tokenizer.json",
+      "bytes": 3548256,
+      "sha256": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a"
+    },
+    "input_055": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/tokenizer_config.json",
+      "bytes": 28713,
+      "sha256": "8b262ec2acb7773caac7b1e59edf921671cdb4c7c815a9c714242540d3fcb531"
+    },
+    "input_056": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/merges.txt",
+      "bytes": 466391,
+      "sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510"
+    },
+    "input_057": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/processor_config.json",
+      "bytes": 67,
+      "sha256": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c"
+    },
+    "input_058": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/generation_config.json",
+      "bytes": 136,
+      "sha256": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840"
+    },
+    "input_059": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/chat_template.json",
+      "bytes": 517,
+      "sha256": "9bc4f36b8d064f824368648472a4a09268c4bbf9bf930f04fae47f1f596dae92"
+    },
+    "input_060": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/config.json",
+      "bytes": 3767,
+      "sha256": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17"
+    },
+    "input_061": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/preprocessor_config.json",
+      "bytes": 599,
+      "sha256": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374"
+    },
+    "input_062": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/processor/added_tokens.json",
+      "bytes": 4739,
+      "sha256": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a"
+    },
+    "input_063": {
+      "root": "analytic",
+      "path": "runs/local-model-validation-v1/export-step-020000/recovery-provenance.json",
+      "bytes": 10050,
+      "sha256": "e88834db27737c711f02cb3bb657a119d75cd82936e8feab00b5400ff2e17c40"
+    },
+    "input_064": {
+      "root": "main",
+      "path": ".venv/lib/python3.11/site-packages/ikpy/chain.py",
+      "bytes": 46227,
+      "sha256": "a7b03b83884ea338d4a5f0fa091244d5f0461c1373fde3a85a5b1c09bdc81c30"
+    }
+  },
+  "provenance_files": {
+    "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/native-snapshot.json": "native",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/processor-action-audit.json": "input_001",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/existing-import/import-validation.json": "input_002",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/existing-import/physical-action-chunk.npy": "input_003",
+    "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/training_approval.json": "input_004",
+    "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/source-provenance.json": "input_005",
+    "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/dataset-integrity.json": "input_006",
+    "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1/data/chunk-000/file-000.parquet": "input_007",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz": "input_008",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.actions.jsonl": "input_009",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json": "meta",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/policy.jsonl": "input_011",
+    "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/frames/episode-00/000000.jpg": "input_012",
+    "/home/tj330/programs/VLA-Project/configs/robot.yaml": "input_013",
+    "/home/tj330/programs/VLA-Project/configs/safety.yaml": "input_014",
+    "/home/tj330/programs/VLA-Project/configs/eval.yaml": "input_015",
+    "/home/tj330/programs/VLA-Project/configs/scenarios.yaml": "input_016",
+    "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml": "input_017",
+    "/home/tj330/programs/VLA-Project/worlds/factory.wbt": "input_018",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/kinematics.py": "input_019",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/urdf_registration.py": "input_020",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/images.py": "input_021",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/backend.py": "input_022",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/scripted_can.py": "input_023",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/scripted_baseline.py": "input_024",
+    "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/summary.json": "input_025",
+    "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/vla-gate.json": "input_026",
+    "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/proposer-role.json": "input_027",
+    "/home/tj330/programs/VLA-Project/runs/eval/vla-train-s0-step20000-recovered-v1/provenance.json": "input_028",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_episode.py": "input_029",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/vla_campaign.py": "input_030",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/action_adapter.py": "input_031",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/model_service.py": "input_032",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/pose_solver.py": "input_033",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/checkpoint_export.py": "input_034",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/schema.py": "input_035",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/execution/safety_monitor.py": "input_036",
+    "/home/tj330/programs/VLA-Project/runs/week2-progress-v1/validate-import.py": "input_037",
+    "/home/tj330/programs/VLA-Project-analytic/tools/recovery/local_import_gate.py": "input_038",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/audit-readonly.py": "input_039",
+    "/home/tj330/programs/VLA-Project/runs/colab-prep-v3/source.zip": "input_040",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf": "input_041",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/vla/dataset_export.py": "input_042",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/model.safetensors": "input_043",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/optimizer-steps.jsonl": "input_044",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/train_config.json": "input_045",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_preprocessor_step_5_normalizer_processor.safetensors": "input_046",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_postprocessor.json": "input_047",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/config.json": "input_048",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_preprocessor.json": "input_049",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "input_050",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/training-approval.json": "input_051",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/special_tokens_map.json": "input_052",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/vocab.json": "input_053",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/tokenizer.json": "input_054",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/tokenizer_config.json": "input_055",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/merges.txt": "input_056",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/processor_config.json": "input_057",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/generation_config.json": "input_058",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/chat_template.json": "input_059",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/config.json": "input_060",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/preprocessor_config.json": "input_061",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/processor/added_tokens.json": "input_062",
+    "/home/tj330/programs/VLA-Project-analytic/runs/local-model-validation-v1/export-step-020000/recovery-provenance.json": "input_063",
+    "/home/tj330/programs/VLA-Project/.venv/lib/python3.11/site-packages/ikpy/chain.py": "input_064"
+  }
+}

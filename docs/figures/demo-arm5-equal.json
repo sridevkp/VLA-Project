@@ -1,0 +1,7 @@
+{
+  "scope": "recorded VALIDATION playback",
+  "episode": "runs/worldmind/nov24-matched-arm5-equal/validation-clear-i00-s0/attempt-2/episode",
+  "frames": 636,
+  "frames_per_second": 31.25,
+  "ordered_source_sha256_of_sha256s": "aa888ff65cfbbf4fe08f3a24d929e27709a732e566e91080424b283c0b866ef7"
+}

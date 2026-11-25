@@ -1,0 +1,80 @@
+{
+  "step": 17000,
+  "all_entries_verified": true,
+  "files": {
+    "pretrained_model/config.json": {
+      "bytes": 2160,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "e8261860a7f7370815ad21f99335c30b3693a3b726ca27ca979a2c3edf94bd12"
+    },
+    "pretrained_model/model.safetensors": {
+      "bytes": 1197789224,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "d8ef2562ce5579210352cfe7c208cc31c7f6f63499e835264ee11a9c735f847b"
+    },
+    "pretrained_model/train_config.json": {
+      "bytes": 6327,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "319e7e4773b304e8fdbc69dac988a27276fc07f3b8ada20988d7aa7305c80409"
+    },
+    "pretrained_model/policy_preprocessor.json": {
+      "bytes": 1591,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "89ae53f8c4d58b989450611f2339b976f9a5899358c68e4b259153aeab65276e"
+    },
+    "pretrained_model/policy_postprocessor.json": {
+      "bytes": 660,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "3b51f092c70c710ce0213ee1b63bf51b4878ec67828dd2d67daf9ef51081a41a"
+    },
+    "pretrained_model/policy_preprocessor_step_5_normalizer_processor.safetensors": {
+      "bytes": 7672,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    "pretrained_model/policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+      "bytes": 7672,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    "training_state/training_step.json": {
+      "bytes": 21,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "742cea80514ab7e9c8325e737bf0f45edbd6a24c2ea82a45d68373f15aa1987c"
+    },
+    "training_state/optimizer_state.safetensors": {
+      "bytes": 412659164,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "8520369d01d0af9f7399db8fc372e4f856006aa59c1e7ec14093fdbf508974c9"
+    },
+    "training_state/optimizer_param_groups.json": {
+      "bytes": 8820,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "9923c1359a2958878333ee996faf555ed352587a4c819bb6c41643c4472ad86b"
+    },
+    "training_state/scheduler_state.json": {
+      "bytes": 228,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "b1dcdf6039883cde786f4a3badaa99031eb33c98b156fd0d9f952fb898c1deb7"
+    },
+    "training_state/rng_state.safetensors": {
+      "bytes": 15708,
+      "size_matches": true,
+      "hash_matches": true,
+      "sha256": "415019dde914b7770c877321ff271d1af6f1faa430372bafe7b1066157368469"
+    }
+  },
+  "source_modified": false,
+  "manifest_sha256": "b0dcf5a9dcfaf35db987b9ec2c1a5b782c857d9a3cc6438cafe4ddc66fd18694"
+}

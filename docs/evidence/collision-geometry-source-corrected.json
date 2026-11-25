@@ -1,0 +1,447 @@
+{
+  "status": "MEASURED one-pose frame comparison; collision safety NOT CERTIFIED",
+  "frames": [
+    {
+      "urdf_link": "base_link",
+      "live_name": "TIAGo",
+      "position_error_m": 1.788112030672749e-18,
+      "orientation_error_rad": 0.0,
+      "live_primitive_count": 3
+    },
+    {
+      "urdf_link": "torso_lift_link",
+      "live_name": "torso_lift_link",
+      "position_error_m": 5.238659860775849e-06,
+      "orientation_error_rad": 1.3797912035281709e-05,
+      "live_primitive_count": 4
+    },
+    {
+      "urdf_link": "head_1_link",
+      "live_name": "head_1_link",
+      "position_error_m": 7.299434801876493e-06,
+      "orientation_error_rad": 1.3819427191319114e-05,
+      "live_primitive_count": 2
+    },
+    {
+      "urdf_link": "head_2_link",
+      "live_name": "head_2_link",
+      "position_error_m": 9.962833384205642e-06,
+      "orientation_error_rad": 1.3811407147008877e-05,
+      "live_primitive_count": 5
+    },
+    {
+      "urdf_link": "Astra",
+      "live_name": "Astra",
+      "position_error_m": 1.0542402865219327e-05,
+      "orientation_error_rad": 1.381142322389904e-05,
+      "live_primitive_count": 2
+    },
+    {
+      "urdf_link": "Torso",
+      "live_name": "Torso",
+      "position_error_m": 3.1039433865322265e-16,
+      "orientation_error_rad": 0.0,
+      "live_primitive_count": 3
+    },
+    {
+      "urdf_link": "TIAGo front arm_3",
+      "live_name": "TIAGo front arm",
+      "position_error_m": 0.012178064543200204,
+      "orientation_error_rad": 0.0023284139960769944,
+      "live_primitive_count": 4
+    },
+    {
+      "urdf_link": "arm_2_link",
+      "live_name": "arm_2_link",
+      "position_error_m": 0.0017668447137232676,
+      "orientation_error_rad": 0.0023284054705991404,
+      "live_primitive_count": 2
+    },
+    {
+      "urdf_link": "arm_3_link",
+      "live_name": "arm_3_link",
+      "position_error_m": 0.00197786172996489,
+      "orientation_error_rad": 0.0023267652783914845,
+      "live_primitive_count": 2
+    },
+    {
+      "urdf_link": "arm_4_link",
+      "live_name": "arm_4_link",
+      "position_error_m": 0.0007204441574941283,
+      "orientation_error_rad": 0.0023263167568424686,
+      "live_primitive_count": 2
+    },
+    {
+      "urdf_link": "arm_5_link",
+      "live_name": "arm_5_link",
+      "position_error_m": 0.0005583383269517778,
+      "orientation_error_rad": 0.00232310650351898,
+      "live_primitive_count": 3
+    },
+    {
+      "urdf_link": "arm_6_link",
+      "live_name": "arm_6_link",
+      "position_error_m": 0.0006009244115903285,
+      "orientation_error_rad": 0.002322642714730718,
+      "live_primitive_count": 1
+    },
+    {
+      "urdf_link": "arm_7_link",
+      "live_name": "arm_7_link",
+      "position_error_m": 0.05549123117051889,
+      "orientation_error_rad": 0.002321652472572128,
+      "live_primitive_count": 1
+    },
+    {
+      "urdf_link": "wrist_ft_tool_link",
+      "live_name": "wrist_ft_tool_link",
+      "position_error_m": 0.0006581398855310806,
+      "orientation_error_rad": 0.0023215904775399213,
+      "live_primitive_count": 1
+    },
+    {
+      "urdf_link": "gripper_left_finger_link",
+      "live_name": "gripper_left_finger_link",
+      "position_error_m": 0.000674794711452207,
+      "orientation_error_rad": 0.002321277729531043,
+      "live_primitive_count": 3
+    },
+    {
+      "urdf_link": "gripper_right_finger_link",
+      "live_name": "gripper_right_finger_link",
+      "position_error_m": 0.0006747928716649978,
+      "orientation_error_rad": 0.0023212786544314795,
+      "live_primitive_count": 3
+    },
+    {
+      "urdf_link": "Hokuyo URG-04LX-UG01",
+      "live_name": "Hokuyo URG-04LX-UG01",
+      "position_error_m": 3.878959614448864e-18,
+      "orientation_error_rad": 0.0,
+      "live_primitive_count": 1
+    }
+  ],
+  "matched_primitive_errors": [
+    {
+      "link": "base_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.398847634977321e-17,
+      "aabb_undercoverage_m": 1.1102230246251565e-16
+    },
+    {
+      "link": "base_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.249000902703301e-16,
+      "aabb_undercoverage_m": 1.1102230246251565e-16
+    },
+    {
+      "link": "base_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.249000902703301e-16,
+      "aabb_undercoverage_m": 1.1102230246251565e-16
+    },
+    {
+      "link": "torso_lift_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 4.962836879218297e-06,
+      "aabb_undercoverage_m": 5.310491225929415e-06
+    },
+    {
+      "link": "torso_lift_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 4.811500453275422e-06,
+      "aabb_undercoverage_m": 5.55286785554332e-06
+    },
+    {
+      "link": "torso_lift_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 4.651522840362346e-06,
+      "aabb_undercoverage_m": 5.259942381097282e-06
+    },
+    {
+      "link": "torso_lift_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 2.7047273090577905e-06,
+      "aabb_undercoverage_m": 3.831564985096181e-06
+    },
+    {
+      "link": "head_1_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 8.219941758389704e-06,
+      "aabb_undercoverage_m": 6.900901388315339e-06
+    },
+    {
+      "link": "head_1_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 7.32438180117023e-06,
+      "aabb_undercoverage_m": 5.915662194114213e-06
+    },
+    {
+      "link": "head_2_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.0313225426411466e-05,
+      "aabb_undercoverage_m": 9.193829102360773e-06
+    },
+    {
+      "link": "head_2_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 9.845070651837804e-06,
+      "aabb_undercoverage_m": 8.470746129973783e-06
+    },
+    {
+      "link": "head_2_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.0661177337251519e-05,
+      "aabb_undercoverage_m": 9.115021116223865e-06
+    },
+    {
+      "link": "head_2_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 9.987160861345983e-06,
+      "aabb_undercoverage_m": 7.21318555016448e-06
+    },
+    {
+      "link": "head_2_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.1293471076054353e-05,
+      "aabb_undercoverage_m": 8.9264992784166e-06
+    },
+    {
+      "link": "Astra",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.085587944010505e-05,
+      "aabb_undercoverage_m": 9.009868381260056e-06
+    },
+    {
+      "link": "Astra",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 1.0567834581474492e-05,
+      "aabb_undercoverage_m": 8.305397150132343e-06
+    },
+    {
+      "link": "Torso",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 3.342876068212269e-16,
+      "aabb_undercoverage_m": 3.3306690738754696e-16
+    },
+    {
+      "link": "Torso",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 2.9712050531116253e-16,
+      "aabb_undercoverage_m": 3.608224830031759e-16
+    },
+    {
+      "link": "Torso",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 3.2136829740644765e-16,
+      "aabb_undercoverage_m": 3.608224830031759e-16
+    },
+    {
+      "link": "TIAGo front arm_3",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0012381066429043804,
+      "aabb_undercoverage_m": 0.0010469683238133465
+    },
+    {
+      "link": "TIAGo front arm_3",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.001179195158362473,
+      "aabb_undercoverage_m": 0.0009591043523105025
+    },
+    {
+      "link": "TIAGo front arm_3",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0010912220961119881,
+      "aabb_undercoverage_m": 0.0009004994307628689
+    },
+    {
+      "link": "TIAGo front arm_3",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0009888205184279616,
+      "aabb_undercoverage_m": 0.0008159559413543072
+    },
+    {
+      "link": "arm_2_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0009670981322841075,
+      "aabb_undercoverage_m": 0.0007833025161221308
+    },
+    {
+      "link": "arm_2_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0010968848041107034,
+      "aabb_undercoverage_m": 0.0009350580881830606
+    },
+    {
+      "link": "arm_3_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0007843057454545176,
+      "aabb_undercoverage_m": 0.000495768663909324
+    },
+    {
+      "link": "arm_3_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0006492691574303167,
+      "aabb_undercoverage_m": 0.0005180809299710765
+    },
+    {
+      "link": "arm_4_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0007207819692657408,
+      "aabb_undercoverage_m": 0.0005428266058044584
+    },
+    {
+      "link": "arm_4_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0005834772702121531,
+      "aabb_undercoverage_m": 0.0004971770164343692
+    },
+    {
+      "link": "arm_5_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0005564538770881692,
+      "aabb_undercoverage_m": 0.0004968863941607893
+    },
+    {
+      "link": "arm_5_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.000572309186583021,
+      "aabb_undercoverage_m": 0.0004958869026001622
+    },
+    {
+      "link": "arm_5_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.000607120175971124,
+      "aabb_undercoverage_m": 0.0004951931902124063
+    },
+    {
+      "link": "arm_6_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0006343153362743227,
+      "aabb_undercoverage_m": 0.0004905619386116333
+    },
+    {
+      "link": "arm_7_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0006455912865465265,
+      "aabb_undercoverage_m": 0.0004905273239953489
+    },
+    {
+      "link": "wrist_ft_tool_link",
+      "type": "cylinder",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0006581398855310806,
+      "aabb_undercoverage_m": 0.0004947864457321982
+    },
+    {
+      "link": "gripper_left_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0008969000846429619,
+      "aabb_undercoverage_m": 0.0005306973754574118
+    },
+    {
+      "link": "gripper_left_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0008285258015638495,
+      "aabb_undercoverage_m": 0.0005332549181829016
+    },
+    {
+      "link": "gripper_left_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0008289756910624258,
+      "aabb_undercoverage_m": 0.0005067468191375379
+    },
+    {
+      "link": "gripper_right_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0009096406547979527,
+      "aabb_undercoverage_m": 0.0005306744554425258
+    },
+    {
+      "link": "gripper_right_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0008244185995881363,
+      "aabb_undercoverage_m": 0.0005014984761494423
+    },
+    {
+      "link": "gripper_right_finger_link",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 0.0007789351872053606,
+      "aabb_undercoverage_m": 0.0004649209406747401
+    },
+    {
+      "link": "Hokuyo URG-04LX-UG01",
+      "type": "box",
+      "dimension_difference_m": 0.0,
+      "center_error_m": 7.153003578337685e-18,
+      "aabb_undercoverage_m": 0.0
+    }
+  ],
+  "frame_origin_differences_are_not_collision_surface_errors": true,
+  "unobserved_collision_links": [
+    "TIAGo front arm",
+    "base_cover_link",
+    "caster_back_left_1_link",
+    "caster_back_left_2_link",
+    "caster_back_right_1_link",
+    "caster_back_right_2_link",
+    "caster_front_left_1_link",
+    "caster_front_left_2_link",
+    "caster_front_right_1_link",
+    "caster_front_right_2_link",
+    "front",
+    "wheel_left_link",
+    "wheel_right_link"
+  ],
+  "self_collision_enabled": 0,
+  "scope": "passive factory initial pose, actual sensors; no fitted correction",
+  "source_geometry_diagnostic": "configs/geometry/source-collision-v1.yaml",
+  "not_deployed_as_safety_certificate": true,
+  "test_accessed": false,
+  "training_or_world_modified": false,
+  "source_sha256": {
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b",
+    "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0",
+    "runs/live-geometry-v3/live-bounding-objects.json": "37bb783962377fe4aba639cc278004242450d9ba5a6dfac8dc97cfee3d124996"
+  }
+}

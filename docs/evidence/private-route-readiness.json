@@ -1,0 +1,11 @@
+{
+  "tailscale_running": true,
+  "self_online": true,
+  "candidate_private_ipv4": "100.86.97.108",
+  "ssh_listener_present": false,
+  "expected_system_ed25519_hostkey_present": false,
+  "credentials_created": false,
+  "services_started": false,
+  "public_ssh_exposed": false,
+  "drive_adc_file_present": false
+}

@@ -1,0 +1,113 @@
+# STAGE 1 TEMPLATE — uncalibrated diagnostic configuration.
+#
+# Non-circular calibration bootstrap:
+#   1. this config (hard checks intact, NO Eq. 3.8 weights, NO approved candidate);
+#   2. VALIDATION-only calibration evidence collection on the 18 frozen scenes/seeds;
+#   3. owner selection/approval of non-safety parameters from that evidence;
+#   4. scored evaluation only with the frozen approved parameters and a `ready` config.
+#
+# This is a BLOCKED template. Fill only owner-reviewed values. No component formula, unit,
+# weight, ranking direction, risk threshold or calibration result is supplied here. This config
+# is rejected by `eval-worldmind`; it is accepted only by `worldmind-diagnostic`, which can never
+# produce a scored result.
+#
+# Reconciliation (2026-11-19): FROZEN fields carry source-backed values from ADR-0004, ADR-0016
+# and the pinned v5 inspection declaration. REGISTERED fields carry stable identities from
+# `eval/worldmind_bindings.py` and `backends/worldmind_bindings.py`; they still require owner
+# confirmation before use in a ready/scored config. Every other owner field stays blocked.
+# Second reconciliation (2026-11-20, ADR-0069): exact source-backed instruction, report path,
+# safety config, rest/object/HOME-tolerance verification inputs and IK tolerances are filled.
+# Third reconciliation (2026-11-20, ADR-0070): destination wording, base-frame up-axis and HOME
+# joints are filled from the accepted v5 observation and canonical instruction source.
+# Definitions, bounds and jitter remain owner-blocked.
+schema_version: 1
+status: "diagnostic_uncalibrated"
+split: "validation"
+base_seed: 0
+seeds: [0, 1, 2]
+episodes: 18
+
+backend:
+  kind: "webots"
+  declaration: "webots_factory_world_supervisor_geometry_export_v1"
+  state_source: "oracle"
+
+task:
+  instruction: "Pick up the can and place it at the target location."
+  target: "CAN"
+  destination: "target location"  # src/vlarobot/eval/demos.py::DEFAULT_INSTRUCTION
+
+pipeline:
+  proposer: "scripted_chunk_adapter"
+  arm: "full_system"
+  candidate_count: 32
+  horizon_steps: 50
+  control_dt_s: 0.032
+  decision_seed_base: 0
+
+bounds:
+  max_decisions: 1060
+  max_steps: 1059
+  timings_enabled: true
+
+report:
+  pdf: "~/Downloads/Project_Report.pdf"
+  definitions: "report/definitions.approved.json"
+  candidate_definitions: "report/definitions.candidate.json"
+  sha256: "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+
+assessment:
+  required_constraints: ["finite_chunk_v1"]
+  hard_checks: ["finite_chunk_v1"]
+
+diagnostic:
+  mode: "evidence_collection_only"
+  scored_evaluation_allowed: false
+  calibration_stage: 1
+  evidence_collection_split: "validation"
+
+surrogate:
+  binding: "analytic_surrogate_corrected_v1"
+  inputs:
+    forward: "forward"
+    inverse: "inverse"
+    validate: "validate"
+    tracking: "tracking"
+
+safety:
+  binding: "runtime_safety_monitor_v1"
+  config_path: "safety.yaml"
+  inputs:
+    monitor: "monitor"
+
+verification:
+  binding: "placement_verifier_v1"
+  destination_world: [-1.0, -4.3, 0.821]
+  rest_center_world: [-0.799879, -4.38998, 0.810949]
+  object_dimensions_m: [0.0635, 0.0635, 0.1222]
+  # Third row of accepted v5 T_world_base_live_observed (world +Z expressed in base frame).
+  up_axis_base: [-0.008464554343786014, 0.028463807918849244, 0.9995589842318061]
+  distance_tolerance_m: 0.10
+  height_tolerance_m: 0.02
+  tilt_limit_rad: 0.2617993877991494
+  home_tolerance_rad: 0.02
+  # Accepted v5 reset joint observation; the controller captures this vector at reset.
+  home_joints:
+    arm_1_joint: 0.07096462462238605
+    arm_2_joint: -2.2620047855248515e-05
+    arm_3_joint: 2.054103653800303e-05
+    arm_4_joint: 8.787041281495702e-06
+    arm_5_joint: 4.885743745552387e-06
+    arm_6_joint: -1.6051675007634115e-06
+    arm_7_joint: 1.4867396893897092e-06
+
+adapter:
+  waypoints_binding: "corrected_scripted_waypoints_v1"
+  alternate_waypoints_binding: null
+  pose_solver_binding: "corrected_bounded_pose_solver_v1"
+  ik_position_tolerance_m: 0.005
+  ik_orientation_tolerance_rad: 0.08726646259971647
+  jitter:
+    joint_std_rad: 0.001
+    joint_limit_rad: 0.005
+    max_attempts: 10

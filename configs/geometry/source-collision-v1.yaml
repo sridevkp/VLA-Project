@@ -1,0 +1,15 @@
+status: diagnostic_not_certified_or_deployed
+registration_scope: arm_1_joint_child_and_descendants
+note: Existing static arm registration is unchanged; body collision frames retain
+  their native base frame.
+collision_origins:
+  wrist_ft_tool_link:
+    index: 0
+    xyz_m:
+    - 0.0
+    - 0.0
+    - 0.0
+    reason: Actual Webots wrist connector bounding Pose has no translation; URDF collision
+      adds 55 mm.
+    source_url: https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoFrontArm.proto
+    source_sha256: 4d606ab949b324a3d13f702b6f642786cab602f2f99a0faba4217a4cf0dcdb10

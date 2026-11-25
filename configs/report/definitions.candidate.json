@@ -1,0 +1,100 @@
+{
+  "review_status": "candidate",
+  "review_owner_decision_required": true,
+  "report_sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b",
+  "equation_3_8_verbatim": "J(τi) = wg Jg(τi) + wl Jl(τi) + wr Jr(τi) + wu Ju(τi)",
+  "components": {
+    "Jg": "Jg measures goal error",
+    "Jl": "Jl length or execution cost",
+    "Jr": "Jr risk",
+    "Ju": "Ju uncertainty or prediction-related penalties"
+  },
+  "table51": {
+    "Task success rate": {
+      "definition": "Successful trials divided by total trials",
+      "denominator": "all planned (scene, seed) trials for the arm and split; successes use the frozen final_can_outcome criteria",
+      "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
+    },
+    "Prediction error": {
+      "definition": "RMSE, MAE or task-appropriate metric",
+      "denominator": "number of valid paired prediction steps per quantity (truthful truncated pairing, allow_truncated=True); unexecuted horizon steps excluded",
+      "unit": "SI per quantity (m, rad) / steps [PROPOSED; OWNER DECISION]"
+    },
+    "Collision rate": {
+      "definition": "Trials with collisions divided by total trials; proxy hits are labelled, never silently promoted to verified contacts",
+      "denominator": "all planned (scene, seed) trials for the arm and split; numerator is episodes with a labelled proxy hit and/or a backend-recorded contact",
+      "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
+    },
+    "Path length": {
+      "definition": "Sum of distances along the executed trajectory",
+      "denominator": "not a ratio; summed over recorded executed EE/tool trajectory segments only",
+      "unit": "m [PROPOSED; OWNER DECISION]"
+    },
+    "Execution time": {
+      "definition": "Recorded simulation or wall-clock duration, clearly identified; sim and wall kept as separate channels",
+      "denominator": "not a ratio; per-episode clock, aggregated over trials by mean/std with n reported",
+      "unit": "s [PROPOSED; OWNER DECISION]"
+    },
+    "Planning latency": {
+      "definition": "Time required to generate and evaluate candidates, measured from decision-sidecar phase timings; full-system latency remains UNVERIFIED until a real run exists",
+      "denominator": "not a ratio; per-decision perf_counter_ns windows, aggregated by p50/p95 with the number of timed decisions reported",
+      "unit": "s [PROPOSED; OWNER DECISION]"
+    },
+    "Risk rejection rate": {
+      "definition": "Rejected candidates divided by evaluated candidates",
+      "denominator": "all evaluated candidates across recorded decisions (candidate dispositions); hard-check vetoes counted separately from Eq. 3.8 ranking",
+      "unit": "ratio (0-1) [PROPOSED; OWNER DECISION]"
+    },
+    "Reliability": {
+      "definition": "Successful runs and documented failure categories",
+      "denominator": "all planned (scene, seed) trials; categories from evaluation_failure_category with raw failure_state preserved separately",
+      "unit": "counts / categories [PROPOSED; OWNER DECISION]"
+    }
+  },
+  "failure_taxonomy": {
+    "source": "eval/metrics.py::derive_evaluation_failure_category; raw failure_state/failure_reason preserved separately",
+    "categories": [
+      "success",
+      "EXCEPTION",
+      "NO_SAFE_SET",
+      "SAFETY_ABORT",
+      "VERIFICATION_ABORT",
+      "VERIFICATION_RETRY",
+      "completed_unsuccessful:<final_state>+home_not_reached+place_distance+can_height+can_tilt+task_unsuccessful"
+    ],
+    "note": "Proposal only; category granularity is an owner decision. Proxy hits and unverified-arm-sweep vetoes are channels, not silently merged into a single risk number."
+  },
+  "measurement_instrumentation": {
+    "source": "worldmind-sidecars/instrumentation.json surfaced as summary.json.worldmind_instrumentation",
+    "fields": [
+      "decisions_total",
+      "decisions_per_episode",
+      "candidate_evaluations_total",
+      "gate_select_calls",
+      "phase_latency"
+    ],
+    "note": "Measured from recorded decisions; no decision count inferred from control steps, no latency taken from a nominal kernel profile."
+  },
+  "evidence_sources": {
+    "Task success rate": "eval/metrics.py success aggregation and Wilson interval",
+    "Prediction error": "world_model/evaluation.py::prediction_errors with truthful truncated pairing",
+    "Collision rate": "recorded displacement/tilt PROXY plus contact diagnostics; proxy must remain labelled",
+    "Path length": "eval/derived_metrics.py::end_effector_path_length_m",
+    "Execution time": "eval/runner.py wall_s and eval/derived_metrics.py::simulation_duration_s kept separate",
+    "Planning latency": "decision sidecar phase timings; full-system latency remains UNVERIFIED",
+    "Risk rejection rate": "eval/decision_metrics.py::risk_rejection_rate from recorded candidate dispositions",
+    "Reliability": "failure_states and evaluation_failure_category in frozen summaries"
+  },
+  "unresolved_owner_decisions": {
+    "Jg_formula": "OWNER DECISION: authoritative component formula not supplied",
+    "Jl_formula": "OWNER DECISION: authoritative component formula not supplied",
+    "Jr_formula": "OWNER DECISION: authoritative component formula not supplied",
+    "Ju_formula": "OWNER DECISION: authoritative component formula not supplied",
+    "component_units": "OWNER DECISION: Eq. 3.8 gives meanings only, not units",
+    "ranking_direction": "OWNER DECISION: maximize or minimize must be selected on VALIDATION",
+    "weights": "OWNER DECISION: (wg, wl, wr, wu) must be selected on VALIDATION",
+    "risk_threshold": "OWNER DECISION: only a non-safety Jr threshold with an exact authoritative definition may be added",
+    "table51_units": "OWNER DECISION: units above are transcribed proposals, not authoritative values"
+  },
+  "scored_execution_enabled": false
+}

@@ -1,0 +1,175 @@
+time_step: 32
+can_def: CAN
+reset_mode: soft # reload requires a Webots process restart and client reconnect; unsupported for now
+place_world: [-1.0, -4.3, 0.821] # CAN center in world coordinates (m)
+grasp_z: 0.02
+approach_h: 0.12
+place_clear: 0.01
+ik_tol: 0.015
+ik_tol_grasp: 0.005
+ik_tol_transit: 0.015
+max_joint_step_rad: 0.15
+align_tol: 0.005
+close_align_tol: 0.008
+skip_align_check: true
+max_tilt_deg: 15
+# Final CAN acceptance criteria, reported separately by can-regression and the trace.
+# Place distance is the unchanged 0.10 m base-frame threshold; the CAN must also be within
+# 0.02 m of its table-rest height and less than 15 deg from upright.
+place_tolerance_m: 0.10
+can_place_z_tolerance_m: 0.02
+can_tilt_limit_deg: 15
+grip_force: null
+min_grasp_open: 0.004
+lift_min: 0.04
+max_retries: 2
+stop_after: null
+torso_height: 0.35
+finger_speed: 0.03
+# Time allowed for the INIT finger open, mirroring the original open_gripper default.
+gripper_open_timeout_s: 4.0
+calibrate_tool: false
+fingers_inverted: false
+gripper_test: false
+head_pan: 0.0
+head_tilt: -0.77
+arm_joints:
+  - arm_1_joint
+  - arm_2_joint
+  - arm_3_joint
+  - arm_4_joint
+  - arm_5_joint
+  - arm_6_joint
+  - arm_7_joint
+finger_joints:
+  - gripper_left_finger_joint
+  - gripper_right_finger_joint
+torso_joint: torso_lift_joint
+head_joints:
+  - head_1_joint
+  - head_2_joint
+tool_offset: [0.0, 0.0, -0.1741]
+gripper_opening_limits: [0.0, 0.045]
+gripper_force_max: 100.0
+safety_command_horizon: 1.0
+joint_stall_steps: 10
+joint_progress_epsilon_rad: 0.000001
+pregrasp_settle_tolerance_rad: 0.01
+home_settle_tolerance_rad: 0.02
+linear_settle_tolerance_rad: 0.03
+linear_final_settle_tolerance_rad: 0.01
+linear_waypoint_spacing_m: 0.03
+joint_move_timeout_steps: 800
+linear_move_timeout_steps: 600
+# Provisional base-drift invariant pending evidence from the original-controller fixture.
+# Warn at 5 mm / 0.5 deg (trace event only); fail at 15 mm / 0.5 deg or when drift grows
+# faster than 10 mm/s sustained over 0.5 s.
+base_drift_warn_position_m: 0.005
+base_drift_warn_yaw_deg: 0.5
+base_drift_fail_position_m: 0.015
+base_drift_fail_yaw_deg: 0.5
+base_drift_rate_limit_m_per_s: 0.010
+base_drift_rate_window_s: 0.5
+# none keeps the Webots PROTO default (wheel position hold at 0).
+# wheels_zero_velocity switches both wheels to velocity control with target 0 at INIT/reset.
+hold_base: none
+# Reset posture semantics copied from the original controller INIT:
+# torso target, torso settle tolerance/timeout, then head settle window.
+reset_torso_settle_tolerance_m: 0.002
+reset_torso_timeout_steps: 1000
+reset_head_settle_ms: 2000
+pregrasp_route: interpolated
+# Re-derive the PREGRASP approach pose from the live base pose after the arm extension
+# rocks the base, then refresh LIFT from it (ADR-0016). true for M1-07; set false for
+# M1-06a equivalence runs that must match the original controller semantics.
+pregrasp_realign: true
+# Recompute each DESCEND/LIFT waypoint target from the live base pose every waypoint
+# instead of once per state (ADR-0018). true for M1-07; set false for M1-06a.
+closed_loop_waypoints: true
+# Local z offset from the finger endPoint Solid origin (slider joint) to the pad centre.
+# Matches tool_offset and the TiagoGripper.proto finger geometry (m).
+finger_tip_offset_m: 0.1741
+# MEASURED (ADR-0022): arm_7 endPoint Solid -> finger-pad midpoint offset in the sim
+# arm_7 Solid frame, measured at 4 safe poses (reset + small arm_1/arm_2/arm_4 moves),
+# per-axis spread <= 1.7e-7 m (runs/campaign-2026-11-11/phase3_finger_gt).
+# grasp_servo=gt_pad uses THIS; the legacy finger_tip_offset_m above is NOT used by the servo.
+pad_offset_arm7_simframe_m: [0.0, 0.0, 0.202825]
+# Can half-height from CAN.proto (R2025a): can lid z = can centre z + 0.0611 m.
+can_half_height_m: 0.0611
+# Pad-bottom offset below the Solid-based pad reference along the approach axis (m),
+# from the live contact-height probe (runs/campaign-2026-11-11/phase3_contact_probe).
+# MEASURED (2026-11-12): -0.00234 m (mean of 3 reps: -0.00262/-0.00225/-0.00216,
+# std 0.243 mm < 2 mm gate; trigger (c) = measured pad reference crossing the
+# can-lid plane; e_xy at contact 2.9-3.1 mm). Signed: negative means the pad
+# reference sits BELOW the can-lid plane at the probe's contact trigger; the
+# gt_pad DESCEND stop equation uses the signed value as-is (ADR-0023 amendment).
+probe_pad_reference_to_pad_bottom_m: -0.0023399045941977135
+# CAN radius for per-side finger clearance telemetry, from CAN.proto (m).
+can_radius_m: 0.03175
+# Table geometry, read from the `Table` instance in worlds/factory.wbt
+# (translation/size) and the Webots R2025a Table.proto: the top surface sits at
+# size.z and the footprint is size.x by size.y centred on the translation.
+table_top_height_m: 0.75
+table_footprint_centre_xy_m: [-0.23882837, -4.8402928]
+table_footprint_size_xy_m: [4.5, 1.5]
+# Policy value, not read from the world: required route clearance above the table top.
+# source: UNVERIFIED (inferred route requirement from ADR-0011)
+table_clearance_required_m: 0.05
+# Diagnostic threshold for FK versus Supervisor joint-anchor agreement.
+# source: UNVERIFIED (inferred tolerance)
+fk_ground_truth_tolerance_m: 0.01
+urdf_filename: tiago.urdf
+# ADR-0020 simulator-kinematics snapshot. When true, the backend attaches at reset
+# a read-only snapshot of link Solid poses and joint axes to the reset observation
+# diagnostics (key sim_kinematics_snapshot) and per-step GT Solid telemetry
+# (key kinematics_telemetry) to every observation; the default stays false so
+# normal runs carry no extra telemetry cost.
+export_sim_kinematics: false
+# Kinematic model used by the policy FK/IK chain (ADR-0020): 'urdf' keeps the
+# repo URDF chain (M1-06a equivalence baseline); 'sim' builds the chain from the
+# JSON written by `uv run python -m vlarobot.cli export-sim-kinematics`.
+kinematic_model: urdf
+# Static geometry calibration; null preserves fresh-v1 and legacy equivalence.
+# Set only for a separately recorded correction trial (ADR-0034).
+urdf_base_registration_file: null
+# Path of the simulator kinematics JSON, relative to configs/.
+sim_kinematics_filename: generated/sim_kinematics.json
+# Observe RGB camera images on reset/step (ADR-0020 addendum: bench-steps/diagnostics).
+# Default true preserves existing behavior; set false only when the brain does not read images.
+observe_images: true
+# Export probe (ADR-0020 addendum): stationarity-based settle, measured-angle axis derivation.
+# A joint is settled when |delta sensor| < probe_stationarity_threshold for
+# probe_stationarity_steps consecutive lockstep steps.
+probe_stationary_delta_rad: 0.0001
+probe_stationarity_steps: 3
+probe_max_steps_per_joint: 60
+probe_total_step_cap: 2000
+
+# ZMQ client per-request timeouts (ms). Justified vs bench-steps ~447 ms/step
+# (step+observation with RGB+kinematics_telemetry enabled on server):
+# step/apply/get_gt ~30s (>> single step); reset 120s (many settle steps/cold start);
+# ping 5s (liveness); shutdown 10s; export poll 300s (per-joint probe chunk, capped).
+# Startup wait for a server to come up is handled separately by run-episodes
+# (startup_timeout_s) with repeated short pings.
+zmq_ping_timeout_ms: 5000
+zmq_reset_timeout_ms: 120000
+zmq_step_timeout_ms: 30000
+zmq_apply_timeout_ms: 30000
+zmq_get_gt_timeout_ms: 30000
+zmq_shutdown_timeout_ms: 10000
+zmq_export_poll_timeout_ms: 300000
+# ZMQ simulator endpoint port (overridable via VLAROBOT_ZMQ_PORT). Server fails loudly on bind failure.
+zmq_port: 5555
+
+# ADR-0020 follow-up: tool/model/servo/settle/marker controls (defaults preserve prior behavior where possible)
+grasp_servo: none  # none | gt_pad (oracle servo, M3 perception replacement; M1-06a runs use none)
+allow_unverified_tool: false  # if true, allow kinematic_model=sim with fallback/unverified tool source
+debug_markers: false  # draw non-colliding GT/pad/FK debug markers (no physics)
+# Post-reset settle before first command (determinism/stability): wait until base linear+angular
+# velocity and tilt-change stay below thresholds for N consecutive steps, or fail explicitly.
+reset_post_settle_enabled: false
+reset_post_settle_velocity_threshold_m_s: 0.0001
+reset_post_settle_ang_velocity_threshold_rad_s: 0.0001
+reset_post_settle_tilt_delta_deg: 0.01
+reset_post_settle_consecutive_steps: 20
+reset_post_settle_max_steps: 500

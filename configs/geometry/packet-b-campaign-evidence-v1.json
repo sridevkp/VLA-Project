@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "source": "/home/tj330/programs/VLA-Project-analytic/runs/validation-evidence-v2-canonical",
+  "episodes": 18,
+  "steps": 13766,
+  "joint_names": [
+    "arm_1_joint",
+    "arm_2_joint",
+    "arm_3_joint",
+    "arm_4_joint",
+    "arm_5_joint",
+    "arm_6_joint",
+    "arm_7_joint",
+    "torso_lift_joint"
+  ],
+  "files": [
+    {
+      "episode": "episode-00",
+      "bytes": 192283,
+      "steps": 663,
+      "sha256": "46eaccc13a5e4f7b2d9c68fac82ca5ae44ae387e9efe1a6b2e2622052e6a7963"
+    },
+    {
+      "episode": "episode-01",
+      "bytes": 235464,
+      "steps": 836,
+      "sha256": "9b20d1c4bca6e84c4725265f62ce4cb7b3da562abd4349445f0889796ac70f47"
+    },
+    {
+      "episode": "episode-02",
+      "bytes": 57891,
+      "steps": 166,
+      "sha256": "2476cdb9971e512533831e3fc271374f4a8e864424493e6b382bc6e4fc670c3d"
+    },
+    {
+      "episode": "episode-03",
+      "bytes": 230278,
+      "steps": 680,
+      "sha256": "b1fa8324a4b0d73f4490bf20266255adb219e1dd992e2ea850915df5a4d010a1"
+    },
+    {
+      "episode": "episode-04",
+      "bytes": 304875,
+      "steps": 935,
+      "sha256": "1ffedc040397a29364af6fb0686f35781b7e8638502b57ce610c47de826476e2"
+    },
+    {
+      "episode": "episode-05",
+      "bytes": 319007,
+      "steps": 954,
+      "sha256": "486d5e99308a34887a2b8347fdc3f4bcd58d1ca064e14378bb9f2a816dcf7324"
+    },
+    {
+      "episode": "episode-06",
+      "bytes": 242345,
+      "steps": 738,
+      "sha256": "cb949acba275a0d2cb4d59df2b5427a41ae507e84fa691f4a44820e8cf9a5c7c"
+    },
+    {
+      "episode": "episode-07",
+      "bytes": 283193,
+      "steps": 1027,
+      "sha256": "ddb92cc0ffa2e64e9d2d503a7a2b9df6a58fe1c882c17047ecf06bfabbd4ea08"
+    },
+    {
+      "episode": "episode-08",
+      "bytes": 100633,
+      "steps": 348,
+      "sha256": "46e425dc0630c2ad09da8ccd3b4a91ca54af49483dc1dd4802ba022ad2e74eef"
+    },
+    {
+      "episode": "episode-09",
+      "bytes": 221081,
+      "steps": 791,
+      "sha256": "fe114be88c696502a151af2d806b6b9727d268ea4f66c0e59bc21f3afb15509b"
+    },
+    {
+      "episode": "episode-10",
+      "bytes": 244383,
+      "steps": 869,
+      "sha256": "25ba46ea2163a40660b0b44a561941c23dddb3e3a8a1a611d2ecb815ea9f6967"
+    },
+    {
+      "episode": "episode-11",
+      "bytes": 265929,
+      "steps": 815,
+      "sha256": "ef00b61d8858846bbd79c583bdfaf057e4279a5bf5bdc5fe4b98bab8ca26c8b3"
+    },
+    {
+      "episode": "episode-12",
+      "bytes": 221321,
+      "steps": 652,
+      "sha256": "5ac3724ae013c86dbfe5a1be39e9fd928460f5e4d8be39954ee0ce7e52f4f272"
+    },
+    {
+      "episode": "episode-13",
+      "bytes": 287968,
+      "steps": 983,
+      "sha256": "9918d2547427c6ed41fc041ede1845e481c8b79ef1750589c6f7ab6e7d0b1b68"
+    },
+    {
+      "episode": "episode-14",
+      "bytes": 326117,
+      "steps": 1009,
+      "sha256": "b55928250c2ae6a15b3da74ba26d462649924b750a82c394f01f313d9043c1bf"
+    },
+    {
+      "episode": "episode-15",
+      "bytes": 348625,
+      "steps": 1059,
+      "sha256": "409d5676f560705ac290f24347948be3de509dc92432e77ef1bef7c5278c5b18"
+    },
+    {
+      "episode": "episode-16",
+      "bytes": 277524,
+      "steps": 849,
+      "sha256": "3086f88d588278f8e0b1a620f2ab7aab56b973376eb1e0144cd9da910399df1e"
+    },
+    {
+      "episode": "episode-17",
+      "bytes": 113377,
+      "steps": 392,
+      "sha256": "7db838c4e7700e2d0bb253041ddac283e366fc6313677f2622dcd66c1434b265"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vlarobot"
+version = "0.1.0"
+description = "Risk-aware world-model VLA robotics for TIAGo"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "msgpack>=1.0",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+    "pyzmq>=26",
+    "typer>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pillow>=10.4",
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "ruff>=0.11",
+    "ty>=0.0.99,<0.1.0",
+]
+
+[project.optional-dependencies]
+core = []
+sim = [
+    "ikpy>=3.3",
+]
+perception = []
+vla = []
+dashboard = []
+# Eval recording (EpisodeRecorder JPEG frames); licence MIT-CMU, see ADR-0031.
+eval = [
+    "pillow>=10.4",
+]
+# Keep the `dev` extra for the documented `uv sync --extra dev` command.
+dev = [
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "ruff>=0.11",
+    "ty>=0.0.99,<0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.data-files]
+"configs" = ["configs/robot.yaml", "configs/safety.yaml", "configs/eval.yaml", "configs/scenarios.yaml", "configs/vla.yaml", "configs/world_model.yaml", "configs/training.yaml", "configs/worldmind_production.yaml", "configs/worldmind_diagnostic.yaml", "configs/worldmind_webots_diagnostic.yaml", "configs/worldmind_arm_sweep.yaml", "configs/worldmind_geometry_diagnostic.yaml", "configs/worldmind_webots_geometry_inspection.yaml"]
+"configs/calibration" = ["configs/calibration/urdf-base-train-v1.yaml"]
+"configs/geometry" = ["configs/geometry/scene-collision-v1.yaml", "configs/geometry/webots-proto-sources-v1.yaml", "configs/geometry/live-geometry-evidence-v1.yaml"]
+"configs/report" = ["configs/report/definitions.candidate.json"]
+"assets/webots/protos/r2025a" = ["assets/webots/protos/r2025a/*.proto"]
+
+[tool.setuptools.package-data]
+"vlarobot.backends.webots" = ["*.urdf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "webots: requires a local Webots installation and simulator",
+    "gpu: requires a supported GPU and GPU-enabled dependencies",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "controllers",
+    "model",
+    "tiago_ikfast",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ty]
+# Exact-diagnostic baseline for two pre-existing findings in files that must not be
+# edited: src/vlarobot/backends/webots/backend.py (frozen baseline provenance lock)
+# and src/vlarobot/diagnostics/ad2/admission.py (closed A-D2 infrastructure).
+# Entries are file+rule+column specific; all other diagnostics remain active.
+# ty is pinned at 0.0.99 by uv.lock; the baseline format is preview and must be
+# regenerated deliberately with: uv run ty check src --update-baseline
+baseline = "ty-baseline.json"

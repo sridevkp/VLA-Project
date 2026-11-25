@@ -1,0 +1,88 @@
+# Dedicated read-only Webots geometry inspection (ADR-0055, extended by ADR-0058).
+#
+# This config is read only by `worldmind-webots-geometry-inspection`. It reuses the existing
+# no-actuation session, identity and launch-attestation contract, and adds only the pinned
+# geometry catalogs. It contains no Eq. 3.8 components, weights, ranking direction, evaluator,
+# calibration result, scoring switch or TEST/TRAIN field. Running the command requires separate
+# explicit owner authorization; this task only adds the inert interface and tests.
+schema_version: 1
+status: "diagnostic_uncalibrated"
+split: "validation"
+state_source: "oracle"
+mode: "launch"
+
+backend:
+  kind: "webots"
+  declaration: "webots_factory_world_supervisor_geometry_export_v1"
+
+# Resolved via WEBOTS_HOME or PATH. A path is also accepted on either OS.
+webots: "webots"
+world: "../worlds/factory.wbt"
+world_sha256: "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+# In launch mode the runner binds a free local port; this value is the connect-mode contract.
+endpoint: "tcp://127.0.0.1:5555"
+
+target_object: "CAN"
+robot_identity: "TIAGO_ROBOT"
+webots_version: "R2025a"
+seed: 0
+scenario: "validation-clear-i00-s0"
+# Diagnostic observation window only; not a safety or control threshold.
+observation_freshness_max_s: 5.0
+
+geometry:
+  urdf: "../src/vlarobot/backends/webots/tiago.urdf"
+  registration: "calibration/urdf-base-train-v1.yaml"
+  robot_config: "robot.yaml"
+  required_arm_links:
+    - "TIAGo front arm"
+    - "TIAGo front arm_3"
+    - "arm_2_link"
+    - "arm_3_link"
+    - "arm_4_link"
+    - "arm_5_link"
+    - "arm_6_link"
+    - "arm_7_link"
+    - "wrist_ft_tool_link"
+  # No reviewed full-arm swept certificate exists; this permits inspection but never motion.
+  swept_arm_certificate: null
+
+dependencies:
+  pose_solver_binding: "corrected_bounded_pose_solver_v1"
+  safety_binding: "runtime_safety_monitor_v1"
+  verification_binding: "placement_verifier_v1"
+  geometry_binding: "urdf_collision_capsules"
+
+diagnostic:
+  mode: "read_only_inspection"
+  no_actuation: true
+  scored_evaluation_allowed: false
+  evidence_collection_split: "validation"
+
+geometry_inspection:
+  schema_version: 2
+  status: "diagnostic_uncalibrated"
+  mode: "live_read_only_bounding_object_export"
+  scene_catalog: "geometry/scene-collision-v1.yaml"
+  scene_catalog_sha256: "c0ba359b25c9163ee3b6c95b86baa36152e2d852d00460d2b86203e3ca63d035"
+  proto_manifest: "geometry/webots-proto-sources-v1.yaml"
+  proto_manifest_sha256: "2d6f84e260b36ff4b754793813216a6ef0c38d8d76aa225ebc534ed4eb0a7362"
+  arm_sweep_contract: "worldmind_arm_sweep.yaml"
+  arm_sweep_contract_sha256: "d1f75347fc9b13d48e8ab400caf1466c0f33758d531e2850f64a114d721ade7f"
+  # Selector-only descriptor. Expected geometry is derived independently from the pinned
+  # Table.proto, SolidBox.proto, world and scene catalog; no expected value is sent to Webots.
+  table_targets:
+    parent_type: "Table"
+    nested_type: "SolidBox"
+    bounding_shape_type: "Box"
+    source_names:
+      - "main frame"
+      - "foot 1"
+      - "foot 2"
+      - "foot 3"
+      - "foot 4"
+    translation_tolerance_m: 0.0001
+    rotation_tolerance_rad: 0.0001
+    size_tolerance_m: 0.0001
+    transform_translation_tolerance_m: 0.0001
+    transform_rotation_tolerance_rad: 0.0001

@@ -1,0 +1,792 @@
+"""Pure, non-scored evidence rules for the no-actuation Webots diagnostic.
+
+This module imports no simulator, backend, ROS or MuJoCo package. The real Webots session is
+collected behind ``vlarobot.backends.worldmind_webots_diagnostic`` and injected as a snapshot.
+Nothing here scores a campaign, selects parameters, reads TEST/TRAIN evidence or commands a robot.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from time import time
+from typing import Literal, cast
+
+import yaml
+
+from vlarobot.core.types import GroundTruth, Observation, Pose3D
+
+WEBOTS_DIAGNOSTIC_SCHEMA_VERSION = 1
+WEBOTS_DIAGNOSTIC_STATUS = "diagnostic_uncalibrated"
+WEBOTS_DIAGNOSTIC_MODE = "read_only_inspection"
+FROZEN_DIAGNOSTIC_SPLIT = "validation"
+FROZEN_STATE_SOURCE = "oracle"
+AUTHORITATIVE_REPORT_SHA256 = "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+CAPTURE_TIMESTAMP_FUTURE_SKEW_MAX_S = 1.0
+CAPTURE_TIMESTAMP_CONSISTENCY_MAX_S = 1.0
+
+_TOP_LEVEL_KEYS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "split",
+        "state_source",
+        "mode",
+        "backend",
+        "webots",
+        "world",
+        "world_sha256",
+        "endpoint",
+        "target_object",
+        "robot_identity",
+        "webots_version",
+        "seed",
+        "scenario",
+        "observation_freshness_max_s",
+        "geometry",
+        "dependencies",
+        "diagnostic",
+    }
+)
+_FORBIDDEN_TOP_LEVEL_KEYS = frozenset(
+    {
+        "train",
+        "test",
+        "dataset",
+        "scoring",
+        "calibration",
+        "components",
+        "weights",
+        "evaluator",
+        "maximize",
+    }
+)
+_GEOMETRY_KEYS = frozenset(
+    {
+        "urdf",
+        "registration",
+        "robot_config",
+        "required_arm_links",
+        "swept_arm_certificate",
+    }
+)
+_DEPENDENCY_KEYS = frozenset(
+    {
+        "pose_solver_binding",
+        "safety_binding",
+        "verification_binding",
+        "geometry_binding",
+    }
+)
+_DIAGNOSTIC_KEYS = frozenset(
+    {
+        "mode",
+        "no_actuation",
+        "scored_evaluation_allowed",
+        "evidence_collection_split",
+    }
+)
+_FORBIDDEN_CALLS = ("apply", "step", "reset", "export_kinematics")
+
+
+@dataclass(frozen=True)
+class WebotsDiagnosticConfig:
+    """Fully reviewed read-only diagnostic contract; no scientific parameters are present."""
+
+    schema_version: int
+    status: str
+    split: str
+    state_source: str
+    mode: Literal["launch", "connect"]
+    backend_declaration: str
+    webots: str
+    world: Path
+    world_sha256: str
+    endpoint: str
+    target_object: str
+    robot_identity: str
+    webots_version: str
+    seed: int
+    scenario: str
+    observation_freshness_max_s: float
+    urdf_path: Path
+    registration_path: Path
+    robot_config_path: Path
+    required_arm_links: tuple[str, ...]
+    swept_arm_certificate: Path | None
+    pose_solver_binding: str
+    safety_binding: str
+    verification_binding: str
+    geometry_binding: str
+    diagnostic_mode: str
+    no_actuation: bool
+    scored_evaluation_allowed: bool
+    evidence_collection_split: str
+    source_path: Path
+
+
+@dataclass(frozen=True)
+class DiagnosticSnapshot:
+    """Read-only backend facts collected by the backend-boundary adapter."""
+
+    ping: Mapping[str, object]
+    observation: Observation
+    ground_truth: GroundTruth
+    identity: Mapping[str, object]
+    captured_at_utc: str
+    age_s: float
+    dependency_availability: Mapping[str, bool]
+    call_counts: Mapping[str, int]
+    launch_attestation: Mapping[str, object] = field(default_factory=dict)
+    capture_wall_time_s: float | None = None
+    capture_timestamp_blockers: tuple[str, ...] = ()
+    # Wall-clock time at which the snapshot was consumed (validated and used by the caller)
+    # while the read-only session was still live. Recorded before session teardown so that
+    # shutdown latency is never misattributed to observation staleness.
+    consumption_wall_time_s: float | None = None
+
+
+@dataclass(frozen=True)
+class ConfigPreflight:
+    blockers: tuple[str, ...]
+    hashes: Mapping[str, str | None]
+    motion_blockers: tuple[str, ...]
+
+
+def _mapping(value: object, name: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be a mapping")
+    return cast(Mapping[str, object], value)
+
+
+def _keys(value: Mapping[str, object], expected: frozenset[str], name: str) -> None:
+    if set(value) != expected:
+        missing = sorted(expected - set(value))
+        unexpected = sorted(set(value) - expected)
+        raise ValueError(f"{name} has missing={missing} and unexpected={unexpected}")
+
+
+def _text(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a nonempty string")
+    return value.strip()
+
+
+def _sha256_text(value: object, name: str) -> str:
+    text = _text(value, name).lower()
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text):
+        raise ValueError(f"{name} must be a 64-character SHA-256 hex digest")
+    return text
+
+
+def _endpoint(value: object, name: str) -> str:
+    text = _text(value, name)
+    if not text.startswith("tcp://") or text.count(":") != 2:
+        raise ValueError(f"{name} must be a tcp://host:port endpoint")
+    port_text = text.rsplit(":", 1)[1]
+    if not port_text.isdigit() or not 1 <= int(port_text) <= 65535:
+        raise ValueError(f"{name} port must be in [1,65535]")
+    return text
+
+
+def _positive_float(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite positive number")
+    number = float(value)
+    if not math.isfinite(number) or number <= 0.0:
+        raise ValueError(f"{name} must be a finite positive number")
+    return number
+
+
+def _nonnegative_int(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return value
+
+
+def _path(value: object, name: str, source: Path) -> Path:
+    text = _text(value, name)
+    candidate = Path(text).expanduser()
+    return (
+        (source.parent / candidate).resolve()
+        if not candidate.is_absolute()
+        else candidate.resolve()
+    )
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def load_webots_diagnostic_config(
+    path: Path, *, extra_top_level_keys: frozenset[str] = frozenset()
+) -> WebotsDiagnosticConfig:
+    """Load the strict read-only config; reject scoring, TEST/TRAIN and scientific parameters.
+
+    ``extra_top_level_keys`` is used only by sibling read-only diagnostics that nest their own
+    reviewed section; it cannot override the forbidden-key or diagnostic-mode gates below.
+    """
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"Webots diagnostic config not found: {source}")
+    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
+    root = _mapping(raw, "Webots diagnostic config")
+    unexpected = sorted(set(root) & _FORBIDDEN_TOP_LEVEL_KEYS)
+    if unexpected:
+        raise ValueError(f"Webots diagnostic config forbids keys: {unexpected}")
+    _keys(root, _TOP_LEVEL_KEYS | extra_top_level_keys, "Webots diagnostic config")
+
+    if root["schema_version"] != WEBOTS_DIAGNOSTIC_SCHEMA_VERSION:
+        raise ValueError("unsupported Webots diagnostic schema_version")
+    if root["status"] != WEBOTS_DIAGNOSTIC_STATUS:
+        raise ValueError(f"Webots diagnostic status must be '{WEBOTS_DIAGNOSTIC_STATUS}'")
+    if root["split"] != FROZEN_DIAGNOSTIC_SPLIT:
+        raise ValueError("Webots read-only diagnostic is VALIDATION-only")
+    if root["state_source"] != FROZEN_STATE_SOURCE:
+        raise ValueError("Webots diagnostic state source must be declared as oracle")
+    mode = _text(root["mode"], "mode")
+    if mode not in ("launch", "connect"):
+        raise ValueError("Webots diagnostic mode must be 'launch' or 'connect'")
+
+    backend = _mapping(root["backend"], "backend")
+    _keys(backend, frozenset({"kind", "declaration"}), "backend")
+    if _text(backend["kind"], "backend.kind") != "webots":
+        raise ValueError("this diagnostic requires backend.kind='webots'")
+    declaration = _text(backend["declaration"], "backend.declaration")
+    if "<" in declaration or ">" in declaration:
+        raise ValueError("backend.declaration is still a blocked template placeholder")
+
+    diagnostic = _mapping(root["diagnostic"], "diagnostic")
+    _keys(diagnostic, _DIAGNOSTIC_KEYS, "diagnostic")
+    if diagnostic["mode"] != WEBOTS_DIAGNOSTIC_MODE:
+        raise ValueError(f"diagnostic.mode must be '{WEBOTS_DIAGNOSTIC_MODE}'")
+    if diagnostic["no_actuation"] is not True:
+        raise ValueError("diagnostic.no_actuation must be true")
+    if diagnostic["scored_evaluation_allowed"] is not False:
+        raise ValueError("a read-only diagnostic can never allow scored evaluation")
+    if diagnostic["evidence_collection_split"] != FROZEN_DIAGNOSTIC_SPLIT:
+        raise ValueError("diagnostic evidence collection is VALIDATION-only")
+
+    geometry = _mapping(root["geometry"], "geometry")
+    _keys(geometry, _GEOMETRY_KEYS, "geometry")
+    raw_links = geometry["required_arm_links"]
+    links = (
+        tuple(
+            _text(value, "geometry.required_arm_links")
+            for value in cast(Sequence[object], raw_links)
+        )
+        if isinstance(raw_links, Sequence) and not isinstance(raw_links, (str, bytes))
+        else ()
+    )
+    if not links or len(set(links)) != len(links):
+        raise ValueError("geometry.required_arm_links must be unique and nonempty")
+    certificate = geometry["swept_arm_certificate"]
+    if certificate is not None:
+        certificate = _path(certificate, "geometry.swept_arm_certificate", source)
+
+    dependencies = _mapping(root["dependencies"], "dependencies")
+    _keys(dependencies, _DEPENDENCY_KEYS, "dependencies")
+
+    return WebotsDiagnosticConfig(
+        schema_version=WEBOTS_DIAGNOSTIC_SCHEMA_VERSION,
+        status=WEBOTS_DIAGNOSTIC_STATUS,
+        split=FROZEN_DIAGNOSTIC_SPLIT,
+        state_source=FROZEN_STATE_SOURCE,
+        mode=mode,
+        backend_declaration=declaration,
+        webots=_text(root["webots"], "webots"),
+        world=_path(root["world"], "world", source),
+        world_sha256=_sha256_text(root["world_sha256"], "world_sha256"),
+        endpoint=_endpoint(root["endpoint"], "endpoint"),
+        target_object=_text(root["target_object"], "target_object"),
+        robot_identity=_text(root["robot_identity"], "robot_identity"),
+        webots_version=_text(root["webots_version"], "webots_version"),
+        seed=_nonnegative_int(root["seed"], "seed"),
+        scenario=_text(root["scenario"], "scenario"),
+        observation_freshness_max_s=_positive_float(
+            root["observation_freshness_max_s"], "observation_freshness_max_s"
+        ),
+        urdf_path=_path(geometry["urdf"], "geometry.urdf", source),
+        registration_path=_path(geometry["registration"], "geometry.registration", source),
+        robot_config_path=_path(geometry["robot_config"], "geometry.robot_config", source),
+        required_arm_links=links,
+        swept_arm_certificate=certificate,
+        pose_solver_binding=_text(
+            dependencies["pose_solver_binding"], "dependencies.pose_solver_binding"
+        ),
+        safety_binding=_text(dependencies["safety_binding"], "dependencies.safety_binding"),
+        verification_binding=_text(
+            dependencies["verification_binding"], "dependencies.verification_binding"
+        ),
+        geometry_binding=_text(dependencies["geometry_binding"], "dependencies.geometry_binding"),
+        diagnostic_mode=WEBOTS_DIAGNOSTIC_MODE,
+        no_actuation=True,
+        scored_evaluation_allowed=False,
+        evidence_collection_split=FROZEN_DIAGNOSTIC_SPLIT,
+        source_path=source,
+    )
+
+
+def preflight_webots_diagnostic(config: WebotsDiagnosticConfig) -> ConfigPreflight:
+    """Verify local geometry/config coverage before any simulator process is started."""
+    blockers: list[str] = []
+    paths = {
+        "world": config.world,
+        "urdf": config.urdf_path,
+        "registration": config.registration_path,
+        "robot_config": config.robot_config_path,
+        "config": config.source_path,
+    }
+    if config.swept_arm_certificate is not None:
+        paths["swept_arm_certificate"] = config.swept_arm_certificate
+    hashes: dict[str, str | None] = {}
+    for name, path in paths.items():
+        digest = _sha256_file(path)
+        hashes[name] = digest
+        if digest is None:
+            blockers.append(f"missing geometry/config file: {name}={path}")
+    if hashes.get("world") is not None and hashes["world"] != config.world_sha256:
+        blockers.append("world SHA-256 does not match the reviewed diagnostic config")
+    motion_blockers: list[str] = ["diagnostic_no_actuation_mode"]
+    if config.swept_arm_certificate is None or hashes.get("swept_arm_certificate") is None:
+        motion_blockers.append("unverified-arm-sweep")
+    return ConfigPreflight(tuple(blockers), hashes, tuple(motion_blockers))
+
+
+def ensure_fresh_output(out_dir: Path) -> None:
+    """Refuse an existing output path before any session, planner or evidence write."""
+    if Path(out_dir).exists():
+        raise FileExistsError(f"prior evidence directory must not be overwritten: {out_dir}")
+
+
+def _finite_pose(pose: Pose3D) -> bool:
+    values = (pose.position.x, pose.position.y, pose.position.z, *pose.orientation)
+    return all(math.isfinite(float(value)) for value in values)
+
+
+def observation_age_at_consumption(
+    snapshot: DiagnosticSnapshot, *, now_wall_time_s: float | None = None
+) -> float:
+    """Observation age derived from actual capture time at validation/consumption.
+
+    When the snapshot records the point-of-use time (``consumption_wall_time_s``), that
+    recorded time is authoritative. The caller records it while the session is still live,
+    immediately after receipt and before teardown, so post-consumption shutdown/finalization
+    latency cannot be mistaken for observation staleness. An explicit ``now_wall_time_s``
+    still overrides the recorded value for diagnostic recomputation.
+    """
+    if snapshot.capture_timestamp_blockers or snapshot.capture_wall_time_s is None:
+        return float("inf")
+    if now_wall_time_s is None:
+        now_wall_time_s = snapshot.consumption_wall_time_s
+    return capture_age_s(snapshot.capture_wall_time_s, now_wall_time_s=now_wall_time_s)
+
+
+def _observation_blockers(
+    config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot
+) -> list[str]:
+    blockers: list[str] = list(snapshot.capture_timestamp_blockers)
+    observation = snapshot.observation
+    if not math.isfinite(observation.t) or observation.t < 0.0:
+        blockers.append("observation timestamp is not finite and nonnegative")
+    age_s = observation_age_at_consumption(snapshot)
+    if not math.isfinite(age_s) or age_s < 0.0:
+        blockers.append("observation age is invalid")
+    elif age_s > config.observation_freshness_max_s:
+        blockers.append("observation is stale")
+    robot = observation.robot
+    if not all(math.isfinite(float(value)) for value in robot.joint_pos.values()):
+        blockers.append("robot joint positions are not finite")
+    if not all(math.isfinite(float(value)) for value in robot.joint_vel.values()):
+        blockers.append("robot joint velocities are not finite")
+    if not math.isfinite(float(robot.gripper_opening)):
+        blockers.append("gripper opening is not finite")
+    if not _finite_pose(robot.ee_pose):
+        blockers.append("end-effector pose is not finite")
+    if robot.base_pose_world is not None and not _finite_pose(robot.base_pose_world):
+        blockers.append("world-frame base pose is not finite")
+    target = snapshot.ground_truth.object_poses.get(config.target_object)
+    if target is None or not _finite_pose(target):
+        blockers.append("declared oracle target pose is missing or not finite")
+    return blockers
+
+
+def _observed_text(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _launch_version_attestation(
+    config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot
+) -> tuple[str | None, str | None]:
+    """Validate executable-bound version evidence; return (blocker, observed version)."""
+    attestation = snapshot.launch_attestation
+    if not attestation:
+        return "launch-time Webots version evidence is unavailable", None
+
+    reported = _observed_text(attestation.get("reported_version"))
+    if reported is None:
+        return "launch executable reported Webots version is unavailable", None
+
+    executable = _observed_text(attestation.get("executable_path"))
+    command_executable = _observed_text(attestation.get("launch_command_executable"))
+    digest = _observed_text(attestation.get("executable_sha256"))
+    if executable is None or command_executable is None or digest is None:
+        return "launch executable identity evidence is incomplete", reported
+    if Path(executable) != Path(command_executable):
+        return (
+            f"launch executable path mismatch: probed={executable} spawned={command_executable}",
+            reported,
+        )
+    if attestation.get("verified_executable_version_pair") is not True:
+        return "launch executable/version pair is not verified", reported
+
+    pid = attestation.get("process_pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return "launched Webots process identity is missing", reported
+    if attestation.get("process_identity_verified") is not True:
+        return "launched Webots process executable does not match the attested executable", reported
+
+    if reported != config.webots_version:
+        return (
+            f"launch executable Webots version mismatch: "
+            f"observed={reported} expected={config.webots_version}",
+            reported,
+        )
+    return None, reported
+
+
+def _snapshot_blockers(config: WebotsDiagnosticConfig, snapshot: DiagnosticSnapshot) -> list[str]:
+    blockers: list[str] = []
+    session = snapshot.ping.get("session_id")
+    if session is None:
+        blockers.append("simulator session identity is missing")
+    elif not isinstance(session, Mapping) or not {"pid", "start_time", "nonce"}.issubset(session):
+        blockers.append("simulator session identity is incomplete")
+
+    observed_world_hash = _observed_text(snapshot.ping.get("world_sha256"))
+    if observed_world_hash is None:
+        blockers.append("running Webots world hash is missing")
+    elif observed_world_hash.lower() != config.world_sha256:
+        blockers.append(
+            "running Webots world hash mismatch: "
+            f"observed={observed_world_hash} expected={config.world_sha256}"
+        )
+
+    if snapshot.identity.get("simulator") != "webots":
+        blockers.append("backend identity is not Webots")
+    robot_def = _observed_text(snapshot.identity.get("robot_def"))
+    if robot_def is None:
+        blockers.append("robot DEF identity is missing")
+    else:
+        if robot_def != config.robot_identity:
+            blockers.append(
+                f"robot identity mismatch: observed={robot_def} expected={config.robot_identity}"
+            )
+        if snapshot.identity.get("robot_def_cross_checked") is not True:
+            blockers.append("robot DEF identity was not cross-checked against the node")
+
+    launch_blocker, launch_version = _launch_version_attestation(config, snapshot)
+    if launch_blocker is not None:
+        blockers.append(launch_blocker)
+
+    controller_version = _observed_text(snapshot.identity.get("webots_version"))
+    if controller_version is not None:
+        if controller_version != config.webots_version:
+            blockers.append(
+                "controller-reported Webots version mismatch: "
+                f"observed={controller_version} expected={config.webots_version}"
+            )
+        if launch_version is not None and controller_version != launch_version:
+            blockers.append(
+                "controller-reported Webots version disagrees with launch executable evidence: "
+                f"controller={controller_version} executable={launch_version}"
+            )
+
+    if snapshot.identity.get("first_command_step_count") is not None:
+        blockers.append("an actuator command was issued in this backend session")
+    if not all(snapshot.dependency_availability.values()):
+        blockers.append("required solver/geometry dependency is unavailable")
+    for name in _FORBIDDEN_CALLS:
+        if snapshot.call_counts.get(name, 0) != 0:
+            blockers.append(f"forbidden backend call was attempted: {name}")
+    blockers.extend(_observation_blockers(config, snapshot))
+    return blockers
+
+
+def _pose_payload(pose: Pose3D | None) -> dict[str, object] | None:
+    if pose is None:
+        return None
+    return {
+        "position": [pose.position.x, pose.position.y, pose.position.z],
+        "orientation": list(pose.orientation),
+    }
+
+
+@dataclass(frozen=True)
+class CaptureTimestamp:
+    captured_at_utc: str
+    capture_wall_time_s: float
+
+
+def _parse_captured_at_utc(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def validate_capture_timestamp(
+    payload: Mapping[str, object], *, now_wall_time_s: float | None = None
+) -> tuple[CaptureTimestamp | None, tuple[str, ...]]:
+    """Validate server-side capture timestamps; reject missing/invalid/future/inconsistent values.
+
+    A valid runtime-grounded read-only observation must carry a finite capture wall-clock time
+    and a consistent UTC timestamp recorded at capture. Future timestamps are rejected (never
+    clamped to zero). Age is derived from the validated capture time at validation/consumption.
+    """
+    now_s = time() if now_wall_time_s is None else float(now_wall_time_s)
+    blockers: list[str] = []
+
+    if "capture_wall_time_s" not in payload or "captured_at_utc" not in payload:
+        blockers.append("capture timestamp is missing")
+        return None, tuple(blockers)
+
+    raw_wall = payload.get("capture_wall_time_s")
+    if raw_wall is None:
+        blockers.append("capture timestamp is null")
+    elif isinstance(raw_wall, bool) or not isinstance(raw_wall, (int, float)):
+        blockers.append("capture timestamp has invalid type")
+    else:
+        wall_s = float(raw_wall)
+        if not math.isfinite(wall_s):
+            blockers.append("capture timestamp is non-finite")
+        elif wall_s < 0.0:
+            blockers.append("capture timestamp is negative")
+        elif wall_s - now_s > CAPTURE_TIMESTAMP_FUTURE_SKEW_MAX_S:
+            blockers.append("capture timestamp is unreasonably ahead of receiving clock")
+        else:
+            parsed_utc = _parse_captured_at_utc(payload.get("captured_at_utc"))
+            if parsed_utc is None:
+                blockers.append("capture timestamp UTC value is invalid")
+            else:
+                utc_epoch_s = parsed_utc.timestamp()
+                if (
+                    not math.isfinite(utc_epoch_s)
+                    or abs(wall_s - utc_epoch_s) > CAPTURE_TIMESTAMP_CONSISTENCY_MAX_S
+                ):
+                    blockers.append("capture timestamp fields are inconsistent")
+                else:
+                    return (
+                        CaptureTimestamp(
+                            captured_at_utc=parsed_utc.isoformat(), capture_wall_time_s=wall_s
+                        ),
+                        (),
+                    )
+    return None, tuple(blockers)
+
+
+def capture_age_s(capture_wall_time_s: float, *, now_wall_time_s: float | None = None) -> float:
+    """Age at validation/consumption derived from actual capture time (never request latency)."""
+    now_s = time() if now_wall_time_s is None else float(now_wall_time_s)
+    age = now_s - float(capture_wall_time_s)
+    if not math.isfinite(age):
+        return float("inf")
+    return max(0.0, age)
+
+
+def finalize_webots_diagnostic(
+    config: WebotsDiagnosticConfig, preflight: ConfigPreflight, snapshot: DiagnosticSnapshot
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    """Return exclusive, non-scored diagnostic, state and provenance artifacts."""
+    observation_blockers = _observation_blockers(config, snapshot)
+    launch_blocker, launch_version = _launch_version_attestation(config, snapshot)
+    controller_version = _observed_text(snapshot.identity.get("webots_version"))
+    runtime_version = launch_version or controller_version
+    blockers = [*preflight.blockers, *_snapshot_blockers(config, snapshot)]
+    ready = not blockers
+    consumption_age_s = observation_age_at_consumption(snapshot)
+    receipt_age_s = snapshot.age_s if math.isfinite(snapshot.age_s) else None
+    report: dict[str, object] = {
+        "schema_version": WEBOTS_DIAGNOSTIC_SCHEMA_VERSION,
+        "outcome": "PASS" if ready else "FAILED",
+        "diagnostic_mode": WEBOTS_DIAGNOSTIC_MODE,
+        "scored_evaluation_allowed": False,
+        "scored_evaluator": None,
+        "scored_results_written": False,
+        "frozen_campaign_modified": False,
+        "test_split_accessed": False,
+        "train_split_accessed": False,
+        "state_source": config.state_source,
+        "oracle_declaration": config.backend_declaration,
+        "oracle_equivalent_to_perception": False,
+        "split": config.split,
+        "backend_declaration": config.backend_declaration,
+        "backend_kind": "webots",
+        "launch_mode": config.mode,
+        "endpoint": snapshot.ping.get("endpoint"),
+        "simulator_session_id": snapshot.ping.get("session_id"),
+        "running_world_sha256_observed": snapshot.ping.get("world_sha256"),
+        "simulator_identity": dict(snapshot.identity),
+        "simulator_version": runtime_version,
+        "runtime_webots_version_observed": runtime_version,
+        "runtime_webots_version_available": runtime_version is not None,
+        "runtime_webots_version_verified": launch_blocker is None and launch_version is not None,
+        "runtime_webots_version_source": (
+            "launch_executable"
+            if launch_version is not None
+            else ("controller" if controller_version is not None else None)
+        ),
+        "controller_webots_version_observed": controller_version,
+        "controller_webots_version_available": controller_version is not None,
+        "launch_webots_attestation": dict(snapshot.launch_attestation),
+        "robot_def_observed": snapshot.identity.get("robot_def"),
+        "robot_def_cross_checked": snapshot.identity.get("robot_def_cross_checked"),
+        "robot_name_observed": snapshot.identity.get("robot_name"),
+        "robot_type_observed": snapshot.identity.get("robot_type"),
+        "robot_identity_declared": config.robot_identity,
+        "observation_timestamp_s": snapshot.observation.t,
+        "observation_age_s": consumption_age_s if math.isfinite(consumption_age_s) else None,
+        "observation_age_s_at_receipt": receipt_age_s,
+        "observation_freshness_limit_s": config.observation_freshness_max_s,
+        "observation_valid": not observation_blockers,
+        "observation_blockers": observation_blockers,
+        "geometry_hashes": dict(preflight.hashes),
+        "required_arm_links": list(config.required_arm_links),
+        "swept_arm_certificate": (
+            None if config.swept_arm_certificate is None else str(config.swept_arm_certificate)
+        ),
+        "motion_allowed": False,
+        "motion_blockers": list(preflight.motion_blockers),
+        "read_only_inspection_allowed": not preflight.blockers,
+        "no_actuation": True,
+        "backend_apply_calls": snapshot.call_counts.get("apply", 0),
+        "backend_step_calls": snapshot.call_counts.get("step", 0),
+        "backend_reset_calls": snapshot.call_counts.get("reset", 0),
+        "backend_export_calls": snapshot.call_counts.get("export_kinematics", 0),
+        "actuator_commands": [],
+        "dependency_availability": dict(snapshot.dependency_availability),
+        "safety_check_readiness": all(snapshot.dependency_availability.values()),
+        "blockers": blockers,
+    }
+    age_s = observation_age_at_consumption(snapshot)
+    receipt_age_s = snapshot.age_s if math.isfinite(snapshot.age_s) else None
+    state = {
+        "captured_at_utc": snapshot.captured_at_utc,
+        "observation_timestamp_s": snapshot.observation.t,
+        "observation_age_s": age_s if math.isfinite(age_s) else None,
+        "observation_age_s_at_receipt": receipt_age_s,
+        "joint_pos": dict(snapshot.observation.robot.joint_pos),
+        "joint_vel": dict(snapshot.observation.robot.joint_vel),
+        "ee_pose": _pose_payload(snapshot.observation.robot.ee_pose),
+        "base_pose_world": _pose_payload(snapshot.observation.robot.base_pose_world),
+        "gripper_opening": snapshot.observation.robot.gripper_opening,
+        "oracle_target_object": config.target_object,
+        "oracle_target_pose": _pose_payload(
+            snapshot.ground_truth.object_poses.get(config.target_object)
+        ),
+    }
+    provenance = {
+        "diagnostic_only": True,
+        "report_sha256": AUTHORITATIVE_REPORT_SHA256,
+        "config_sha256": preflight.hashes.get("config"),
+        "world_sha256": preflight.hashes.get("world"),
+        "urdf_sha256": preflight.hashes.get("urdf"),
+        "registration_sha256": preflight.hashes.get("registration"),
+        "robot_config_sha256": preflight.hashes.get("robot_config"),
+        "session_id": snapshot.ping.get("session_id"),
+        "captured_at_utc": snapshot.captured_at_utc,
+        "frozen_campaign_modified": False,
+        "scored_results_written": False,
+    }
+    return report, state, provenance
+
+
+def failed_webots_diagnostic(
+    config: WebotsDiagnosticConfig,
+    preflight: ConfigPreflight,
+    reason: str,
+    dependency_availability: Mapping[str, bool] | None = None,
+) -> dict[str, object]:
+    """Explicit fail-closed report used before any backend session is created."""
+    availability = dict(dependency_availability or {})
+    return {
+        "schema_version": WEBOTS_DIAGNOSTIC_SCHEMA_VERSION,
+        "outcome": "FAILED",
+        "diagnostic_mode": WEBOTS_DIAGNOSTIC_MODE,
+        "scored_evaluation_allowed": False,
+        "scored_evaluator": None,
+        "scored_results_written": False,
+        "frozen_campaign_modified": False,
+        "test_split_accessed": False,
+        "train_split_accessed": False,
+        "state_source": config.state_source,
+        "backend_declaration": config.backend_declaration,
+        "geometry_hashes": dict(preflight.hashes),
+        "motion_allowed": False,
+        "motion_blockers": list(preflight.motion_blockers),
+        "read_only_inspection_allowed": False,
+        "no_actuation": True,
+        "backend_apply_calls": 0,
+        "backend_step_calls": 0,
+        "backend_reset_calls": 0,
+        "backend_export_calls": 0,
+        "actuator_commands": [],
+        "dependency_availability": availability,
+        "safety_check_readiness": all(availability.values()) if availability else False,
+        "blockers": [reason, *preflight.blockers],
+    }
+
+
+def write_diagnostic_evidence(
+    out_dir: Path,
+    report: Mapping[str, object],
+    state: Mapping[str, object] | None = None,
+    provenance: Mapping[str, object] | None = None,
+) -> tuple[Path, ...]:
+    """Write into the caller-created exclusive directory; never overwrite prior evidence."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    files: list[Path] = [out / "diagnostic.json"]
+    if files[0].exists():
+        raise FileExistsError(f"prior diagnostic evidence must not be overwritten: {files[0]}")
+    with files[0].open("x", encoding="utf-8") as stream:
+        json.dump(report, stream, indent=2, sort_keys=True, allow_nan=False)
+        stream.write("\n")
+    for name, payload in (("state.json", state), ("provenance.json", provenance)):
+        if payload is None:
+            continue
+        path = out / name
+        with path.open("x", encoding="utf-8") as stream:
+            json.dump(payload, stream, indent=2, sort_keys=True, allow_nan=False)
+            stream.write("\n")
+        files.append(path)
+    return tuple(files)
+
+
+__all__ = [
+    "ConfigPreflight",
+    "DiagnosticSnapshot",
+    "WebotsDiagnosticConfig",
+    "ensure_fresh_output",
+    "failed_webots_diagnostic",
+    "finalize_webots_diagnostic",
+    "load_webots_diagnostic_config",
+    "preflight_webots_diagnostic",
+    "write_diagnostic_evidence",
+]

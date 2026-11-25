@@ -1,0 +1,22 @@
+source_split: train
+scene: train-clear-i03-s0
+seed: 0
+evidence: runs/eval/grasp-train-clear-i03-s0-v2/none/diag_none.jsonl
+status: geometry cross-validated; physical correction trial pending
+T_robot_base_urdf_root:
+- - 0.9974551725274837
+  - 0.0712834339077239
+  - 0.0013604589266520133
+  - -0.001602160033457145
+- - -0.07128081326035315
+  - 0.997454503879007
+  - -0.0018863595697533337
+  - 0.009027146173410994
+- - -0.0014914620714482302
+  - 0.0017845844913981247
+  - 0.9999972953958838
+  - 0.0012659826838374855
+- - 0.0
+  - 0.0
+  - 0.0
+  - 1.0

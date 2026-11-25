@@ -1,0 +1,338 @@
+{
+  "kind": "AD2-design-only-source-inventory-v1",
+  "execution_authorized": false,
+  "source_ad1_commit": "6db9573",
+  "files": [
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/result.json",
+      "bytes": 22115,
+      "sha256": "391baecb2dbc37d32a83876c8b9ef213086cb16b3ba0433f553d9bb1642a0f28"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/case-B.json",
+      "bytes": 1634,
+      "sha256": "3b3b021b477a06ae5cb5ed103b99c3fcb2be622393d22cdc30648b8c86caa347"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/case-C.json",
+      "bytes": 1832,
+      "sha256": "9ed0422ff617775b8f76329cc61fd159ab1d04a1eec26e95e63cb32800c1dc13"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/provenance.json",
+      "bytes": 11844,
+      "sha256": "b8c61fe030573ae12561f8cc9e8ca05b28f98c505b9c8bd19a47d3470da3d09c"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/files.sha256.json",
+      "bytes": 1548,
+      "sha256": "a56d4c24fa9ada03a9ebe8dce67d6ec107c7dbe5d09b4310dee8dea8578c80a0"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/native-snapshot.json",
+      "bytes": 984,
+      "sha256": "5a2c58a69843fb6ad9aaaad76342a2a26db0568dfb0da79016e15864b735b9e0"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project-analytic/runs/ad1-train-clear-i00-s100-frame0-v1/solve-ledger.json",
+      "bytes": 2180,
+      "sha256": "af7dd8172b546076f599f26399ea1003003737d32e13d20863406436407718f0"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/policy.jsonl",
+      "bytes": 784281,
+      "sha256": "cea3ba43257b961d7f3a8133586e4f3e03c8f00abe84fd25746b7b3ffd4a637e"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.physical.jsonl",
+      "bytes": 234138,
+      "sha256": "e8a4d0c2cc1df6798882acbddf32e273392b224a152c60b9f8758ecbb3a24696"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.steps.npz",
+      "bytes": 271773,
+      "sha256": "dd56d7c9d5a05a5e8d4633f22311c259def08088bfed456cc32ec8ae053126e7"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/runs/demos/train-s100-registered-v1/attempts/attempt-0000/episode-00.meta.json",
+      "bytes": 1851,
+      "sha256": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/backend.py",
+      "bytes": 50617,
+      "sha256": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/robot_io.py",
+      "bytes": 22839,
+      "sha256": "f48dcdfbfaba7db2706898aac3043fe63e6d188a231fb260b2897cf8c4e9abbd"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/visualization.py",
+      "bytes": 2349,
+      "sha256": "02aa3a203097564560404c3ba4cb023182320a7b87a1f4f015eb879334f656ea"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/zmq/client.py",
+      "bytes": 10761,
+      "sha256": "1e9133d4fe0bd42788619347e2d9be88229639c974caaad44f3201c6a985591f"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/zmq/server.py",
+      "bytes": 12120,
+      "sha256": "24e5eb7a6148ac9b3cc9a8e0257f61fc7e3cd26ea04c7cf2cd300983e3c9a8d4"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/execution/safety_monitor.py",
+      "bytes": 9257,
+      "sha256": "900c9218a9727a94cae0a1be9b071133c80925095cd7ca4b16241334adbc371a"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/execution/episode_runner.py",
+      "bytes": 42813,
+      "sha256": "6fa075d8360122143b01956f7bb46241aa1a2c83c5485ba7ab1625a9cbe1d4d8"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/execution/scripted_can.py",
+      "bytes": 116033,
+      "sha256": "d89b7eb6c3b00b14df6686325d2c2742ae6588e92f045af072fb07f391f608a3"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml",
+      "bytes": 546,
+      "sha256": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+    },
+    {
+      "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf",
+      "bytes": 35253,
+      "sha256": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b"
+    },
+    {
+      "path": "/home/tj330/Downloads/Project_Report.pdf",
+      "bytes": 24118576,
+      "sha256": "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+    }
+  ],
+  "saved_targets": {
+    "A": {
+      "arm_1_joint": 0.07103975613359034,
+      "arm_2_joint": -5.6330103023860545e-05,
+      "arm_3_joint": -2.289653672216385e-05,
+      "arm_4_joint": 2.1903720995360823e-05,
+      "arm_5_joint": -5.50120551103984e-06,
+      "arm_6_joint": 1.8481290345948952e-06,
+      "arm_7_joint": -1.680523213603215e-06
+    },
+    "B": {
+      "arm_1_joint": 0.07103975613359034,
+      "arm_2_joint": -5.6330103023860545e-05,
+      "arm_3_joint": -2.289653672216385e-05,
+      "arm_4_joint": 2.1903720995360823e-05,
+      "arm_5_joint": -5.50120551103984e-06,
+      "arm_6_joint": 1.8481290345948952e-06,
+      "arm_7_joint": -1.680523213603215e-06
+    },
+    "C": {
+      "arm_1_joint": 0.07000000000000002,
+      "arm_2_joint": -0.0015776230243764139,
+      "arm_3_joint": -0.15002289653672213,
+      "arm_4_joint": -0.002329658044912425,
+      "arm_5_joint": -0.15000548310097536,
+      "arm_6_joint": 0.0061974754183294345,
+      "arm_7_joint": -0.0014491773677773425
+    }
+  },
+  "reference": {
+    "sim_time_s": 0.03200000000000003,
+    "joint_positions": {
+      "arm_1_joint": 0.07103975613359034,
+      "arm_2_joint": -5.6330103023860545e-05,
+      "arm_3_joint": -2.289653672216385e-05,
+      "arm_4_joint": 2.1903720995360823e-05,
+      "arm_5_joint": -5.50120551103984e-06,
+      "arm_6_joint": 1.8481290345948952e-06,
+      "arm_7_joint": -1.680523213603215e-06,
+      "torso_lift_joint": 0.3497446130613471
+    },
+    "gripper_opening_m": 1.4364845662158865e-06,
+    "frame0_physical": {
+      "t": 0.03200000000000003,
+      "finger_positions_m": [
+        -1.0779306241058846e-06,
+        1.7950385083258884e-06
+      ],
+      "pad_positions_world_m": [
+        [
+          -1.567943004823918,
+          -3.830371119403928,
+          1.0095016699137247
+        ],
+        [
+          -1.5679429769979125,
+          -3.8303711060917127,
+          1.0095009534758235
+        ]
+      ]
+    },
+    "base_world_xyz_m": [
+      -0.5380204655062031,
+      -3.71038607552986,
+      0.08824030447119319
+    ],
+    "base_world_orientation_xyzw": [
+      0.020221111092265036,
+      -0.006754331648571902,
+      -0.7175169288049312,
+      0.6962147244554043
+    ],
+    "base_speed_norms": [
+      2.611530867254974e-05,
+      3.6844188467267185e-05
+    ],
+    "earlier_reset_fingerprint": {
+      "motors": {
+        "arm_1_joint": {
+          "target_position_rad": 0.07096462462238319,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_2_joint": {
+          "target_position_rad": -2.2620047860577586e-05,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_3_joint": {
+          "target_position_rad": 2.054103654329185e-05,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_4_joint": {
+          "target_position_rad": 8.78704128275071e-06,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_5_joint": {
+          "target_position_rad": 4.88574374472262e-06,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_6_joint": {
+          "target_position_rad": -1.6051675236402287e-06,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "arm_7_joint": {
+          "target_position_rad": 1.486739668816861e-06,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "gripper_left_finger_joint": {
+          "target_position_rad": 0.0,
+          "velocity_rad_s": 0.03,
+          "control_mode": "position"
+        },
+        "gripper_right_finger_joint": {
+          "target_position_rad": 7.171095937807197e-07,
+          "velocity_rad_s": 0.03,
+          "control_mode": "position"
+        },
+        "head_1_joint": {
+          "target_position_rad": 0.0,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "head_2_joint": {
+          "target_position_rad": -0.77,
+          "velocity_rad_s": 0.5,
+          "control_mode": "position"
+        },
+        "torso_lift_joint": {
+          "target_position_rad": 0.35,
+          "velocity_rad_s": 0.07,
+          "control_mode": "position"
+        },
+        "wheel_left_joint": {
+          "target_position_rad": 0.0,
+          "velocity_rad_s": 10.1523,
+          "control_mode": "position"
+        },
+        "wheel_right_joint": {
+          "target_position_rad": 0.0,
+          "velocity_rad_s": 10.1523,
+          "control_mode": "position"
+        }
+      },
+      "joint_sensors_rad": {
+        "arm_1_joint": 0.07089103067645036,
+        "arm_2_joint": -5.633052374065528e-05,
+        "arm_3_joint": 6.404218972084902e-05,
+        "arm_4_joint": 2.19039695493935e-05,
+        "arm_5_joint": 1.52685782001198e-05,
+        "arm_6_joint": -4.981624255592888e-06,
+        "arm_7_joint": 4.652738704870604e-06,
+        "gripper_left_finger_joint": -1.077931300493822e-06,
+        "gripper_right_finger_joint": 1.7950438309480917e-06,
+        "head_1_joint": 1.071283086460569e-06,
+        "head_2_joint": -0.7700005719753937,
+        "torso_lift_joint": 0.34974461407881113,
+        "wheel_left_joint": 1.1428092477615835e-06,
+        "wheel_right_joint": -2.463512472460461e-06
+      },
+      "base": {
+        "world_xyz_m": [
+          -0.538019740394514,
+          -3.710386173759337,
+          0.08824034086372526
+        ],
+        "world_orientation_matrix": [
+          -0.029751967331561886,
+          0.9988185679609924,
+          -0.03842250299309396,
+          -0.9993648524045675,
+          -0.03047854395297647,
+          -0.018464835144232517,
+          -0.01961408214265651,
+          0.03784873386071352,
+          0.999090967393281
+        ],
+        "velocity_world_xyz_m_s": [
+          -2.6637449904990744e-05,
+          -4.0652883279335744e-05,
+          5.067754331512212e-07
+        ],
+        "angular_velocity_world_xyz_rad_s": [
+          0.00016027294454840063,
+          -1.915557575397051e-05,
+          -5.351442688833589e-06
+        ]
+      },
+      "can": {
+        "world_xyz_m": [
+          -0.7655823732277313,
+          -4.366173390788633,
+          0.811059875895476
+        ],
+        "world_orientation_matrix": [
+          0.24176697611183118,
+          0.9703342435107489,
+          -0.0004302698735779547,
+          -0.9703339417039853,
+          0.24176725459425932,
+          0.0007976109086587753,
+          0.000877974343738895,
+          0.00022466948492512993,
+          0.9999995893422529
+        ]
+      },
+      "torso_sensor_after_rad": 0.34974461407881113,
+      "torso_commanded_rad": 0.35,
+      "physics_step_count_at_reset": 0
+    }
+  },
+  "limitations": [
+    "Reset fingerprint predates frame0; do not use its velocities as frame0 velocities.",
+    "Frame0 object velocities and complete base twist are not recorded in inspected sources.",
+    "No simulator, model, solver or actuator invoked for this inventory."
+  ]
+}

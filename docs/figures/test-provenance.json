@@ -1,0 +1,10 @@
+{
+  "split": "TEST",
+  "analysis": "runs/worldmind/nov25-test-analysis/analysis.json",
+  "analysis_sha256": "e5240db8b88c7da093aacc027ffd6918242df5d44f68eabae8cece572a11b296",
+  "renderer": "runs/worldmind/nov25-test-analysis/render.py",
+  "assets": {
+    "docs/figures/test-family-success.png": "82b7d91bb5e6676290e86a5a21798441b1c14bc978bd979bdd6c9611ed634c52",
+    "docs/figures/test-family-success.pdf": "977349cba1fa7bb85eb301ae8e12bcef3b809d127b5dd0ae1117bcc5fbb2875b"
+  }
+}

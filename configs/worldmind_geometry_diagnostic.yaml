@@ -1,0 +1,48 @@
+# Bounded geometry-only local diagnostic (ADR-0054).
+#
+# Reads only the pinned files below. It never launches Webots, opens a socket, solves IK,
+# applies/steps/resets a backend, scores an episode, or reads TEST/TRAIN evidence.
+schema_version: 1
+status: "diagnostic_uncalibrated"
+split: "validation"
+state_source: "oracle"
+mode: "local_file_inspection"
+
+backend:
+  kind: "local_geometry_files"
+  declaration: "pinned_tiago_urdf_factory_wbt_local_files_v1"
+
+geometry:
+  urdf: "../src/vlarobot/backends/webots/tiago.urdf"
+  registration: "calibration/urdf-base-train-v1.yaml"
+  robot_config: "robot.yaml"
+  world: "../worlds/factory.wbt"
+  required_arm_links:
+    - "TIAGo front arm"
+    - "TIAGo front arm_3"
+    - "arm_2_link"
+    - "arm_3_link"
+    - "arm_4_link"
+    - "arm_5_link"
+    - "arm_6_link"
+    - "arm_7_link"
+    - "wrist_ft_tool_link"
+  required_objects:
+    - "CAN"
+  permitted_contact_objects: []
+  swept_arm_certificate: null
+
+hashes:
+  urdf_sha256: "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b"
+  registration_sha256: "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+  robot_config_sha256: "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d"
+  world_sha256: "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+
+diagnostic:
+  local_files_only: true
+  no_webots_launch: true
+  no_actuation: true
+  no_ik: true
+  no_trajectory: true
+  scored_evaluation_allowed: false
+  evidence_collection_split: "validation"

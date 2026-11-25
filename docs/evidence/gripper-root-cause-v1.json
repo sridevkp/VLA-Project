@@ -1,0 +1,714 @@
+{
+  "episodes": 80,
+  "frames": 63081,
+  "source_command_rows_with_opening": 240,
+  "all_source_commands_and_steps_hashes_verified": true,
+  "all_gripper_labels_match_accepted_command_replay": true,
+  "raw_commands": {
+    "min": 0.0,
+    "max": 0.045,
+    "count_above_0_045": 0,
+    "unique_values": [
+      0.0,
+      0.045
+    ]
+  },
+  "physical_held_labels": {
+    "min": 0.0,
+    "max": 0.045,
+    "above_0_045": 0
+  },
+  "native_float32_labels_promoted_float64": {
+    "min": 0.0,
+    "max": 0.04500000178813934,
+    "literal_above_0_045": 40106,
+    "endpoint_aware_above_0_045": 0,
+    "unique_distribution": [
+      {
+        "value": 0.0,
+        "count": 22975,
+        "fraction": 0.3642142641999968
+      },
+      {
+        "value": 0.04500000178813934,
+        "count": 40106,
+        "fraction": 0.6357857358000032
+      }
+    ]
+  },
+  "near_boundary_counts": {
+    "1e-09": 40106,
+    "1e-06": 40106,
+    "0.0001": 40106,
+    "0.0005": 40106,
+    "0.001": 40106
+  },
+  "float32_endpoint": {
+    "value": 0.04500000178813934,
+    "excess_m": 1.7881393449270533e-09,
+    "next_representable": 0.04500000551342964,
+    "next_excess_m": 5.513429643388967e-09
+  },
+  "training_stats": {
+    "gripper_mean_m": 0.02861039899289608,
+    "gripper_std_m": 0.021654436364769936,
+    "empirical_native_mean_m": 0.02861035924787363,
+    "empirical_native_std_population_m": 0.021654412045152234,
+    "normalized_physical_upper": 0.7568703581575787,
+    "normalized_serialized_upper": 0.7568704407336991,
+    "normalizer_eps": 1e-08,
+    "normalized_training_open_label_with_eps": 0.7568700912117451,
+    "normalized_training_closed_label_with_eps": -1.3212251429084294,
+    "saved_minus_empirical_mean_m": 3.974502245027156e-08,
+    "saved_minus_empirical_std_m": 2.4319617701606955e-08
+  },
+  "saved_prediction": {
+    "count": 50,
+    "min": 0.04416652396321297,
+    "max": 0.045476075261831284,
+    "mean": 0.04507563881576061,
+    "std_population": 0.00027709324330209176,
+    "above_0_045": 35,
+    "max_excess_m": 0.00047607526183128523,
+    "normalized_min": 0.7183805068057776,
+    "normalized_max": 0.7788554726076515,
+    "max_excess_in_training_std": 0.02198511445007279,
+    "targets_m": [
+      0.044908665120601654,
+      0.0451897531747818,
+      0.04471106082201004,
+      0.04493533447384834,
+      0.04500473290681839,
+      0.04521636664867401,
+      0.04534381628036499,
+      0.04515864700078964,
+      0.04512409120798111,
+      0.045186400413513184,
+      0.04504162073135376,
+      0.04534952715039253,
+      0.04516077786684036,
+      0.04537290334701538,
+      0.04535975307226181,
+      0.04538044333457947,
+      0.045476075261831284,
+      0.04535076022148132,
+      0.04518192261457443,
+      0.045202601701021194,
+      0.04538250342011452,
+      0.04496052861213684,
+      0.045372165739536285,
+      0.04534464329481125,
+      0.04511173814535141,
+      0.04416652396321297,
+      0.04515228793025017,
+      0.04534182697534561,
+      0.04504089802503586,
+      0.04511350393295288,
+      0.045001786202192307,
+      0.04515000432729721,
+      0.045398496091365814,
+      0.04496092349290848,
+      0.04531776160001755,
+      0.04494301229715347,
+      0.04504748433828354,
+      0.045053791254758835,
+      0.04520825296640396,
+      0.04512374848127365,
+      0.04514632374048233,
+      0.045106492936611176,
+      0.04482065886259079,
+      0.04499318078160286,
+      0.044853001832962036,
+      0.044969141483306885,
+      0.04457065463066101,
+      0.04438513144850731,
+      0.044339731335639954,
+      0.04475048929452896
+    ],
+    "above_serialized_training_max": 35,
+    "max_excess_vs_serialization_excess_ratio": 266240.5830853784
+  },
+  "matched_training_window": {
+    "episode": 0,
+    "first_frame": 0,
+    "frames": 50,
+    "unique_targets": [
+      0.045
+    ],
+    "prediction_mae_m": 0.00022491727769374914,
+    "prediction_rmse_m": 0.00028723143270425745
+  },
+  "observed_state_gripper_not_labels": {
+    "min": 1.421266574652691e-06,
+    "max": 0.045132171362638474,
+    "above_0_045": 31146
+  },
+  "per_episode": [
+    {
+      "episode": 0,
+      "frames": 983,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 1,
+      "frames": 924,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 2,
+      "frames": 621,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 3,
+      "frames": 803,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 4,
+      "frames": 685,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 5,
+      "frames": 819,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 6,
+      "frames": 771,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 7,
+      "frames": 736,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 8,
+      "frames": 800,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 9,
+      "frames": 849,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 10,
+      "frames": 941,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 11,
+      "frames": 682,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 12,
+      "frames": 748,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 13,
+      "frames": 938,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 14,
+      "frames": 640,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 15,
+      "frames": 798,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 16,
+      "frames": 708,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 17,
+      "frames": 874,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 18,
+      "frames": 689,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 19,
+      "frames": 636,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 20,
+      "frames": 952,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 21,
+      "frames": 760,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 22,
+      "frames": 839,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 23,
+      "frames": 1001,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 24,
+      "frames": 773,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 25,
+      "frames": 610,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 26,
+      "frames": 896,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 27,
+      "frames": 989,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 28,
+      "frames": 788,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 29,
+      "frames": 644,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 30,
+      "frames": 685,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 31,
+      "frames": 935,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 32,
+      "frames": 572,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 33,
+      "frames": 894,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 34,
+      "frames": 579,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 35,
+      "frames": 907,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 36,
+      "frames": 626,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 37,
+      "frames": 654,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 38,
+      "frames": 716,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 39,
+      "frames": 756,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 40,
+      "frames": 856,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 41,
+      "frames": 620,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 42,
+      "frames": 631,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 43,
+      "frames": 782,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 44,
+      "frames": 971,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 45,
+      "frames": 649,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 46,
+      "frames": 781,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 47,
+      "frames": 969,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 48,
+      "frames": 916,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 49,
+      "frames": 565,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 50,
+      "frames": 718,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 51,
+      "frames": 794,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 52,
+      "frames": 682,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 53,
+      "frames": 824,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 54,
+      "frames": 1016,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 55,
+      "frames": 756,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 56,
+      "frames": 1024,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 57,
+      "frames": 841,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 58,
+      "frames": 697,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 59,
+      "frames": 721,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 60,
+      "frames": 847,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 61,
+      "frames": 740,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 62,
+      "frames": 713,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 63,
+      "frames": 699,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 64,
+      "frames": 968,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 65,
+      "frames": 822,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 66,
+      "frames": 824,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 67,
+      "frames": 695,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 68,
+      "frames": 808,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 69,
+      "frames": 538,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 70,
+      "frames": 822,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 71,
+      "frames": 672,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 72,
+      "frames": 881,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 73,
+      "frames": 1141,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 74,
+      "frames": 1022,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 75,
+      "frames": 838,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 76,
+      "frames": 663,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 77,
+      "frames": 668,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 78,
+      "frames": 903,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    },
+    {
+      "episode": 79,
+      "frames": 783,
+      "raw_target_min": 0.0,
+      "raw_target_max": 0.045,
+      "all_gripper_labels_replayed_exactly": true
+    }
+  ],
+  "inference_calls": 0,
+  "webots_steps": 0,
+  "dataset_modified": false,
+  "export_modified": false,
+  "preserved_model_sha256": "7531991e27719e6fee402344aadbe43b2fc4ac858a87ae5ec77809c8efe385d8",
+  "inspection_script_sha256": "d4ebea112024cb283cdd3bc6b111061f5f982d8f6282007e29e339d37b0a1aa7"
+}

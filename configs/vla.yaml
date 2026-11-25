@@ -1,0 +1,11 @@
+# TIAGo VLA data/execution contract. No frozen evaluation criteria are changed.
+schema_version: 1
+camera_key: observation.images.camera1
+sample_steps: 1
+max_chunk_actions: 50
+# Existing grasp position tolerance and backend orientation acceptance bound.
+ik_position_tolerance_m: 0.005
+ik_orientation_tolerance_rad: 0.08726646259971647
+successful_demo_target: 80
+max_collection_attempts: 240
+collection_workers: 2

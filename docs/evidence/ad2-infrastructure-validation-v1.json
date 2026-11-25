@@ -1,0 +1,75 @@
+{
+  "kind": "AD2-offline-validation-v1",
+  "base_commit": "58c6ee0",
+  "fixture_tests": {
+    "passed": 60,
+    "failed": 0,
+    "last_duration_s": 0.55
+  },
+  "lint_new_code": "PASS",
+  "lint_repository_excluding_unchanged_frozen_notebook": "PASS",
+  "full_repository_lint": "pre-existing E402 notebooks/smolvla_finetune_colab.ipynb cell3 line6; frozen file untouched",
+  "repository_format": "PASS 202 files",
+  "full_non_webots_pytest": "NOT RUN: other tests may invoke prohibited IK/inference",
+  "live_snapshot_api": "UNVERIFIED",
+  "production_protocol": null,
+  "physical_execution_authorized": false,
+  "new_ik_solves": 0,
+  "model_calls": 0,
+  "simulator_starts": 0,
+  "actuator_commands": 0,
+  "files": {
+    "src/vlarobot/diagnostics/__init__.py": {
+      "bytes": 68,
+      "sha256": "b1f62475da8462390f6a593a5de8522436d418e5adb723bd5ca7291396a6c79e"
+    },
+    "src/vlarobot/diagnostics/ad2/__init__.py": {
+      "bytes": 86,
+      "sha256": "fd0686b9d5451ef16483745a2a130fb8111066fcfa3b03200171c2436d3ab9a8"
+    },
+    "src/vlarobot/diagnostics/ad2/admission.py": {
+      "bytes": 7959,
+      "sha256": "4c69af88058abb87284541791b43009c950c571ac4fd4f33e27df8099113d185"
+    },
+    "src/vlarobot/diagnostics/ad2/evidence.py": {
+      "bytes": 6027,
+      "sha256": "0ad4402d9a19ca0769d8390f1064ef3cb0fb8e301fdc4a754a1b2e032ef4a0e2"
+    },
+    "src/vlarobot/diagnostics/ad2/fixtures.py": {
+      "bytes": 8346,
+      "sha256": "a62dd9acc0e52910a9200a0b4574a9b6389c703ae8172564eec72cf10856f2ae"
+    },
+    "src/vlarobot/diagnostics/ad2/geometry.py": {
+      "bytes": 5223,
+      "sha256": "a5d741ff2be48b5685c6ca52a57b932de0d703d7a380d06ba783d34d80435c36"
+    },
+    "tools/diagnostics/ad2_audit.py": {
+      "bytes": 4141,
+      "sha256": "57738365d3ad3f3f3bbc85bec60c8f4f8be3ca01862bd6bb7ca1c331bb1da1dd"
+    },
+    "tests/test_ad2_infrastructure.py": {
+      "bytes": 21836,
+      "sha256": "ada1d20ad35e63d04c64e8b33663c01c564ec750ae51dec190adfe224d6797ee"
+    },
+    "docs/evidence/ad2-immutable-inputs-v1.json": {
+      "bytes": 24544,
+      "sha256": "207f66a7c8e24de619e0034300844a90c5b1ed36bdfb7c97525773bd4dfda220"
+    },
+    "docs/evidence/ad2-static-geometry-v1.json": {
+      "bytes": 91130,
+      "sha256": "8d0c72886e37201ce1d8bf0a86aa3cffadf1ab2bb2a59bb1eadd204fc9f9eb0d"
+    },
+    "docs/evidence/ad2-artifact-loading-v1.json": {
+      "bytes": 1381,
+      "sha256": "b70f82f55cd50bddfdb9be7ce169f344c004bf85a73a0ce040b713bfcb89c741"
+    },
+    "docs/AD2_CPU_INFRASTRUCTURE_REPORT.md": {
+      "bytes": 10238,
+      "sha256": "a7a9c3ae8c70ecc530aaf800165029af46562d8f0df8480352ec418019a2be3a"
+    },
+    "runs/ad2-offline-infrastructure-v3/fixture-tests.xml": {
+      "bytes": 7676,
+      "sha256": "a97a1c98e8e2a79dbdb93fad020f0331c937fe9650a30740b30f781d676483f5"
+    }
+  }
+}

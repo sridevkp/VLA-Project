@@ -1,0 +1,13 @@
+{
+  "actual_installed_config_loaded": true,
+  "runtime_only_changed_field_before_cpu_test": "vlm_model_name",
+  "actual_installed_preprocessor_and_postprocessor_loaded": true,
+  "verified_processor_files": 11,
+  "test_device_only": "cpu",
+  "original_checkpoint_json_modified": false,
+  "model_instantiated": false,
+  "model_inference_executed": false,
+  "optimizer_updates": 0,
+  "actual_account2_auth_tested": false,
+  "actual_cuda_restoration_tested": false
+}

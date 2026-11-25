@@ -1,0 +1,31 @@
+{
+  "sha256": "645cc7121449ebc899c19aa52029b535a5e4dc3f3e0e49ed2c65b2851fc86846",
+  "processor_files_sha256": {
+    "chat_template.json": "9bc4f36b8d064f824368648472a4a09268c4bbf9bf930f04fae47f1f596dae92",
+    "processor_config.json": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c",
+    "config.json": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17",
+    "merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+    "special_tokens_map.json": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60",
+    "generation_config.json": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840",
+    "added_tokens.json": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a",
+    "vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+    "tokenizer_config.json": "8b262ec2acb7773caac7b1e59edf921671cdb4c7c815a9c714242540d3fcb531",
+    "tokenizer.json": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a",
+    "preprocessor_config.json": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374"
+  },
+  "golden_input_sha256": "e34c9596d0fdaef579b734829d45a60c257370d9de4e17348055de6734366109",
+  "training_started": false,
+  "original_checkpoint_modified": false,
+  "helper_files_sha256": {
+    "checkpoint_guard.py": "a737fc384da90f56ceee9744cb7cf1432fdb1429fcd877d1828e7f2d896d3973",
+    "recover_training.py": "4d4d874fee2863f58af21cd9e88031459b0ac71c62083ce7822a17cd4343f22e",
+    "restore_gate.py": "071cf660ee012a432fe51b1314ad7fd53a3cad072e1400c6a6e9867acc849063",
+    "durable_transfer.py": "2c73cf1c6d22351cca1f095016c4e750e25a3fc892f701b65e81e3179393fee9",
+    "durable_sink.py": "b539a911c2f7926f371461e6647e0ffce8ecf3fc0bf204010d643e1089aa73e1",
+    "drive_diagnostics.py": "59bb24b3ef291600726f8ed82a609dc334b2615698c539ee2fabd871ab1d3335",
+    "package_backup.py": "5788c34e604a3cd558c77847b7d31358c528de981c3454a50401ed9d1a7134e7",
+    "receiver_dispatch.py": "3480e21117c8c0678da0a6a8d034c0acef77b254fcf46a719002272e87c53d25",
+    "local_import_gate.py": "c78d9680e996740765f81a881e70bb100101937b6726f0eabcf67a880e54757e",
+    "account_migration.py": "60034c400e77599c86a6f26bb93490afd32b4c5f52d425bff8b2ce9ca7c29ed3"
+  }
+}

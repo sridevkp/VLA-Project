@@ -1,0 +1,7 @@
+schema_version: 1
+scope: stateful_validation
+home_reference: existing_configured_placement_verifier_home
+terminal_home_predicate: finite_observed_joint_error_le_existing_verifier_tolerance
+predicted_home_predicate: same_configured_reference_and_tolerance
+intermediate_waypoints: existing_expert_settle_predicate
+recovery_and_episode_budget: unchanged

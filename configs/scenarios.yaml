@@ -1,0 +1,56 @@
+# Scenario generator parameters (ADR-0029 week 1).
+#
+# PRE-REGISTRATION: these geometry values are committed in week 1 (2026-11-14), BEFORE any
+# baseline or VLA result exists. After that, only feasibility repairs are allowed (a scene
+# that is unreachable for the scripted expert BY CONSTRUCTION), each documented in
+# docs/DECISIONS.md. Scene counts are FROZEN separately in configs/eval.yaml; changing a
+# value here also changes tests/test_scenarios.py pre-registration guards (visible in the
+# commit). Note: raising baseline feasibility RAISES the week-2 gate threshold
+# (min(0.40, 0.60 * baseline)), so scene repairs can never lower the bar for the VLA.
+
+world: # factory.wbt layout facts; drift-guarded against the world file by tests.
+  can_xyz: [-0.799879, -4.38998, 0.810949]
+  obstacles:
+    HAM: [-0.544929, -4.5081, 0.754298]
+    APP: [-0.41, -4.44, 0.83]
+
+# SeedSequence members: scenes for (split, seed) are drawn from an independent stream.
+split_salts:
+  train: 0
+  validation: 1
+  test: 2
+
+# Family assignment is round-robin by scene index (train: 3/3/2, validation: 2/2/2, test: 4/3/3).
+families_order: [clear, cluttered, reach-limited]
+
+# CAN yaw is physically inert for a cylinder; drawn anyway to exercise orientation plumbing.
+can_yaw_range_rad: [-3.141592653589793, 3.141592653589793]
+
+families:
+  clear:
+    can_radius_m: [0.0, 0.05]
+    obstacles: parked # obstacles far out of the approach/place corridor
+  cluttered:
+    can_radius_m: [0.0, 0.05]
+    obstacles: near_can # obstacles close to the can, approach-confounding clutter
+  reach-limited:
+    # Radius band beyond the measured M1-07 grid (<= 0.05, r <= 0.0707) to stress reach.
+    can_radius_m: [0.06, 0.1]
+    obstacles: parked
+
+obstacle_modes:
+  parked:
+    radius_m: [0.55, 0.7]
+    # World frame, 0 = +x (along the table away from the place corridor at -x);
+    # keeps obstacles on the table (y in [-5.59, -4.09]) and >= 0.5 m from the CAN.
+    theta_rad: [-0.5235987755982988, 0.17453292519943295]
+    yaw_random: false
+  near_can:
+    radius_m: [0.13, 0.2]
+    # Excludes the place-corridor cone (120 deg .. 190 deg around the CAN): the fixed
+    # PLACE_WORLD target (-1.0, -4.3) lies at 155.8 deg, 0.22 m from the default CAN.
+    # An obstacle ON the target would make placement physically impossible for EVERY arm
+    # (degenerate scene for all experiment arms); clutter must confound the approach, not
+    # abolish the target. Allowed range = [-170 deg, 120 deg].
+    theta_rad: [-2.9670597283903604, 2.0943951023931953]
+    yaw_random: true

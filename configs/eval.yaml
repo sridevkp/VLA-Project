@@ -1,0 +1,38 @@
+# FROZEN evaluation-campaign sizes — owner decision ADR-0029 (2026-11-14).
+# Do not change any value here without explicit owner approval (ADR-0029: sizes frozen;
+# test split untouched until week 4 days 1-3; never relax acceptance criteria).
+campaign:
+  start_date: "2026-11-14"
+  deadline: "2026-12-12"
+  weeks: 4
+# Scene counts by seed. test MUST NOT be evaluated before week 4 days 1-3.
+splits:
+  train: 8
+  validation: 6
+  test: 10
+families:
+  - clear
+  - cluttered
+  - reach-limited
+arms:
+  - scripted_baseline
+  - vla_only
+  - vla_risk_veto
+  - vla_world_model
+  - full_system
+repetitions:
+  # VLA arms: 3 seeds per scene (ADR-0029 SIZES).
+  vla_seeds_per_scene: 3
+  # Scripted baseline: 3 seeds per scene, the SAME seeds as the VLA arms
+  # (owner answer 2026-11-14, ADR-0029 gate: paired (scene, seed) structure for McNemar).
+  baseline_seeds_per_scene: 3
+week2_gate:
+  # VLA-only success >= min(min_success_rate, baseline_fraction * baseline_rate)
+  # on the 8 train scenes x 3 seeds. Literal `min` interpretation (owner answer, ADR-0029).
+  min_success_rate: 0.40
+  baseline_fraction: 0.60
+  comparator: min
+collision_proxy:
+  # Proxy metric, NOT ground-truth collision detection (labelled "proxy" everywhere).
+  max_displacement_m: 0.005
+  max_tilt_deg: 5.0

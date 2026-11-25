@@ -1,0 +1,215 @@
+{
+  "status": "MEASURED independently sampled physical VALIDATION chunks",
+  "completed_cases": 4,
+  "cases": [
+    {
+      "kind": "carried_joint",
+      "outcome": {
+        "success": false,
+        "diagnostic_completed": true,
+        "not_a_demonstration": true,
+        "failure_state": "DIAGNOSTIC_ONLY",
+        "failure_reason": null,
+        "kind": "carried_joint",
+        "sample_seed": 4102,
+        "prefix": "LIFT",
+        "scene_index": 0,
+        "scene_seed": 0,
+        "steps": 50,
+        "observed_steps": 50,
+        "errors": {
+          "prediction_steps": 50,
+          "robot_position_rmse_m": 0.0006553374423526547,
+          "robot_position_mae_m": 0.00022393568983900626,
+          "joint_rmse_rad": 0.0013996422496327984,
+          "joint_mae_rad": 0.00036013608731357325,
+          "object_position_rmse_m": 0.007546107524834944,
+          "object_orientation_rmse_rad": 0.004697004636074031
+        },
+        "execution_veto": null,
+        "prediction_hard_reasons": [
+          "unverified-arm-sweep"
+        ],
+        "release_half_aperture_geometry_m": 0.03555,
+        "conditional_on_observed_lift": true,
+        "joint_quantity": "7 arm joints plus torso feedback",
+        "gravity_model": "base-z gravity, fixed support; contact/tilt uncalibrated",
+        "initial_can_rise_world_m": 0.11962052183162775
+      },
+      "gripper_feedback_rmse_m": 2.866745053606153e-05,
+      "gripper_feedback_mae_m": 2.5990938527168593e-05,
+      "max_can_rise_from_episode_start_m": 0.12132053918630015,
+      "final_can_world_xyz_m": [
+        -0.7412427228799777,
+        -4.412972519601613,
+        0.9314659881197069
+      ],
+      "files_sha256": {
+        "episode-00.actions.jsonl": "c2978d8f3c4920e73e4a693b18f4f2ab9d4a22535e0a4117e15621ab11762324",
+        "episode-00.predicted.jsonl": "74efc152d200e2735aeca0993a440bd2737d39a788f9c2c1cf1af0a0d3417592",
+        "episode-00.contacts.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "episode-00.steps.npz": "bcc780d252889e6b02655da80b0990edef86249d06e01ef0a310f6ece8926324",
+        "episode-00.meta.json": "f1acb518045f28f5b469239507f906b39708f4b7026c74bf0f946c4a33ac9cf0"
+      }
+    },
+    {
+      "kind": "closure",
+      "outcome": {
+        "success": false,
+        "diagnostic_completed": true,
+        "not_a_demonstration": true,
+        "failure_state": "DIAGNOSTIC_ONLY",
+        "failure_reason": null,
+        "kind": "closure",
+        "sample_seed": 4101,
+        "prefix": "DESCEND",
+        "scene_index": 0,
+        "scene_seed": 0,
+        "steps": 50,
+        "observed_steps": 50,
+        "errors": {
+          "prediction_steps": 50,
+          "robot_position_rmse_m": 0.0016100866087494805,
+          "robot_position_mae_m": 0.001596761387127593,
+          "joint_rmse_rad": 0.002338394337932119,
+          "joint_mae_rad": 0.0018419737886624127,
+          "object_position_rmse_m": 0.00422162670012312,
+          "object_orientation_rmse_rad": 0.010796732801507286
+        },
+        "execution_veto": null,
+        "prediction_hard_reasons": [
+          "unverified-arm-sweep"
+        ],
+        "release_half_aperture_geometry_m": 0.03555,
+        "conditional_on_observed_lift": false,
+        "joint_quantity": "7 arm joints plus torso feedback",
+        "gravity_model": "base-z gravity, fixed support; contact/tilt uncalibrated",
+        "initial_can_rise_world_m": 8.497712686628134e-06
+      },
+      "gripper_feedback_rmse_m": 0.0164232751000656,
+      "gripper_feedback_mae_m": 0.012098877661559326,
+      "max_can_rise_from_episode_start_m": 0.000304537235248592,
+      "final_can_world_xyz_m": [
+        -0.7548849629937557,
+        -4.378440547761122,
+        0.8111078622940388
+      ],
+      "files_sha256": {
+        "episode-00.actions.jsonl": "90d1f775bd7e0e38cceb55d0c271644b0a5ff240382a000563c831e76c29a381",
+        "episode-00.predicted.jsonl": "83d63efe2c7fa698d6103917c87f00160cd77d0ba58a33d96e16368baad40f36",
+        "episode-00.contacts.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "episode-00.steps.npz": "3ac786cfb75dbe2dc27145132f32f5604ba9391ebacb3853a7b0e0f2f9454c72",
+        "episode-00.meta.json": "480872e12f18765dbb455d831550d3ff20455c90fe085fa27fe7087c3455d52f"
+      }
+    },
+    {
+      "kind": "free_joint",
+      "outcome": {
+        "success": false,
+        "diagnostic_completed": true,
+        "not_a_demonstration": true,
+        "failure_state": "DIAGNOSTIC_ONLY",
+        "failure_reason": null,
+        "kind": "free_joint",
+        "sample_seed": 4100,
+        "prefix": null,
+        "scene_index": 0,
+        "scene_seed": 0,
+        "steps": 50,
+        "observed_steps": 50,
+        "errors": {
+          "prediction_steps": 50,
+          "robot_position_rmse_m": 0.0011965237476888532,
+          "robot_position_mae_m": 0.00042050400897907387,
+          "joint_rmse_rad": 0.0015338337423641555,
+          "joint_mae_rad": 0.0004115003019984651,
+          "object_position_rmse_m": 2.6585465286198196e-06,
+          "object_orientation_rmse_rad": 3.87016531770351e-05
+        },
+        "execution_veto": null,
+        "prediction_hard_reasons": [
+          "unverified-arm-sweep"
+        ],
+        "release_half_aperture_geometry_m": 0.03555,
+        "conditional_on_observed_lift": false,
+        "joint_quantity": "7 arm joints plus torso feedback",
+        "gravity_model": "base-z gravity, fixed support; contact/tilt uncalibrated",
+        "initial_can_rise_world_m": 0.0
+      },
+      "gripper_feedback_rmse_m": 3.3317964269404746e-07,
+      "gripper_feedback_mae_m": 1.2791134638072545e-07,
+      "max_can_rise_from_episode_start_m": 2.0966190766857906e-06,
+      "final_can_world_xyz_m": [
+        -0.7582237596512247,
+        -4.374357126366166,
+        0.8110619725145339
+      ],
+      "files_sha256": {
+        "episode-00.actions.jsonl": "28e0bd61c89b9b09312c41a493471e309378d91ae83207b3c6fcbd2958e036e0",
+        "episode-00.predicted.jsonl": "9e9835b804679c88a387a1c6d2fa3dcda2586250999f4da95e082fdcc6fd0c32",
+        "episode-00.contacts.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "episode-00.steps.npz": "131ed2a1e291ac7dbf59c2e099d89eaa3fc1ade72f3fbd0d744b0c764dcd899a",
+        "episode-00.meta.json": "82c89b3cdbbf38358550fc965b5dabd82220923c6e51c98719bce3885f04c27d"
+      }
+    },
+    {
+      "kind": "release",
+      "outcome": {
+        "success": false,
+        "diagnostic_completed": true,
+        "not_a_demonstration": true,
+        "failure_state": "DIAGNOSTIC_ONLY",
+        "failure_reason": null,
+        "kind": "release",
+        "sample_seed": 4103,
+        "prefix": "LIFT",
+        "scene_index": 0,
+        "scene_seed": 0,
+        "steps": 50,
+        "observed_steps": 50,
+        "errors": {
+          "prediction_steps": 50,
+          "robot_position_rmse_m": 0.0015708199191446252,
+          "robot_position_mae_m": 0.001557789694843694,
+          "joint_rmse_rad": 0.0025242161049169303,
+          "joint_mae_rad": 0.001556706252744805,
+          "object_position_rmse_m": 0.03834999730203043,
+          "object_orientation_rmse_rad": 0.008910579962143998
+        },
+        "execution_veto": null,
+        "prediction_hard_reasons": [
+          "unverified-arm-sweep"
+        ],
+        "release_half_aperture_geometry_m": 0.03555,
+        "conditional_on_observed_lift": true,
+        "joint_quantity": "7 arm joints plus torso feedback",
+        "gravity_model": "base-z gravity, fixed support; contact/tilt uncalibrated",
+        "initial_can_rise_world_m": 0.12192486131547908
+      },
+      "gripper_feedback_rmse_m": 0.0019277199557915232,
+      "gripper_feedback_mae_m": 0.0011378433040824963,
+      "max_can_rise_from_episode_start_m": 0.12192486131547908,
+      "final_can_world_xyz_m": [
+        -0.7464273098444488,
+        -4.386202896162723,
+        0.8110380233236286
+      ],
+      "files_sha256": {
+        "episode-00.actions.jsonl": "21cd74adfe4a374a7d36118f90374e3500a0dd342fb1caa0149e89fc632814bd",
+        "episode-00.predicted.jsonl": "47eac9ddf34aadbb98d834571466eccadaf97f7a7cef0900c62ba4f92347a8b4",
+        "episode-00.contacts.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "episode-00.steps.npz": "daa0d610e5e8c850f22f1b1d78a3fdbe407b4e9a73e4701f16afd2527187c326",
+        "episode-00.meta.json": "506b496af5ba054c4c3b75fc33a40424193fb424122a7aa06fb8a7f6344fde9d"
+      }
+    }
+  ],
+  "test_accessed": false,
+  "training_admission": false,
+  "brier_score": null,
+  "limitations": [
+    "one sample per staged condition; not a task success estimate",
+    "oracle object initialization; future observations only for scoring",
+    "conditional carry, closure, release and placement are separate quantities",
+    "no grasp probability calibration or collision-safety certificate"
+  ]
+}

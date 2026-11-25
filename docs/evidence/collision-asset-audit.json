@@ -1,0 +1,2775 @@
+{
+  "status": "NOT CERTIFIED",
+  "scope": "read-only actual pinned asset coverage audit, not physical collision acceptance",
+  "urdf": {
+    "path": "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/tiago.urdf",
+    "sha256": "1a6de9920b241f8d2fe6ca675e73137cd4a3daced88b67764669825aaa1b4e1b",
+    "links": [
+      {
+        "name": "base_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.06",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.265",
+                  "length": "0.276"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.201 0.1062 0.28",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.007",
+                  "length": "0.173"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.201 -0.1062 0.28",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.007",
+                  "length": "0.173"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_back_left_1_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "-0.003 0 -0.022",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.036 0.032 0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_back_left_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.025",
+                  "length": "0.015"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_back_right_1_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "-0.003 0 -0.022",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.036 0.032 0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_back_right_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.025",
+                  "length": "0.015"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_front_left_1_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "-0.003 0 -0.022",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.036 0.032 0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_front_left_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.025",
+                  "length": "0.015"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_front_right_1_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "-0.003 0 -0.022",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.036 0.032 0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "caster_front_right_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.025",
+                  "length": "0.015"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "wheel_left_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.0002",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0985",
+                  "length": "0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "wheel_right_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 -0.0002",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0985",
+                  "length": "0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "base_sonar_01_link",
+        "collisions": []
+      },
+      {
+        "name": "base_sonar_02_link",
+        "collisions": []
+      },
+      {
+        "name": "base_sonar_03_link",
+        "collisions": []
+      },
+      {
+        "name": "base_cover_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.043",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.272",
+                  "length": "0.086"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "base_footprint",
+        "collisions": []
+      },
+      {
+        "name": "gyro",
+        "collisions": []
+      },
+      {
+        "name": "inertial unit",
+        "collisions": []
+      },
+      {
+        "name": "accelerometer",
+        "collisions": []
+      },
+      {
+        "name": "Hokuyo URG-04LX-UG01",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 -0.018",
+              "rpy": "1.570741 0.000118 -1.570741"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.05 0.07 0.05"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "Torso",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.275",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.18 0.2 0.55"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.085 0 0.02",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.4 0.254 0.04"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.001 0 0.05",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.233 0.26 0.12"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "torso_lift_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.164 0 -0.032",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.15 0.138 0.074"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.1389 0 -0.0432",
+              "rpy": "0 -0.43 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.12 0.134 0.097"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.016 0 -0.05",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.291 0.333 0.11"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.003 0 -0.283",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.228 0.263 0.358"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "head_1_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.01 0 0.097",
+              "rpy": "-1.5708 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.082",
+                  "length": "0.09"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.005 0 0.005",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.103 0.088 0.103"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "head_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "-0.009 0.0466 0",
+              "rpy": "0 0 -0.7"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.092 0.132 0.26"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.008 -0.019 0",
+              "rpy": "0 0 -1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.03",
+                  "length": "0.132"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.054 0.06 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.111 0.13 0.16"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.053 0.056 -0.068",
+              "rpy": "3.141593 -1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0667",
+                  "length": "0.111"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.053 0.056 0.068",
+              "rpy": "3.141593 -1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0667",
+                  "length": "0.111"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "Astra",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.006 0 0.034",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.04 0.165 0.029"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.009 0 0.007",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.061 0.06 0.014"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "Astra depth",
+        "collisions": []
+      },
+      {
+        "name": "Astra rgb",
+        "collisions": []
+      },
+      {
+        "name": "TIAGo front arm",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.026 0.14 -0.232",
+              "rpy": "0 0 1.5708"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.042 0.094 0.094"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0256 0.1868 -0.2661",
+              "rpy": "0.261799 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.016"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.026 0.19 -0.221",
+              "rpy": "0 0 -1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.075"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "TIAGo front arm_3",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.0001 -0.000001 0.002",
+              "rpy": "0 0 1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0522",
+                  "length": "0.052"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0331 0.000999 0.001",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.08 0.1044 0.048"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0721 0.028999 -0.023",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.035 0.09 0.081"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.1251 0.052999 -0.042",
+              "rpy": "1.5708 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.069"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_2_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.056 0 -0.0005",
+              "rpy": "3.141593 -1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.052",
+                  "length": "0.048"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0 0 0.0295",
+              "rpy": "0 0 -1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.057"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_3_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 -0.1037",
+              "rpy": "0 0 -1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.23"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.0169 0.03 -0.2187",
+              "rpy": "1.5708 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.056",
+                  "length": "0.056"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_4_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0.001 -0.002",
+              "rpy": "0 0 1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.054",
+                  "length": "0.056"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.093 0.019 0.027",
+              "rpy": "3.141593 1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.052",
+                  "length": "0.191"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_5_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.04",
+              "rpy": "0 0 1.57"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.063",
+                  "length": "0.062"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0 0 0.099",
+              "rpy": "0 0 1.57"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.057",
+                  "length": "0.06"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0 0 0.156",
+              "rpy": "0 0 1.57"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.053",
+                  "length": "0.06"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_6_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.0409 0 0",
+              "rpy": "3.141593 1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0226",
+                  "length": "0.013"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "arm_7_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.055",
+              "rpy": "0 0 1.5708"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0225",
+                  "length": "0.0157"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "wrist_ft_tool_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0.055",
+              "rpy": "0 1.57 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0253",
+                  "length": "0.011"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "front",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0 0 0",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "cylinder",
+                "attributes": {
+                  "radius": "0.0227",
+                  "length": "0.028"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.029 -0.01834 -0.046",
+              "rpy": "0 0 0.59"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.04 0.0217 0.105"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.029 0.01834 -0.046",
+              "rpy": "0 0 0.59"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.04 0.0217 0.105"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0172 0.0109 -0.046",
+              "rpy": "3.141593 -1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.106 0.056 0.071"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.0172 -0.0109 -0.046",
+              "rpy": "3.141593 -1.570793 3.141593"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.106 0.056 0.071"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "gripper_right_finger_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.004 0 -0.1741",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.0076 0.05091 0.08982"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0049 0.0153 -0.1208",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.0055 0.0295 0.018"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.0085 0.0156 -0.1048",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.03213 0.02959 0.01487"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "gripper_left_finger_link",
+        "collisions": [
+          {
+            "origin": {
+              "xyz": "0.004 0 -0.1741",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.0076 0.05091 0.08982"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "0.0049 0.0153 -0.1208",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.0055 0.0295 0.018"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          },
+          {
+            "origin": {
+              "xyz": "-0.0085 0.0156 -0.1048",
+              "rpy": "0 0 0"
+            },
+            "primitives": [
+              {
+                "type": "box",
+                "attributes": {
+                  "size": "0.03213 0.02959 0.01487"
+                }
+              }
+            ],
+            "unresolved_geometry": false
+          }
+        ]
+      },
+      {
+        "name": "cap screw(19)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(18)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(17)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(16)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(15)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(14)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(13)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(12)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(11)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(10)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(9)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(8)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(7)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(6)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(5)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(4)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(3)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(2)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw(1)",
+        "collisions": []
+      },
+      {
+        "name": "cap screw",
+        "collisions": []
+      }
+    ],
+    "joints": [
+      {
+        "name": "CASTER_WHEEL_BACK_LEFT_JOINT",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "caster_back_left_1_link"
+      },
+      {
+        "name": "SMALL_WHEEL_JOINT",
+        "type": "continuous",
+        "parent": "caster_back_left_1_link",
+        "child": "caster_back_left_2_link"
+      },
+      {
+        "name": "CASTER_WHEEL_BACK_RIGHT_JOINT",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "caster_back_right_1_link"
+      },
+      {
+        "name": "SMALL_WHEEL_JOINT_0",
+        "type": "continuous",
+        "parent": "caster_back_right_1_link",
+        "child": "caster_back_right_2_link"
+      },
+      {
+        "name": "CASTER_WHEEL_FRONT_LEFT_JOINT",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "caster_front_left_1_link"
+      },
+      {
+        "name": "SMALL_WHEEL_JOINT_1",
+        "type": "continuous",
+        "parent": "caster_front_left_1_link",
+        "child": "caster_front_left_2_link"
+      },
+      {
+        "name": "CASTER_WHEEL_FRONT_RIGHT_JOINT",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "caster_front_right_1_link"
+      },
+      {
+        "name": "SMALL_WHEEL_JOINT_2",
+        "type": "continuous",
+        "parent": "caster_front_right_1_link",
+        "child": "caster_front_right_2_link"
+      },
+      {
+        "name": "wheel_left_joint",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "wheel_left_link"
+      },
+      {
+        "name": "wheel_right_joint",
+        "type": "continuous",
+        "parent": "base_link",
+        "child": "wheel_right_link"
+      },
+      {
+        "name": "base_link_base_sonar_01_link_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "base_sonar_01_link"
+      },
+      {
+        "name": "base_link_base_sonar_02_link_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "base_sonar_02_link"
+      },
+      {
+        "name": "base_link_base_sonar_03_link_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "base_sonar_03_link"
+      },
+      {
+        "name": "base_link_base_cover_link_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "base_cover_link"
+      },
+      {
+        "name": "base_link_base_footprint_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "base_footprint"
+      },
+      {
+        "name": "base_link_gyro_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "gyro"
+      },
+      {
+        "name": "base_link_inertial unit_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "inertial unit"
+      },
+      {
+        "name": "base_link_accelerometer_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "accelerometer"
+      },
+      {
+        "name": "base_link_Hokuyo URG-04LX-UG01_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "Hokuyo URG-04LX-UG01"
+      },
+      {
+        "name": "base_link_Torso_joint",
+        "type": "fixed",
+        "parent": "base_link",
+        "child": "Torso"
+      },
+      {
+        "name": "torso_lift_joint",
+        "type": "prismatic",
+        "parent": "Torso",
+        "child": "torso_lift_link"
+      },
+      {
+        "name": "head_1_joint",
+        "type": "revolute",
+        "parent": "torso_lift_link",
+        "child": "head_1_link"
+      },
+      {
+        "name": "head_2_joint",
+        "type": "revolute",
+        "parent": "head_1_link",
+        "child": "head_2_link"
+      },
+      {
+        "name": "head_2_link_Astra_joint",
+        "type": "fixed",
+        "parent": "head_2_link",
+        "child": "Astra"
+      },
+      {
+        "name": "Astra_Astra depth_joint",
+        "type": "fixed",
+        "parent": "Astra",
+        "child": "Astra depth"
+      },
+      {
+        "name": "Astra_Astra rgb_joint",
+        "type": "fixed",
+        "parent": "Astra",
+        "child": "Astra rgb"
+      },
+      {
+        "name": "torso_lift_link_TIAGo front arm_joint",
+        "type": "fixed",
+        "parent": "torso_lift_link",
+        "child": "TIAGo front arm"
+      },
+      {
+        "name": "arm_1_joint",
+        "type": "revolute",
+        "parent": "TIAGo front arm",
+        "child": "TIAGo front arm_3"
+      },
+      {
+        "name": "arm_2_joint",
+        "type": "revolute",
+        "parent": "TIAGo front arm_3",
+        "child": "arm_2_link"
+      },
+      {
+        "name": "arm_3_joint",
+        "type": "revolute",
+        "parent": "arm_2_link",
+        "child": "arm_3_link"
+      },
+      {
+        "name": "arm_4_joint",
+        "type": "revolute",
+        "parent": "arm_3_link",
+        "child": "arm_4_link"
+      },
+      {
+        "name": "arm_5_joint",
+        "type": "revolute",
+        "parent": "arm_4_link",
+        "child": "arm_5_link"
+      },
+      {
+        "name": "arm_6_joint",
+        "type": "revolute",
+        "parent": "arm_5_link",
+        "child": "arm_6_link"
+      },
+      {
+        "name": "arm_7_joint",
+        "type": "revolute",
+        "parent": "arm_6_link",
+        "child": "arm_7_link"
+      },
+      {
+        "name": "arm_7_link_wrist_ft_tool_link_joint",
+        "type": "fixed",
+        "parent": "arm_7_link",
+        "child": "wrist_ft_tool_link"
+      },
+      {
+        "name": "wrist_ft_tool_link_front_joint",
+        "type": "fixed",
+        "parent": "wrist_ft_tool_link",
+        "child": "front"
+      },
+      {
+        "name": "gripper_right_finger_joint",
+        "type": "prismatic",
+        "parent": "front",
+        "child": "gripper_right_finger_link"
+      },
+      {
+        "name": "gripper_left_finger_joint",
+        "type": "prismatic",
+        "parent": "front",
+        "child": "gripper_left_finger_link"
+      },
+      {
+        "name": "front_cap screw(19)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(19)"
+      },
+      {
+        "name": "front_cap screw(18)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(18)"
+      },
+      {
+        "name": "front_cap screw(17)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(17)"
+      },
+      {
+        "name": "front_cap screw(16)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(16)"
+      },
+      {
+        "name": "front_cap screw(15)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(15)"
+      },
+      {
+        "name": "front_cap screw(14)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(14)"
+      },
+      {
+        "name": "front_cap screw(13)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(13)"
+      },
+      {
+        "name": "front_cap screw(12)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(12)"
+      },
+      {
+        "name": "front_cap screw(11)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(11)"
+      },
+      {
+        "name": "front_cap screw(10)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(10)"
+      },
+      {
+        "name": "front_cap screw(9)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(9)"
+      },
+      {
+        "name": "front_cap screw(8)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(8)"
+      },
+      {
+        "name": "front_cap screw(7)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(7)"
+      },
+      {
+        "name": "front_cap screw(6)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(6)"
+      },
+      {
+        "name": "front_cap screw(5)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(5)"
+      },
+      {
+        "name": "front_cap screw(4)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(4)"
+      },
+      {
+        "name": "front_cap screw(3)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(3)"
+      },
+      {
+        "name": "front_cap screw(2)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(2)"
+      },
+      {
+        "name": "front_cap screw(1)_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw(1)"
+      },
+      {
+        "name": "front_cap screw_joint",
+        "type": "fixed",
+        "parent": "front",
+        "child": "cap screw"
+      }
+    ]
+  },
+  "webots": {
+    "Tiago": {
+      "proto": "Tiago",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/486538c7f379a4d6f74ccaf33dbf14d6dae1486b",
+      "sha256": "5306bc3b6517b8196aa00f8f523852a2386a1303d47d66946ad45083d08d8065",
+      "bounding_objects": [],
+      "primitive_counts": {},
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago/protos/Tiago.proto"
+    },
+    "TiagoBase": {
+      "proto": "TiagoBase",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/10bd68a813851848a53bf53ea5ddfaa058e1dd71",
+      "sha256": "75415c02c46265c811632f33c5f9e0999efc40965ef9b3fd5cb7fc23e06faa7b",
+      "bounding_objects": [
+        {
+          "owner": "TIAGo base",
+          "parent_joint_def": null,
+          "line": 144,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.272
+                ],
+                "height": [
+                  0.086
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "c817edd921fe8266043120671a9bb4660ba852137bccb0cececcef9ead14817d"
+        },
+        {
+          "owner": "wheel_right_link",
+          "parent_joint_def": "RIGHT_WHEEL_JOINT",
+          "line": 284,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0985
+                ],
+                "height": [
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "0d65b40491a25493f20e6e50d7305608f7a0287a16338cf838ca8794b6e9d37c"
+        },
+        {
+          "owner": "wheel_left_link",
+          "parent_joint_def": "LEFT_WHEEL_JOINT",
+          "line": 380,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0985
+                ],
+                "height": [
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "0d65b40491a25493f20e6e50d7305608f7a0287a16338cf838ca8794b6e9d37c"
+        },
+        {
+          "owner": "caster_front_right_2_link",
+          "parent_joint_def": "SMALL_WHEEL_JOINT",
+          "line": 433,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.025
+                ],
+                "height": [
+                  0.015
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e0240358a32114ae9b49d0df5fb2510f151816b1ea24373408c4971911adc67e"
+        },
+        {
+          "owner": "caster_front_right_1_link",
+          "parent_joint_def": "CASTER_WHEEL_FRONT_RIGHT_JOINT",
+          "line": 460,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.036,
+                  0.032,
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "b86dae23017fc2f10590408942663a20bdb62306a8f900cfc807eeeab2bc3444"
+        },
+        {
+          "owner": "caster_front_left_2_link",
+          "parent_joint_def": "SMALL_WHEEL_JOINT",
+          "line": 513,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.025
+                ],
+                "height": [
+                  0.015
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e0240358a32114ae9b49d0df5fb2510f151816b1ea24373408c4971911adc67e"
+        },
+        {
+          "owner": "caster_front_left_1_link",
+          "parent_joint_def": "CASTER_WHEEL_FRONT_LEFT_JOINT",
+          "line": 540,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.036,
+                  0.032,
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "b86dae23017fc2f10590408942663a20bdb62306a8f900cfc807eeeab2bc3444"
+        },
+        {
+          "owner": "caster_back_right_2_link",
+          "parent_joint_def": "SMALL_WHEEL_JOINT",
+          "line": 593,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.025
+                ],
+                "height": [
+                  0.015
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e0240358a32114ae9b49d0df5fb2510f151816b1ea24373408c4971911adc67e"
+        },
+        {
+          "owner": "caster_back_right_1_link",
+          "parent_joint_def": "CASTER_WHEEL_BACK_RIGHT_JOINT",
+          "line": 620,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.036,
+                  0.032,
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "b86dae23017fc2f10590408942663a20bdb62306a8f900cfc807eeeab2bc3444"
+        },
+        {
+          "owner": "caster_back_left_2_link",
+          "parent_joint_def": "SMALL_WHEEL_JOINT",
+          "line": 673,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.025
+                ],
+                "height": [
+                  0.015
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e0240358a32114ae9b49d0df5fb2510f151816b1ea24373408c4971911adc67e"
+        },
+        {
+          "owner": "caster_back_left_1_link",
+          "parent_joint_def": "CASTER_WHEEL_BACK_LEFT_JOINT",
+          "line": 700,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.036,
+                  0.032,
+                  0.04
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "b86dae23017fc2f10590408942663a20bdb62306a8f900cfc807eeeab2bc3444"
+        },
+        {
+          "owner": "TIAGo base",
+          "parent_joint_def": null,
+          "line": 716,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.265
+                ],
+                "height": [
+                  0.276
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.007
+                ],
+                "height": [
+                  0.173
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": true,
+          "source_block_sha256": "53b17987c547591554755841c1e363672675245a1c9c010349c20ec244c39696"
+        }
+      ],
+      "primitive_counts": {
+        "Cylinder": 9,
+        "Box": 4
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_base/protos/TiagoBase.proto"
+    },
+    "TiagoBody": {
+      "proto": "TiagoBody",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/1d8ea125e64eb491b6a7e7781f9ff6d8940f5eee",
+      "sha256": "adeede86539f936c9627741d3597f2b40a0f43907370ebcfd5cc4fae29bd8974",
+      "bounding_objects": [
+        {
+          "owner": "head_2_link",
+          "parent_joint_def": "HEAD_JOINT",
+          "line": 363,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.092,
+                  0.132,
+                  0.26
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.03
+                ],
+                "height": [
+                  0.132
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.111,
+                  0.13,
+                  0.16
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0667
+                ],
+                "height": [
+                  0.111
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0667
+                ],
+                "height": [
+                  0.111
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "3071526622224c638c751602781a7e9752489b789f2da222a6f1bdd19ded7d03"
+        },
+        {
+          "owner": "head_1_link",
+          "parent_joint_def": "NECK_JOINT",
+          "line": 422,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.082
+                ],
+                "height": [
+                  0.09
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.103,
+                  0.088,
+                  0.103
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "12ee380e6a650c73303a76dc9c5abb633f66477782d919f543fa3bb721941beb"
+        },
+        {
+          "owner": "torso_lift_link",
+          "parent_joint_def": "TORSO_LIFT_JOINT",
+          "line": 452,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.15,
+                  0.138,
+                  0.074
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.12,
+                  0.134,
+                  0.097
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.291,
+                  0.333,
+                  0.11
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.228,
+                  0.263,
+                  0.358
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "1fbbafafa868f61911eb7e2003a9c646d08b150acc9107d8655492458c3d2477"
+        },
+        {
+          "owner": "Torso",
+          "parent_joint_def": null,
+          "line": 498,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.18,
+                  0.2,
+                  0.55
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.4,
+                  0.254,
+                  0.04
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.233,
+                  0.26,
+                  0.12
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "5e791036fdd7b5e1cf76298a0a0c557cb645dd6be2cbaf8cb24c05c450f49247"
+        }
+      ],
+      "primitive_counts": {
+        "Box": 10,
+        "Cylinder": 4
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoBody.proto"
+    },
+    "TiagoFrontArm": {
+      "proto": "TiagoFrontArm",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/e944e0827c8df64945f22d66be2275b3c46658cd",
+      "sha256": "4d606ab949b324a3d13f702b6f642786cab602f2f99a0faba4217a4cf0dcdb10",
+      "bounding_objects": [
+        {
+          "owner": "wrist_ft_tool_link",
+          "parent_joint_def": "ARM_7_JOINT",
+          "line": 359,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0253
+                ],
+                "height": [
+                  0.011
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "d365060dbfab153d063db4a23092d6f01bfddbc3fa29a770dec1ed0ba120f12f"
+        },
+        {
+          "owner": "arm_7_link",
+          "parent_joint_def": "ARM_7_JOINT",
+          "line": 375,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0225
+                ],
+                "height": [
+                  0.0157
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "8adea8a998369eb477c720dca790eb5d9c4d35540178edd7fc60e2592a5b0d8b"
+        },
+        {
+          "owner": "arm_6_link",
+          "parent_joint_def": "ARM_6_JOINT",
+          "line": 393,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0226
+                ],
+                "height": [
+                  0.013
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "c2992631b1d36d266016090b2cb41a53f5aadb12d164fa72aeb031f5b6deef76"
+        },
+        {
+          "owner": "arm_5_link",
+          "parent_joint_def": "ARM_5_JOINT",
+          "line": 411,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.063
+                ],
+                "height": [
+                  0.062
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.057
+                ],
+                "height": [
+                  0.06
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.06
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "5e5d73a94806de502348c964c387d4883f387f37e922dec423829a30b4c1dbfa"
+        },
+        {
+          "owner": "arm_4_link",
+          "parent_joint_def": "ARM_4_JOINT",
+          "line": 453,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.054
+                ],
+                "height": [
+                  0.056
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.052
+                ],
+                "height": [
+                  0.191
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e3878d5c5c1f1267376a8d908f0c79bcd9323cb08e673a74b67ab5d9e71790b7"
+        },
+        {
+          "owner": "arm_3_link",
+          "parent_joint_def": "ARM_3_JOINT",
+          "line": 485,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.23
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.056
+                ],
+                "height": [
+                  0.056
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "27aa1e4ecf2c6596686b6ce92ec5e60d0eb45bf5c57f0d157c7395a8da69676e"
+        },
+        {
+          "owner": "arm_2_link",
+          "parent_joint_def": "ARM_2_JOINT",
+          "line": 518,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.052
+                ],
+                "height": [
+                  0.048
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.057
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "ddafd58636875c864711b581ad4483d7b00ffb56c62afee15da4973726e5c2de"
+        },
+        {
+          "owner": "TIAGo front arm",
+          "parent_joint_def": "ARM_1_JOINT",
+          "line": 550,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0522
+                ],
+                "height": [
+                  0.052
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.08,
+                  0.1044,
+                  0.048
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.035,
+                  0.09,
+                  0.081
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.069
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "609a96600cbd768dc77d941cffaa6ea06cbf70d0526bc6275ab891d2b13a5fd1"
+        },
+        {
+          "owner": "Left shoulder",
+          "parent_joint_def": null,
+          "line": 598,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.042,
+                  0.094,
+                  0.094
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.016
+                ]
+              }
+            },
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.053
+                ],
+                "height": [
+                  0.075
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "0648092aadf353949fff8a923bb90f2ac2a03589691e92a84e7d77661779981c"
+        }
+      ],
+      "primitive_counts": {
+        "Cylinder": 16,
+        "Box": 3
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoFrontArm.proto"
+    },
+    "TiagoGripper": {
+      "proto": "TiagoGripper",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/4e7a9e23c276e883e79a4ffdba3dad10f06fcf10",
+      "sha256": "2519a5091aee31a682df489a568c30f77bed170be00054dd71ef3b621862eec9",
+      "bounding_objects": [
+        {
+          "owner": "gripper_left_finger_link",
+          "parent_joint_def": "LEFT_GRIPPER_JOINT",
+          "line": 435,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.0076,
+                  0.05091,
+                  0.08982
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.0055,
+                  0.0295,
+                  0.018
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.03213,
+                  0.02959,
+                  0.01487
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e28c5b64a3a66f9bb74024c9ad07158fb26413dec527243243fdad1fa516f753"
+        },
+        {
+          "owner": "gripper_right_finger_link",
+          "parent_joint_def": "RIGHT_GRIPPER_JOINT",
+          "line": 549,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.0076,
+                  0.05091,
+                  0.08982
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.0055,
+                  0.0295,
+                  0.018
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.03213,
+                  0.02959,
+                  0.01487
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "e28c5b64a3a66f9bb74024c9ad07158fb26413dec527243243fdad1fa516f753"
+        },
+        {
+          "owner": "front",
+          "parent_joint_def": null,
+          "line": 588,
+          "primitives": [
+            {
+              "type": "Cylinder",
+              "dimensions": {
+                "radius": [
+                  0.0227
+                ],
+                "height": [
+                  0.028
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.04,
+                  0.0217,
+                  0.105
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.04,
+                  0.0217,
+                  0.105
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.106,
+                  0.056,
+                  0.071
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.106,
+                  0.056,
+                  0.071
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "bbad625c4f8728a0817c4f6a6f770b5d85e54989d6b4577bc55d778a7d87b26c"
+        }
+      ],
+      "primitive_counts": {
+        "Box": 10,
+        "Cylinder": 1
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/pal_robotics/tiago_extensions/protos/TiagoGripper.proto"
+    },
+    "Astra": {
+      "proto": "Astra",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/130883eb5d1c79974e4758080de47341ddb3ca62",
+      "sha256": "6c1c63203faffa2f3cbf15c61dda201ee037bdef00496ea3673cbe95bb4a12dc",
+      "bounding_objects": [
+        {
+          "owner": "Astra",
+          "parent_joint_def": null,
+          "line": 51,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.04,
+                  0.165,
+                  0.029
+                ]
+              }
+            },
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.061,
+                  0.06,
+                  0.014
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "f012e5b96d545b712250b41edce93b7dd2122d9e87fbf76c57c1e377905b1cdc"
+        }
+      ],
+      "primitive_counts": {
+        "Box": 2
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/devices/orbbec/protos/Astra.proto"
+    },
+    "HokuyoUrg04lxug01": {
+      "proto": "HokuyoUrg04lxug01",
+      "path": "/home/tj330/.cache/Cyberbotics/Webots/assets/f96bfb5a4b3b357f3fe6e337d4030c6df328e6b5",
+      "sha256": "08ca8596e21a360165829923591e3dd0e084abf75e793d75c229a8f0f4d5e5df",
+      "bounding_objects": [
+        {
+          "owner": null,
+          "parent_joint_def": null,
+          "line": 90,
+          "primitives": [
+            {
+              "type": "Box",
+              "dimensions": {
+                "size": [
+                  0.05,
+                  0.07,
+                  0.05
+                ]
+              }
+            }
+          ],
+          "unresolved_geometry": false,
+          "source_block_sha256": "0cab67b69475e8cc4365c971e4b75f2d706f5846ba78bd9c796acc8f9210e302"
+        }
+      ],
+      "primitive_counts": {
+        "Box": 1
+      },
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/devices/hokuyo/protos/HokuyoUrg04lxug01.proto"
+    }
+  },
+  "missing_assets": [],
+  "coverage_differences": [],
+  "link_mapping": [
+    {
+      "proto": "TiagoBase",
+      "owner": "wheel_right_link",
+      "urdf_link": "wheel_right_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "wheel_left_link",
+      "urdf_link": "wheel_left_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_front_right_2_link",
+      "urdf_link": "caster_front_right_2_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_front_right_1_link",
+      "urdf_link": "caster_front_right_1_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_front_left_2_link",
+      "urdf_link": "caster_front_left_2_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_front_left_1_link",
+      "urdf_link": "caster_front_left_1_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_back_right_2_link",
+      "urdf_link": "caster_back_right_2_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_back_right_1_link",
+      "urdf_link": "caster_back_right_1_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_back_left_2_link",
+      "urdf_link": "caster_back_left_2_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "caster_back_left_1_link",
+      "urdf_link": "caster_back_left_1_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoBody",
+      "owner": "head_2_link",
+      "urdf_link": "head_2_link",
+      "webots_count": 5,
+      "urdf_count": 5
+    },
+    {
+      "proto": "TiagoBody",
+      "owner": "head_1_link",
+      "urdf_link": "head_1_link",
+      "webots_count": 2,
+      "urdf_count": 2
+    },
+    {
+      "proto": "TiagoBody",
+      "owner": "torso_lift_link",
+      "urdf_link": "torso_lift_link",
+      "webots_count": 4,
+      "urdf_count": 4
+    },
+    {
+      "proto": "TiagoBody",
+      "owner": "Torso",
+      "urdf_link": "Torso",
+      "webots_count": 3,
+      "urdf_count": 3
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "wrist_ft_tool_link",
+      "urdf_link": "wrist_ft_tool_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_7_link",
+      "urdf_link": "arm_7_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_6_link",
+      "urdf_link": "arm_6_link",
+      "webots_count": 1,
+      "urdf_count": 1
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_5_link",
+      "urdf_link": "arm_5_link",
+      "webots_count": 3,
+      "urdf_count": 3
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_4_link",
+      "urdf_link": "arm_4_link",
+      "webots_count": 2,
+      "urdf_count": 2
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_3_link",
+      "urdf_link": "arm_3_link",
+      "webots_count": 2,
+      "urdf_count": 2
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "arm_2_link",
+      "urdf_link": "arm_2_link",
+      "webots_count": 2,
+      "urdf_count": 2
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "TIAGo front arm",
+      "urdf_link": "TIAGo front arm_3",
+      "webots_count": 4,
+      "urdf_count": 4
+    },
+    {
+      "proto": "TiagoFrontArm",
+      "owner": "Left shoulder",
+      "urdf_link": "TIAGo front arm",
+      "webots_count": 3,
+      "urdf_count": 3
+    },
+    {
+      "proto": "TiagoGripper",
+      "owner": "gripper_left_finger_link",
+      "urdf_link": "gripper_left_finger_link",
+      "webots_count": 3,
+      "urdf_count": 3
+    },
+    {
+      "proto": "TiagoGripper",
+      "owner": "gripper_right_finger_link",
+      "urdf_link": "gripper_right_finger_link",
+      "webots_count": 3,
+      "urdf_count": 3
+    },
+    {
+      "proto": "TiagoGripper",
+      "owner": "front",
+      "urdf_link": "front",
+      "webots_count": 5,
+      "urdf_count": 5
+    },
+    {
+      "proto": "Astra",
+      "owner": "Astra",
+      "urdf_link": "Astra",
+      "webots_count": 2,
+      "urdf_count": 2
+    }
+  ],
+  "unmapped_bounding_objects": [
+    {
+      "proto": "TiagoBase",
+      "owner": "TIAGo base",
+      "primitives": 1
+    },
+    {
+      "proto": "TiagoBase",
+      "owner": "TIAGo base",
+      "primitives": 2
+    },
+    {
+      "proto": "HokuyoUrg04lxug01",
+      "owner": null,
+      "primitives": 1
+    }
+  ],
+  "frozen_world_sha256": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706",
+  "self_collision_enabled_in_frozen_world": false,
+  "proto_self_collision_default_false": true,
+  "unverified": [
+    "per-link URDF-to-Webots registration",
+    "primitive containment for differences",
+    "fixed-joint versus physically adjacent exclusions",
+    "carried-object enclosure and swept bounds",
+    "all nearby world obstacle bounding geometry",
+    "physical swept/self-collision validation"
+  ],
+  "test_accessed": false,
+  "training_or_world_modified": false
+}

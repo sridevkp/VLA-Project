@@ -1,0 +1,37 @@
+{
+  "training_started": false,
+  "evaluation_started": false,
+  "test_split_accessed": false,
+  "original_checkpoint_modified": false,
+  "existing_remote_canary_recreated": false,
+  "original_receipt_or_config_rewritten": false,
+  "local_validation": {
+    "focused_tests_passed": 74,
+    "scoped_ruff": "PASS",
+    "global_format": "PASS",
+    "global_ruff": "inherited_E402_in_untouched_approved_training_notebook",
+    "cpu_suite": {
+      "passed": 377,
+      "deselected": 1,
+      "warnings": 496,
+      "seconds": 160.32,
+      "command": "PYTHONPATH=src /home/tj330/programs/VLA-Project/.venv/bin/python -m pytest -m 'not webots and not gpu' -k 'not generate_scenes_counts_families_and_test_split_guard' -q",
+      "exclusion": "legacy test generates TEST geometry; frozen TEST access prohibited"
+    }
+  },
+  "remote_evidence": "user supplied matching ID/owner/parent/size/SHA with historical version1 and current2; not independently inspected locally",
+  "exact_remote_version_increment_trigger": "UNPROVEN; source contains no post-upload update to canary; receipt gets distinct file ID",
+  "remaining_owner_actions": [
+    "upload v7 helper in current kernel",
+    "run only the two v7 correction cells",
+    "inspect revalidation log and optional GET diagnostics",
+    "continue existing readiness cells6/7 only; leave training cell8 disabled"
+  ],
+  "no_new_scopes": true,
+  "no_frozen_contract_change": true,
+  "archive_readback": "PASS; ZIP SHA/CRC and all packaged helpers verified against source; v6 bytes unchanged",
+  "changed_helpers": [
+    "drive_handoff.py",
+    "drive_handoff_setup.py"
+  ]
+}

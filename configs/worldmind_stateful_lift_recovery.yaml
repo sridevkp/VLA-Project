@@ -1,0 +1,9 @@
+schema_version: 1
+scope: stateful_full_system_validation_with_verified_home
+phase: first_lift_waypoint_after_close
+maximum_recovery_ticks: 1
+table_plane_and_operating_floor: unchanged_matched_clearance
+require_collision_free_prediction: true
+require_observed_floor_and_no_reported_contact: true
+repeat_on_same_waypoint: false
+other_predictive_checks_and_motor_monitor: unchanged

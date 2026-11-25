@@ -1,0 +1,113 @@
+# BLOCKED PRODUCTION CONFIGURATION STRUCTURE — not runnable/scored.
+#
+# Structurally completed from frozen/approved contracts where values are known.
+# All scientific/owner-decision values remain explicitly blocked and must not be
+# invented: Eq. 3.8 component bindings/formulas/units/weights, ranking direction,
+# risk thresholds, calibration evidence/candidate/selection, task/bounds specifics,
+# verification numeric contract, safety config/inputs, and adapter solve/jitter
+# parameters require owner-reviewed evidence and approvals.
+# Loader remains fail-closed: status must become "ready" only with reviewed values
+# and registered bindings; placeholders/existing blocks prevent scored execution.
+schema_version: 1
+status: "blocked"
+split: "validation"
+base_seed: 0
+seeds: [0, 1, 2]
+episodes: 18
+
+backend:
+  kind: "webots"
+  declaration: "<OWNER_DECISION: declared Webots backend and measurement source>"
+  state_source: "oracle"
+
+task:
+  instruction: "<OWNER_DECISION: reviewed task instruction>"
+  target: "<OWNER_DECISION: target object id>"
+  destination: "<OWNER_DECISION: destination id>"
+
+pipeline:
+  proposer: "scripted_chunk_adapter"
+  arm: "full_system"
+  candidate_count: 32
+  horizon_steps: 50
+  control_dt_s: 0.032
+  decision_seed_base: 0
+
+bounds:
+  max_decisions: "<OWNER_DECISION: reviewed decision bound>"
+  max_steps: "<OWNER_DECISION: reviewed step bound>"
+  timings_enabled: true
+
+report:
+  pdf: "<OWNER_DECISION: authoritative report PDF path>"
+  definitions: "<OWNER_DECISION: approved definitions JSON path>"
+  candidate_definitions: "report/definitions.candidate.json"
+  sha256: "23d5ff15e39c49890e6e20dc1d09b861c072fe5ac8cbc0f0e5aeed8eafa1522b"
+
+components:
+  Jg:
+    binding: "<OWNER_DECISION: approved Jg component binding>"
+    unit: "<OWNER_DECISION: approved Jg unit>"
+  Jl:
+    binding: "<OWNER_DECISION: approved Jl component binding>"
+    unit: "<OWNER_DECISION: approved Jl unit>"
+  Jr:
+    binding: "<OWNER_DECISION: approved Jr component binding>"
+    unit: "<OWNER_DECISION: approved Jr unit>"
+  Ju:
+    binding: "<OWNER_DECISION: approved Ju component binding>"
+    unit: "<OWNER_DECISION: approved Ju unit>"
+
+assessment:
+  weights:
+    Jg: "<OWNER_DECISION: VALIDATION-selected wg>"
+    Jl: "<OWNER_DECISION: VALIDATION-selected wl>"
+    Jr: "<OWNER_DECISION: VALIDATION-selected wr>"
+    Ju: "<OWNER_DECISION: VALIDATION-selected wu>"
+  maximize: "<OWNER_DECISION: VALIDATION-selected ranking direction>"
+  required_constraints: ["finite_chunk_v1"]
+  hard_checks: ["finite_chunk_v1"]
+
+calibration:
+  evidence_id: "<OWNER_DECISION: VALIDATION calibration evidence id>"
+  evidence_path: "<OWNER_DECISION: approved calibration evidence JSON>"
+  candidate_path: "<OWNER_DECISION: approved calibration candidate JSON>"
+  evaluator_binding: "registered_calibration_evaluator_v1"
+
+surrogate:
+  binding: "analytic_surrogate_corrected_v1"
+  inputs:
+    forward: "<OWNER_DECISION: reviewed forward input binding>"
+    inverse: "<OWNER_DECISION: reviewed inverse input binding>"
+    validate: "<OWNER_DECISION: reviewed validate input binding>"
+    tracking: "<OWNER_DECISION: reviewed tracking input binding>"
+
+safety:
+  binding: "runtime_safety_monitor_v1"
+  config_path: "<OWNER_DECISION: reviewed safety config path>"
+  inputs:
+    monitor: "<OWNER_DECISION: reviewed safety input binding>"
+
+verification:
+  binding: "placement_verifier_v1"
+  destination_world: ["<OWNER_DECISION: X m>", "<OWNER_DECISION: Y m>", "<OWNER_DECISION: Z m>"]
+  rest_center_world: ["<OWNER_DECISION: X m>", "<OWNER_DECISION: Y m>", "<OWNER_DECISION: Z m>"]
+  object_dimensions_m: ["<OWNER_DECISION: X m>", "<OWNER_DECISION: Y m>", "<OWNER_DECISION: Z m>"]
+  up_axis_base: ["<OWNER_DECISION: X>", "<OWNER_DECISION: Y>", "<OWNER_DECISION: Z>"]
+  distance_tolerance_m: "<OWNER_DECISION: reviewed m>"
+  height_tolerance_m: "<OWNER_DECISION: reviewed m>"
+  tilt_limit_rad: "<OWNER_DECISION: reviewed rad>"
+  home_tolerance_rad: "<OWNER_DECISION: reviewed rad>"
+  home_joints:
+    "<OWNER_DECISION: joint name>": "<OWNER_DECISION: rad>"
+
+adapter:
+  waypoints_binding: "corrected_scripted_waypoints_v1"
+  alternate_waypoints_binding: null
+  pose_solver_binding: "corrected_bounded_pose_solver_v1"
+  ik_position_tolerance_m: "<OWNER_DECISION: reviewed m>"
+  ik_orientation_tolerance_rad: "<OWNER_DECISION: reviewed rad>"
+  jitter:
+    joint_std_rad: "<OWNER_DECISION: reviewed rad>"
+    joint_limit_rad: "<OWNER_DECISION: reviewed rad>"
+    max_attempts: "<OWNER_DECISION: reviewed attempt bound>"

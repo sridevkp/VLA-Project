@@ -1,0 +1,27 @@
+{
+  "status": "PREPARED_NOT_EXECUTED",
+  "cpu_tests_passed": 345,
+  "cpu_tests_seconds": 121.56,
+  "legacy_test_scene_generator_deselected": 1,
+  "targeted_tests_passed": 59,
+  "migration_notebook_code_cells": 8,
+  "run_all_can_start_training": false,
+  "notebook_doc_ast_equivalence_verified": true,
+  "installed_config_processors_cpu_test_passed": true,
+  "processor_files_verified": 11,
+  "new_account_auth_verified": false,
+  "new_account_share_verified": false,
+  "new_account_network_canary_verified": false,
+  "new_account_t4_cuda_restore_verified": false,
+  "training_started": false,
+  "evaluation_executed": false,
+  "original_017000_checkpoint_modified": false,
+  "approved_model_dataset_training_contract_modified": false,
+  "test_accessed": false,
+  "blockers": [
+    "operator must verify new compute/mount account and API principal",
+    "shared folder and payload download permissions must pass",
+    "owner-approved SSH route, key and host fingerprint plus new full-size canary/capacity receipt",
+    "actual T4 and live SmolVLA/AdamW/scheduler/RNG restoration17000 before future owner launch"
+  ]
+}

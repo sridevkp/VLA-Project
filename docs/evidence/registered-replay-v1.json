@@ -1,0 +1,438 @@
+{
+  "status": "MEASURED offline recorded TRAIN replay; not autonomous task success",
+  "episodes": 80,
+  "sources": [
+    {
+      "attempt": 0,
+      "meta_sha256": "5c10d12809173e9f8009035e76543ccb1571755dc1ac81aa3a21829f52d4d3f3"
+    },
+    {
+      "attempt": 1,
+      "meta_sha256": "c047fd3689b74287a8e5d82f3dcb03d947adcb46bdbf25400261561236314658"
+    },
+    {
+      "attempt": 2,
+      "meta_sha256": "f3fa211608fb0f1be5924b766d0c321a277aa420c8d547d78335278ce0fed566"
+    },
+    {
+      "attempt": 3,
+      "meta_sha256": "07066ee77dc639e88f40d5a55d67352cfa74faa2542d7f5d06c3959ffdfd30f3"
+    },
+    {
+      "attempt": 4,
+      "meta_sha256": "87aa897c5b3d85b8673310955a474d3be127427c626d05d2eea15ea0f0ee937b"
+    },
+    {
+      "attempt": 5,
+      "meta_sha256": "817180e928b1a05b82fcef1524eb77ee9f98e736606d91052c9acafa3d450d04"
+    },
+    {
+      "attempt": 6,
+      "meta_sha256": "2a8d6e64790d642978de580fe2c2248d7a743e577e599989de46fa8200b5cd95"
+    },
+    {
+      "attempt": 7,
+      "meta_sha256": "9ac084fb05a9f511f5466115ba90d98489b7875329e5f4a890b22ab808f6a875"
+    },
+    {
+      "attempt": 8,
+      "meta_sha256": "abec0c42b139aa5a9ce42316c193be8e33c0edadd76d3241ae1f5c4767833337"
+    },
+    {
+      "attempt": 9,
+      "meta_sha256": "215db801e4cf2b140797ee76be0ee3ba41ab7a8cd6a09189d6b5b928c2a7c2da"
+    },
+    {
+      "attempt": 10,
+      "meta_sha256": "51a0b9ecbb305b529c8809c7b07d53961b862452cff1032fbfe40c5a1628b2bf"
+    },
+    {
+      "attempt": 11,
+      "meta_sha256": "93dbf4562f30ca64d5aef7dfef73d8b9d65fa0ede8ae7c6f4d6a51dfb2ac9cc4"
+    },
+    {
+      "attempt": 12,
+      "meta_sha256": "55ed77e2a30172237c8dce784094173a3416d4ac8b369af2987f7129820c0382"
+    },
+    {
+      "attempt": 13,
+      "meta_sha256": "ed55e9be7ef152f27eac9d0c6b18f01dc1894d03a3490a5a813973b25e51da5d"
+    },
+    {
+      "attempt": 14,
+      "meta_sha256": "e9d9ef1aa21fd7b8672e4cef792af6c361fab295966e0fe05fd14cbfa56bdc73"
+    },
+    {
+      "attempt": 15,
+      "meta_sha256": "0730b8c6dcab951ef5eeab1b4ea0dcf1f0fa8cb36f2bd1317b9df087b576ac11"
+    },
+    {
+      "attempt": 16,
+      "meta_sha256": "25be7d674859c77e9ef6745bec6e7ad818f1e04c4c31fec3490beec22bd128b6"
+    },
+    {
+      "attempt": 17,
+      "meta_sha256": "16fcb4e9d7236509a9f6516f57e901cb99371ac77c364b70ee7722f7b1c8a088"
+    },
+    {
+      "attempt": 19,
+      "meta_sha256": "0923537e0c0e362ea6e015ee0aac8bbfacea6985a5b15e6b9c525bd3c5137a3d"
+    },
+    {
+      "attempt": 20,
+      "meta_sha256": "05bfd2d0c7e58848480d035c5d2d21c4330852971f9fe548809cdd41db209928"
+    },
+    {
+      "attempt": 22,
+      "meta_sha256": "251c7d3842fbf2f5466e73ec9c96baaf21ef46d51d3c9368cc62780f271ce81e"
+    },
+    {
+      "attempt": 23,
+      "meta_sha256": "b5b481736e4e64bd4641af0e9d0aea37a6e9f4b1342988605ad5f27750a2c843"
+    },
+    {
+      "attempt": 24,
+      "meta_sha256": "d9870e3c87ae9f921b1366b6b4c0f7e95628386f3f19c040eb22f0978d1e4b07"
+    },
+    {
+      "attempt": 25,
+      "meta_sha256": "19a478ad47d487daef344cd2a1a5aeb04916a5763f5854550dd70d5b39286491"
+    },
+    {
+      "attempt": 26,
+      "meta_sha256": "60fa90d191cf937999598c1bb420079238cd44b1975c65ac9a93962166aea50d"
+    },
+    {
+      "attempt": 27,
+      "meta_sha256": "57e99cb952bd561a3052c094e87566d1b99c0ab1e41aa9b20f0fef0f068ba2b7"
+    },
+    {
+      "attempt": 28,
+      "meta_sha256": "632ed5f911321c4f30a3665783c2579543f70af40642d508c7aaa7e72285052a"
+    },
+    {
+      "attempt": 29,
+      "meta_sha256": "f1eca933223bdf725133b885146a6d1b987b9f7b19420015a07adc1e9e5209f3"
+    },
+    {
+      "attempt": 30,
+      "meta_sha256": "1fe857791f156713f8bdd8a25e92a453797e9783e729fb0e6debefbe4906c089"
+    },
+    {
+      "attempt": 31,
+      "meta_sha256": "5063ba46be3fdad3a4ddc7199860326ed477354650381b9d19ad499620ea05c3"
+    },
+    {
+      "attempt": 32,
+      "meta_sha256": "c0abde45625ee57057c9c369cc70430dd9f4913312b5690ed083427a3f488304"
+    },
+    {
+      "attempt": 33,
+      "meta_sha256": "905f923cca59ab18ad107618336aa2240b9ca92fc757f382cfa5155a356da321"
+    },
+    {
+      "attempt": 35,
+      "meta_sha256": "1e0d987e165ecac552b897a8bd54914139b0f184bf41c7ae92940a8b83abe577"
+    },
+    {
+      "attempt": 38,
+      "meta_sha256": "e49f29c1e6c70cafa495947c98266b57850e0509be77db2dcee090a989cc1f58"
+    },
+    {
+      "attempt": 39,
+      "meta_sha256": "100693a7c35bf9fbaae840d7604d97987c04f02452bfd28caf06eeac19abb336"
+    },
+    {
+      "attempt": 40,
+      "meta_sha256": "4cd32ac1228b0a4954f9d4d18742f45bad01ceb610f4aec54edd2daf60c8374d"
+    },
+    {
+      "attempt": 41,
+      "meta_sha256": "ea355b63c635f806530dc908f89f3b0c6f38caa42405f78a9f149e9db8808531"
+    },
+    {
+      "attempt": 42,
+      "meta_sha256": "d2da99dab6476c1434bae3b0a089a989b9ee3706a02f42f5a9fde2645355e128"
+    },
+    {
+      "attempt": 43,
+      "meta_sha256": "f59508645620311bcfd985f6dc791694f32b13c6073ee31f9a617139839e8335"
+    },
+    {
+      "attempt": 44,
+      "meta_sha256": "e4e6ce76ec97e2c9da212475bc161a4161c76c461d30c3984de05ef236bd0ae9"
+    },
+    {
+      "attempt": 45,
+      "meta_sha256": "43de36131ec59005d5d2ea89f0d57eb5c302ca611fc78c483af5e054125d420a"
+    },
+    {
+      "attempt": 46,
+      "meta_sha256": "738db9c7ea4a1381551bcd04a116e249f291083b19bc64c04e9f1fe0fe96ffb9"
+    },
+    {
+      "attempt": 47,
+      "meta_sha256": "ecb2f3483a1e79b338ecd64913f1e229d406f2641a9f8699647130997c2b3623"
+    },
+    {
+      "attempt": 48,
+      "meta_sha256": "6bb5bef2e995de7e9cbdbddcdf8f857c5de029a4284492ddb5674d22e03957f1"
+    },
+    {
+      "attempt": 49,
+      "meta_sha256": "281223f67441314977e21b5b36d55d7c3725046e3e2fa839d59547fce6740cdd"
+    },
+    {
+      "attempt": 50,
+      "meta_sha256": "72e6367002eba7cea66cb590fba929457cd284b73b32299dfc6f913eba4f674a"
+    },
+    {
+      "attempt": 51,
+      "meta_sha256": "5c88758053d426be73b84970b0c4eaf9a9830b97050206159045fe122a86ed05"
+    },
+    {
+      "attempt": 53,
+      "meta_sha256": "b9126f453236defa122613c035426ebf137acb8ee76b1fe701ce36d03b26c7e5"
+    },
+    {
+      "attempt": 54,
+      "meta_sha256": "b33ebc8327adc4e80252483774c3d4ef5de0bd590d817fd309d2a967fb79be68"
+    },
+    {
+      "attempt": 55,
+      "meta_sha256": "d4200a6b90ae923abbadbcdd889344b846442aeb4c7bffa928c30e4d62870bd6"
+    },
+    {
+      "attempt": 56,
+      "meta_sha256": "2b9c498ec4b8a7ae1259bbb987fcfd50da1fe76f8a97f66d257e0f3a578e3165"
+    },
+    {
+      "attempt": 58,
+      "meta_sha256": "452f337ee85d7a336428107e76ae84068185977bfcd93b6204aedaaeb2bd5f7c"
+    },
+    {
+      "attempt": 59,
+      "meta_sha256": "2e2abde3fb68397cb7f970a8e514afa1d8f0316e857c856315840aefe9c72bc8"
+    },
+    {
+      "attempt": 60,
+      "meta_sha256": "1bdb6be5fac22cb72400d77f991af5df5c8682651e2fec8fecdcb629bc1294d2"
+    },
+    {
+      "attempt": 62,
+      "meta_sha256": "d209d2910a419c9f6ad7d5e3638c15ceee5204f0aa0979576de9f532301c7f05"
+    },
+    {
+      "attempt": 63,
+      "meta_sha256": "943a4f93819cf0f251d6155577e07a5e57349d54447e2feef16b2be42aa13f1d"
+    },
+    {
+      "attempt": 64,
+      "meta_sha256": "0f3b41a76ec844b9bbb4770ec296d535a22d321f98bca8fe9268067c04451d99"
+    },
+    {
+      "attempt": 65,
+      "meta_sha256": "027421426fbd596927a6340377d05599578670e694984ea9d9ace03fcb227ada"
+    },
+    {
+      "attempt": 67,
+      "meta_sha256": "d69e042d175bd656b2ac91faa611fe1d2ea9a1e7ca9ed53ab4fce29037bd7a4a"
+    },
+    {
+      "attempt": 68,
+      "meta_sha256": "c185a0a3f6a4ed6805cc77b9eb741c3588e3713a213bdbe32062b3802f4c2c04"
+    },
+    {
+      "attempt": 70,
+      "meta_sha256": "a723223df8afd41b1e2b37c6e00a562f55c66f56ccdf7f5e816400ee8139a7c5"
+    },
+    {
+      "attempt": 72,
+      "meta_sha256": "322f7bebd701db0d55649efde52e2ba1b8df0c38434726a387c1568d229844ce"
+    },
+    {
+      "attempt": 73,
+      "meta_sha256": "00901abc393a0f328006be2df81a29feec774574f389c896fd05f86bd71be608"
+    },
+    {
+      "attempt": 75,
+      "meta_sha256": "6fbb29c7a554ffda9afcf1a8cbe1b41bfc58e6a864fc8c2408cb39adf0760d2f"
+    },
+    {
+      "attempt": 76,
+      "meta_sha256": "81f8f605fddf8c0f1882d6c14d4129b8957ad8374121778aaa5f18b24c4dd0ce"
+    },
+    {
+      "attempt": 77,
+      "meta_sha256": "71ba7f82563ee09f373367496916bd14fe7d7aef1c1a0e73790504e8e398d9b0"
+    },
+    {
+      "attempt": 78,
+      "meta_sha256": "024ab6f1cfb9ce2de3d647e71797c9d3ec30870c7675a73726345c8853bba3c7"
+    },
+    {
+      "attempt": 79,
+      "meta_sha256": "72fd4651e92693368e42e8f251354de4163f4d6a260e43046d23939a506efd90"
+    },
+    {
+      "attempt": 80,
+      "meta_sha256": "4f5911919cd7258e9192302562cea3189a43329ab440373a8b63a5aaa9e7fef6"
+    },
+    {
+      "attempt": 81,
+      "meta_sha256": "a6c3a5d29fd654dcf56a5aed1869774bcdfc07b3c66e7272a61cb88380a79678"
+    },
+    {
+      "attempt": 83,
+      "meta_sha256": "9bf5bb560f4accd92fd2231eae68a9665af1472d7023b2b0b01015f168b52aab"
+    },
+    {
+      "attempt": 84,
+      "meta_sha256": "bb087925a3c8ffaf2aa17f91132fcda2181c83a2a02f5792d7f3645033f1df51"
+    },
+    {
+      "attempt": 85,
+      "meta_sha256": "09a6eef32dde65019ed3645ea56b232ce78154fde9d39c025c7290127d6614b3"
+    },
+    {
+      "attempt": 86,
+      "meta_sha256": "5f70557e4f97fd51a5598891219701cba69ebd2c7e80031b41eb287a1c7cac4f"
+    },
+    {
+      "attempt": 87,
+      "meta_sha256": "d0a3ab9071d47dcc397328d0f7b5cca231be7ea8104541085bc9b61f6981cff8"
+    },
+    {
+      "attempt": 88,
+      "meta_sha256": "7b7517476c5184ca62d3dd5965e67b9db651dc8b53071a351758159dbd305ba9"
+    },
+    {
+      "attempt": 89,
+      "meta_sha256": "4d102ddf0a19bb563e1b831386f692d8516a9c97f325e8d123202219a9756fb5"
+    },
+    {
+      "attempt": 90,
+      "meta_sha256": "56f7db62cd8a19de9f8637ebd67699611085923c74ebe4a20775ff825343d8bb"
+    },
+    {
+      "attempt": 91,
+      "meta_sha256": "2f18730a00eadc6ca4c09e3d28ffb0692b8b92d5cc197daf38c473faccc24cde"
+    },
+    {
+      "attempt": 92,
+      "meta_sha256": "df33bcb77e2e52c2e5eea99b57b8a4c730225786e9bd56c2d93c57b74992b315"
+    }
+  ],
+  "stride": 50,
+  "horizons": [
+    1,
+    10,
+    50
+  ],
+  "future_input": "recorded commanded joint targets only; observed future states are metrics",
+  "object_quantity": "stationary CAN world-frame baseline, not contact/grasp prediction",
+  "probabilities_calibrated": false,
+  "brier_score": null,
+  "test_accessed": false,
+  "families": {
+    "clear": {
+      "1": {
+        "windows": 574,
+        "tcp_rmse_m": 0.004621569631336042,
+        "tcp_mae_m": 0.0028459372737276467,
+        "joint_rmse_rad": 0.0038057392856194624,
+        "stationary_tcp_rmse_m": 0.006874337716598855,
+        "stationary_can_world_rmse_m": 0.002578709241811743
+      },
+      "10": {
+        "windows": 567,
+        "tcp_rmse_m": 0.005883598591731369,
+        "tcp_mae_m": 0.003563345780795994,
+        "joint_rmse_rad": 0.005928816245305223,
+        "stationary_tcp_rmse_m": 0.04571122017983677,
+        "stationary_can_world_rmse_m": 0.016264696470588005
+      },
+      "50": {
+        "windows": 539,
+        "tcp_rmse_m": 0.006694568141291723,
+        "tcp_mae_m": 0.004248030127757385,
+        "joint_rmse_rad": 0.0065936506660255354,
+        "stationary_tcp_rmse_m": 0.2235133558932607,
+        "stationary_can_world_rmse_m": 0.06449263562705913
+      }
+    },
+    "cluttered": {
+      "1": {
+        "windows": 489,
+        "tcp_rmse_m": 0.004482266560286139,
+        "tcp_mae_m": 0.0028321481606576075,
+        "joint_rmse_rad": 0.003815262041333606,
+        "stationary_tcp_rmse_m": 0.007143652897501857,
+        "stationary_can_world_rmse_m": 0.002268996435465512
+      },
+      "10": {
+        "windows": 486,
+        "tcp_rmse_m": 0.006234824933114544,
+        "tcp_mae_m": 0.003799560834402891,
+        "joint_rmse_rad": 0.005987017255074994,
+        "stationary_tcp_rmse_m": 0.04627660000505799,
+        "stationary_can_world_rmse_m": 0.01616973469025347
+      },
+      "50": {
+        "windows": 459,
+        "tcp_rmse_m": 0.006443123160827486,
+        "tcp_mae_m": 0.00422132475566086,
+        "joint_rmse_rad": 0.0065980657103538514,
+        "stationary_tcp_rmse_m": 0.222646601090495,
+        "stationary_can_world_rmse_m": 0.06503300773628298
+      }
+    },
+    "reach-limited": {
+      "1": {
+        "windows": 234,
+        "tcp_rmse_m": 0.004489528603075623,
+        "tcp_mae_m": 0.0028160553489618295,
+        "joint_rmse_rad": 0.0037493784232262195,
+        "stationary_tcp_rmse_m": 0.007637485296936903,
+        "stationary_can_world_rmse_m": 0.0030570111401274384
+      },
+      "10": {
+        "windows": 232,
+        "tcp_rmse_m": 0.005666533103141514,
+        "tcp_mae_m": 0.003402448156925658,
+        "joint_rmse_rad": 0.005715589213595425,
+        "stationary_tcp_rmse_m": 0.04879193977318263,
+        "stationary_can_world_rmse_m": 0.01855789046085225
+      },
+      "50": {
+        "windows": 220,
+        "tcp_rmse_m": 0.006298892427355574,
+        "tcp_mae_m": 0.00397794304646017,
+        "joint_rmse_rad": 0.006489408194009425,
+        "stationary_tcp_rmse_m": 0.2264854672225949,
+        "stationary_can_world_rmse_m": 0.06702430917945036
+      }
+    }
+  },
+  "replay_wall_s": 158.9903314319963,
+  "latency": {
+    "registered_fk_32_chunks_x50_steps_s": {
+      "p50": 0.8253072555016843,
+      "p95": 0.8922631302448281
+    },
+    "registered_full_pose_ik_s": {
+      "p50": 0.023651330498978496,
+      "p95": 0.030012123050255468
+    },
+    "serial_1600_ik_p50_projection_s": 37.84212879836559,
+    "ik_last_position_error_m": 1.6868438445681233e-11,
+    "excludes_model_inference_full_arm_sweep_and_state_copy": true,
+    "not_full_pipeline_acceptance": true
+  },
+  "source_sha256": {
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/execution/replay_errors.py": "c823dda064342b7269d3bf175a167868c2422592544531422133ba9eab1857f1",
+    "/home/tj330/programs/VLA-Project-analytic/src/vlarobot/world_model/kinematic.py": "0145d30effe264b2902dbb8388de0d747f0c701c044a7638c8fc5a536adf79fe",
+    "/home/tj330/programs/VLA-Project/src/vlarobot/backends/webots/kinematics.py": "cd564d9acd030ee19e8c4de80b9d96f2bff8811b73b5cef7c40be12ae538e69a",
+    "/home/tj330/programs/VLA-Project/configs/calibration/urdf-base-train-v1.yaml": "dfc542e11f17e97dfb52f695f75d0787ca1a3ceace0b80715826bb97271b5ea0"
+  }
+}

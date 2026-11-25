@@ -1,0 +1,16 @@
+schema_version: 1
+arm: full_system
+split: validation
+policy: equal
+proposer: scripted_chunk_adapter
+candidate_count: 32
+horizon_steps: 50
+control_dt_s: 0.032
+clearance_profile_sha256: 6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4
+placement_binding: terminal_place_descend_first_predicted_joint_settle
+early_goal_component: unavailable_excluded_from_equal_weight_sum
+path_and_risk: predicted_executable_prefix
+vetoed_continuation:
+  replacement_rounds_per_waypoint: 3
+  replacement_target: same_waypoint_within_original_jitter_support
+  exhausted: NO_SAFE_SET

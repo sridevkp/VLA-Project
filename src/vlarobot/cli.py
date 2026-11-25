@@ -74,6 +74,7 @@ def eval_vla(
     resume: bool = False,
     recovery_v2: bool = False,
     recovery_ik: bool = False,
+    endpoint_gripper: bool = False,
     diagnostic_index: Annotated[list[int] | None, typer.Option()] = None,
 ) -> None:
     """Run actual frozen TRAIN 8×3 VLA-only evaluation; never use compatibility fixtures."""
@@ -91,6 +92,7 @@ def eval_vla(
             resume=resume,
             recovery_v2=recovery_v2,
             recovery_ik=recovery_ik,
+            endpoint_gripper=endpoint_gripper,
             diagnostic_indices=tuple(diagnostic_index or ()),
         )
     finally:

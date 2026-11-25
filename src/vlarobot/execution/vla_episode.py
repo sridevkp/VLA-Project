@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -13,6 +14,7 @@ from PIL import Image
 
 from vlarobot.core.types import ApplyResult, GripperCmd, JointTarget, Observation, ScenarioSpec
 from vlarobot.vla.action_adapter import ActionAdapter
+from vlarobot.world_model.rollout import rotate
 
 
 class ChunkSource(Protocol):
@@ -58,6 +60,45 @@ def project_recovery_chunk(actions: np.ndarray, limits: tuple[float, float]) -> 
     return result
 
 
+def decode_endpoint_gripper(actions: np.ndarray, limits: tuple[float, float]) -> np.ndarray:
+    """Decode the checkpoint's scalar as an endpoint choice using the TRAIN label midpoint."""
+    values = np.asarray(actions)
+    if (
+        values.ndim != 2
+        or values.shape[1] != 7
+        or not len(values)
+        or values.dtype.kind not in "fiu"
+        or not np.all(np.isfinite(values))
+    ):
+        raise ValueError("invalid learned endpoint action chunk")
+    lower, upper = limits
+    if not (math.isfinite(lower) and math.isfinite(upper) and lower < upper):
+        raise ValueError("invalid learned endpoint actuator limits")
+    result = values.astype(np.float64)
+    scores = result[:, 6]
+    midpoint = (lower + upper) / 2
+    if np.any(scores == midpoint):
+        raise ValueError("ambiguous learned gripper endpoint")
+    result[:, 6] = np.where(scores > midpoint, upper, lower)
+    return result
+
+
+def _motion_sample(observation: Observation, accepted_action: int) -> dict[str, Any]:
+    base, tcp = observation.robot.base_pose_world, observation.robot.ee_pose
+    world = (
+        base.position.as_array() + rotate(np.asarray(base.orientation), tcp.position.as_array())
+        if base is not None
+        else None
+    )
+    return {
+        "t": observation.t,
+        "accepted_actions": accepted_action,
+        "tcp_world_m": world.tolist() if world is not None else None,
+        "observed_gripper_m": observation.robot.gripper_opening,
+        "observed_holding": observation.robot.gripper_holding,
+    }
+
+
 class VLAEpisodePolicy:
     """Learned actions only. The independent scorer may confirm terminal success in V2."""
 
@@ -76,6 +117,7 @@ class VLAEpisodePolicy:
         score: Callable[[Any, Observation, bool, str | None, str | None], dict[str, Any]],
         begin_metrics: Callable[[Any], None] | None = None,
         recovery_v2: bool = False,
+        endpoint_gripper: bool = False,
     ) -> None:
         if max_steps <= 0 or max_chunk_actions <= 0 or home_tolerance_rad <= 0:
             raise ValueError("VLA execution requires positive fixed bounds")
@@ -85,7 +127,10 @@ class VLAEpisodePolicy:
         self.home_tolerance_rad, self.arm_names = home_tolerance_rad, arm_names
         self.trace, self.score = trace, score
         self.begin_metrics = begin_metrics
+        if endpoint_gripper and not recovery_v2:
+            raise ValueError("endpoint decoder requires V2 execution")
         self.recovery_v2 = recovery_v2
+        self.endpoint_gripper = endpoint_gripper
 
     def execute(self, backend: Any, seed: int) -> dict[str, Any]:
         import json
@@ -105,7 +150,14 @@ class VLAEpisodePolicy:
         self.trace.parent.mkdir(parents=True, exist_ok=True)
         inputs = self.trace.with_suffix(".inputs")
         inputs.mkdir(exist_ok=False)
-        with self.trace.open("x", encoding="utf-8", buffering=1) as stream:
+        motion = (
+            self.trace.with_suffix(".motion.jsonl").open("x", encoding="utf-8", buffering=1)
+            if self.endpoint_gripper
+            else nullcontext()
+        )
+        with self.trace.open("x", encoding="utf-8", buffering=1) as stream, motion as motion_log:
+            if motion_log is not None:
+                motion_log.write(json.dumps(_motion_sample(observation, 0), allow_nan=False) + "\n")
             while executed < self.max_steps:
                 try:
                     actions, timing = self.model.predict(observation, self.instruction)
@@ -128,7 +180,12 @@ class VLAEpisodePolicy:
                 projection: dict[str, Any] = {}
                 if self.recovery_v2:
                     try:
-                        actions = project_recovery_chunk(
+                        decoder = (
+                            decode_endpoint_gripper
+                            if self.endpoint_gripper
+                            else project_recovery_chunk
+                        )
+                        actions = decoder(
                             raw_actions, self.adapter.safety_monitor.limits.gripper_opening
                         )
                     except ValueError as error:
@@ -137,6 +194,11 @@ class VLAEpisodePolicy:
                     else:
                         delta = actions[:, 6] - raw_actions[:, 6]
                         projection = {
+                            "gripper_decoder": (
+                                "train_endpoint_midpoint_v1"
+                                if self.endpoint_gripper
+                                else "bounded_extrapolation_v2"
+                            ),
                             "projected_gripper_m": actions[:, 6].tolist(),
                             "projection_delta_m": delta.tolist(),
                             "projected_count": int(np.count_nonzero(delta)),
@@ -170,6 +232,11 @@ class VLAEpisodePolicy:
                         break
                     observation = backend.step(1)
                     executed += 1
+                    if motion_log is not None:
+                        motion_log.write(
+                            json.dumps(_motion_sample(observation, executed), allow_nan=False)
+                            + "\n"
+                        )
                     q = np.array([observation.robot.joint_pos[n] for n in self.arm_names])
                     error = float(np.max(np.abs(q - home)))
                     departed = departed or error > self.home_tolerance_rad

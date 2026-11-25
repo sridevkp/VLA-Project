@@ -232,3 +232,35 @@ def test_recovery_projection_rejection_preserves_the_model_input_without_apply(t
     assert trace["projection_error"] and trace["actions"][0][6] > 0.046
     assert Path(trace["input_image"]).is_file()
     assert not backend.commands and backend.steps == 0
+
+
+def test_endpoint_decoder_preserves_learned_intent_and_fails_closed():
+    from vlarobot.execution.vla_episode import decode_endpoint_gripper
+
+    x = np.zeros((4, 7))
+    x[:, 0] = [0.01, 0.02, 0.03, 0.04]
+    x[:, 6] = [-0.0005, 0.018, 0.039, 0.04676]
+    y = decode_endpoint_gripper(x, (0.0, 0.045))
+    np.testing.assert_array_equal(y[:, :6], x[:, :6])
+    np.testing.assert_array_equal(y[:, 6], [0.0, 0.0, 0.045, 0.045])
+    for value in (float("nan"), float("inf"), 0.0225):
+        x[0, 6] = value
+        with pytest.raises(ValueError):
+            decode_endpoint_gripper(x, (0.0, 0.045))
+    with pytest.raises(ValueError):
+        decode_endpoint_gripper(x[:, :6], (0.0, 0.045))
+
+
+def test_endpoint_execution_records_raw_decoded_and_confirmed_motion(tmp_path):
+    control, _ = policy(tmp_path, [[0, 0, 0, 0, 0, 0, 0.04676]], max_steps=1)
+    control.recovery_v2 = control.endpoint_gripper = True
+    backend = Backend()
+    result = control.execute(backend, 0)
+    assert result["executed_actions"] == 1
+    trace = json.loads(control.trace.read_text())
+    assert trace["actions"][0][6] > 0.045
+    assert trace["projected_gripper_m"] == [0.045]
+    motion = [
+        json.loads(x) for x in control.trace.with_suffix(".motion.jsonl").read_text().splitlines()
+    ]
+    assert [x["accepted_actions"] for x in motion] == [0, 1]

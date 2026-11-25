@@ -131,9 +131,10 @@ def run_vla_campaign(
     recovery_v2: bool = False,
     diagnostic_indices: tuple[int, ...] = (),
     recovery_ik: bool = False,
+    endpoint_gripper: bool = False,
 ) -> dict[str, Any]:
     """Run all TRAIN 8×3 pairs; refuse untrained fixtures and preserve every completed episode."""
-    if recovery_ik and not recovery_v2:
+    if (recovery_ik or endpoint_gripper) and not recovery_v2:
         raise ValueError("recovery IK requires V2 execution")
     approval = require_trained_export(export)
     baseline_provenance = json.loads((baseline / "provenance.json").read_text(encoding="utf-8"))
@@ -181,6 +182,7 @@ def run_vla_campaign(
                 "execution_profile": "v2_bounded_gripper_verified_home",
                 "diagnostic_indices": list(diagnostic_indices),
                 "gate_normalized_ik_fallback": recovery_ik,
+                "endpoint_gripper": endpoint_gripper,
             }
             if recovery_v2
             else {}
@@ -282,6 +284,7 @@ def run_vla_campaign(
                         score=scorer,
                         begin_metrics=scorer.begin,
                         recovery_v2=recovery_v2,
+                        endpoint_gripper=endpoint_gripper,
                     )
 
                 with launch_webots_session(

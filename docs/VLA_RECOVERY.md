@@ -135,22 +135,67 @@ observations autonomously. [Phase evidence](../runs/worldmind/v2-phase-probe/)
   placement, release or successful HOME in either diagnostic.
   Both results are **0/3 diagnostic**, with no full TRAIN gate run.
 
-The next targeted comparison is an endpoint-native learned gripper output
-on TRAIN-only phase windows, with independent motor limits and malformed-output
-checks retained. Measure timing, reopening and residual behavior before
-deciding whether a bounded output head or more extensive fine-tuning is
-needed. One successful second query does not establish learned competence.
-Expanding the decoder envelope to cover these particular failures does not
-address the observed reopening during CLOSE. Eq. 3.2 integration remains
-downstream of the admission gate.
+## Endpoint decoder and closed-loop decision
+
+The approved native TRAIN dataset has 63,081 action labels across 80 demos.
+The gripper component is exactly one of two stored endpoints: 40,106 open
+and 22,975 closed. Every demo contains one close and one release transition.
+The decoder selects the endpoint from the model's finite scalar score using
+the actuator midpoint. It rejects malformed, nonfinite and exactly ambiguous
+scores. It takes no task-phase or oracle input. The pose commands, SafetyMonitor,
+HOME lifecycle and bounded IK fallback are unchanged.
+
+On 1,050 aligned commands in 21 teacher-forced windows, 485 raw targets were
+outside the motor interval and zero decoded targets were outside. Endpoint
+intent disagreed with the expert at 14/100 DESCEND, 7/100 CLOSE and 1/50
+first-open RELEASE actions. All 100 LIFT and all 100 TRANSIT commands agreed
+on the gripper endpoint. The seven CLOSE reopenings are learned decisions
+and remain visible after decoding.
+
+| Seed-0 TRAIN scene | Model queries | Accepted ticks | Closest TCP–CAN | Maximum CAN rise | Terminal |
+|---|---:|---:|---:|---:|---|
+| clear-i00 | 3 | 108 | 791 mm | 4.7 μm | Workspace z violation |
+| cluttered-i01 | 2 | 92 | 886 mm | 4.0 μm | IK residual exceeds tolerance |
+| reach-limited-i02 | 2 | 92 | 880 mm | 4.0 μm | IK residual exceeds tolerance |
+
+The three live diagnostics each commanded only the 45 mm open endpoint and
+failed independent task verification. Observed final half-apertures
+were 45.013, 45.003 and 45.006 mm, respectively. No closed-loop grasp, lift, transport, release
+or HOME completion was observed. Raw proposed targets ranged from 44.10 to
+46.70 mm. Of 350 proposed targets, 252 were outside the motor interval. These
+are diagnostic results under the corrected execution path. Full TRAIN admission
+remains unrun. The TCP–CAN distance uses the confirmed TCP pose transformed by
+the full base pose and CAN ground truth from the observation recorder. Ground
+truth is used only for this post-run calculation.
+[Recorded diagnostic](../runs/worldmind/v2-train-endpoint-1/)
+
+Targeted TRAIN fine-tuning is warranted. The intervention keeps the validated
+action labels and pose objective, and allocates explicit sample coverage to
+grasp and release transitions. It is a hypothesis to test for improved timing
+and pose accuracy. The closed-loop evidence also shows that learning to
+approach the target is necessary. Progress on the grip score alone is
+insufficient. The original optimizer telemetry confirms updates and throughput.
+It does not establish convergence.
+The original processor audit confirms exact RGB and state-normalization parity,
+matching dataset statistics, and zero error on a postprocessor round-trip
+of recorded physical actions. It does not cover the original normalized
+intermediate predictions or establish sensitivity to the language instruction.
+
+For Eq. 3.2, the minimum recovery is a learned decision head that jointly
+consumes the VLA observation/language representation, candidate actions and the
+corresponding predicted state sequences. Once learned admission is established,
+train and test this head on TRAIN-only evidence. Hold images, state, language
+and candidate payloads fixed, and test whether changing only the predicted
+context can change the learned decision. Report this conditioned decision
+separately from external objective ranking.
 
 ## Integration and PR access
 
 PR #2 remains bound to evaluated V1. Both official CI jobs failed at
 `uv run ty check src`. The separate `work/v1-integration-fixes` branch
-has a first behavior-preserving narrowing patch and nine passing focused
-tests. The same local type-check command still reports 93 diagnostics,
-down from 98. It is not ready to advance PR #2. The notebook-helper SHA
+contains behavior-preserving typing patches. The local type-check reports
+54 diagnostics, down from 98. The two latest patches passed 33 production
+regressions and five arm-sweep regressions. It is not ready to advance PR #2. The notebook-helper SHA
 mismatch is separate.
 
 From a machine with GitHub CLI and repository permissions, authenticate
@@ -165,3 +210,94 @@ gh pr edit 2 --repo sridevkp/VLA-Project --title "WorldMind V1: completed implem
 Alternatively, sign in to GitHub, open PR #2, use the title and description
 edit controls, and save the draft text from that file. No API credential
 was available in this session. SSH branch pushes succeeded.
+
+## TRAIN transition warm-start on Colab
+
+Use the original 80-demonstration TRAIN archive and the same step-20,000 export
+as the closed-loop endpoint experiment. The source export manifest SHA-256 is
+`5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1`.
+The policy receives the original camera, state, language and action representations.
+The sampler uses TRAIN label transitions to select windows. No phase label enters
+training inputs or the runtime decoder.
+
+1. Follow [Colab setup](COLAB_EXECUTION.md) in a T4 runtime through the first
+   three code cells, including TRAIN dataset verification. Skip the V1 training cells.
+2. Upload the original `acct2-durable-v1-drive-v1-portable-020000-attempt-1.zip`
+   and its receipt from Downloads into `MyDrive/vlarobot_smolvla/`.
+3. Add a Colab Python cell and run the following. Set `REVISION` to the full recovery
+   commit containing this section. If the repo requires access, upload the recovery
+   source archive for that commit and extract it at `/content/VLA-Project-v2`.
+   To make the archive, run `git archive --format=zip -o vla-recovery.zip REVISION`
+   from the recovery worktree, substituting the full commit for `REVISION`.
+   Upload it to the same Drive folder and run
+   `!unzip -q /content/drive/MyDrive/vlarobot_smolvla/vla-recovery.zip -d /content/VLA-Project-v2`
+   in Colab before the Python cell below.
+
+```python
+import hashlib
+import os
+import subprocess
+import zipfile
+from pathlib import Path
+
+REVISION = "replace-with-full-recovery-commit"
+drive = Path("/content/drive/MyDrive/vlarobot_smolvla")
+repo = Path("/content/VLA-Project-v2")
+export = Path("/content/vla-source-step-020000")
+python = "/content/vla-env/bin/python"
+if not repo.exists():
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--branch",
+            "work/vla-recovery",
+            "https://github.com/sridevkp/VLA-Project.git",
+            str(repo),
+        ],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "checkout", "--detach", REVISION], check=True)
+if (repo / ".git").exists():
+    assert (
+        subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        == REVISION
+    )
+if not export.exists():
+    with zipfile.ZipFile(drive / "acct2-durable-v1-drive-v1-portable-020000-attempt-1.zip") as z:
+        z.extractall(export)
+assert hashlib.sha256((export / "export-manifest.json").read_bytes()).hexdigest() == (
+    "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1"
+)
+subprocess.run([python, "-c", "import torch; assert torch.cuda.is_available()"], check=True)
+subprocess.run(
+    [
+        python,
+        "-u",
+        str(repo / "tools/finetune_vla_transitions.py"),
+        str(export),
+        "/content/vlarobot-data",
+        str(drive / "v2-transition-warmstart-01"),
+        "--steps",
+        "1000",
+        "--batch",
+        "8",
+        "--save-every",
+        "250",
+        "--device",
+        "cuda",
+    ],
+    env={**os.environ, "PYTHONPATH": str(repo / "src")},
+    check=True,
+)
+```
+
+The earlier T4 run recorded about 1.18 seconds per update over its final 3,000
+steps. That gives about 20 minutes for 1,000 updates at the same speed.
+Allow 30–60 minutes with setup and checkpoint writes. This is an estimate.
+After an interruption, use `--resume` if the run has a complete checkpoint.
+If it stopped before the first save, keep the attempted run and use a fresh
+output directory. Download the `step-021000` directory and retain the
+optimizer log. Before attempting the full TRAIN gate, rerun the same three
+TRAIN diagnostics with the resulting export and check for an observed grasp
+and lift. The diagnostic cannot satisfy the 10/24 admission gate.

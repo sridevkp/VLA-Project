@@ -4066,3 +4066,21 @@ differ:
 7. The frozen-arm numbers in `docs/RESULTS.md` are not edited.
 
 Daily status reports are five lines while this side-track is active.
+
+### V2 recovered step-021000 diagnostic negative result — 2026-11-26
+
+The recovered export `step-021000` was accepted by the production loader with
+manifest SHA-256 `0d5059dc5051b12a0d19614cc93f4b6a8ec77887f7e1e97b6e830858399504d6`
+and 1000 reloaded optimizer updates. The unchanged three-scene TRAIN diagnostic
+returned `0/3`; all accepted gripper endpoint actions target `0.045` m open,
+with no close command, no observed holding, micrometre-scale CAN motion and
+`success=false`/`home_reached=false` from the independent verifier. Execution
+profile, diagnostic indices, flags and all five controller/adapter hashes match
+the step-020000 baseline; only the model manifest changed.
+
+Decision: rule 6 above applies, so the V2 side-track stops here. The 24-trial
+admission campaign is not run, the `>=10/24` threshold is not changed, the V2
+holdout stays sealed, V1 results and frozen `docs/RESULTS.md` numbers are not
+touched, and no decoder, IK or safety change is made. Evidence:
+`docs/V2_NEGATIVE_RESULT.md`, `docs/evidence/v2-recovered-diagnostic-result.json`
+and `docs/evidence/v2-recovered-step21000-receipt.json`.

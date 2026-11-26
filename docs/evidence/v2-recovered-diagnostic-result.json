@@ -1,0 +1,334 @@
+{
+  "scope": "V2 TRAIN diagnostic of recovered step-021000; not the 24-trial admission gate",
+  "date": "2026-11-26",
+  "decision": "stop V2 side-track; do not run 24-trial admission",
+  "stop_rule_applies": true,
+  "stop_rule_basis": "0/3 and only open-endpoint gripper commands; no autonomous close, grasp, lift or transport",
+  "checkpoint": {
+    "step": 21000,
+    "export_manifest_sha256": "0d5059dc5051b12a0d19614cc93f4b6a8ec77887f7e1e97b6e830858399504d6",
+    "production_loader": "require_trained_export",
+    "optimizer_updates": 1000,
+    "receipt": "docs/evidence/v2-recovered-step21000-receipt.json"
+  },
+  "unchanged_execution_config": {
+    "controller_hashes_equal": true,
+    "baseline_summary_sha256_equal": true,
+    "profile": "v2_bounded_gripper_verified_home",
+    "flags": {
+      "recovery_v2": true,
+      "recovery_ik": true,
+      "endpoint_gripper": true,
+      "diagnostic_indices": [
+        0,
+        1,
+        2
+      ]
+    },
+    "model_changed_only": {
+      "baseline_manifest_sha256": "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1",
+      "recovered_manifest_sha256": "0d5059dc5051b12a0d19614cc93f4b6a8ec77887f7e1e97b6e830858399504d6"
+    }
+  },
+  "baseline": {
+    "run_dir": "runs/worldmind/v2-train-endpoint-1",
+    "status": null,
+    "trials": 3,
+    "successes": 0,
+    "model_manifest_sha256": "5d31a5d8c1a7728f0e8db7ab379d8d29737d75c18ee1897e12d49153477d92a1",
+    "execution_profile": "v2_bounded_gripper_verified_home",
+    "diagnostic_indices": [
+      0,
+      1,
+      2
+    ],
+    "gate_normalized_ik_fallback": true,
+    "endpoint_gripper": true,
+    "controller_sha256": {
+      "src/vlarobot/execution/vla_episode.py": "d212ebddc8f8e5bb7ba9cfc3791f248adbb6e4987f7224983b2c9fe057b9e9b5",
+      "src/vlarobot/execution/vla_campaign.py": "a8e05728c4465664aa12fd5ac9eac8f2ac216114b2f0ccf10074d491179bf38f",
+      "src/vlarobot/vla/action_adapter.py": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add",
+      "src/vlarobot/vla/model_service.py": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9",
+      "src/vlarobot/backends/webots/pose_solver.py": "ed400173dff18c1212677642433cebdeb56080b558c8a72fb7117655a584973f"
+    },
+    "baseline_summary_sha256": "8cdd50c6afb8b95d73014a82b14c66386f6c501b42f22e643e3216eed27191bd",
+    "file_sha256": {
+      "diagnostic-results.json": "16878da19fc4db0dc7a6f938a485c09f39e5135cf0e97048c17b39fbc735f181",
+      "derived-motion-summary.jsonl": "2996d0846f31a7e85325f6eb3e8118e5b3f807df81558f251afc308c5380f2d5",
+      "provenance.json": "70eba4e0ab1e3ba575492ed20ef652c6b2d260936ac664a6228685088eedcb51"
+    },
+    "episodes": [
+      {
+        "trial": "episode-00",
+        "scene": "train-clear-i00",
+        "terminal": "SAFETY",
+        "reason": "position z=1.0973357416647826 is outside workspace [0.652413946369596, 1.09241395]",
+        "model_queries": 3,
+        "accepted_action_ticks": 108,
+        "ik_fallbacks": 13,
+        "closest_m": 0.790903,
+        "closest_t_s": 3.488,
+        "approach_vector_from_can_m": [
+          -0.648915,
+          0.295798,
+          0.341964
+        ],
+        "rise_m": 4.7228683857092335e-06,
+        "can_xy_m": 9.16499079987483e-06,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.044104,
+        "raw_opening_max_m": 0.046703,
+        "raw_opening_outside_range": 102,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 0.9921250870512364,
+            "observed_opening_m": 1.4357139979111406e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.237758,
+        "can_height_error_m": 4.7228683857092335e-06,
+        "can_tilt_deg": 0.06052481504282267
+      },
+      {
+        "trial": "episode-01",
+        "scene": "train-cluttered-i01",
+        "terminal": "SAFETY",
+        "reason": "VLA IK pose residual exceeds configured tolerances",
+        "model_queries": 2,
+        "accepted_action_ticks": 92,
+        "ik_fallbacks": 4,
+        "closest_m": 0.886025,
+        "closest_t_s": 2.976,
+        "approach_vector_from_can_m": [
+          -0.750663,
+          0.382279,
+          0.274606
+        ],
+        "rise_m": 3.976696026586346e-06,
+        "can_xy_m": 7.716762516584566e-06,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.044239,
+        "raw_opening_max_m": 0.046027,
+        "raw_opening_outside_range": 72,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 0.9929785648614747,
+            "observed_opening_m": 1.4357139979111406e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.248711,
+        "can_height_error_m": 3.976696026586346e-06,
+        "can_tilt_deg": 0.05916596047768721
+      },
+      {
+        "trial": "episode-02",
+        "scene": "train-reach-limited-i02",
+        "terminal": "SAFETY",
+        "reason": "VLA IK pose residual exceeds configured tolerances",
+        "model_queries": 2,
+        "accepted_action_ticks": 92,
+        "ik_fallbacks": 7,
+        "closest_m": 0.879963,
+        "closest_t_s": 2.976,
+        "approach_vector_from_can_m": [
+          -0.794487,
+          0.306648,
+          0.221567
+        ],
+        "rise_m": 3.9766960249210115e-06,
+        "can_xy_m": 7.71676251693552e-06,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.044363,
+        "raw_opening_max_m": 0.046494,
+        "raw_opening_outside_range": 78,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 1.031336639551239,
+            "observed_opening_m": 1.4357139980178006e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.298913,
+        "can_height_error_m": 3.9766960249210115e-06,
+        "can_tilt_deg": 0.05916596047768721
+      }
+    ]
+  },
+  "recovered": {
+    "run_dir": "runs/worldmind/v2-train-recovered-diag-1",
+    "status": null,
+    "trials": 3,
+    "successes": 0,
+    "model_manifest_sha256": "0d5059dc5051b12a0d19614cc93f4b6a8ec77887f7e1e97b6e830858399504d6",
+    "execution_profile": "v2_bounded_gripper_verified_home",
+    "diagnostic_indices": [
+      0,
+      1,
+      2
+    ],
+    "gate_normalized_ik_fallback": true,
+    "endpoint_gripper": true,
+    "controller_sha256": {
+      "src/vlarobot/execution/vla_episode.py": "d212ebddc8f8e5bb7ba9cfc3791f248adbb6e4987f7224983b2c9fe057b9e9b5",
+      "src/vlarobot/execution/vla_campaign.py": "a8e05728c4465664aa12fd5ac9eac8f2ac216114b2f0ccf10074d491179bf38f",
+      "src/vlarobot/vla/action_adapter.py": "b95fec69be7af3bd7af0dc73a9e15d73f4ee89f9d01cb53074ededfa57752add",
+      "src/vlarobot/vla/model_service.py": "58f4e1fe499e1060cdc57ce721c7b6c42297e1c8a986621e0f3646ba6d4d3bf9",
+      "src/vlarobot/backends/webots/pose_solver.py": "ed400173dff18c1212677642433cebdeb56080b558c8a72fb7117655a584973f"
+    },
+    "baseline_summary_sha256": "8cdd50c6afb8b95d73014a82b14c66386f6c501b42f22e643e3216eed27191bd",
+    "file_sha256": {
+      "diagnostic-results.json": "9f551775dd9616ed3f1a5ace98bce55457b5f308ca5e9ec236113b28536d5841",
+      "derived-motion-summary.jsonl": "b55d5be2763caf696b7351b7b49fa01f82f58b3f08e85d9232625944a4b460af",
+      "provenance.json": "464986b390a30d44afaafdf807011e2593b1a7b4f88252dba2d4064c6db1c154"
+    },
+    "episodes": [
+      {
+        "trial": "episode-00",
+        "scene": "train-clear-i00",
+        "terminal": "SAFETY",
+        "reason": "VLA IK pose residual exceeds configured tolerances",
+        "model_queries": 2,
+        "accepted_action_ticks": 92,
+        "ik_fallbacks": 1,
+        "closest_m": 0.859546,
+        "closest_t_s": 2.976,
+        "approach_vector_from_can_m": [
+          -0.712823,
+          0.397215,
+          0.270044
+        ],
+        "rise_m": 3.976696026919413e-06,
+        "can_xy_m": 7.71676251603526e-06,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.04416,
+        "raw_opening_max_m": 0.0464,
+        "raw_opening_outside_range": 78,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 0.9921250870512602,
+            "observed_opening_m": 1.4357139981923138e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.237757,
+        "can_height_error_m": 3.976696026919413e-06,
+        "can_tilt_deg": 0.05916596047768721
+      },
+      {
+        "trial": "episode-01",
+        "scene": "train-cluttered-i01",
+        "terminal": "SAFETY",
+        "reason": "position z=1.0938129715414315 is outside workspace [0.652413946369596, 1.09241395]",
+        "model_queries": 3,
+        "accepted_action_ticks": 115,
+        "ik_fallbacks": 10,
+        "closest_m": 0.784819,
+        "closest_t_s": 3.648,
+        "approach_vector_from_can_m": [
+          -0.678173,
+          0.234699,
+          0.31771
+        ],
+        "rise_m": 8.055283894803367e-06,
+        "can_xy_m": 1.7531699731350965e-05,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.044359,
+        "raw_opening_max_m": 0.046739,
+        "raw_opening_outside_range": 134,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 0.9929785648614747,
+            "observed_opening_m": 1.4357139979111406e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.248717,
+        "can_height_error_m": 8.055283894803367e-06,
+        "can_tilt_deg": 0.06553419760096593
+      },
+      {
+        "trial": "episode-02",
+        "scene": "train-reach-limited-i02",
+        "terminal": "SAFETY",
+        "reason": "VLA IK pose residual exceeds configured tolerances",
+        "model_queries": 3,
+        "accepted_action_ticks": 149,
+        "ik_fallbacks": 3,
+        "closest_m": 0.258056,
+        "closest_t_s": 4.8,
+        "approach_vector_from_can_m": [
+          -0.176435,
+          -0.045291,
+          0.182792
+        ],
+        "rise_m": 1.173237661256099e-05,
+        "can_xy_m": 2.491162731699708e-05,
+        "accepted_gripper_targets_m": [
+          0.045
+        ],
+        "autonomous_close_targets": [],
+        "observed_holding_true_ticks": 0,
+        "raw_opening_min_m": 0.042902,
+        "raw_opening_max_m": 0.045537,
+        "raw_opening_outside_range": 55,
+        "gripper_events": [
+          {
+            "t": 0.03200000000000003,
+            "target": 0.045,
+            "alignment_m": 1.0317384231199622,
+            "observed_opening_m": 1.4364845662158865e-06
+          }
+        ],
+        "independent_verifier_success": false,
+        "home_reached": false,
+        "placement_m": 0.298924,
+        "can_height_error_m": 9.837578792359913e-06,
+        "can_tilt_deg": 0.06596151352223652
+      }
+    ]
+  },
+  "preserved": {
+    "v1_results_untouched": true,
+    "v2_holdout_sealed": true,
+    "admission_threshold_unchanged": ">=10/24 TRAIN",
+    "decoder_ik_safety_changed": false,
+    "docs_results_frozen_arm_numbers_touched": false
+  }
+}

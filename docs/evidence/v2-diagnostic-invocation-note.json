@@ -1,0 +1,26 @@
+{
+  "scope": "execution bookkeeping only; no gate, model or control setting changed",
+  "date": "2026-11-26",
+  "first_invocation": {
+    "command": "uv run python -m vlarobot.cli eval-vla --export /home/tj330/Downloads/v2-transition-warmstart-01/step-021000 --out runs/worldmind/v2-train-recovered-diag-1 --model-python /home/tj330/programs/VLA-Project/.venv-vla/bin/python --webots /home/tj330/.local/opt/webots/webots --recovery-v2 --recovery-ik --endpoint-gripper --diagnostic-index 0 --diagnostic-index 1 --diagnostic-index 2",
+    "outcome": "failed before Webots/model startup",
+    "error": "FileNotFoundError: runs/eval/baseline-train-s0-fresh-v2-registered/provenance.json",
+    "artifacts_written": false
+  },
+  "correction": {
+    "reason": "the frozen baseline lives in the sibling project, not in this worktree",
+    "added_flag": "--baseline /home/tj330/programs/VLA-Project/runs/eval/baseline-train-s0-fresh-v2-registered",
+    "baseline_provenance_sha256": "690f1597be07251200d74afe66ccec24fa06567ce29ba20f7c80175841d3aca9",
+    "baseline_summary_sha256": "8cdd50c6afb8b95d73014a82b14c66386f6c501b42f22e643e3216eed27191bd",
+    "unchanged": [
+      "export",
+      "output directory",
+      "model Python",
+      "Webots executable",
+      "recovery-v2",
+      "recovery-ik",
+      "endpoint-gripper",
+      "diagnostic indices 0/1/2"
+    ]
+  }
+}

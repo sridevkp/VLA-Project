@@ -81,11 +81,17 @@ cd /home/tj330/programs/VLA-Project-week3
 uv run python -m vlarobot.cli eval-vla \
   --export ~/Downloads/v2-transition-warmstart-01/step-021000 \
   --out runs/worldmind/v2-train-recovered-diag-1 \
+  --baseline /home/tj330/programs/VLA-Project/runs/eval/baseline-train-s0-fresh-v2-registered \
   --model-python /home/tj330/programs/VLA-Project/.venv-vla/bin/python \
   --webots /home/tj330/.local/opt/webots/webots \
   --recovery-v2 --recovery-ik --endpoint-gripper \
   --diagnostic-index 0 --diagnostic-index 1 --diagnostic-index 2
 ```
+
+The explicit baseline path is required in this worktree because the frozen
+baseline campaign is retained in the sibling project. It changes no model,
+decoder, IK, safety or gate setting; the CLI otherwise looks for a relative path
+that is absent here.
 
 The campaign writes `diagnostic-results.json`, `derived-motion-summary.jsonl`,
 per-episode `episode-NN.meta.json`, `.steps.npz`, `.actions.jsonl`,
@@ -139,3 +145,10 @@ and confirm that the diagnostic execution configuration has not changed.
 If the three scenes are 0/3 with only open-endpoint gripper commands, stop and
 write the V2 negative result with all receipts. Do not make further decoder or
 safety changes under this authorization.
+
+## Outcome (2026-11-26)
+
+The recovered `step-021000` checkpoint was 0/3 with only open-endpoint gripper
+commands, so the stop rule was applied. See [V2_NEGATIVE_RESULT.md](V2_NEGATIVE_RESULT.md)
+and `docs/evidence/v2-recovered-diagnostic-result.json`. No 24-trial admission
+campaign was started and the holdout remains sealed.

@@ -1,0 +1,46 @@
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+{
+  "cpu_threads": 2,
+  "device": "cpu",
+  "input": {
+    "image_shape_hw": [
+      480,
+      640
+    ],
+    "state_dim": 8,
+    "task_chars": 52
+  },
+  "decode_jpeg_ms": {
+    "samples": 20,
+    "mean_ms": 3.3255,
+    "p50_ms": 3.3483,
+    "p95_ms": 3.5154,
+    "min_ms": 3.0618,
+    "max_ms": 3.5154
+  },
+  "decode_and_tensorize_ms": {
+    "samples": 20,
+    "mean_ms": 7.2034,
+    "p50_ms": 7.2664,
+    "p95_ms": 8.9169,
+    "min_ms": 5.5197,
+    "max_ms": 8.9169
+  },
+  "smolvla_preprocessor_ms": {
+    "samples": 20,
+    "mean_ms": 9.6933,
+    "p50_ms": 9.644,
+    "p95_ms": 12.5632,
+    "min_ms": 8.8531,
+    "max_ms": 12.5632
+  },
+  "feature_pipeline_ms": {
+    "samples": 20,
+    "mean_ms": 9.8167,
+    "p50_ms": 9.7945,
+    "p95_ms": 13.041,
+    "min_ms": 8.801,
+    "max_ms": 13.041
+  }
+}

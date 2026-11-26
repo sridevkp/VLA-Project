@@ -1,0 +1,805 @@
+{
+  "schema": "worldmind-v2-evidence-backup-v1",
+  "purpose": "Preserve gitignored V2 raw diagnostics and frozen checkpoint evidence",
+  "source_roots": [
+    "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1",
+    "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1",
+    "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000"
+  ],
+  "file_count": 132,
+  "total_bytes": 1623929814,
+  "files": [
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/config.json",
+      "size_bytes": 2113,
+      "sha256": "4b03cc3cb3257ec32491bb56d44566590bb9cd6aceb4b02ab8e3cef25cb119f4"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/export-manifest.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/export-manifest.json",
+      "size_bytes": 3168,
+      "sha256": "0d5059dc5051b12a0d19614cc93f4b6a8ec77887f7e1e97b6e830858399504d6"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/model.safetensors",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/model.safetensors",
+      "size_bytes": 1197789224,
+      "sha256": "9aa7631a11704e92d2e820aa44c875024085eae0c178b7d129d506fbd365eac9"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/optimizer-steps.jsonl",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/optimizer-steps.jsonl",
+      "size_bytes": 688708,
+      "sha256": "06806b922e703c6a6d87f9b468df9cbf563d7be7720a19e014aba349ec656c61"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/policy_postprocessor.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/policy_postprocessor.json",
+      "size_bytes": 660,
+      "sha256": "3b51f092c70c710ce0213ee1b63bf51b4878ec67828dd2d67daf9ef51081a41a"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/policy_postprocessor_step_0_unnormalizer_processor.safetensors",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/policy_postprocessor_step_0_unnormalizer_processor.safetensors",
+      "size_bytes": 7672,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/policy_preprocessor.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/policy_preprocessor.json",
+      "size_bytes": 1558,
+      "sha256": "622c61c6ed6bd26bc741e1cef7eaa36e037f06665f1f218c5e1962b965bcf605"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/policy_preprocessor_step_5_normalizer_processor.safetensors",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/policy_preprocessor_step_5_normalizer_processor.safetensors",
+      "size_bytes": 7672,
+      "sha256": "1109ea83cd1bb2b596f7b3d90ff872950c0eec085e54a3d2d53ec21afe5435bf"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/added_tokens.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/added_tokens.json",
+      "size_bytes": 4739,
+      "sha256": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/chat_template.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/chat_template.json",
+      "size_bytes": 517,
+      "sha256": "9bc4f36b8d064f824368648472a4a09268c4bbf9bf930f04fae47f1f596dae92"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/config.json",
+      "size_bytes": 3767,
+      "sha256": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/generation_config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/generation_config.json",
+      "size_bytes": 136,
+      "sha256": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/merges.txt",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/merges.txt",
+      "size_bytes": 466391,
+      "sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/preprocessor_config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/preprocessor_config.json",
+      "size_bytes": 599,
+      "sha256": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/processor_config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/processor_config.json",
+      "size_bytes": 67,
+      "sha256": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/special_tokens_map.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/special_tokens_map.json",
+      "size_bytes": 868,
+      "sha256": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/tokenizer.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/tokenizer.json",
+      "size_bytes": 3548256,
+      "sha256": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/tokenizer_config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/tokenizer_config.json",
+      "size_bytes": 28713,
+      "sha256": "8b262ec2acb7773caac7b1e59edf921671cdb4c7c815a9c714242540d3fcb531"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/processor/vocab.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/processor/vocab.json",
+      "size_bytes": 800662,
+      "sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/recovery-optimizer.pt",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/recovery-optimizer.pt",
+      "size_bytes": 412746973,
+      "sha256": "a1a9fe78f13de4ad9c94433e2eebc4d736e6c3a4491930ad2fa1ef550dfb7006"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/recovery-provenance.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/recovery-provenance.json",
+      "size_bytes": 10050,
+      "sha256": "e88834db27737c711f02cb3bb657a119d75cd82936e8feab00b5400ff2e17c40"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/train_config.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/train_config.json",
+      "size_bytes": 6252,
+      "sha256": "63f4b7305f437bc01cb0d12fcfef2241f9c0251e2089322be31539fefea6b82f"
+    },
+    {
+      "source": "/home/tj330/Downloads/v2-transition-warmstart-01/step-021000/training-approval.json",
+      "relative_path": "external/v2-transition-warmstart-01/step-021000/training-approval.json",
+      "size_bytes": 30450,
+      "sha256": "21904aa4007bd1ab2d8276913255c9d2f8e65f5f9c02239463f521eb9f8bf20a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/derived-motion-summary.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/derived-motion-summary.jsonl",
+      "size_bytes": 3211,
+      "sha256": "2996d0846f31a7e85325f6eb3e8118e5b3f807df81558f251afc308c5380f2d5"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/diagnostic-results.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/diagnostic-results.json",
+      "size_bytes": 2249,
+      "sha256": "16878da19fc4db0dc7a6f938a485c09f39e5135cf0e97048c17b39fbc735f181"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.actions.jsonl",
+      "size_bytes": 46105,
+      "sha256": "520d9ee91ec729fb2f1e37e1375ab268132e3d60b28be1300afbaa8f97b01105"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000001.png",
+      "size_bytes": 314539,
+      "sha256": "43a1034ecff53502621b432fe7617bac23365abf914526dbfa7de854a7d7d4fe"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000002.png",
+      "size_bytes": 315441,
+      "sha256": "169b1277ed9fbd4dda900d06d6dfeab558085f75a514b02a0961f11513908eee"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000003.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.latency.inputs/000003.png",
+      "size_bytes": 316879,
+      "sha256": "28de47ff5b7f31165183b067d9b48164d544810c70e41922215f86dbeeac94f2"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.latency.jsonl",
+      "size_bytes": 31133,
+      "sha256": "001dedb4d3db6cb77daabffa3b479f931bdeeefe887a89cd9289b683c76610a9"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.latency.motion.jsonl",
+      "size_bytes": 20913,
+      "sha256": "2d7c7c66b75b704edbaa1fbf94ae3ee3e9e2c81b90480e2955ce5648fd22b579"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.meta.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.meta.json",
+      "size_bytes": 1688,
+      "sha256": "0d63bdb478a4dcf56a7457674ead87dc0e3bd9f23e4f9eb6a9c3baba86ef532f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-00.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-00.steps.npz",
+      "size_bytes": 34063,
+      "sha256": "84c9e2a15583f0d75cc993d0c1fe762d6a854cf802edda85c41b924521e981a8"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.actions.jsonl",
+      "size_bytes": 39394,
+      "sha256": "1a5e29e9891fadba6e3ded057a0a07ac029a163f67f3dbc6917afb305694946e"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.latency.inputs/000001.png",
+      "size_bytes": 314791,
+      "sha256": "273f880f7d56d14f1e188a6db498386c6492f967557e74c4cb572c1351bf2c06"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.latency.inputs/000002.png",
+      "size_bytes": 315763,
+      "sha256": "811648739a709c6a70cc186f9c422e20cbc5fcb20d30897e053caf5f6394664f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.latency.jsonl",
+      "size_bytes": 20835,
+      "sha256": "aa0b756d5ab881f26e22a40ecea98380caec57952bc2f81aba4e59ceaa74d13f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.latency.motion.jsonl",
+      "size_bytes": 17863,
+      "sha256": "47c9ed0d8a2756f0a3880f1377f2bfa45a05123723cc50cb99bacc28c6edb44f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.meta.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.meta.json",
+      "size_bytes": 1689,
+      "sha256": "4f72b3937d99fdb2deee3b061d5b1b3ae1637ad00f24e1e20d5c089e225f4a6f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-01.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-01.steps.npz",
+      "size_bytes": 29628,
+      "sha256": "76d167c618e56f4214fda3ff1657ae73fc65a7aac6ba11644b3c9fd604b00df5"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.actions.jsonl",
+      "size_bytes": 39400,
+      "sha256": "e0c98ee424815abc87d96c490063837c89fb5ec5314fbcd4e04b95447e31325a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.latency.inputs/000001.png",
+      "size_bytes": 315552,
+      "sha256": "c26a3f9c4bbaa49a09e5d879cd6398e439f163a107780872d50dd32f2de8710c"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.latency.inputs/000002.png",
+      "size_bytes": 315723,
+      "sha256": "c8c7f75bfd966a65d4fd29f5b73873dd9d9027c323378082ea8b7e492d913e6c"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.latency.jsonl",
+      "size_bytes": 20860,
+      "sha256": "78adba47ca325789015f0978c1c9fadacdef9b863c7cc4a25aaae2c841a84087"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.latency.motion.jsonl",
+      "size_bytes": 17868,
+      "sha256": "3a7c2d5be3ce22f34ffaff1e2501bbc4c8cb444b967297b1e17887ae9550fb5b"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.meta.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.meta.json",
+      "size_bytes": 1666,
+      "sha256": "18bd87d14c60e2a04fdbb52f822666ded7dfbf9d2f415c6867a498c388913251"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episode-02.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episode-02.steps.npz",
+      "size_bytes": 29949,
+      "sha256": "c1eb5eb11ea15b36447126a035bf49de556fc3652dc35c86b8289cb0e9f70bda"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/episodes.csv",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/episodes.csv",
+      "size_bytes": 501,
+      "sha256": "1c105bb90303d3b1082ccf2d00ffc95ab657d3ea60030f4c17f21aba317600f2"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-00/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-00/000000.jpg",
+      "size_bytes": 53853,
+      "sha256": "f0cec1d7e1c8e0ca4e3b3307cf8828cc99bc90c16619120d56588f4e5aa0139d"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-00/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-00/000001.jpg",
+      "size_bytes": 54118,
+      "sha256": "25a62ba833ea68b0b3ce98fd922f2bb78298466c82076e89ced46ac764789afc"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-00/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-00/000002.jpg",
+      "size_bytes": 54130,
+      "sha256": "b947e74350d688d00e389fb5cd28855b81fc70b5606c2326574019cc2ae15484"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-00/000003.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-00/000003.jpg",
+      "size_bytes": 54423,
+      "sha256": "341db9c64a1c84d91d1dead5c9f709eee52d455a9c7e38ce325ab881b842db76"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-01/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-01/000000.jpg",
+      "size_bytes": 53676,
+      "sha256": "ef30ce527d3a3e43c1a6c1625e218d8e0ecc4038ad409cbf92dcafa9374bad40"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-01/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-01/000001.jpg",
+      "size_bytes": 54048,
+      "sha256": "1cc54a823d558e42e3db40627a825491211de2948c5de51112438d7e3cc28219"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-01/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-01/000002.jpg",
+      "size_bytes": 54320,
+      "sha256": "670c7e760c760cf2c7b7a4150a9dfaf581d51c3e783f8ee55890079ef70b6a2a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-02/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-02/000000.jpg",
+      "size_bytes": 53039,
+      "sha256": "cf583c7cc5a62070041bc6dd72b70caa1125330eb1c9347c9ee8ff0c9ac19a70"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-02/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-02/000001.jpg",
+      "size_bytes": 53236,
+      "sha256": "df4081ac7cb87ae5e7ac5f85f68a9169c0fa3e280f96b34901f0bf4e19114dbd"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/frames/episode-02/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/frames/episode-02/000002.jpg",
+      "size_bytes": 53249,
+      "sha256": "1f98ce6deb9fe270ce1b907f7f2059c1d92e1a8205080f8e7a7e78b6e40e97b6"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/model-metadata.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/model-metadata.json",
+      "size_bytes": 561,
+      "sha256": "a80dbac4de30ee1d59245abc5b8ed78903bcfa1413650f435885e23608866a57"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/model-server.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/model-server.log",
+      "size_bytes": 419,
+      "sha256": "d66caa988cf26c78aad3cc5f3666a7b7b5dbd44670e28f8fff7b1897c026d104"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/plan.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/plan.json",
+      "size_bytes": 963,
+      "sha256": "449bed19ff13777ef1a50ed244d6b4f1f5e432300d568952f5591125001eb457"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/provenance.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/provenance.json",
+      "size_bytes": 22275,
+      "sha256": "70eba4e0ab1e3ba575492ed20ef652c6b2d260936ac664a6228685088eedcb51"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/summary.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/summary.json",
+      "size_bytes": 1689,
+      "sha256": "abe1e0eb691e00bc5d73e5fc511539274351b079ad80f7ca826b64de1fd9d90d"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/timings.json",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/timings.json",
+      "size_bytes": 230,
+      "sha256": "07c56a6093663fed96e9f82a4d57081f19fcf4bba14864f9d58292cbab561bda"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep00.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep00.controller-stderr.log",
+      "size_bytes": 85174,
+      "sha256": "030820ef75277619d030fd0bc14c7f7bf7c660b7d208d8478bdafed75480028c"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep00.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep00.log",
+      "size_bytes": 85039,
+      "sha256": "bbcee5e2fd61f58aa587416ee27501e6c41900e4cc03e63391cb8cd273419611"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep01.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep01.controller-stderr.log",
+      "size_bytes": 72987,
+      "sha256": "d4cdb04269c02df10b8b7639ce4f32c5b99302d512cb37e718bd831c814cc91b"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep01.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep01.log",
+      "size_bytes": 72943,
+      "sha256": "fd795c6149a21077883bf70832be9dd8387ffb7ed09acb297894e804fbc19c78"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep02.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep02.controller-stderr.log",
+      "size_bytes": 72985,
+      "sha256": "80ab11a6215e005db82b084e7e2f5c59080ed2372e52bcb0b20b25374960bf29"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-endpoint-1/vla-ep02.log",
+      "relative_path": "runs/worldmind/v2-train-endpoint-1/vla-ep02.log",
+      "size_bytes": 72941,
+      "sha256": "254bc53ec3a1cf2e661866f0d287c7b60daeec2f8ecad63c2dd0e96f40459387"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/derived-motion-summary.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/derived-motion-summary.jsonl",
+      "size_bytes": 3216,
+      "sha256": "b55d5be2763caf696b7351b7b49fa01f82f58b3f08e85d9232625944a4b460af"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/diagnostic-results.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/diagnostic-results.json",
+      "size_bytes": 2249,
+      "sha256": "9f551775dd9616ed3f1a5ace98bce55457b5f308ca5e9ec236113b28536d5841"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.actions.jsonl",
+      "size_bytes": 39344,
+      "sha256": "3573a8e72b59399975717fd397f84b09fe0188ecd7f38c995aa9fa9f75604d56"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.inputs/000001.png",
+      "size_bytes": 314539,
+      "sha256": "43a1034ecff53502621b432fe7617bac23365abf914526dbfa7de854a7d7d4fe"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.inputs/000002.png",
+      "size_bytes": 314996,
+      "sha256": "afa639a44f995d0b351aaf6759e0d3f3c408d8431d3d1c78499834bff790800a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.jsonl",
+      "size_bytes": 20841,
+      "sha256": "a36ee04e45ae78fe87d368056c07bfbd85be1d2fe595abc0c76118f835725299"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.latency.motion.jsonl",
+      "size_bytes": 17877,
+      "sha256": "f69a1d3a488333c86685a9e439c8d6733a13fa5a3206891f0edb9bb2a12d2d57"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.meta.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.meta.json",
+      "size_bytes": 1652,
+      "sha256": "809b8e2e1832b532f43e4002078851ff191a4b693723de608d2908023efd896e"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-00.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-00.steps.npz",
+      "size_bytes": 29510,
+      "sha256": "a53b30256745c387bd61a31d1ccfb4db8e86291d5f700eb4cdd27d9507a4f339"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.actions.jsonl",
+      "size_bytes": 49131,
+      "sha256": "653a4c8a1368e5a25acf8786aff42a19d8b57e883b1fe7ed23638bb753f7e552"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000001.png",
+      "size_bytes": 314791,
+      "sha256": "273f880f7d56d14f1e188a6db498386c6492f967557e74c4cb572c1351bf2c06"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000002.png",
+      "size_bytes": 316058,
+      "sha256": "89fe2ff61ec54db055ea96720cd6f7e870af2874eb221ee5529aa8343203ecb4"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000003.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.inputs/000003.png",
+      "size_bytes": 318569,
+      "sha256": "73c0693f5db13f2f6152d9a48d0ea401059ef13e574c4d6d956090d812845ea8"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.jsonl",
+      "size_bytes": 30964,
+      "sha256": "e15337fd3c1707f05de683f6c634b0eadcc1f2e8a73a79b6a5d6c050c61f99c5"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.latency.motion.jsonl",
+      "size_bytes": 22299,
+      "sha256": "30cd583afb24e929e2c0da39a110763872bfc1539c3413f5033206b2f0d57fc0"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.meta.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.meta.json",
+      "size_bytes": 1725,
+      "sha256": "c3a37410e07722cc3838e1d99ff45952eade83fa4843cb9a11c5fb3baf80b513"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-01.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-01.steps.npz",
+      "size_bytes": 36251,
+      "sha256": "4c476369b943a073cf76f3f11594c45a5cf620544354f818d7353b4fe12ee919"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.actions.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.actions.jsonl",
+      "size_bytes": 62897,
+      "sha256": "4cf6d939212a6627440711c90bdc847aca5dcd4b36d8e391d8dee2390db7111a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.contacts.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.contacts.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000001.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000001.png",
+      "size_bytes": 315710,
+      "sha256": "5f86d52e11033ffddcf18da77550200d5a313647bbf14807925d5d34558e973e"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000002.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000002.png",
+      "size_bytes": 316110,
+      "sha256": "f36a3da9bf7f73476763ca8b87d4697f91eb8b45bbe9929781c71da4e1a22fd4"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000003.png",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.inputs/000003.png",
+      "size_bytes": 317000,
+      "sha256": "5f1eb3cb303de65e5eef989fa1983ba8fc6eedaf272d58d97819f52ffe95c83e"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.jsonl",
+      "size_bytes": 30850,
+      "sha256": "a5b557deb74f4df4f557a906a871c31048ec0857895721fb71fee714fb9ac094"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.motion.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.latency.motion.jsonl",
+      "size_bytes": 28603,
+      "sha256": "50b79d2fa01dfed54c3abca624aff3c5aa320de5bbfa4384a4bdc9ccfa942b31"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.meta.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.meta.json",
+      "size_bytes": 1668,
+      "sha256": "a2ff8969288a5e0ead61145ac25b4e880245e0c05b14b515b191306e8ff0bf67"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.predicted.jsonl",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.predicted.jsonl",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episode-02.steps.npz",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episode-02.steps.npz",
+      "size_bytes": 46833,
+      "sha256": "29318d5468bb99a9561ec7e699f7a753905e30da04b149e1a52956133f845bfa"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/episodes.csv",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/episodes.csv",
+      "size_bytes": 501,
+      "sha256": "49e60ce95efc0d121f4115a281732553b9cbb67dc226029a7822e19bf9b8fda4"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000000.jpg",
+      "size_bytes": 53853,
+      "sha256": "f0cec1d7e1c8e0ca4e3b3307cf8828cc99bc90c16619120d56588f4e5aa0139d"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000001.jpg",
+      "size_bytes": 54165,
+      "sha256": "b08a25d45b8157250cdbb0de85f083da257fb6d829f2c5f9b03d3565a6675bd2"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-00/000002.jpg",
+      "size_bytes": 54033,
+      "sha256": "112abb05a03c6c1750a6872566d142f639a428a2f8e6d79d2dfbf3d9e420c83d"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000000.jpg",
+      "size_bytes": 53676,
+      "sha256": "ef30ce527d3a3e43c1a6c1625e218d8e0ecc4038ad409cbf92dcafa9374bad40"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000001.jpg",
+      "size_bytes": 54059,
+      "sha256": "73c5c43ff83c4ee1c1f19bcf6334d6ce4fa66784f647a81cb6b0431330eae9da"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000002.jpg",
+      "size_bytes": 54372,
+      "sha256": "7d805fef0de71b3ef1ca2c25c00cfd1ef2da8348e10ead77a35635b4f12683bd"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000003.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-01/000003.jpg",
+      "size_bytes": 54802,
+      "sha256": "be0527ae6c91945b597ed4d9dbc49d4591c4b3d489d4d3a4d49e53b2fc1eb734"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000000.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000000.jpg",
+      "size_bytes": 53195,
+      "sha256": "2e53f72c24c9eefe99e67db230fb702be0c9ae4a6d8d2f8c791e89b95f1353c9"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000001.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000001.jpg",
+      "size_bytes": 53284,
+      "sha256": "a905b6fce6166c8571b3f906ea840815bc225e5ef7e80472aeb09c93b73a35e3"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000002.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000002.jpg",
+      "size_bytes": 53260,
+      "sha256": "02b082c5ab1a8c97df6194a3d9367d4a5e42007787e2744b44452c794616cf49"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000003.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000003.jpg",
+      "size_bytes": 53726,
+      "sha256": "6da2f617f9f9949ae792600baf71ca31c4e231b82b8de069221a54a87328b322"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000004.jpg",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/frames/episode-02/000004.jpg",
+      "size_bytes": 53535,
+      "sha256": "39a627bb2559ec1ee790f29af55b4658a022d19aa5cd2653125d50c8d1c8ed96"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/model-metadata.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/model-metadata.json",
+      "size_bytes": 561,
+      "sha256": "25c000911dc28c23fc39d2feb0b6da6d64c24f9ade1a9f5e411a80f839bcdfdf"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/model-server.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/model-server.log",
+      "size_bytes": 419,
+      "sha256": "d66caa988cf26c78aad3cc5f3666a7b7b5dbd44670e28f8fff7b1897c026d104"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/plan.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/plan.json",
+      "size_bytes": 963,
+      "sha256": "449bed19ff13777ef1a50ed244d6b4f1f5e432300d568952f5591125001eb457"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/provenance.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/provenance.json",
+      "size_bytes": 22275,
+      "sha256": "464986b390a30d44afaafdf807011e2593b1a7b4f88252dba2d4064c6db1c154"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/summary.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/summary.json",
+      "size_bytes": 1689,
+      "sha256": "64b5e9a9ff85d0b7963dca3a4e3519ee1dba31dae8fcf51f8b5b1bf9515f5ddd"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/timings.json",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/timings.json",
+      "size_bytes": 229,
+      "sha256": "cac1934bbc5d2b2936eff828bdc3952fc339b6f442da47f1b50f8cb3fe9a28bb"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep00.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep00.controller-stderr.log",
+      "size_bytes": 72971,
+      "sha256": "0d4e10bd0e02d9dd5ebef66d065551f8acc0ce9ee1211f1238a8f917effcaecf"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep00.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep00.log",
+      "size_bytes": 73108,
+      "sha256": "78ce5c211c947e87e4cb15e030d6e0e1af2b22c622ef6ab1ae9e8ec0510282a0"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep01.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep01.controller-stderr.log",
+      "size_bytes": 91696,
+      "sha256": "65e5f80f55555c9eaccf4d2c517031a8a60298f1680b17a6d5f45c74de74c873"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep01.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep01.log",
+      "size_bytes": 91838,
+      "sha256": "21261ecf6bd0f38374b618cb881c8e1ad05d782b6ed3aa56e3266d9336833b9a"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep02.controller-stderr.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep02.controller-stderr.log",
+      "size_bytes": 115229,
+      "sha256": "0c5f0ce27ecd5195c3a500bcf495273947d23b34be4ae4045a182354b0dd5c0f"
+    },
+    {
+      "source": "/home/tj330/programs/VLA-Project-week3/runs/worldmind/v2-train-recovered-diag-1/vla-ep02.log",
+      "relative_path": "runs/worldmind/v2-train-recovered-diag-1/vla-ep02.log",
+      "size_bytes": 115476,
+      "sha256": "73ea8acdc98fadaf8b4b68686928938c2d8078595174639f4e60ae7b423c9986"
+    }
+  ]
+}

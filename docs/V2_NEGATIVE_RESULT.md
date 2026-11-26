@@ -95,3 +95,7 @@ commands, stop and write the V2 negative result" is satisfied. Consequences:
   `diagnostic-results.json`, `derived-motion-summary.jsonl`, per-episode meta,
   steps, actions, latency, logs, frames and `provenance.json`.
 - Baseline raw campaign: `runs/worldmind/v2-train-endpoint-1/`.
+- External backup plan and committed raw-file hash manifest:
+  `docs/V2_EVIDENCE_BACKUP_PLAN.md` and
+  `docs/evidence/v2-raw-evidence-manifest.json`. The external copy is pending an
+  owner-provided destination; a Git push does not preserve gitignored `runs/`.

@@ -4220,3 +4220,19 @@ grasp evidence is inconclusive. A prior attachment can refresh after
 substantial measured tool–CAN co-motion with a partially closed gripper and
 a tool–CAN separation within one CAN diameter. An initial attachment still
 requires observed lift. Independent safety and proxy checks still run.
+
+The predicted-context TRAIN diagnostic at `fbb2dcb` grasped, lifted,
+transported, lowered, and released the CAN. Final distance was 12.5 mm.
+Distance, height, and tilt passed. The frozen verifier failed HOME.
+The original run directory now contains a model copy and a provenance
+manifest alongside the existing decision and controller traces.
+
+The V4 selector now exposes HOME after a measured release at a valid placement.
+It uses the simulator's configured reset reference and the existing V4
+0.01 rad verifier tolerance. The independent monitor and command-time
+tool-envelope proxy audit each joint waypoint. The strict full-arm result
+remains unverified. The existing model lacks HOME supervision, so an explicit
+completion objective ranks HOME, local retreat, and termination at valid
+placement. The empirical utility and candidate scores before placement retain
+their existing meaning. A task verification claim still requires the frozen
+independent predicate.

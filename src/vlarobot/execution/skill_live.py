@@ -9,6 +9,7 @@ from sys import executable
 import numpy as np
 
 from vlarobot.backends.webots.config import (
+    ARM_JOINTS,
     CAN_RADIUS_M,
     CLOSE_ALIGN_TOL,
     GRIPPER_OPEN,
@@ -39,7 +40,12 @@ from vlarobot.execution.episode_runner import launch_webots_session
 from vlarobot.execution.skill_empirical import FORECAST_PROFILE, forecast_candidate
 from vlarobot.execution.skill_proxy import PROFILE_ID, command_proxy, placement_clearance_offset_m
 from vlarobot.execution.skill_selection import UtilityModel, enumerate_skills
-from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
+from vlarobot.execution.skills import (
+    HOME_VERIFICATION_TOLERANCE_RAD,
+    Skill,
+    SkillAction,
+    SkillExecutor,
+)
 from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
 from vlarobot.world_model.rollout import compose, rotate
@@ -252,6 +258,27 @@ def close_progress_score(
     return raw_score
 
 
+def _verify_pose(initial: Pose3D, current: Pose3D, home_reached: bool) -> dict:
+    return final_can_outcome(
+        initial,
+        current,
+        place_world_m=SETTINGS.place_world,
+        distance_tolerance_m=SETTINGS.place_tolerance_m,
+        height_tolerance_m=SETTINGS.can_place_z_tolerance_m,
+        tilt_limit_deg=SETTINGS.can_tilt_limit_deg,
+        home_reached=home_reached,
+        failure_state=None,
+        failure_reason=None,
+    )
+
+
+def _at_home(observation: Observation, home: dict[str, float]) -> bool:
+    return all(
+        abs(observation.robot.joint_pos[name] - target) <= HOME_VERIFICATION_TOLERANCE_RAD
+        for name, target in home.items()
+    )
+
+
 def run_learned_smoke(
     out: Path,
     model_path: Path,
@@ -313,6 +340,7 @@ def run_learned_smoke(
         stop_reason = "decision budget"
         best_approach_gap = None
         attachment_offset = None
+        observed_release = False
         for index in range(max_decisions):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
@@ -336,6 +364,15 @@ def run_learned_smoke(
                 measured_can_base=oracle_can,
                 attachment_offset=attachment_offset,
             )
+            home_reached = _at_home(obs, home)
+            placement = _verify_pose(initial, truth.object_poses["CAN"], home_reached)
+            placed_and_released = (
+                observed_release
+                and obs.robot.gripper_opening >= GRIPPER_OPEN - 0.002
+                and all(
+                    placement[key] for key in ("place_distance_ok", "can_height_ok", "can_tilt_ok")
+                )
+            )
             forecasts = (
                 [forecast_candidate(state, candidate).trajectory for candidate in candidates]
                 if context != "smoke"
@@ -345,6 +382,13 @@ def run_learned_smoke(
             if context == "shuffled" and len(futures) > 1:
                 shift = int(np.random.default_rng(entry.seed + index).integers(1, len(futures)))
                 futures = futures[shift:] + futures[:shift]
+            # HOME has exact joint forecasts and no empirical labels in this fit.
+            if placed_and_released and not home_reached:
+                candidates += (
+                    SkillAction(
+                        Skill.HOME, home_joints=tuple((name, home[name]) for name in ARM_JOINTS)
+                    ),
+                )
             rows, assessments = [], []
             for candidate_index, candidate in enumerate(candidates):
                 checks = []
@@ -357,7 +401,7 @@ def run_learned_smoke(
                     audit=command_proxy(preview.monitor, candidate.skill, checks.append),
                 )
                 safe = predicted.settled and bool(checks) and not predicted.vetoes
-                forecast = forecasts[candidate_index] if forecasts else None
+                forecast = forecasts[candidate_index] if candidate_index < len(forecasts) else None
                 if forecast is not None:
                     safe = (
                         safe
@@ -365,11 +409,17 @@ def run_learned_smoke(
                         and set(forecast.hard_reasons) <= {"unverified-arm-sweep"}
                     )
                 future = None
-                if uses_context:
+                if uses_context and forecast is not None:
                     future = state if context == "controlled" else futures[candidate_index]
-                raw_score = model.score(state, candidate, future)
-                score = approach_progress_score(
-                    raw_score, candidate, can.position, best_approach_gap
+                raw_score = (
+                    None if candidate.skill is Skill.HOME else model.score(state, candidate, future)
+                )
+                score = (
+                    0.0
+                    if raw_score is None
+                    else approach_progress_score(
+                        raw_score, candidate, can.position, best_approach_gap
+                    )
                 )
                 score = release_progress_score(score, candidate, truth.object_poses["CAN"].position)
                 score = close_progress_score(
@@ -381,6 +431,15 @@ def run_learned_smoke(
                         for option in candidates
                     ),
                 )
+                score_source = "empirical-utility"
+                if placed_and_released:
+                    score_source = "measured-completion-objective"
+                    if candidate.skill is Skill.HOME:
+                        score = float(_at_home(predicted.observation, home))
+                    elif candidate.skill is Skill.RETREAT and not home_reached:
+                        score = min(0.5, max(0.0, score))
+                    else:
+                        score = min(-1.0, score)
                 assessments.append(
                     CandidateAssessment((("proxy", safe),), (score, None, None, None))
                 )
@@ -389,6 +448,7 @@ def run_learned_smoke(
                         "action": asdict(candidate),
                         "score": score,
                         "raw_model_score": raw_score,
+                        "score_source": score_source,
                         "strict_forecast_reasons": None
                         if forecast is None
                         else forecast.hard_reasons,
@@ -406,11 +466,16 @@ def run_learned_smoke(
                         "audits": [asdict(check) for check in checks],
                     }
                 )
-            assessments.append(CandidateAssessment((("proxy", True),), (0.0, None, None, None)))
-            rows.append({"action": "terminate", "score": 0.0, "proxy_pass": True})
+            termination_score = 1.0 if placed_and_released and home_reached else 0.0
+            assessments.append(
+                CandidateAssessment((("proxy", True),), (termination_score, None, None, None))
+            )
+            rows.append({"action": "terminate", "score": termination_score, "proxy_pass": True})
             decision = gate.select(assessments)
             record = {
                 "index": index,
+                "placed_and_released": placed_and_released,
+                "home_reached": home_reached,
                 "causal_best_approach_gap_m": best_approach_gap,
                 "observed_attachment_tool_m": (
                     None if attachment_offset is None else attachment_offset.tolist()
@@ -456,6 +521,10 @@ def run_learned_smoke(
             tool_before = obs.robot.ee_pose.position
             obs = actual.observation
             pose_after = backend.get_ground_truth().object_poses["CAN"]
+            if actual.settled and candidate.skill in (Skill.OPEN, Skill.RELEASE):
+                observed_release = True
+            elif candidate.skill is Skill.CLOSE:
+                observed_release = False
             if actual.settled:
                 new_attachment = measured_attachment(
                     obs_before,
@@ -527,17 +596,9 @@ def run_learned_smoke(
             "instruction": "Pick up the can and place it at the target location.",
             "language_dependence": "unmeasured; fixed configured destination",
             "decisions": len(decisions),
-            "verification": final_can_outcome(
-                initial,
-                final,
-                place_world_m=SETTINGS.place_world,
-                distance_tolerance_m=SETTINGS.place_tolerance_m,
-                height_tolerance_m=SETTINGS.can_place_z_tolerance_m,
-                tilt_limit_deg=SETTINGS.can_tilt_limit_deg,
-                home_reached=all(abs(obs.robot.joint_pos[k] - v) <= 0.01 for k, v in home.items()),
-                failure_state=None,
-                failure_reason=None,
-            ),
+            "home_reference_rad": home,
+            "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
+            "verification": _verify_pose(initial, final, _at_home(obs, home)),
         }
         write_json(out / "learned-summary.json", result)
     return result

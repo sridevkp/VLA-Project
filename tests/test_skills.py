@@ -1,10 +1,12 @@
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
 
 from vlarobot.backends.fake.backend import FakeBackend
-from vlarobot.backends.webots.config import GRIPPER_OPEN
+from vlarobot.backends.webots.config import ARM_JOINTS, GRIPPER_OPEN
 from vlarobot.core.types import ApplyResult, GripperCmd, JointTarget, ScenarioSpec, Vec3
+from vlarobot.execution.skill_live import _at_home, _PreviewBackend
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor, _CheckedBackend
 
 
@@ -112,3 +114,47 @@ def test_proxy_rejection_prevents_dispatch() -> None:
     assert not result.settled
     assert result.vetoes == ("modeled_obstacles",)
     apply.assert_not_called()
+
+
+def test_home_audits_each_joint_waypoint_and_dispatches_no_gripper_action() -> None:
+    backend = FakeBackend()
+    initial = backend.reset(ScenarioSpec(), 0)
+    limits = SkillExecutor(0, initial).monitor.limits.joint_position
+    home = {joint: sum(limits[joint]) / 2 for joint in ARM_JOINTS}
+    away = replace(
+        initial,
+        robot=replace(initial.robot, joint_pos={**home, ARM_JOINTS[0]: home[ARM_JOINTS[0]] + 0.08}),
+    )
+    action = SkillAction(Skill.HOME, home_joints=tuple(home.items()))
+    audited = []
+
+    def audit(command, observation, truth, terminal):
+        assert isinstance(command, JointTarget)
+        audited.append(command)
+        return ApplyResult(True)
+
+    preview = _PreviewBackend(away, backend.get_ground_truth())
+    assert not _at_home(away, home)
+    result = SkillExecutor(0, away).run_skill(preview, away, action, audit=audit)
+    assert result.settled
+    assert len(audited) >= 2
+    assert tuple(audited) == result.dispatched
+    assert audited[-1].q == home
+    assert _at_home(result.observation, home)
+
+
+def test_home_stops_at_first_proxy_veto() -> None:
+    backend = FakeBackend()
+    observation = backend.reset(ScenarioSpec(), 0)
+    limits = SkillExecutor(0, observation).monitor.limits.joint_position
+    home = {joint: sum(limits[joint]) / 2 for joint in ARM_JOINTS}
+    observation = replace(observation, robot=replace(observation.robot, joint_pos=home))
+    result = SkillExecutor(0, observation).run_skill(
+        backend,
+        observation,
+        SkillAction(Skill.HOME, home_joints=tuple(home.items())),
+        audit=lambda *args: ApplyResult(False, "table"),
+    )
+    assert not result.settled
+    assert result.vetoes == ("table",)
+    assert not result.dispatched

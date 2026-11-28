@@ -73,7 +73,9 @@ def _features(state: WorldState, action: SkillAction, future: WorldState | None)
         obj.pose.position.as_array() for obj in state.scene.objects if obj.object_id == "CAN"
     )
     target = tool if action.target_base is None else action.target_base.as_array()
-    identity = np.array([skill == action.skill for skill in Skill], dtype=float)
+    identity = np.array(
+        [skill == action.skill for skill in Skill if skill is not Skill.HOME], dtype=float
+    )
     current = np.r_[
         tool,
         can - tool,

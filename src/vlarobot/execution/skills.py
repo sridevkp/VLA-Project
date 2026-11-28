@@ -19,6 +19,8 @@ from vlarobot.core.types import (
 from vlarobot.execution.safety_monitor import SafetyMonitor
 from vlarobot.execution.scripted_can import ScriptedCanPolicy
 
+HOME_VERIFICATION_TOLERANCE_RAD = 0.01
+
 
 class Skill(StrEnum):
     APPROACH = "PREGRASP"
@@ -30,14 +32,22 @@ class Skill(StrEnum):
     OPEN = "OPEN"
     CLOSE = "CLOSE"
     RELEASE = "RELEASE"
+    HOME = "HOME"
 
 
 @dataclass(frozen=True)
 class SkillAction:
     skill: Skill
     target_base: Vec3 | None = None
+    home_joints: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
+        if self.skill is Skill.HOME:
+            if self.target_base is not None or set(dict(self.home_joints)) != set(ARM_JOINTS):
+                raise ValueError("HOME requires the configured arm joint vector.")
+            return
+        if self.home_joints:
+            raise ValueError("Only HOME accepts a joint vector.")
         gripper_only = self.skill in (Skill.OPEN, Skill.CLOSE, Skill.RELEASE)
         if gripper_only != (self.target_base is None):
             raise ValueError("Cartesian skills require a base-frame target.")
@@ -108,6 +118,16 @@ class SkillExecutor(ScriptedCanPolicy):
         self._reset_base_pose_world = initial.robot.base_pose_world
         self.monitor = SafetyMonitor(runtime_safety_limits())
 
+    def _joint_waypoint_settled(self, measured, commanded, tolerance, *, terminal_home):
+        if terminal_home:
+            return all(
+                abs(measured[name] - target) <= HOME_VERIFICATION_TOLERANCE_RAD
+                for name, target in commanded.items()
+            )
+        return super()._joint_waypoint_settled(
+            measured, commanded, tolerance, terminal_home=terminal_home
+        )
+
     def execute(self, backend: RobotBackend, seed: int) -> None:
         raise TypeError("Use run_skill with an explicit SkillAction.")
 
@@ -131,6 +151,12 @@ class SkillExecutor(ScriptedCanPolicy):
             settled = self._open_gripper(checked, observation) is not None
         elif action.skill is Skill.CLOSE:
             settled = self._close_gripper(checked)
+        elif action.skill is Skill.HOME:
+            current = self._full_joint_vector(observation.robot.joint_pos)
+            goal = self._full_joint_vector(observation.robot.joint_pos | dict(action.home_joints))
+            settled = (
+                self._move_to_joint_target(checked, current, goal, action.skill.value) is not None
+            )
         else:
             assert action.target_base is not None
             target = action.target_base.as_array()

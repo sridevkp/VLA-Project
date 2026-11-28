@@ -1,0 +1,22 @@
+{
+  "val_bases": [
+    "train-clear-i00",
+    "train-cluttered-i01",
+    "train-reach-limited-i02"
+  ],
+  "feature_dim": 82,
+  "head_feature_dim": 104,
+  "phases": [
+    "INIT",
+    "PREGRASP_REALIGN",
+    "PREGRASP",
+    "DESCEND",
+    "LIFT",
+    "TRANSIT",
+    "PLACE_DESCEND",
+    "RELEASE",
+    "RETREAT",
+    "HOME",
+    "DONE"
+  ]
+}

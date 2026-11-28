@@ -131,14 +131,25 @@ def load_metadata_rows(dataset_root: Path) -> dict[int, list[dict[str, Any]]]:
 def align_samples(
     sources: list[dict[str, Any]],
     rows_by_episode: dict[int, list[dict[str, Any]]],
+    *,
+    collapse_same_frame: bool = True,
 ) -> list[WaypointSample]:
+    """Align waypoint-change events to dataset frames.
+
+    When multiple events map to the same (episode, frame), they represent
+    same-instant decision boundaries. With collapse_same_frame=True (default),
+    keep the final event in file order for that frame to avoid contradictory
+    labels while preserving executable decision semantics.
+    """
     samples: list[WaypointSample] = []
+    collapsed = 0
     for episode_index, source in enumerate(sources):
         rows = rows_by_episode.get(episode_index)
         if not rows:
             continue
         scene = source["scene"]
         times = np.asarray([float(row["timestamp"]) for row in rows], dtype=float)
+        ep_samples: list[WaypointSample] = []
         for event in load_policy_events(Path(source["raw_dir"])):
             frame_index = int(np.argmin(np.abs(times - float(event["t"]))))
             row = rows[frame_index]
@@ -147,7 +158,7 @@ def align_samples(
             prev_action = np.asarray(rows[prev_idx]["action"], dtype=float)
             if frame_index == 0:
                 prev_action = np.zeros_like(action)
-            samples.append(
+            ep_samples.append(
                 WaypointSample(
                     episode_index=episode_index,
                     scene=str(scene["name"]),
@@ -163,8 +174,18 @@ def align_samples(
                     phase=str(event["phase"]),
                 )
             )
+        if collapse_same_frame and ep_samples:
+            by_frame: dict[int, list[WaypointSample]] = {}
+            for s in ep_samples:
+                by_frame.setdefault(s.frame_index, []).append(s)
+            collapsed += sum(max(0, len(v) - 1) for v in by_frame.values())
+            ep_samples = [v[-1] for _, v in sorted(by_frame.items())]
+        samples.extend(ep_samples)
     if not samples:
         raise ValueError("no waypoint samples aligned to dataset rows")
+    # attach audit as attribute-like side channel? keep simple: log via global not ideal.
+    # callers needing audit can compare with collapse_same_frame=False.
+    align_samples.last_collapsed_same_frame = collapsed  # type: ignore[attr-defined]
     return samples
 
 

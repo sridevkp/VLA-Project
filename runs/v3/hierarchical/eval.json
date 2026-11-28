@@ -1,0 +1,403 @@
+{
+  "status": "measured-offline-hierarchical-v3",
+  "model": "hierarchical_intent_conditioned_waypoint_v1",
+  "dataset_root": "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1",
+  "cache_path": "runs/v3/features/facebook__dinov2-small-224.npz",
+  "val_bases": [
+    "train-clear-i00",
+    "train-cluttered-i01",
+    "train-reach-limited-i02"
+  ],
+  "n_train": 1318,
+  "n_val": 799,
+  "phases": [
+    "INIT",
+    "PREGRASP_REALIGN",
+    "PREGRASP",
+    "DESCEND",
+    "LIFT",
+    "TRANSIT",
+    "PLACE_DESCEND",
+    "RELEASE",
+    "RETREAT",
+    "HOME",
+    "DONE"
+  ],
+  "intent_accuracy": 0.9912390488110138,
+  "intent_confusion": {
+    "INIT": {
+      "INIT": 30
+    },
+    "PREGRASP_REALIGN": {
+      "PREGRASP_REALIGN": 27,
+      "DESCEND": 3
+    },
+    "PREGRASP": {},
+    "DESCEND": {
+      "PREGRASP_REALIGN": 2,
+      "DESCEND": 142,
+      "PLACE_DESCEND": 2
+    },
+    "LIFT": {
+      "LIFT": 101
+    },
+    "TRANSIT": {
+      "TRANSIT": 222
+    },
+    "PLACE_DESCEND": {
+      "PLACE_DESCEND": 90
+    },
+    "RELEASE": {
+      "RELEASE": 30
+    },
+    "RETREAT": {
+      "RETREAT": 90
+    },
+    "HOME": {
+      "HOME": 30
+    },
+    "DONE": {
+      "DONE": 30
+    }
+  },
+  "per_intent": {
+    "INIT": {
+      "n": 30,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.014004,
+        "x_m": 0.023426,
+        "y_m": 0.014185,
+        "z_m": 0.004403
+      },
+      "orientation_mae_rad": {
+        "roll": 0.000626,
+        "pitch": 0.001181,
+        "yaw": 0.004074
+      }
+    },
+    "PREGRASP_REALIGN": {
+      "n": 30,
+      "intent_recall": 0.9,
+      "waypoint": {
+        "overall_m": 0.014506,
+        "x_m": 0.007993,
+        "y_m": 0.016471,
+        "z_m": 0.019055
+      },
+      "orientation_mae_rad": {
+        "roll": 0.000935,
+        "pitch": 0.001194,
+        "yaw": 0.006369
+      }
+    },
+    "DESCEND": {
+      "n": 146,
+      "intent_recall": 0.9726027397260274,
+      "waypoint": {
+        "overall_m": 0.017785,
+        "x_m": 0.009315,
+        "y_m": 0.018375,
+        "z_m": 0.025664
+      },
+      "orientation_mae_rad": {
+        "roll": 0.001617,
+        "pitch": 0.001522,
+        "yaw": 0.005601
+      }
+    },
+    "LIFT": {
+      "n": 101,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.01778,
+        "x_m": 0.008476,
+        "y_m": 0.019563,
+        "z_m": 0.0253
+      },
+      "orientation_mae_rad": {
+        "roll": 0.002368,
+        "pitch": 0.002199,
+        "yaw": 0.006799
+      }
+    },
+    "TRANSIT": {
+      "n": 222,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.023468,
+        "x_m": 0.019343,
+        "y_m": 0.043242,
+        "z_m": 0.007818
+      },
+      "orientation_mae_rad": {
+        "roll": 0.00128,
+        "pitch": 0.002706,
+        "yaw": 0.012933
+      }
+    },
+    "PLACE_DESCEND": {
+      "n": 90,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.010555,
+        "x_m": 0.004127,
+        "y_m": 0.007419,
+        "z_m": 0.020118
+      },
+      "orientation_mae_rad": {
+        "roll": 0.001674,
+        "pitch": 0.001775,
+        "yaw": 0.005784
+      }
+    },
+    "RELEASE": {
+      "n": 30,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.007079,
+        "x_m": 0.00587,
+        "y_m": 0.009842,
+        "z_m": 0.005525
+      },
+      "orientation_mae_rad": {
+        "roll": 0.000445,
+        "pitch": 0.00159,
+        "yaw": 0.00467
+      }
+    },
+    "RETREAT": {
+      "n": 90,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.010663,
+        "x_m": 0.00482,
+        "y_m": 0.008324,
+        "z_m": 0.018845
+      },
+      "orientation_mae_rad": {
+        "roll": 0.001496,
+        "pitch": 0.001762,
+        "yaw": 0.006007
+      }
+    },
+    "HOME": {
+      "n": 30,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.009921,
+        "x_m": 0.007365,
+        "y_m": 0.015448,
+        "z_m": 0.006949
+      },
+      "orientation_mae_rad": {
+        "roll": 0.001392,
+        "pitch": 0.001994,
+        "yaw": 0.004287
+      }
+    },
+    "DONE": {
+      "n": 30,
+      "intent_recall": 1.0,
+      "waypoint": {
+        "overall_m": 0.009001,
+        "x_m": 0.007329,
+        "y_m": 0.013845,
+        "z_m": 0.005827
+      },
+      "orientation_mae_rad": {
+        "roll": 0.001046,
+        "pitch": 0.00323,
+        "yaw": 0.005261
+      }
+    }
+  },
+  "waypoint_overall_pred_intent": {
+    "overall_m": 0.016454,
+    "x_m": 0.011108,
+    "y_m": 0.022239,
+    "z_m": 0.016016
+  },
+  "waypoint_overall_oracle_intent_diagnostic": {
+    "overall_m": 0.016251,
+    "x_m": 0.010933,
+    "y_m": 0.022007,
+    "z_m": 0.015814
+  },
+  "orientation_overall_mae_rad": {
+    "roll": 0.001474,
+    "pitch": 0.002051,
+    "yaw": 0.00773
+  },
+  "gripper": {
+    "accuracy": 0.9987484355444305,
+    "open_precision": 1.0,
+    "open_recall": 0.9969325153374233,
+    "closed_precision": 0.9978902953586498,
+    "closed_recall": 1.0,
+    "confusion": {
+      "tp_open": 325,
+      "fp_open": 0,
+      "fn_open": 1,
+      "tn_open": 473
+    }
+  },
+  "termination": {
+    "accuracy": 1.0,
+    "open_precision": 1.0,
+    "open_recall": 1.0,
+    "closed_precision": 1.0,
+    "closed_recall": 1.0,
+    "confusion": {
+      "tp_open": 30,
+      "fp_open": 0,
+      "fn_open": 0,
+      "tn_open": 769
+    }
+  },
+  "transition_accuracy": {
+    "true_transitions": 270,
+    "predicted_transitions": 268,
+    "transition_correct": 262,
+    "transition_accuracy": 0.9703703703703703
+  },
+  "prev_action_dominance": {
+    "intent_acc_with_prev": 0.9912390488110138,
+    "intent_acc_without_prev": 0.9274092615769712,
+    "delta": 0.06382978723404253
+  },
+  "localization_oof_val_mae_m": 0.040504660457372665,
+  "localization_oof_compare": {
+    "vis": {
+      "n": 799,
+      "mae_x_m": 0.014281015843153,
+      "mae_y_m": 0.01837676577270031,
+      "mae_z_m": 0.026584463194012642,
+      "mae_euclidean_m": 0.040504660457372665,
+      "median_euclidean_m": 0.03626381605863571,
+      "p90_euclidean_m": 0.07185645401477814,
+      "bias_x_m": 0.0024404407013207674,
+      "bias_y_m": -0.0003646781260613352,
+      "bias_z_m": -0.005847943481057882,
+      "by_phase": {
+        "DESCEND": {
+          "n": 146,
+          "mae_x_m": 0.01375769916921854,
+          "mae_y_m": 0.018062924966216087,
+          "mae_z_m": 0.02052578516304493,
+          "mae_euclidean_m": 0.03528425842523575,
+          "median_euclidean_m": 0.034367822110652924,
+          "p90_euclidean_m": 0.054403580725193024
+        },
+        "LIFT": {
+          "n": 101,
+          "mae_x_m": 0.014792022295296192,
+          "mae_y_m": 0.022199444472789764,
+          "mae_z_m": 0.02458941377699375,
+          "mae_euclidean_m": 0.04105240851640701,
+          "median_euclidean_m": 0.0388011559844017,
+          "p90_euclidean_m": 0.06883922964334488
+        },
+        "PLACE_DESCEND": {
+          "n": 90,
+          "mae_x_m": 0.018745452165603638,
+          "mae_y_m": 0.015654070302844048,
+          "mae_z_m": 0.033735089004039764,
+          "mae_euclidean_m": 0.046001117676496506,
+          "median_euclidean_m": 0.04079757258296013,
+          "p90_euclidean_m": 0.07543803751468658
+        }
+      }
+    },
+    "state": {
+      "n": 799,
+      "mae_x_m": 0.01114853285253048,
+      "mae_y_m": 0.022424103692173958,
+      "mae_z_m": 0.027176275849342346,
+      "mae_euclidean_m": 0.041063763201236725,
+      "median_euclidean_m": 0.03641682118177414,
+      "p90_euclidean_m": 0.0683712288737297,
+      "bias_x_m": 0.0014978066319599748,
+      "bias_y_m": -0.0019323008600622416,
+      "bias_z_m": -0.0012554724235087633,
+      "by_phase": {
+        "DESCEND": {
+          "n": 146,
+          "mae_x_m": 0.008757825940847397,
+          "mae_y_m": 0.022246282547712326,
+          "mae_z_m": 0.02560628391802311,
+          "mae_euclidean_m": 0.03856848180294037,
+          "median_euclidean_m": 0.03496039658784866,
+          "p90_euclidean_m": 0.06087389588356018
+        },
+        "LIFT": {
+          "n": 101,
+          "mae_x_m": 0.008970084600150585,
+          "mae_y_m": 0.02355477400124073,
+          "mae_z_m": 0.011244858615100384,
+          "mae_euclidean_m": 0.030471395701169968,
+          "median_euclidean_m": 0.03093964233994484,
+          "p90_euclidean_m": 0.045610178261995316
+        },
+        "PLACE_DESCEND": {
+          "n": 90,
+          "mae_x_m": 0.01709855906665325,
+          "mae_y_m": 0.018494825810194016,
+          "mae_z_m": 0.02016109600663185,
+          "mae_euclidean_m": 0.03768264874815941,
+          "median_euclidean_m": 0.03829667344689369,
+          "p90_euclidean_m": 0.05236354470252991
+        }
+      }
+    },
+    "fused": {
+      "n": 799,
+      "mae_x_m": 0.011029655113816261,
+      "mae_y_m": 0.015718333423137665,
+      "mae_z_m": 0.01588980108499527,
+      "mae_euclidean_m": 0.028325695544481277,
+      "median_euclidean_m": 0.02494223229587078,
+      "p90_euclidean_m": 0.04895622283220291,
+      "bias_x_m": 0.002070491435006261,
+      "bias_y_m": 0.0015007515903562307,
+      "bias_z_m": -0.0017459462396800518,
+      "by_phase": {
+        "DESCEND": {
+          "n": 146,
+          "mae_x_m": 0.008900308050215244,
+          "mae_y_m": 0.015875836834311485,
+          "mae_z_m": 0.017187338322401047,
+          "mae_euclidean_m": 0.027977868914604187,
+          "median_euclidean_m": 0.02497681975364685,
+          "p90_euclidean_m": 0.04765518382191658
+        },
+        "LIFT": {
+          "n": 101,
+          "mae_x_m": 0.009392629377543926,
+          "mae_y_m": 0.016983170062303543,
+          "mae_z_m": 0.015494783408939838,
+          "mae_euclidean_m": 0.027563193812966347,
+          "median_euclidean_m": 0.024806734174489975,
+          "p90_euclidean_m": 0.04514706879854202
+        },
+        "PLACE_DESCEND": {
+          "n": 90,
+          "mae_x_m": 0.017603905871510506,
+          "mae_y_m": 0.01542708184570074,
+          "mae_z_m": 0.01717664673924446,
+          "mae_euclidean_m": 0.03314265236258507,
+          "median_euclidean_m": 0.031205369159579277,
+          "p90_euclidean_m": 0.05257163941860199
+        }
+      }
+    },
+    "selected_for_training_runtime": "vis"
+  },
+  "notes": [
+    "Expert phase annotations used only as offline supervision labels.",
+    "Runtime must predict intent; no expert phase labels/GT/hardcoded transitions/scripted fallback.",
+    "CAN localization inputs are OOF predicted, not ground truth.",
+    "Oracle-intent waypoint is diagnostic only.",
+    "Visual-only CAN localization selected for deployment robustness after live OOD drift audit."
+  ]
+}

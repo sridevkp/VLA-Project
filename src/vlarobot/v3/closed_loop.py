@@ -138,3 +138,92 @@ def run_train_diagnostic(out: Path, *, webots: str, dataset_root: Path, cache_pa
     summary = {'rows': rows, 'n': len(rows), 'successes': sum(1 for r in rows if r.get('success') is True)}
     write_json(out / 'diagnostic-summary.json', summary)
     return summary
+
+
+def build_hierarchical_source(dataset_root: Path, cache_path: Path, hier_model_path: Path):
+    import os
+    from vlarobot.v3.hierarchical import load_hierarchical_models
+    from vlarobot.v3.vla_source import HierarchicalChunkSource
+    from vlarobot.v3.localization import _can_base_at_frame
+    from vlarobot.v3.offline import fit_ridge, predict_ridge
+
+    hier_models = load_hierarchical_models(hier_model_path)
+    sources = load_sources(dataset_root)
+    rows = load_metadata_rows(dataset_root)
+    samples = align_samples(sources, rows)
+    pooled, spatial, _ = _load_dino_cache(cache_path, samples)
+    val_bases = choose_validation_bases(samples)
+    train, _ = split_by_bases(samples, val_bases)
+    train_ids = {id(s) for s in train}
+    tr = np.array([id(s) in train_ids for s in samples])
+    tr_idx = np.where(tr)[0]
+    state = np.stack([s.state for s in samples]).astype(np.float32)
+    pca64 = _pca_fit_transform(spatial, tr, 64)
+    # CAN localization model (offline GT labels only). Visual-only default for deployment robustness.
+    y_can=[]
+    for s in samples:
+        c=_can_base_at_frame(Path(sources[s.episode_index]['raw_dir']), s.t)
+        y_can.append(c if c is not None else np.zeros(3,dtype=np.float32))
+    y_can=np.stack(y_can).astype(np.float32)
+    can_mode = os.environ.get("VLAROBOT_V3_CAN_MODE", "vis")
+    if can_mode == "fused":
+        X_loc=np.concatenate([state,pca64],axis=1)
+    elif can_mode == "state":
+        X_loc=state
+    else:
+        can_mode = "vis"
+        X_loc=pca64
+    can_model=fit_ridge(X_loc[tr_idx], y_can[tr_idx])
+    xtr = spatial[tr_idx]
+    mu = xtr.mean(axis=0)
+    _, _, vt = np.linalg.svd(xtr - mu, full_matrices=False)
+    comp = vt[:64]
+    dino = _DinoRuntime()
+    return HierarchicalChunkSource(
+        hier_models=hier_models, can_model=can_model, pca_mu=mu, pca_comp=comp, dino=dino,
+        feature_mode='no_prev_grip', can_mode=can_mode,
+    )
+
+
+def run_hierarchical_diagnostic(out: Path, *, webots: str, dataset_root: Path, cache_path: Path, hier_model_path: Path, indices=(0,1,2)) -> dict[str, Any]:
+    import os
+    os.environ.setdefault("VLAROBOT_URDF_REGISTRATION_FILE", "calibration/urdf-base-train-v1.yaml")
+    out.mkdir(parents=True, exist_ok=True)
+    source = build_hierarchical_source(dataset_root, cache_path, hier_model_path)
+    eval_settings = load_eval_settings()
+    plan = build_episode_plan("train", 0, n=0, settings=eval_settings)
+    selected = [e for e in plan if e.index in set(indices)]
+    vla = load_vla_settings()
+    adapter = make_vla_adapter(recovery_ik=True)
+    rows = []
+    for entry in selected:
+        trace = out / f"episode-{entry.index:02d}.latency.jsonl"
+        scorer = CanEpisodeScorer()
+        policy = VLAEpisodePolicy(
+            entry.scene,
+            source,
+            adapter,
+            instruction="Pick up the can and place it at the target location.",
+            max_steps=120,
+            max_chunk_actions=vla.max_chunk_actions,
+            home_tolerance_rad=0.01,
+            arm_names=('arm_1_joint','arm_2_joint','arm_3_joint','arm_4_joint','arm_5_joint','arm_6_joint','arm_7_joint'),
+            trace=trace,
+            score=scorer,
+            begin_metrics=scorer.begin,
+            recovery_v2=False,
+            endpoint_gripper=False,
+        )
+        with launch_webots_session(webots=webots, world=DEFAULT_WORLD, trace_dir=out, trace_prefix=f"v3-hier-{entry.index:02d}", headless=True) as session:
+            started = perf_counter()
+            result = policy.execute(session.client, entry.seed)
+            result['wall_s'] = perf_counter() - started
+            result['scene'] = entry.scene.name
+            result['index'] = entry.index
+            # capture intent trace summary
+            # VLAEpisodePolicy doesn't log intent; we can read from source if available
+            rows.append(result)
+            write_json(out / f"episode-{entry.index:02d}.result.json", result)
+    summary = {'rows': rows, 'n': len(rows), 'successes': sum(1 for r in rows if r.get('success') is True)}
+    write_json(out / 'diagnostic-summary.json', summary)
+    return summary

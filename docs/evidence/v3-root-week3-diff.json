@@ -1,0 +1,74 @@
+{
+  "root_commit": "5abeb702c6403718b52927d38e8b2a6d71b4c1c3",
+  "week3_branch": "work/v3-waypoint-vla",
+  "week3_head": "a46d5a10e84d643e60088ee043bf2fee94097d53",
+  "note": "Collection ran from root codebase (baseline-matching) writing to week3 output; root config temporarily set collection_workers=3 then restored.",
+  "files": [
+    {
+      "path": "configs/vla.yaml",
+      "root_sha256": "0ae9bacb4ec81e0f9cbddda6420e8a206579ec3b4b19b840d92a754c643babcc",
+      "week3_sha256": "b239ba5f262028aa145294f2947c977c5b1b96c949397dd7d5658ebc7940056f",
+      "same": false
+    },
+    {
+      "path": "configs/robot.yaml",
+      "root_sha256": "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d",
+      "week3_sha256": "1a9f0c2b57d771e45b6908d05177eb64eb80634b7ab2d35c5dfbefb1f863ca1d",
+      "same": true
+    },
+    {
+      "path": "configs/eval.yaml",
+      "root_sha256": "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f",
+      "week3_sha256": "79e4dfa708baea8bb85e839cbcbcc6e48bb2ca84eac830ebdbaffd19b9daaf4f",
+      "same": true
+    },
+    {
+      "path": "configs/safety.yaml",
+      "root_sha256": "a54ace2a04021ad3c4a517ba93555ed73c3d5fe045659f67ab67578d5d2a511f",
+      "week3_sha256": "a54ace2a04021ad3c4a517ba93555ed73c3d5fe045659f67ab67578d5d2a511f",
+      "same": true
+    },
+    {
+      "path": "src/vlarobot/backends/webots/backend.py",
+      "root_sha256": "37f084766041f3bf05ed7878b9ee4b6ea8a8e1c7ff0d794d7c201a9a1d79bf05",
+      "week3_sha256": "b1db6494ef0cb086c0c832622034b423932f3e3984df6d4d35355112984047cf",
+      "same": false
+    },
+    {
+      "path": "src/vlarobot/execution/scripted_can.py",
+      "root_sha256": "d89b7eb6c3b00b14df6686325d2c2742ae6588e92f045af072fb07f391f608a3",
+      "week3_sha256": "921da033d497b86bb1a4f3dd9b3005dfaf733a7ac3fef245df3cc367bf8d0857",
+      "same": false
+    },
+    {
+      "path": "src/vlarobot/execution/scripted_baseline.py",
+      "root_sha256": "d304fef311e6ec7fc5464745fd3fc4f1cbb90439e159dc9c272f068e79869671",
+      "week3_sha256": "d304fef311e6ec7fc5464745fd3fc4f1cbb90439e159dc9c272f068e79869671",
+      "same": true
+    },
+    {
+      "path": "src/vlarobot/execution/demo_collection.py",
+      "root_sha256": "e16d69815dd0eca80276d3752d84729b6d9937ec330d795e791cdf386e6c577f",
+      "week3_sha256": "e16d69815dd0eca80276d3752d84729b6d9937ec330d795e791cdf386e6c577f",
+      "same": true
+    },
+    {
+      "path": "src/vlarobot/execution/episode_runner.py",
+      "root_sha256": "6fa075d8360122143b01956f7bb46241aa1a2c83c5485ba7ab1625a9cbe1d4d8",
+      "week3_sha256": "6d1a9b81e2cdef3fd25f78665be1812c2619f037cdfb3df6c3baa6d851f54ca4",
+      "same": false
+    },
+    {
+      "path": "src/vlarobot/eval/demos.py",
+      "root_sha256": "f25502d4fe5beafc23656a42a923f68333574c1ade0f6422fbed3229c2a2a9ef",
+      "week3_sha256": "f25502d4fe5beafc23656a42a923f68333574c1ade0f6422fbed3229c2a2a9ef",
+      "same": true
+    },
+    {
+      "path": "src/vlarobot/eval/settings.py",
+      "root_sha256": "eb236cbb6f12790aad6c7d7200b829283242dbddda40ced13fedb9484bc11bd5",
+      "week3_sha256": "eb236cbb6f12790aad6c7d7200b829283242dbddda40ced13fedb9484bc11bd5",
+      "same": true
+    }
+  ]
+}

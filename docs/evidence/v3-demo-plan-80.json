@@ -52,11 +52,13 @@
     "mean": 0.244449,
     "max": 3.13395
   },
-  "can_radius_m": {
+  "can_home_offset_radius_m": {
     "count": 80,
     "min": 0.001531,
     "mean": 0.04213,
     "max": 0.098406
   },
+  "can_home_offset_radius_definition": "horizontal displacement sqrt(dx^2+dy^2) of the CAN from its nominal home; not the physical can radius",
+  "physical_can_radius_m": 0.03175,
   "status": "planned-only; not collected"
 }

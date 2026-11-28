@@ -1,0 +1,339 @@
+{
+  "generated_at_utc": "2026-11-28T04:39:38.609208+00:00",
+  "status": "measured-offline",
+  "dataset": "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1",
+  "source_provenance_sha256": "de7aff693700bbb0c8f0abb0b5a41564e52a6d1b17fb838f4590cef39564f602",
+  "sample_count": 2757,
+  "episode_count": 80,
+  "base_scene_count": 8,
+  "base_scene_counts": {
+    "train-clear-i00": 413,
+    "train-clear-i03": 409,
+    "train-clear-i06": 378,
+    "train-cluttered-i01": 376,
+    "train-cluttered-i04": 344,
+    "train-cluttered-i07": 341,
+    "train-reach-limited-i02": 250,
+    "train-reach-limited-i05": 246
+  },
+  "phase_counts": {
+    "DESCEND": 469,
+    "DONE": 80,
+    "HOME": 80,
+    "INIT": 160,
+    "LIFT": 435,
+    "PLACE_DESCEND": 320,
+    "PREGRASP": 80,
+    "PREGRASP_REALIGN": 80,
+    "RELEASE": 80,
+    "RETREAT": 320,
+    "TRANSIT": 653
+  },
+  "development_split": {
+    "validation_bases": [
+      "train-clear-i00",
+      "train-cluttered-i01",
+      "train-reach-limited-i02"
+    ],
+    "train_samples": 1718,
+    "validation_samples": 1039
+  },
+  "baselines": [
+    {
+      "name": "constant_train_mean",
+      "train": {
+        "overall_m": 0.069204,
+        "x_m": 0.052212,
+        "y_m": 0.107258,
+        "z_m": 0.048142
+      },
+      "validation": {
+        "overall_m": 0.071421,
+        "x_m": 0.052676,
+        "y_m": 0.113466,
+        "z_m": 0.048122
+      }
+    },
+    {
+      "name": "state_ridge",
+      "train": {
+        "overall_m": 0.03797,
+        "x_m": 0.035277,
+        "y_m": 0.05077,
+        "z_m": 0.027862
+      },
+      "validation": {
+        "overall_m": 0.038227,
+        "x_m": 0.035311,
+        "y_m": 0.051383,
+        "z_m": 0.027988
+      }
+    },
+    {
+      "name": "state_action_ridge",
+      "train": {
+        "overall_m": 0.027906,
+        "x_m": 0.022395,
+        "y_m": 0.035642,
+        "z_m": 0.025681
+      },
+      "validation": {
+        "overall_m": 0.029112,
+        "x_m": 0.023217,
+        "y_m": 0.038641,
+        "z_m": 0.025477
+      }
+    },
+    {
+      "name": "image_ridge",
+      "train": {
+        "overall_m": 0.034832,
+        "x_m": 0.031792,
+        "y_m": 0.046624,
+        "z_m": 0.026081
+      },
+      "validation": {
+        "overall_m": 0.112161,
+        "x_m": 0.087011,
+        "y_m": 0.150361,
+        "z_m": 0.099112
+      }
+    },
+    {
+      "name": "state_image_ridge",
+      "train": {
+        "overall_m": 0.032502,
+        "x_m": 0.029397,
+        "y_m": 0.042713,
+        "z_m": 0.025395
+      },
+      "validation": {
+        "overall_m": 0.110691,
+        "x_m": 0.089688,
+        "y_m": 0.136723,
+        "z_m": 0.105663
+      }
+    },
+    {
+      "name": "previous_waypoint_persistence",
+      "train": {
+        "overall_m": 0.046168,
+        "x_m": 0.036043,
+        "y_m": 0.054163,
+        "z_m": 0.048297
+      },
+      "validation": {
+        "overall_m": 0.046379,
+        "x_m": 0.035974,
+        "y_m": 0.055302,
+        "z_m": 0.047862
+      }
+    }
+  ],
+  "image_coverage": {
+    "waypoint_samples": 2757,
+    "missing": 0,
+    "image_baselines_available": true
+  },
+  "loso_state_action_ridge": {
+    "folds": [
+      {
+        "base_scene": "train-clear-i00",
+        "train_samples": 2344,
+        "validation_samples": 413,
+        "train": {
+          "overall_m": 0.028205,
+          "x_m": 0.022828,
+          "y_m": 0.036287,
+          "z_m": 0.0255
+        },
+        "validation": {
+          "overall_m": 0.028167,
+          "x_m": 0.022212,
+          "y_m": 0.036602,
+          "z_m": 0.025686
+        }
+      },
+      {
+        "base_scene": "train-clear-i03",
+        "train_samples": 2348,
+        "validation_samples": 409,
+        "train": {
+          "overall_m": 0.028338,
+          "x_m": 0.022824,
+          "y_m": 0.036676,
+          "z_m": 0.025514
+        },
+        "validation": {
+          "overall_m": 0.026806,
+          "x_m": 0.021815,
+          "y_m": 0.033198,
+          "z_m": 0.025403
+        }
+      },
+      {
+        "base_scene": "train-clear-i06",
+        "train_samples": 2379,
+        "validation_samples": 378,
+        "train": {
+          "overall_m": 0.028329,
+          "x_m": 0.022892,
+          "y_m": 0.03665,
+          "z_m": 0.025446
+        },
+        "validation": {
+          "overall_m": 0.027155,
+          "x_m": 0.02181,
+          "y_m": 0.033891,
+          "z_m": 0.025765
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i01",
+        "train_samples": 2381,
+        "validation_samples": 376,
+        "train": {
+          "overall_m": 0.028259,
+          "x_m": 0.022796,
+          "y_m": 0.036419,
+          "z_m": 0.025562
+        },
+        "validation": {
+          "overall_m": 0.028029,
+          "x_m": 0.022458,
+          "y_m": 0.036171,
+          "z_m": 0.025458
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i04",
+        "train_samples": 2413,
+        "validation_samples": 344,
+        "train": {
+          "overall_m": 0.028253,
+          "x_m": 0.022698,
+          "y_m": 0.036591,
+          "z_m": 0.02547
+        },
+        "validation": {
+          "overall_m": 0.027379,
+          "x_m": 0.022931,
+          "y_m": 0.033658,
+          "z_m": 0.025549
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i07",
+        "train_samples": 2416,
+        "validation_samples": 341,
+        "train": {
+          "overall_m": 0.028172,
+          "x_m": 0.022652,
+          "y_m": 0.03636,
+          "z_m": 0.025503
+        },
+        "validation": {
+          "overall_m": 0.028087,
+          "x_m": 0.023354,
+          "y_m": 0.035352,
+          "z_m": 0.025554
+        }
+      },
+      {
+        "base_scene": "train-reach-limited-i02",
+        "train_samples": 2507,
+        "validation_samples": 250,
+        "train": {
+          "overall_m": 0.02788,
+          "x_m": 0.02226,
+          "y_m": 0.035784,
+          "z_m": 0.025597
+        },
+        "validation": {
+          "overall_m": 0.031608,
+          "x_m": 0.025981,
+          "y_m": 0.044183,
+          "z_m": 0.024661
+        }
+      },
+      {
+        "base_scene": "train-reach-limited-i05",
+        "train_samples": 2511,
+        "validation_samples": 246,
+        "train": {
+          "overall_m": 0.027904,
+          "x_m": 0.022564,
+          "y_m": 0.035727,
+          "z_m": 0.02542
+        },
+        "validation": {
+          "overall_m": 0.03213,
+          "x_m": 0.024844,
+          "y_m": 0.04537,
+          "z_m": 0.026177
+        }
+      }
+    ],
+    "mean_validation_mae_m": 0.02867
+  },
+  "gripper": {
+    "unique_targets_m": [
+      0.0,
+      0.045
+    ],
+    "counts": [
+      1648,
+      1109
+    ],
+    "majority_target_m": 0.0,
+    "validation_majority_accuracy": 0.599615,
+    "train_samples": 1718,
+    "validation_samples": 1039
+  },
+  "encoder": [
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 1,
+      "iterations": 50,
+      "mean_ms": 0.037808,
+      "p95_ms": 0.039528,
+      "images_per_s": 26449.485
+    },
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 8,
+      "iterations": 50,
+      "mean_ms": 0.139011,
+      "p95_ms": 0.165582,
+      "images_per_s": 57549.27
+    },
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 32,
+      "iterations": 50,
+      "mean_ms": 0.158127,
+      "p95_ms": 0.184427,
+      "images_per_s": 202368.828
+    }
+  ],
+  "image_feature_timing": {
+    "status": "measured",
+    "samples": 38,
+    "mean_ms": 9.566826,
+    "p95_ms": 14.721372,
+    "operation": "jpeg decode + grayscale resize + float normalise"
+  },
+  "waypoint_samples_path": "runs/v3/offline/waypoint_samples.npz",
+  "notes": [
+    "Waypoints come from recorded commanded_ee_base_xyz_m changes.",
+    "Runtime expert phase labels and CAN ground truth are not model inputs.",
+    "The development split is grouped by base scene identity.",
+    "LOSO is a memorization check, not a holdout evaluation."
+  ]
+}

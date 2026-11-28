@@ -11,7 +11,7 @@ remains unchanged. The Dec 5 hard stop applies to all V3 experiments.
 `docs/evidence/v3-feature-timing.json` (SHA-256
 `ce4a6b8391f48c23650e53966cfa3fd5dc1e6117b7b76d0475439a1a8e6b9c5d`) and
 `docs/evidence/v3-demo-plan-80.json` (SHA-256
-`45c673fdd2fbfc89a3d2ad683731eb0afc9900ade829d536df0cb96a7593ca40`). Every
+`f9e9d706f49db4e3041cb032d1ff133c6a7beb5452c6c552b883dbc0c75cb80e`). Every
 numeric statement below is tagged **MEASURED** (directly observed/derived) or
 **INFERRED** (engineering estimate from measured anchors). Dates and file paths
 are protocol facts, not performance figures. The 80-demo plan evidence is
@@ -258,11 +258,11 @@ Use last 4–8 observations as design range **INFERRED**.
 
 Use the additional demonstration budget (up to 80) primarily for randomized CAN
 position/yaw inside the reachable envelope **INFERRED target from owner
-addendum**. The existing TRAIN generator already draws CAN radius and yaw per
-seed block **MEASURED implementation**, so a fresh TRAIN seed range provides
-new CAN poses over the same 8 base scene identities. Collection must start in
-parallel with model code and use the existing accepted-demo audit **MEASURED
-pipeline constraint**.
+addendum**. The existing TRAIN generator already draws CAN home-offset radius
+and yaw per seed block **MEASURED implementation**, so a fresh TRAIN seed range
+provides new CAN poses over the same 8 base scene identities. Collection must
+start in parallel with model code and use the existing accepted-demo audit
+**MEASURED pipeline constraint**.
 
 Language-varying demos are secondary and only if time remains **INFERRED
 sequencing from owner addendum**. Language conditioning stays **UNMEASURED**
@@ -284,8 +284,11 @@ holdout **MEASURED pipeline constraint**.
 
 A read-only plan check for `n=80, seed=200` built 80 entries: 10 per base scene
 identity, 10 seed blocks, CAN x offset −0.094084 to 0.085783 m, y offset
-−0.088809 to 0.069048 m, yaw −3.135123 to 3.133950 rad and radius 0.001531 to
-0.098406 m **MEASURED plan output, not collected**. The 20 reach-limited entries
+−0.088809 to 0.069048 m, yaw −3.135123 to 3.133950 rad and CAN home-offset
+radius 0.001531 to 0.098406 m **MEASURED plan output, not collected**. This
+radius is the horizontal displacement `sqrt(dx²+dy²)` from the nominal CAN home,
+not the physical can radius; the physical can radius is 0.03175 m **MEASURED
+from `configs/robot.yaml`**. The 20 reach-limited entries
 are retained only if the accepted-demo audit admits them; failures are
 quarantined, so the target is up to 80 accepted demos, not 80 attempts
 **MEASURED pipeline constraint**.

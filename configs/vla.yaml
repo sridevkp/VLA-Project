@@ -8,4 +8,4 @@ ik_position_tolerance_m: 0.005
 ik_orientation_tolerance_rad: 0.08726646259971647
 successful_demo_target: 80
 max_collection_attempts: 240
-collection_workers: 2
+collection_workers: 3

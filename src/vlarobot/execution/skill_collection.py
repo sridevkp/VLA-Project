@@ -9,7 +9,9 @@ from vlarobot.execution.skill_diagnostic import run_skill_diagnostic
 from vlarobot.execution.skills import Skill
 
 
-def collect_approach_pairs(out: Path, webots: str | None, seed: int) -> dict:
+def collect_approach_pairs(
+    out: Path, webots: str | None, seed: int, *, internal: bool = False
+) -> dict:
     """Measure a small matched batch before expanding the experimental budget."""
     out.mkdir(parents=True, exist_ok=False)
     started = perf_counter()
@@ -41,12 +43,13 @@ def collect_approach_pairs(out: Path, webots: str | None, seed: int) -> dict:
         return {"scene_index": index, "results": results}
 
     with ThreadPoolExecutor(max_workers=3) as workers:
-        pairs = list(workers.map(pair, range(3)))
+        pairs = list(workers.map(pair, (6, 7, 5) if internal else (0, 1, 2)))
     elapsed = perf_counter() - started
     executed = sum(result["executed"] for pair in pairs for result in pair["results"])
     report = {
         "split": "train",
         "seed": seed,
+        "cohort": "internal-train-evaluation" if internal else "fit",
         "attempts": 6,
         "executed": executed,
         "wall_s": elapsed,

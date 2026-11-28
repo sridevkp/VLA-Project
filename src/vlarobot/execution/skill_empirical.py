@@ -1,6 +1,7 @@
 """Initial candidate utility fit using demonstrated and measured TRAIN decisions."""
 
 import json
+from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,11 @@ def _forecast(row: UtilityExample, robot: dict) -> UtilityExample:
             joint_vel=robot["joint_vel"],
         ),
     )
+    return replace(row, state=state, candidate=forecast_candidate(state, row.candidate.action))
+
+
+def forecast_candidate(state: WorldState, action: SkillAction) -> ScoringInput:
+    """Generate the same analytic context in empirical fitting and live decisions."""
     monitor = SafetyMonitor(runtime_safety_limits())
     kin = corrected_kinematics()
     kin.set_seed(0)
@@ -95,10 +101,9 @@ def _forecast(row: UtilityExample, robot: dict) -> UtilityExample:
         support_z_m={"CAN": can_z},
         validate=lambda a, r: monitor.validate(a, r).accepted,
     )
-    candidate = predict_candidates(
-        state, (row.candidate.action,), surrogate, horizon_s=1.0, open_position_m=GRIPPER_OPEN
+    return predict_candidates(
+        state, (action,), surrogate, horizon_s=1.0, open_position_m=GRIPPER_OPEN
     )[0]
-    return replace(row, state=state, candidate=candidate)
 
 
 def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
@@ -116,11 +121,13 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
     shift = int(np.random.default_rng(0).integers(1, len(futures))) if len(futures) > 1 else 0
     shuffled = np.roll(np.arange(len(futures)), shift)
     records = []
+    pairs = defaultdict(list)
     for index, row in enumerate(matched):
         state, action = row.state, row.candidate.action
         records.append(
             {
                 "scene_group": row.scene_group,
+                "pair_id": row.pair_id,
                 "skill": action.skill.value,
                 "target_base_m": None
                 if action.target_base is None
@@ -132,6 +139,53 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
                 "score_predicted_context": context.score(state, action, futures[index]),
                 "score_shuffled_context": context.score(state, action, futures[shuffled[index]]),
                 "score_controlled_no_change": context.score(state, action, state),
+            }
+        )
+        if row.pair_id is not None and action.skill is Skill.APPROACH:
+            pairs[row.pair_id].append(index)
+    comparisons = []
+    for pair_id, indices in sorted(pairs.items()):
+        if len(indices) != 2:
+            continue
+        a, b = (matched[i] for i in indices)
+        first, second = a.state, b.state
+        joints = first.robot.joint_pos
+        if (
+            joints.keys() != second.robot.joint_pos.keys()
+            or any(
+                abs(value - second.robot.joint_pos[name]) > 1e-8 for name, value in joints.items()
+            )
+            or not np.allclose(
+                first.scene.objects[0].pose.position.as_array(),
+                second.scene.objects[0].pose.position.as_array(),
+                atol=1e-8,
+                rtol=0,
+            )
+        ):
+            continue
+        scores = {
+            "no_context": [records[i]["score_no_context"] for i in indices],
+            "predicted_context": [records[i]["score_predicted_context"] for i in indices],
+            "shuffled_within_pair": [
+                context.score(matched[i].state, matched[i].candidate.action, futures[j])
+                for i, j in (indices, indices[::-1])
+            ],
+            "controlled_no_change": [records[i]["score_controlled_no_change"] for i in indices],
+        }
+        comparisons.append(
+            {
+                "pair_id": pair_id,
+                "fit_record": a.scene_group in fit_groups,
+                "candidate_count": 2,
+                "skill_count": 1,
+                "observed_utilities": [a.utility, b.utility],
+                "choices": {
+                    mode: {
+                        "chosen_alternative": int(np.argmax(values)),
+                        "chosen_observed_utility": (a, b)[int(np.argmax(values))].utility,
+                    }
+                    for mode, values in scores.items()
+                },
             }
         )
     return {
@@ -148,6 +202,7 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
             "intercept": baseline.intercept,
         },
         "records": records,
+        "matched_reset_replay": comparisons,
         "forecast_excluded": [
             {
                 "skill": row.candidate.action.skill.value,
@@ -219,7 +274,8 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
                     "simulator-observed",
                 )
             )
-            forecasts.append(_forecast(outcomes[-1], robot))
+            measured = replace(outcomes[-1], pair_id=report["scene"])
+            forecasts.append(_forecast(measured, robot))
     if not any(row.scene_group in fit_groups for row in outcomes):
         raise ValueError("measured alternative-action outcomes required in fit groups")
     model = fit_utility(

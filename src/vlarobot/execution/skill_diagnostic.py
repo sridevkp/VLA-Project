@@ -50,9 +50,9 @@ def run_skill_diagnostic(
     """Issue each setup and test action explicitly, keeping one observed result per dispatch."""
     if imperfect_approach and (empty_grasp or skill is not Skill.APPROACH):
         raise ValueError("Imperfect approach requires an isolated PREGRASP probe.")
-    if scene_index not in (0, 1, 2):
-        raise ValueError("Use one of the three bounded TRAIN diagnostic scene indices.")
-    entry = build_episode_plan("train", seed, n=3)[scene_index]
+    if not 0 <= scene_index < 8:
+        raise ValueError("Use a TRAIN base scene index from 0 through 7.")
+    entry = build_episode_plan("train", seed, n=8)[scene_index]
     out.mkdir(parents=True, exist_ok=False)
     probes = (
         _OFF_EXPERT

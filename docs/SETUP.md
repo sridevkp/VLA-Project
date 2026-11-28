@@ -430,3 +430,10 @@ Use `uv run python -m vlarobot.cli v4-collect-approach-pairs <fresh-dir> --seed 
 for a bounded three-worker TRAIN throughput batch. Each scene resets
 separately for its centered and offset proposal. Vetoes and incomplete
 attempts stay in the output.
+
+Use `--internal` with the approach-pair command for the separate TRAIN
+evaluation groups. The empirical fit exports matched no-context and predicted
+context weights when complete analytic forecasts are present. The live command
+accepts `--context matched-none`, `predicted`, `shuffled`, or `controlled`
+with that artifact. All four use the original candidate forecast vetoes and
+the command-time proxy.

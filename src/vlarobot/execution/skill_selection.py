@@ -64,6 +64,7 @@ class UtilityExample:
     candidate: ScoringInput
     utility: float
     source: str
+    pair_id: str | None = None
 
 
 def _features(state: WorldState, action: SkillAction, future: WorldState | None) -> np.ndarray:

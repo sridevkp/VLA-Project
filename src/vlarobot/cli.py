@@ -2726,22 +2726,31 @@ def v4_train_empirical(dataset: Path, output: Path, measured: list[Path]) -> Non
 
 @app.command("v4-learned-smoke")
 def v4_learned_smoke(
-    out: Path, model: Path, webots: str | None = None, localizer: Path | None = None
+    out: Path,
+    model: Path,
+    webots: str | None = None,
+    localizer: Path | None = None,
+    context: str = "smoke",
 ) -> None:
     """Run the bounded oracle-assisted V4 clear TRAIN diagnostic."""
     from vlarobot.execution.skill_live import run_learned_smoke
 
     typer.echo(
-        json.dumps(run_learned_smoke(out, model, webots, localizer_path=localizer), indent=2)
+        json.dumps(
+            run_learned_smoke(out, model, webots, localizer_path=localizer, context=context),
+            indent=2,
+        )
     )
 
 
 @app.command("v4-collect-approach-pairs")
-def v4_collect_approach_pairs(out: Path, webots: str | None = None, seed: int = 1) -> None:
+def v4_collect_approach_pairs(
+    out: Path, webots: str | None = None, seed: int = 1, *, internal: bool = False
+) -> None:
     """Collect a bounded three-worker batch of TRAIN approach alternatives."""
     from vlarobot.execution.skill_collection import collect_approach_pairs
 
-    typer.echo(json.dumps(collect_approach_pairs(out, webots, seed), indent=2))
+    typer.echo(json.dumps(collect_approach_pairs(out, webots, seed, internal=internal), indent=2))
 
 
 @app.command("v4-fit-localizer")

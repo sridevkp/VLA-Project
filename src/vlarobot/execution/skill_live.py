@@ -604,7 +604,9 @@ def run_learned_smoke(
     return result
 
 
-def run_matched_clear(out: Path, model: Path, webots: str | None) -> dict:
+def run_matched_clear(
+    out: Path, model: Path, webots: str | None, *, max_decisions: int = 16
+) -> dict:
     """Freeze model bytes once and run all four matched clear TRAIN conditions."""
     out.mkdir(parents=True, exist_ok=False)
     frozen = out / "frozen-model.json"
@@ -613,7 +615,7 @@ def run_matched_clear(out: Path, model: Path, webots: str | None) -> dict:
     for context in ("matched-none", "predicted", "shuffled", "controlled"):
         try:
             trials[context] = run_learned_smoke(
-                out / context, frozen, webots, context=context, max_decisions=10
+                out / context, frozen, webots, context=context, max_decisions=max_decisions
             )
         except Exception as error:
             trials[context] = {"error": str(error)}

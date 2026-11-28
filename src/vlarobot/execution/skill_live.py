@@ -363,9 +363,13 @@ def run_learned_smoke(
                         )[:2]
                     )
                 )
-                best_approach_gap = (
-                    gap if best_approach_gap is None else min(gap, best_approach_gap)
+                can_shift = np.linalg.norm(
+                    pose_after.position.as_array() - truth.object_poses["CAN"].position.as_array()
                 )
+                if best_approach_gap is None or can_shift >= CLOSE_ALIGN_TOL:
+                    best_approach_gap = gap
+                else:
+                    best_approach_gap = min(gap, best_approach_gap)
             else:
                 best_approach_gap = None
             x, y, _, _ = pose_after.orientation

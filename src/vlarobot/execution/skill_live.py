@@ -8,7 +8,13 @@ from sys import executable
 
 import numpy as np
 
-from vlarobot.backends.webots.config import CAN_RADIUS_M, GRIPPER_OPEN, SETTINGS, TIME_STEP
+from vlarobot.backends.webots.config import (
+    CAN_RADIUS_M,
+    CLOSE_ALIGN_TOL,
+    GRIPPER_OPEN,
+    SETTINGS,
+    TIME_STEP,
+)
 from vlarobot.backends.worldmind_bindings import _corrected_forward
 from vlarobot.core.types import (
     Action,
@@ -84,6 +90,17 @@ def generate_candidates(
     can_world = compose(base, state.scene.objects[0].pose).position.as_array()
     anchors = executor._base_frame_targets(backend, observation, can_world=can_world)
     targets = {skill: Vec3(*map(float, anchors[key])) for skill, key in _TARGETS.items()}
+    tool = state.robot.ee_pose.position.as_array()
+    aperture = state.robot.gripper_opening
+    plausible_grasp = state.robot.gripper_holding is True or (
+        state.robot.gripper_holding is None
+        and 0.002 < aperture < GRIPPER_OPEN - 0.002
+        and np.linalg.norm(tool - anchors["grasp"]) < CLOSE_ALIGN_TOL
+    )
+    if not plausible_grasp:
+        for carry in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER):
+            del targets[carry]
+    state = replace(state, robot=replace(state.robot, gripper_holding=plausible_grasp))
     candidates = enumerate_skills(
         state,
         targets,
@@ -146,6 +163,7 @@ def run_learned_smoke(
         home = obs.robot.joint_pos.copy()
         initial = backend.get_ground_truth().object_poses["CAN"]
         decisions = []
+        stop_reason = "decision budget"
         for index in range(6):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
@@ -240,6 +258,7 @@ def run_learned_smoke(
             decisions.append(record)
             write_json(out / f"decision-{index:02d}.json", record)
             if decision.selected_index is None or decision.selected_index == len(candidates):
+                stop_reason = "termination selected"
                 break
             candidate = candidates[decision.selected_index]
             live_audits = []
@@ -250,9 +269,13 @@ def run_learned_smoke(
                 audit=command_proxy(executor.monitor, candidate.skill, live_audits.append),
             )
             obs = actual.observation
+            pose_after = backend.get_ground_truth().object_poses["CAN"]
+            x, y, _, _ = pose_after.orientation
+            tilt_deg = float(np.degrees(np.arccos(np.clip(1 - 2 * (x * x + y * y), -1, 1))))
             record["actual"] = {
                 "settled": actual.settled,
                 "can_rise_m": actual.can_rise_m,
+                "can_tilt_deg": tilt_deg,
                 "gripper_opening_m": obs.robot.gripper_opening,
                 "commands": [asdict(command) for command in actual.dispatched],
                 "failure": actual.failure_reason,
@@ -260,17 +283,17 @@ def run_learned_smoke(
                 "audits": [asdict(audit) for audit in live_audits],
             }
             write_json(out / f"decision-{index:02d}.json", record)
-            if not actual.settled:
+            if not actual.settled or tilt_deg >= SETTINGS.can_tilt_limit_deg:
+                stop_reason = "skill failed" if not actual.settled else "CAN exceeded tilt limit"
                 break
         final = backend.get_ground_truth().object_poses["CAN"]
         result = {
             "split": "train",
             "scene": entry.scene.name,
             "seed": entry.seed,
-            "mode": "oracle-assisted-no-context"
-            if localize is None
-            else "visual-can-oracle-safety-no-context",
+            "mode": "oracle-assisted" if localize is None else "visual-can-oracle-safety",
             "utility_context": context,
+            "stop_reason": stop_reason,
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
             "privileged_inputs": [

@@ -2660,6 +2660,7 @@ def v4_skill_diagnostic(
     empty_grasp: bool = False,
     imperfect_approach: bool = False,
     scene_index: int = 0,
+    proxy: bool = False,
 ) -> None:
     """Check that one explicit V4 skill executes in isolation on TRAIN."""
     from vlarobot.execution.skill_diagnostic import run_skill_diagnostic
@@ -2672,6 +2673,7 @@ def v4_skill_diagnostic(
         empty_grasp=empty_grasp,
         imperfect_approach=imperfect_approach,
         scene_index=scene_index,
+        proxy=proxy,
     )
     typer.echo(json.dumps(result, indent=2))
     if not result["settled"] or not result["isolated"]:
@@ -2707,6 +2709,18 @@ def v4_train_reference(dataset: Path, output: Path) -> None:
     typer.echo(
         f"Fit {result['fit_n']} decisions. Internal TRAIN accuracy "
         f"{result['internal_train_accuracy']:.3f} on {result['internal_train_evaluation_n']}."
+    )
+
+
+@app.command("v4-train-empirical")
+def v4_train_empirical(dataset: Path, output: Path, measured: list[Path]) -> None:
+    """Fit the initial utility baseline using observed TRAIN outcomes."""
+    from vlarobot.execution.skill_empirical import train_empirical
+
+    result = train_empirical(dataset, output, measured)
+    typer.echo(
+        f"Fit {result['demonstration_fit_n']} demonstrations and "
+        f"{result['measured_fit_n']} measured outcomes."
     )
 
 

@@ -11,6 +11,7 @@ from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import launch_webots_session
+from vlarobot.execution.skill_proxy import command_proxy
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
 
 _CARTESIAN = {
@@ -43,6 +44,7 @@ def run_skill_diagnostic(
     empty_grasp: bool = False,
     imperfect_approach: bool = False,
     scene_index: int = 0,
+    proxy: bool = False,
 ) -> dict[str, Any]:
     """Issue each setup and test action explicitly, keeping one observed result per dispatch."""
     if imperfect_approach and (empty_grasp or skill is not Skill.APPROACH):
@@ -73,7 +75,11 @@ def run_skill_diagnostic(
                 targets = executor._base_frame_targets(backend, observation)
                 x, y, z = map(float, targets[_CARTESIAN[selected]])
                 target = Vec3(x, y + (CAN_RADIUS_M if imperfect_approach else 0.0), z)
-            result = executor.run_skill(backend, observation, SkillAction(selected, target))
+            audits = []
+            audit = command_proxy(executor.monitor, selected, audits.append) if proxy else None
+            result = executor.run_skill(
+                backend, observation, SkillAction(selected, target), audit=audit
+            )
             commands = result.dispatched
             if target is None:
                 commanded_opening = 0.0 if selected is Skill.CLOSE else GRIPPER_OPEN
@@ -94,6 +100,7 @@ def run_skill_diagnostic(
                 "target_base_m": None if target is None else asdict(target),
                 "settled": result.settled,
                 "isolated": isolated,
+                "predictive_audits": [asdict(item) for item in audits],
                 "commands": [asdict(command) for command in commands],
                 "measurement_source": "simulator-observed",
                 "can_before_world_m": asdict(before),

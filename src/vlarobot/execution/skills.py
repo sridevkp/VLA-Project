@@ -1,12 +1,21 @@
 """Single-action CAN manipulation skills for the oracle-assisted V4 experiment."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
 from vlarobot.backends.webots.config import ARM_JOINTS
 from vlarobot.backends.worldmind_bindings import runtime_safety_limits
 from vlarobot.core.interfaces import RobotBackend
-from vlarobot.core.types import Action, ApplyResult, GripperCmd, GroundTruth, Observation, Vec3
+from vlarobot.core.types import (
+    Action,
+    ApplyResult,
+    GripperCmd,
+    GroundTruth,
+    JointTarget,
+    Observation,
+    Vec3,
+)
 from vlarobot.execution.safety_monitor import SafetyMonitor
 from vlarobot.execution.scripted_can import ScriptedCanPolicy
 
@@ -45,21 +54,40 @@ class SkillOutcome:
     failure_reason: str | None
 
 
+CommandAudit = Callable[[Action, Observation, GroundTruth, bool], ApplyResult]
+
+
 class _CheckedBackend:
     def __init__(
-        self, backend: RobotBackend, monitor: SafetyMonitor, observation: Observation
+        self,
+        backend: RobotBackend,
+        monitor: SafetyMonitor,
+        observation: Observation,
+        audit: CommandAudit | None = None,
     ) -> None:
         self.backend = backend
         self.monitor = monitor
         self.observation = observation
         self.vetoes: list[str] = []
         self.dispatched: list[Action] = []
+        self.audit = audit
+        self.terminal = True
 
     def apply(self, action: Action) -> ApplyResult:
         verdict = self.monitor.validate(action, self.observation.robot)
         if not verdict.accepted:
             self.vetoes.append(verdict.reason or "safety monitor veto")
             return verdict
+        if self.audit is not None:
+            audited_q = action.q.copy() if isinstance(action, JointTarget) else None
+            verdict = self.audit(
+                action, self.observation, self.backend.get_ground_truth(), self.terminal
+            )
+            if isinstance(action, JointTarget) and action.q != audited_q:
+                verdict = ApplyResult(False, "joint command changed during predictive audit")
+            if not verdict.accepted:
+                self.vetoes.append(verdict.reason or "predictive proxy veto")
+                return verdict
         self.dispatched.append(action)
         return self.backend.apply(action)
 
@@ -84,9 +112,14 @@ class SkillExecutor(ScriptedCanPolicy):
         raise TypeError("Use run_skill with an explicit SkillAction.")
 
     def run_skill(
-        self, backend: RobotBackend, observation: Observation, action: SkillAction
+        self,
+        backend: RobotBackend,
+        observation: Observation,
+        action: SkillAction,
+        *,
+        audit: CommandAudit | None = None,
     ) -> SkillOutcome:
-        checked = _CheckedBackend(backend, self.monitor, observation)
+        checked = _CheckedBackend(backend, self.monitor, observation, audit)
         self._last_observation = observation
         self._last_failure_reason = None
         self._last_failure_is_safety = False
@@ -117,6 +150,10 @@ class SkillExecutor(ScriptedCanPolicy):
             dispatched=tuple(checked.dispatched),
             failure_reason=self._last_failure_reason,
         )
+
+    def _command_and_wait(self, backend, *args, phase_terminal=None, **kwargs):
+        backend.terminal = phase_terminal is not False
+        return super()._command_and_wait(backend, *args, phase_terminal=phase_terminal, **kwargs)
 
     def _close_gripper(self, backend: _CheckedBackend) -> bool:
         response = backend.apply(GripperCmd(0.0, force=50.0))

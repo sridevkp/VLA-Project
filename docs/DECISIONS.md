@@ -4181,3 +4181,15 @@ The demonstration reference is CPU ridge regression on tool position,
 CAN-to-tool displacement, and measured aperture. The CAN pose is
 privileged. Scaling and fitting use only the 945 fit decisions. The 495
 internal TRAIN decisions measure demonstrated skill agreement.
+
+V4 now supports an explicit command-time proxy guard in the isolated TRAIN
+harness. It samples each concrete joint or gripper command at the lockstep
+interval, from the latest observation. The independent command monitor
+runs first. Changed joint setpoints are rejected and each fresh command
+gets a fresh check. Strict sweep remains unverified under this proxy.
+Candidate-wide preflight and learned runtime integration remain pending.
+
+The initial empirical ridge fit combines demonstrated preferences with the
+available measured approach error and empty-close outcomes. It is a
+no-context baseline. It uses oracle CAN position and does not use observed
+future geometry as a decision feature.

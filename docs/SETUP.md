@@ -414,3 +414,7 @@ Run `uv run python -m vlarobot.cli v4-train-reference <eligible-decisions.json> 
 to fit and evaluate the demonstration reference. For isolated TRAIN probes,
 `--scene-index 0`, `1`, and `2` select the clear, cluttered, and reach-limited
 scenes, respectively.
+
+Add `--proxy` to an isolated V4 TRAIN skill probe to run the separate
+geometric audit before each dispatched command. To fit the initial
+no-context utility model, run `uv run python -m vlarobot.cli v4-train-empirical <eligible-decisions.json> <fresh-model.json> <observed-skill-result.json> ...`.

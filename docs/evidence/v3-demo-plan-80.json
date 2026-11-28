@@ -1,0 +1,62 @@
+{
+  "plan": "v3-can-random-s200-n80",
+  "split": "train",
+  "base_seed": 200,
+  "requested": 80,
+  "built": 80,
+  "instruction_strings": [
+    "Pick up the can and place it at the target location."
+  ],
+  "base_scene_counts": {
+    "train-clear-i00": 10,
+    "train-clear-i03": 10,
+    "train-clear-i06": 10,
+    "train-cluttered-i01": 10,
+    "train-cluttered-i04": 10,
+    "train-cluttered-i07": 10,
+    "train-reach-limited-i02": 10,
+    "train-reach-limited-i05": 10
+  },
+  "family_counts": {
+    "clear": 30,
+    "cluttered": 30,
+    "reach-limited": 20
+  },
+  "seed_blocks": [
+    200,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209
+  ],
+  "can_x_offset_m": {
+    "count": 80,
+    "min": -0.094084,
+    "mean": -0.001692,
+    "max": 0.085783
+  },
+  "can_y_offset_m": {
+    "count": 80,
+    "min": -0.088809,
+    "mean": 0.000229,
+    "max": 0.069048
+  },
+  "can_yaw_offset_rad": {
+    "count": 80,
+    "min": -3.135123,
+    "mean": 0.244449,
+    "max": 3.13395
+  },
+  "can_radius_m": {
+    "count": 80,
+    "min": 0.001531,
+    "mean": 0.04213,
+    "max": 0.098406
+  },
+  "status": "planned-only; not collected"
+}

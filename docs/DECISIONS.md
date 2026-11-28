@@ -4084,3 +4084,27 @@ holdout stays sealed, V1 results and frozen `docs/RESULTS.md` numbers are not
 touched, and no decoder, IK or safety change is made. Evidence:
 `docs/V2_NEGATIVE_RESULT.md`, `docs/evidence/v2-recovered-diagnostic-result.json`
 and `docs/evidence/v2-recovered-step21000-receipt.json`.
+
+### ADR-0087 — V3 separate arm and in-sample admission, 2026-11-28
+
+The owner addendum of 2026-11-28 makes V3 a separate arm. Frozen V1/V2 results
+are not modified. TRAIN admission is explicitly in-sample over the 8 base scene
+identities; before any pass is reported as a working VLA, V3 must run an
+object-position intervention (move the CAN with other inputs fixed apart from the
+image change and require correctly directed waypoints) and a
+leave-one-base-scene-out memorization check. If the intervention fails, the
+result is reported as “memorized TRAIN scenes”.
+
+Up to 80 additional TRAIN demonstrations are prioritized for randomized CAN
+position/yaw inside the reachable envelope, starting in parallel with model
+code. Language-varying demos are secondary; language conditioning remains
+UNMEASURED without instruction-dependent destinations. Option B must avoid
+privileged object pose in the prediction context where possible; any
+oracle-derived field is labelled in every table and tested with zeroed/shuffled
+prediction ablations.
+
+V3 experiments stop on 2026-12-05 and report daily in five lines. Any V3
+evaluation on VALIDATION/TEST requires explicit owner approval after the V3
+configuration is frozen by commit. Evidence and plan:
+`docs/VLA_ALTERNATIVES_ASSESSMENT.md`, `docs/V3_DAILY_REPORT.md` and
+`docs/evidence/v3-demo-plan-80.json`.

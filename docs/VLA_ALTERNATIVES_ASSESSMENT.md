@@ -1,17 +1,47 @@
 # V3 alternatives assessment — learned manipulation routes under the V2 stop rule
 
-**Status:** Two-hour, read-only feasibility assessment. No training, GPU use,
-model substitution, gate change, decoder/IK/safety change or holdout access.
-V1 remains immutable; V2 step-021000 remains documented at `0/3`; the
-`>=10/24` TRAIN gate remains unchanged.
+**Status:** V3 is a separate assessment and implementation arm under the
+2026-11-28 owner addendum. No training, GPU use, model substitution, gate
+change, decoder/IK/safety change or holdout access has occurred. V1 remains
+immutable; V2 step-021000 remains documented at `0/3`; the `>=10/24` TRAIN gate
+remains unchanged. The Dec 5 hard stop applies to all V3 experiments.
 
 **Evidence files:** `docs/evidence/v3-dataset-measurements.json` (SHA-256
-`d8c6310ff737dc6c6a773c44c011af20db43989334bcbd20650f4453bbfb3856`) and
+`d8c6310ff737dc6c6a773c44c011af20db43989334bcbd20650f4453bbfb3856`),
 `docs/evidence/v3-feature-timing.json` (SHA-256
-`ce4a6b8391f48c23650e53966cfa3fd5dc1e6117b7b76d0475439a1a8e6b9c5d`). Every
+`ce4a6b8391f48c23650e53966cfa3fd5dc1e6117b7b76d0475439a1a8e6b9c5d`) and
+`docs/evidence/v3-demo-plan-80.json` (SHA-256
+`45c673fdd2fbfc89a3d2ad683731eb0afc9900ade829d536df0cb96a7593ca40`). Every
 numeric statement below is tagged **MEASURED** (directly observed/derived) or
 **INFERRED** (engineering estimate from measured anchors). Dates and file paths
-are protocol facts, not performance figures.
+are protocol facts, not performance figures. The 80-demo plan evidence is
+**MEASURED plan output**, not collected data. Daily five-line status is recorded
+in `docs/V3_DAILY_REPORT.md`.
+
+### Owner addendum — 2026-11-28
+
+- **A. In-sample admission.** TRAIN has only 8 base scene identities. Before any TRAIN
+  admission pass is reported as a working VLA, run an object-position
+  intervention test (move the CAN, hold other inputs fixed, and require
+  waypoints to shift in the right direction) and a scene-identity memorization
+  check such as leave-one-base-scene-out offline error. If the intervention
+  test fails, report the result as **“memorized TRAIN scenes”**, not as a
+  working VLA.
+- **B. Data priority.** Use up to 80 additional demonstrations primarily for
+  randomized CAN position/yaw inside the reachable envelope, starting now in
+  parallel with model code. Language-varying demos only if time remains.
+  Language conditioning stays **UNMEASURED** without instruction-dependent
+  destinations.
+- **C. Option B context.** Avoid privileged object pose in the prediction
+  context where possible. If used, label it **oracle-derived** in every table
+  and include zeroed/shuffled-prediction ablations.
+- **D. Separate V3 arm.** Frozen V1/V2 results are never modified. A V3
+  evaluation on VALIDATION/TEST requires explicit owner approval after the V3
+  configuration is frozen by commit.
+- **E. Hard stop and reporting.** V3 experiments stop on Dec 5. Report daily in
+  five lines.
+
+Recorded as ADR-0087 in `docs/DECISIONS.md`.
 
 ## 1. SPEC — exact Phase I passages and conformity
 
@@ -106,6 +136,24 @@ V2 holdout or sealed identity was accessed **MEASURED**.
 | Gripper close transitions in recorded commands | 80 | MEASURED |
 | Gripper release transitions in recorded commands | 80 | MEASURED |
 
+**In-sample warning:** these 80 demos cover only 8 base scene identities
+**MEASURED**. A TRAIN admission pass is therefore an in-sample result and does
+not establish scene generalization **INFERRED**. The required admission
+evidence is:
+
+1. **Object-position intervention:** move the CAN to a new position, keep the
+   instruction, robot state, camera and other scene inputs fixed apart from the
+   resulting image change, and require the learned waypoints to shift in the
+   correct direction **INFERRED protocol**.
+2. **Scene-identity memorization check:** leave one base scene identity out at a
+   time and report offline waypoint/gripper error on the held-out identity
+   **INFERRED protocol**. A large train-to-held-out gap means the policy learned
+   scene identity, not the task **INFERRED**.
+
+If the intervention test fails, the result must be reported as **“memorized
+TRAIN scenes”** and must not be called a working VLA **INFERRED consequence of
+the owner addendum**.
+
 Phase-tagged row counts are `INIT 400`, `HOME 1,108`, `PREGRASP 1,374`,
 `PREGRASP_REALIGN 900`, `DESCEND 629`, `CLOSE 320`, `LIFT 435`, `TRANSIT 733`,
 `RETREAT 400`, `PLACE_DESCEND 400`, `RELEASE 1,322`, `DONE 80` **MEASURED**.
@@ -172,6 +220,14 @@ policy T4 estimates below are scaled from this anchor and are not promises.
 | **C. Compact low-level chunk policy** | 3–8 M parameters: A encoder + temporal decoder for H actions **INFERRED** | RGB/state/task (+history) → 7-D action chunk, H = 50 to match frozen chunk shape **INFERRED** | Feature cache 15.6 min full-data or 40 s sampled; T4 45–120 min **INFERRED** | `src/vlarobot/vla/action_adapter.py`, `src/vlarobot/execution/vla_episode.py`, `src/vlarobot/vla/model_service.py`; RiskGate and motor safety unchanged | Repeats SmolVLA closed-loop precision failure; binary gripper regression; chunk horizon mismatch; IK residual vetoes; no clear phase semantics **INFERRED** |
 | **D. Staged hybrid learned/scripted** | Selector 0.01–1 M parameters; learned waypoint policy optional 2–5 M if A is used **INFERRED** | Source-tagged scripted and learned candidate waypoints → selected candidate index **INFERRED** | Selector CPU minutes; add A cost only if learned candidates are enabled **INFERRED** | `src/vlarobot/planning/candidates.py` source tags; `src/vlarobot/risk/gate.py` veto first; `src/vlarobot/planning/prediction_conditioned.py` selector after veto; `src/vlarobot/planning/execution.py` motor safety; verifier unchanged | Scripted completion attributed to VLA; duplicate candidates; prediction head sensitivity mistaken for learned competence; documented proposal deviation **INFERRED** |
 
+**Option B context constraint (owner addendum C):** avoid privileged object pose
+in the prediction context where possible **INFERRED design requirement**. If a
+CAN pose or any other oracle-derived field is used, every table must label it
+**oracle-derived** and the experiment must include zeroed and shuffled
+prediction-context ablations **INFERRED protocol**. A model that changes output
+only when oracle pose is present has not demonstrated learned
+prediction-conditioned selection **INFERRED**.
+
 ### Responsibility split
 
 - Learned policy: choose the next waypoint, gripper close/release decision and
@@ -198,6 +254,42 @@ The model must infer phase from observation history; a single frame is likely
 insufficient to separate approach, grasp, transport and release **INFERRED**.
 Use last 4–8 observations as design range **INFERRED**.
 
+### Additional demonstration priority (owner addendum B)
+
+Use the additional demonstration budget (up to 80) primarily for randomized CAN
+position/yaw inside the reachable envelope **INFERRED target from owner
+addendum**. The existing TRAIN generator already draws CAN radius and yaw per
+seed block **MEASURED implementation**, so a fresh TRAIN seed range provides
+new CAN poses over the same 8 base scene identities. Collection must start in
+parallel with model code and use the existing accepted-demo audit **MEASURED
+pipeline constraint**.
+
+Language-varying demos are secondary and only if time remains **INFERRED
+sequencing from owner addendum**. Language conditioning stays **UNMEASURED**
+until demonstrations pair distinct instructions with distinct destinations
+**MEASURED current dataset limitation**.
+
+The intended measured collection command is:
+
+```text
+uv run python -m vlarobot.cli collect-demos \
+  --n 80 --seed 200 --split train --backend webots \
+  --out runs/demos/v3-can-random-s200-n80
+```
+
+This command was **not run** because this host has no Webots executable or
+`WEBOTS_HOME` **MEASURED environment limitation**. The same command on a Webots
+host uses the existing accepted-demo audit and does not touch the sealed
+holdout **MEASURED pipeline constraint**.
+
+A read-only plan check for `n=80, seed=200` built 80 entries: 10 per base scene
+identity, 10 seed blocks, CAN x offset −0.094084 to 0.085783 m, y offset
+−0.088809 to 0.069048 m, yaw −3.135123 to 3.133950 rad and radius 0.001531 to
+0.098406 m **MEASURED plan output, not collected**. The 20 reach-limited entries
+are retained only if the accepted-demo audit admits them; failures are
+quarantined, so the target is up to 80 accepted demos, not 80 attempts
+**MEASURED pipeline constraint**.
+
 ### Minimum additional demonstrations for instruction dependence
 
 Current instruction count is 1 **MEASURED**, so language dependence is
@@ -206,7 +298,8 @@ TRAIN demos: 2 strings × 8 base scene identities × 3 seeds **INFERRED**.
 Recommended target is 80 additional demos: 2 strings × 8 base scene identities ×
 5 seeds **INFERRED**, collected with the same accepted demo audit and no holdout.
 Both estimates assume one new instruction variant or goal phrasing; three
-variants would require proportionally more **INFERRED**.
+variants would require proportionally more **INFERRED**. This is a secondary
+budget: CAN randomization takes priority under addendum B **INFERRED**.
 
 ## 4. ANTI-DISGUISE TESTS
 
@@ -238,6 +331,15 @@ variants would require proportionally more **INFERRED**.
 8. **Low-level distribution check.** Repeat the measured action-distribution
    table before any regression-collapse explanation is accepted **MEASURED
    anchor**. Current near-zero translation fraction is 30.01% **MEASURED**.
+9. **Object-position intervention.** Move the CAN, hold instruction/state/camera
+   setup and other non-CAN scene inputs fixed apart from the resulting image,
+   and require the waypoint change to have the correct direction and sign
+   **INFERRED expected effect**. If it does not, report **“memorized TRAIN
+   scenes”** and stop calling the policy a working VLA **INFERRED gate**.
+10. **Scene-identity memorization.** Run leave-one-base-scene-out offline
+    evaluation across the 8 base identities and report the train-to-held-out
+    error gap **INFERRED protocol**. High held-out error means memorization, not
+    task generalization **INFERRED interpretation**.
 
 ### Scene-grouped offline split
 
@@ -245,8 +347,11 @@ Use base scene identity as the grouping unit, not random frame splits **INFERRED
 protocol**. There are 8 base groups with 7–12 demos each **MEASURED**. Proposed
 development split: keep one clear, one cluttered and one reach-limited base
 identity for offline validation; train on the remaining 5 groups **INFERRED**.
-No frame from a demo may appear in both sides of the split **INFERRED**. Sealed
-holdout remains untouched **MEASURED constraint**.
+No frame from a demo may appear in both sides of the split **INFERRED**. The
+admission memorization check is stricter: run 8-fold leave-one-base-scene-out
+evaluation over all base identities, separate from the 5/3 development split
+**INFERRED owner addendum A**. Sealed holdout remains untouched **MEASURED
+constraint**.
 
 ### Eq. 3.2 controlled path
 
@@ -254,9 +359,13 @@ holdout remains untouched **MEASURED constraint**.
    predicted context used by the selector **INFERRED**.
 2. Hold image, state, language and candidate actions fixed; vary only predicted
    context **INFERRED**. Compare no-context, analytic-context, learned-context
-   and counterfactual-context arms **INFERRED**.
+   and counterfactual-context arms **INFERRED**. Prefer non-privileged predicted
+   fields (distance, clearance, progress, gripper, validity) over CAN pose
+   **INFERRED owner addendum C**.
 3. Counterfactual interventions: set distance/clearance/progress/gripper fields
-   to zero, shuffle across candidates, and apply bounded perturbations **INFERRED**.
+   to zero, shuffle across candidates, and apply bounded perturbations
+   **INFERRED**. If oracle-derived CAN pose is present, label it in every table
+   and include zeroed/shuffled-prediction arms **INFERRED owner addendum C**.
 4. Require selection changes attributable only to prediction context before any
    Eq. 3.2 claim **INFERRED**. Oracle-context runs are diagnostic only and never
    enter the real pipeline **MEASURED constraint**.
@@ -279,36 +388,50 @@ holdout remains untouched **MEASURED constraint**.
 
 | Date | Work | Gate / stop |
 |---|---|---|
-| Nov 26 | Owner approval only; no implementation starts without it | No training, no GPU |
-| Nov 27 | Freeze V3 protocol; build scene-grouped split; export waypoint supervision and input hashes | Offline only |
-| Nov 28 | Implement A trainer and anti-disguise tests in code, CPU only | No GPU; review before T4 |
-| Nov 29 | T4 train A if approved; measure learned-vs-expert waypoint error and ablations | Stop A if waypoint error does not beat scripted jitter |
-| Nov 30 | TRAIN-only closed-loop prototype with A; verifier confirms close/lift/transport if competent | No full admission, no holdout |
-| Dec 1 | Fit B context/predictor if A passes; run controlled prediction interventions | No Eq. 3.2 claim without intervention evidence |
-| Dec 2 | C comparator only if A/B fail diagnostic competence; otherwise skip | No decoder/IK/safety changes |
-| Dec 3 | D labelled hybrid fallback if no learned waypoint competence | Never label as VLA-primary |
-| Dec 4 | Freeze evidence, write final report, preserve raw artifacts | No new training |
-| Dec 5 | **Hard stop**: report ranked outcome; any admission/holdout work needs a new owner decision | Stop regardless of result |
+| Nov 28 | Record addendum; define object-position intervention and LOSO protocol; start up to 80 randomized CAN position/yaw TRAIN demos in parallel with CPU model code | No training/GPU; measured collection needs Webots |
+| Nov 29 | Finish or continue accepted-demo collection; freeze V3 data manifest and scene-grouped split | No holdout; language demos only if time |
+| Nov 30 | Implement A offline trainer and anti-disguise tests; run object-position intervention and LOSO memorization check | If intervention fails, report **“memorized TRAIN scenes”** |
+| Dec 1 | T4 train A only after CPU review and approval; measure learned-vs-expert waypoint error | Stop A if waypoint error does not beat scripted jitter |
+| Dec 2 | TRAIN-only closed-loop A prototype; verifier checks close/lift/transport if competent | No full admission, no holdout |
+| Dec 3 | Fit B non-privileged context; run zeroed/shuffled-prediction ablations; label oracle-derived fields | No Eq. 3.2 claim without intervention evidence |
+| Dec 4 | C comparator only if A/B fail; D labelled hybrid fallback if no learned waypoint competence; freeze V3 config and evidence | Never label D as VLA-primary; no new training |
+| Dec 5 | **Hard stop**: report ranked outcome in five lines; any VALIDATION/TEST evaluation needs explicit owner approval after the frozen commit | Stop regardless of result |
 
-### Exact approval needed from owner
+### Owner decisions and remaining approvals
 
-Approve all of the following before any V3 implementation begins:
+**Directed by the 2026-11-28 addendum:**
 
-1. A new `work/v3-feasibility` branch from `d62f313` for protocol/code work only.
-2. Permission to build offline waypoint supervision from TRAIN demo logs and to
-   use scene-grouped offline splits; no sealed holdout access.
-3. Permission to collect 48–80 additional TRAIN demos **INFERRED** with at least
-   2 instruction strings **INFERRED**, if the first A prototype shows instruction
-   sensitivity is needed.
-4. Permission to use the approved Colab T4 session for bounded A/B training after
-   CPU implementation review; no local GPU and no new dependency without a
+- V3 remains a separate arm; frozen V1/V2 results are never modified.
+- Up to 80 additional TRAIN demos are prioritized for randomized CAN
+  position/yaw inside the reachable envelope, starting in parallel with model
+  code; language-varying demos are secondary.
+- TRAIN admission is in-sample over 8 base scenes and requires the
+  object-position intervention and leave-one-base-scene-out memorization check.
+- Option B must avoid privileged object pose where possible and label any
+  oracle-derived field with zeroed/shuffled-prediction ablations.
+- V3 experiments stop on Dec 5 and report daily in five lines.
+
+**Still required before the corresponding action:**
+
+1. Confirm whether V3 code/data work continues on `work/vla-recovery` or moves
+   to a new `work/v3-feasibility` branch from commit `4c668e2`.
+2. Approve the Webots collection host or start command for the 80-demo
+   randomized-CAN campaign. This environment has no Webots executable or
+   `WEBOTS_HOME`, so measured collection cannot start here **MEASURED
+   environment limitation**.
+3. Approve the approved Colab T4 session for bounded A/B training after CPU
+   implementation review; no local GPU and no new dependency without a
    `docs/DECISIONS.md` licence note.
-5. Permission to run TRAIN-only diagnostic prototypes on the existing three
-   diagnostic identities; no 24-trial admission and no threshold change.
-6. Permission to activate the prepared Eq. 3.2 head only under B's controlled
+4. Approve TRAIN-only diagnostic prototypes on the existing three diagnostic
+   identities; no 24-trial admission and no threshold change.
+5. Approve activation of the prepared Eq. 3.2 head only under B's controlled
    prediction interventions and only as a TRAIN diagnostic.
-7. Confirmation that V1, V2, frozen `docs/RESULTS.md`, decoder, IK, SafetyMonitor
+6. Give explicit approval for any V3 evaluation on VALIDATION/TEST after the V3
+   configuration is frozen by commit. Before that approval, only TRAIN
+   diagnostics are permitted.
+7. Confirm that V1, V2, frozen `docs/RESULTS.md`, decoder, IK, SafetyMonitor
    thresholds, the `>=10/24` gate and the sealed holdout remain immutable.
 
-Without item 1–7, this document is the complete deliverable and nothing further
-will be implemented **MEASURED commitment**.
+Without these remaining approvals, this document and the daily report are the
+complete deliverable and no corresponding action will be implemented **MEASURED
+commitment**.

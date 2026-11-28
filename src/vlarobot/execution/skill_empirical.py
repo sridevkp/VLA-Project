@@ -40,6 +40,7 @@ from vlarobot.world_model.kinematic import VelocityLimitedKinematics
 from vlarobot.world_model.rollout import AnalyticSurrogate, Trajectory, compose
 
 _IDENTITY = (0.0, 0.0, 0.0, 1.0)
+_RESET_MATCH_TOLERANCE = 1e-6
 
 
 def _example(
@@ -153,12 +154,13 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
         if (
             joints.keys() != second.robot.joint_pos.keys()
             or any(
-                abs(value - second.robot.joint_pos[name]) > 1e-8 for name, value in joints.items()
+                abs(value - second.robot.joint_pos[name]) > _RESET_MATCH_TOLERANCE
+                for name, value in joints.items()
             )
             or not np.allclose(
                 first.scene.objects[0].pose.position.as_array(),
                 second.scene.objects[0].pose.position.as_array(),
-                atol=1e-8,
+                atol=_RESET_MATCH_TOLERANCE,
                 rtol=0,
             )
         ):
@@ -203,6 +205,7 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
         },
         "records": records,
         "matched_reset_replay": comparisons,
+        "reset_match_tolerance_rad_and_m": _RESET_MATCH_TOLERANCE,
         "forecast_excluded": [
             {
                 "skill": row.candidate.action.skill.value,

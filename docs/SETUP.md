@@ -409,3 +409,8 @@ a motion failure or loss of command isolation. Use `--empty-grasp` for a
 close and reopen away from the CAN. Use `--skill PREGRASP --imperfect-approach`
 for a one-CAN-radius lateral perturbation. Both options use the same clear
 TRAIN scene with fresh output directories.
+
+Run `uv run python -m vlarobot.cli v4-train-reference <eligible-decisions.json> <fresh-model.json>`
+to fit and evaluate the demonstration reference. For isolated TRAIN probes,
+`--scene-index 0`, `1`, and `2` select the clear, cluttered, and reach-limited
+scenes, respectively.

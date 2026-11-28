@@ -4168,3 +4168,16 @@ certificate pinned to its contract, geometry and review cases. A future
 binding must check the joint transitions implied by each actual skill path,
 including intermediate waypoints. Candidate endpoint forecasts alone do
 not establish clearance for the dispatched path.
+
+The owner authorized a separate V4 TRAIN tool-envelope scope. The
+`v4-train-tool-envelope-proxy-v1` assessment pins its clearance profile,
+factory world, and modeled PROTO assets. It checks the sampled tool segments
+and records strict sweep reasons separately, with full-arm coverage marked
+unverified. This is an offline assessment. Learned dispatch still requires
+a binding between the assessed trajectory and the actual commands emitted
+by each skill. The strict AnalyticSurrogate path retains its sweep vetoes.
+
+The demonstration reference is CPU ridge regression on tool position,
+CAN-to-tool displacement, and measured aperture. The CAN pose is
+privileged. Scaling and fitting use only the 945 fit decisions. The 495
+internal TRAIN decisions measure demonstrated skill agreement.

@@ -1,0 +1,9 @@
+{
+  "identity": "v4-train-tool-envelope-proxy-v1",
+  "split": "train",
+  "full_arm_sweep_coverage": "unverified",
+  "clearance_file": "configs/worldmind_arm5_matched_clearance.json",
+  "clearance_sha256": "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4",
+  "world_file": "worlds/factory.wbt",
+  "world_sha256": "35d87f3601813a47e932bb8558740443710ba15421f07e1f3c67c6e5fd027706"
+}

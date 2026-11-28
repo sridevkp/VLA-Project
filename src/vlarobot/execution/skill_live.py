@@ -572,11 +572,15 @@ def run_learned_smoke(
                 "vetoes": actual.vetoes,
                 "audits": [asdict(audit) for audit in live_audits],
             }
+            if candidate.skill is Skill.HOME:
+                record["actual"]["home_reached"] = _at_home(obs, home)
+                record["actual"]["joint_after_rad"] = obs.robot.joint_pos.copy()
             write_json(out / f"decision-{index:02d}.json", record)
             if not actual.settled or tilt_deg >= SETTINGS.can_tilt_limit_deg:
                 stop_reason = "skill failed" if not actual.settled else "CAN exceeded tilt limit"
                 break
         final = backend.get_ground_truth().object_poses["CAN"]
+        verification = _verify_pose(initial, final, _at_home(obs, home))
         result = {
             "split": "train",
             "scene": entry.scene.name,
@@ -588,7 +592,7 @@ def run_learned_smoke(
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
             "privileged_inputs": [
-                "CAN pose for safety and verification",
+                "CAN pose for grasp and release safety, completion scoring and verification",
                 "HAM/APP poses for proxy",
                 "world base transform",
                 *([] if localize is not None else ["CAN pose for skill generation and utility"]),
@@ -598,7 +602,12 @@ def run_learned_smoke(
             "decisions": len(decisions),
             "home_reference_rad": home,
             "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
-            "verification": _verify_pose(initial, final, _at_home(obs, home)),
+            "object_placement_passed": all(
+                verification[key] for key in ("place_distance_ok", "can_height_ok", "can_tilt_ok")
+            ),
+            "verified_termination": stop_reason == "termination selected"
+            and verification["success"],
+            "verification": verification,
         }
         write_json(out / "learned-summary.json", result)
     return result

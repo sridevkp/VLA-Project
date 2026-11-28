@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from dataclasses import asdict, replace
 from pathlib import Path
-from sys import executable
 
 import numpy as np
 
@@ -22,10 +21,10 @@ from vlarobot.backends.webots.config import (
     TIME_STEP,
 )
 from vlarobot.backends.worldmind_bindings import (
+    CORRECTED_REGISTRATION_RELATIVE,
     CORRECTED_REGISTRATION_SHA256,
     _corrected_forward,
     corrected_kinematics,
-    corrected_registration_path,
 )
 from vlarobot.core.types import (
     Action,
@@ -46,18 +45,31 @@ from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import launch_webots_session
 from vlarobot.execution.skill_empirical import FORECAST_PROFILE, forecast_candidate
-from vlarobot.execution.skill_proxy import PROFILE_ID, command_proxy, placement_clearance_offset_m
+from vlarobot.execution.skill_proxy import (
+    CLEARANCE_MAX_RISE_M,
+    CLEARANCE_TARGET_MARGIN_M,
+    PROFILE_ID,
+    clearance_path_passes,
+    command_proxy,
+    placement_clearance_offset_m,
+    transit_floor_m,
+)
 from vlarobot.execution.skill_selection import UtilityModel, enumerate_skills
 from vlarobot.execution.skills import (
+    EMPIRICAL_SKILLS,
     HOME_VERIFICATION_TOLERANCE_RAD,
+    CommandAudit,
     Skill,
     SkillAction,
     SkillExecutor,
+    require_v4_registration,
+    v4_simulator_environment,
 )
 from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
 from vlarobot.world_model.rollout import Trajectory, compose, rotate
 
+CLEARANCE_POLICY = "bounded-vertical-held-can-v1"
 WAYPOINT_FORECAST_POLICY = "open-hand-approach-recovery-audited-joint-path-v1"
 
 _TARGETS = {
@@ -268,6 +280,30 @@ def close_progress_score(
     return raw_score
 
 
+def _clearance_target(observation: Observation, floor: float) -> SkillAction | None:
+    base = observation.robot.base_pose_world
+    if base is None:
+        return None
+    tool = observation.robot.ee_pose.position
+    slack = compose(base, observation.robot.ee_pose).position.z - floor
+    rise = CLEARANCE_TARGET_MARGIN_M - slack
+    if slack >= 0 or not 0 < rise <= CLEARANCE_MAX_RISE_M:
+        return None
+    displacement = rotate(np.asarray(_inverse_pose(base).orientation), np.array((0, 0, rise)))
+    return SkillAction(Skill.CLEARANCE_LIFT, Vec3(*map(float, tool.as_array() + displacement)))
+
+
+def _attached(observation: Observation, truth: GroundTruth, offset: np.ndarray | None) -> bool:
+    base = observation.robot.base_pose_world
+    if base is None or offset is None:
+        return False
+    robot = observation.robot
+    if robot.gripper_holding is False or not 0.002 < robot.gripper_opening < GRIPPER_OPEN - 0.002:
+        return False
+    measured = compose(_inverse_pose(compose(base, robot.ee_pose)), truth.object_poses["CAN"])
+    return bool(np.linalg.norm(measured.position.as_array() - offset) < CLOSE_ALIGN_TOL)
+
+
 def _waypoint_forecast(
     nominal: Trajectory | None,
     audited: list[Trajectory],
@@ -384,20 +420,18 @@ def _run_train_episode(
         required_constraints=("proxy",),
         inactive_components=(1, 2, 3),
     )
-    registration = corrected_registration_path()
     kinematics = corrected_kinematics()
     out.mkdir(parents=True, exist_ok=False)
     with launch_webots_session(
         webots=webots,
         trace_dir=out,
         headless=True,
-        extra_env={
-            "WEBOTS_PYTHON": executable,
-            "VLAROBOT_URDF_REGISTRATION_FILE": str(registration),
-        },
+        extra_env=v4_simulator_environment(),
     ) as session:
         backend = session.client
         obs = backend.reset(entry.scene, entry.seed)
+        require_v4_registration(obs)
+        floor = transit_floor_m()
         home = obs.robot.joint_pos.copy()
         initial = backend.get_ground_truth().object_poses["CAN"]
         write_json(
@@ -412,6 +446,7 @@ def _run_train_episode(
                 "can_world": asdict(initial),
                 "reset_fingerprint": obs.robot.diagnostics.get("reset_fingerprint"),
                 "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
+                "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
             },
         )
         decisions = []
@@ -442,6 +477,15 @@ def _run_train_episode(
                 measured_can_base=oracle_can,
                 attachment_offset=attachment_offset,
             )
+            origin = compose(base, obs.robot.ee_pose).position.as_array()
+            clearance = float(origin[2] - floor)
+            attached_before = _attached(obs, truth, attachment_offset)
+            if clearance < 0:
+                candidates = tuple(c for c in candidates if c.skill is not Skill.TRANSFER)
+                if attached_before and measured_rise >= LIFT_MIN:
+                    recovery = _clearance_target(obs, floor)
+                    if recovery is not None:
+                        candidates += (recovery,)
             home_reached = _at_home(obs, home)
             placement = _verify_pose(initial, truth.object_poses["CAN"], home_reached)
             placed_and_released = (
@@ -452,7 +496,12 @@ def _run_train_episode(
                 )
             )
             forecasts = (
-                [forecast_candidate(state, candidate).trajectory for candidate in candidates]
+                [
+                    forecast_candidate(state, candidate).trajectory
+                    if candidate.skill in EMPIRICAL_SKILLS
+                    else None
+                    for candidate in candidates
+                ]
                 if context != "smoke"
                 else []
             )
@@ -483,6 +532,9 @@ def _run_train_episode(
                         candidate.skill,
                         checks.append,
                         record_accepted_forecast=audited_waypoints.append if recoverable else None,
+                        clearance_origin_world=origin
+                        if candidate.skill is Skill.CLEARANCE_LIFT
+                        else None,
                     ),
                 )
                 safe = predicted.settled and bool(checks) and not predicted.vetoes
@@ -499,10 +551,15 @@ def _run_train_episode(
                         and set(forecast.hard_reasons) <= {"unverified-arm-sweep"}
                     )
                 rehearsals.append((predicted, checks, safe, forecast, original_veto))
-            futures = [forecast.states[-1] for _, _, _, forecast, _ in rehearsals if forecast]
+            futures = {
+                i: forecast.states[-1]
+                for i, (_, _, _, forecast, _) in enumerate(rehearsals)
+                if forecast
+            }
             if context == "shuffled" and len(futures) > 1:
                 shift = int(np.random.default_rng(entry.seed + index).integers(1, len(futures)))
-                futures = futures[shift:] + futures[:shift]
+                values = list(futures.values())
+                futures = dict(zip(futures, values[shift:] + values[:shift], strict=True))
             rows, assessments = [], []
             for candidate_index, candidate in enumerate(candidates):
                 predicted, checks, safe, forecast, original_veto = rehearsals[candidate_index]
@@ -510,7 +567,9 @@ def _run_train_episode(
                 if uses_context and forecast is not None:
                     future = state if context == "controlled" else futures[candidate_index]
                 raw_score = (
-                    None if candidate.skill is Skill.HOME else model.score(state, candidate, future)
+                    None
+                    if candidate.skill not in EMPIRICAL_SKILLS
+                    else model.score(state, candidate, future)
                 )
                 score = (
                     0.0
@@ -530,6 +589,9 @@ def _run_train_episode(
                     ),
                 )
                 score_source = "empirical-utility"
+                if candidate.skill is Skill.CLEARANCE_LIFT:
+                    score_source = "rule-based-clearance-recovery"
+                    score = 1.0
                 if placed_and_released:
                     score_source = "measured-completion-objective"
                     if candidate.skill is Skill.HOME:
@@ -582,6 +644,9 @@ def _run_train_episode(
                 "base_pose_world": asdict(base),
                 "placed_and_released": placed_and_released,
                 "home_reached": home_reached,
+                "transit_floor_world_m": floor,
+                "transit_clearance_m": clearance,
+                "current_attachment_valid": attached_before,
                 "causal_best_approach_gap_m": best_approach_gap,
                 "observed_attachment_tool_m": (
                     None if attachment_offset is None else attachment_offset.tolist()
@@ -617,16 +682,53 @@ def _run_train_episode(
                 break
             candidate = candidates[decision.selected_index]
             live_audits = []
+            recovery_selected = candidate.skill is Skill.CLEARANCE_LIFT
+            audit = command_proxy(
+                executor.monitor,
+                candidate.skill,
+                live_audits.append,
+                clearance_origin_world=origin if recovery_selected else None,
+            )
+
+            def checked_audit(
+                action: Action,
+                current: Observation,
+                measured: GroundTruth,
+                terminal: bool,
+                *,
+                require_grasp: bool = recovery_selected,
+                offset: np.ndarray | None = attachment_offset,
+                check: CommandAudit = audit,
+            ) -> ApplyResult:
+                if require_grasp and not _attached(current, measured, offset):
+                    return ApplyResult(False, "clearance recovery lost measured grasp")
+                return check(action, current, measured, terminal)
+
             actual = executor.run_skill(
                 backend,
                 obs,
                 candidate,
-                audit=command_proxy(executor.monitor, candidate.skill, live_audits.append),
+                audit=checked_audit,
             )
             obs_before = obs
             tool_before = obs.robot.ee_pose.position
             obs = actual.observation
-            pose_after = backend.get_ground_truth().object_poses["CAN"]
+            after_truth = backend.get_ground_truth()
+            pose_after = after_truth.object_poses["CAN"]
+            recovery_verified = None
+            if recovery_selected:
+                after_base = obs.robot.base_pose_world
+                endpoint = (
+                    compose(after_base, obs.robot.ee_pose).position.as_array()
+                    if after_base is not None
+                    else np.full(3, np.nan)
+                )
+                grasp_retained = _attached(obs, after_truth, attachment_offset)
+                recovery_verified = (
+                    actual.settled
+                    and grasp_retained
+                    and clearance_path_passes(np.array((origin, endpoint)), origin, floor, True)
+                )
             if actual.settled and candidate.skill in (Skill.OPEN, Skill.RELEASE):
                 observed_release = True
             elif candidate.skill is Skill.CLOSE:
@@ -678,10 +780,17 @@ def _run_train_episode(
                 "vetoes": actual.vetoes,
                 "audits": [asdict(audit) for audit in live_audits],
             }
+            if recovery_selected:
+                record["actual"]["recovery_verified"] = recovery_verified
+                record["actual"]["grasp_retained"] = grasp_retained
+                record["actual"]["transit_clearance_after_m"] = float(endpoint[2] - floor)
             if candidate.skill is Skill.HOME:
                 record["actual"]["home_reached"] = _at_home(obs, home)
                 record["actual"]["joint_after_rad"] = obs.robot.joint_pos.copy()
             write_json(out / f"decision-{index:02d}.json", record)
+            if recovery_verified is False:
+                stop_reason = "clearance recovery did not verify"
+                break
             if not actual.settled or tilt_deg >= SETTINGS.can_tilt_limit_deg:
                 stop_reason = "skill failed" if not actual.settled else "CAN exceeded tilt limit"
                 break
@@ -699,6 +808,8 @@ def _run_train_episode(
             "profile": PROFILE_ID,
             "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
             "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
+            "clearance_policy": CLEARANCE_POLICY,
+            "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
             "privileged_inputs": [
                 "CAN pose for grasp and release safety, completion scoring and verification",
                 "HAM/APP poses for proxy",
@@ -757,6 +868,8 @@ def run_train_admission(
         "profile": PROFILE_ID,
         "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
         "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
+        "clearance_policy": CLEARANCE_POLICY,
+        "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
         "model_sha256": model_sha,
         "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
         "stop_reason": "termination selected",

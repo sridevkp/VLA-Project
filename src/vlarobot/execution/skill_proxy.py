@@ -43,7 +43,7 @@ from vlarobot.execution.worldmind_proxy_binding import (
     proxy_scene,
 )
 from vlarobot.world_model.kinematic import VelocityLimitedKinematics
-from vlarobot.world_model.rollout import AnalyticSurrogate, Attachment, Trajectory, compose
+from vlarobot.world_model.rollout import AnalyticSurrogate, Attachment, Trajectory, compose, rotate
 
 PROFILE_ID = "v4-train-tool-envelope-proxy-v1"
 V1_CLEARANCE_SHA256 = "6ea88763ad27a769943aa52132c60e785e4aa4e811899e34473c6f6cec17bed4"
@@ -72,6 +72,32 @@ def _clearance_configuration() -> tuple[dict, str]:
         if hashlib.sha256(model.read_bytes()).hexdigest() != digest:
             raise ValueError(f"V4 proxy model hash mismatch: {name}")
     return json.loads(clearance), hashlib.sha256(raw).hexdigest()
+
+
+# Recovery is local to the measured transit-height deficit.
+CLEARANCE_MAX_RISE_M = 0.020
+CLEARANCE_TARGET_MARGIN_M = 0.006
+CLEARANCE_MAX_LATERAL_M = 0.004
+CLEARANCE_TRACKING_SLACK_M = 0.001
+
+
+def transit_floor_m() -> float:
+    settings, _ = _clearance_configuration()
+    return float(settings["table_top_world_z_m"] + settings["table_margin_m"][Skill.TRANSFER.value])
+
+
+def clearance_path_passes(
+    points: np.ndarray, origin: np.ndarray, floor: float, terminal: bool
+) -> bool:
+    """Check a bounded lift under LIFT geometry and require transit height at its endpoint."""
+    return bool(
+        np.all(np.isfinite(points))
+        and np.all(np.linalg.norm((points - origin)[:, :2], axis=1) <= CLEARANCE_MAX_LATERAL_M)
+        and np.min(points[:, 2]) >= origin[2] - CLEARANCE_TRACKING_SLACK_M
+        and np.max(points[:, 2]) <= origin[2] + CLEARANCE_MAX_RISE_M
+        and np.min(points[:, 2]) >= points[0, 2] - CLEARANCE_TRACKING_SLACK_M
+        and (not terminal or points[-1, 2] >= floor)
+    )
 
 
 def placement_clearance_offset_m() -> float:
@@ -118,6 +144,7 @@ def _assess_path(
     *,
     terminal: bool = True,
     exact_joint_commands: bool = False,
+    clearance_origin_world: np.ndarray | None = None,
 ) -> SkillProxyAssessment:
     settings, profile_sha256 = _clearance_configuration()
     command_type = GripperCmd if skill in (Skill.OPEN, Skill.CLOSE, Skill.RELEASE) else EEPoseTarget
@@ -140,13 +167,14 @@ def _assess_path(
     if complete:
         config = SimpleNamespace(verification=SimpleNamespace(destination_world=PLACE_WORLD))
         scene, _, goal = proxy_scene(state, truth, config)
+        phase = Skill.LIFT.value if skill is Skill.CLEARANCE_LIFT else skill.value
         evidence = _matched_proxy_evidence(
             scene,
             chunk,
             trajectory,
             monitor,
             settings,
-            active_phase=skill.value,
+            active_phase=phase,
             phase_terminal=terminal,
         )
         checks.extend(
@@ -168,13 +196,32 @@ def _assess_path(
                             trajectory.states[-1].robot.ee_pose.position.as_array()
                             - chunk.actions[-1].pose.position.as_array()
                         )
-                        <= _ik_tolerance_for_state(skill.value)
+                        <= _ik_tolerance_for_state(phase)
                     ),
                 ),
                 ("table", evidence.geometric_hard_pass[0] is True),
                 ("modeled_obstacles", evidence.geometric_hard_pass[1] is True),
             )
         )
+        if skill is Skill.CLEARANCE_LIFT:
+            base = state.robot.base_pose_world
+            valid = False
+            if base is not None and clearance_origin_world is not None:
+                world_points = np.array(
+                    [
+                        base.position.as_array()
+                        + rotate(
+                            np.asarray(base.orientation), item.robot.ee_pose.position.as_array()
+                        )
+                        for item in trajectory.states
+                    ]
+                )
+                floor = (
+                    settings["table_top_world_z_m"]
+                    + settings["table_margin_m"][Skill.TRANSFER.value]
+                )
+                valid = clearance_path_passes(world_points, clearance_origin_world, floor, terminal)
+            checks.append(("bounded_vertical_clearance", valid))
         if skill is Skill.LOWER and terminal:
             error = np.linalg.norm(
                 trajectory.states[-1].robot.ee_pose.position.as_array() - goal.as_array()
@@ -196,6 +243,7 @@ def command_proxy(
     record: Callable[[SkillProxyAssessment], None],
     *,
     record_accepted_forecast: Callable[[Trajectory], None] | None = None,
+    clearance_origin_world: np.ndarray | None = None,
 ) -> Callable[[Action, Observation, GroundTruth, bool], ApplyResult]:
     """Reforecast the exact current command before dispatch under the separate proxy scope."""
     dt = TIME_STEP / 1000.0
@@ -250,6 +298,7 @@ def command_proxy(
             monitor,
             terminal=terminal,
             exact_joint_commands=True,
+            clearance_origin_world=clearance_origin_world,
         )
         record(
             replace(

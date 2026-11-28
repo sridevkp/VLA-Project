@@ -742,6 +742,7 @@ class WebotsBackend:
         contacts = contact_lookup() if contact_lookup else []
         wheel_lookup = getattr(self.io, "wheel_status", None)
         diagnostics: dict[str, object] = {
+            "urdf_registration_sha256": getattr(self.kinematics, "registration_sha256", None),
             "physics_step_count": getattr(self, "_physics_step_count", 0),
             "first_command_step_count": getattr(self, "_first_command_step_count", None),
             "torso_lift_joint_sensor_rad": float(self.io.sensors[TORSO_JOINT].getValue()),

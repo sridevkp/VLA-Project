@@ -1,9 +1,9 @@
 """Bounded, explicit single-skill probes on the first TRAIN clear scene."""
 
 from contextlib import nullcontext
+from copy import copy
 from dataclasses import asdict
 from pathlib import Path
-from sys import executable
 from typing import Any
 
 from vlarobot.backends.webots.config import (
@@ -13,13 +13,21 @@ from vlarobot.backends.webots.config import (
     LIFT_MIN,
     SETTINGS,
 )
+from vlarobot.backends.worldmind_bindings import corrected_kinematics
 from vlarobot.core.types import GripperCmd, JointTarget, Vec3
 from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import WebotsSession, launch_webots_session
 from vlarobot.execution.skill_proxy import command_proxy
-from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
+from vlarobot.execution.skills import (
+    V4_REGISTRATION_RECORD,
+    Skill,
+    SkillAction,
+    SkillExecutor,
+    require_v4_registration,
+    v4_simulator_environment,
+)
 
 _CARTESIAN = {
     Skill.APPROACH: "pregrasp",
@@ -81,13 +89,14 @@ def run_skill_diagnostic(
         nullcontext(session)
         if session is not None
         else launch_webots_session(
-            webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
+            webots=webots, trace_dir=out, headless=True, extra_env=v4_simulator_environment()
         )
     )
     with context as active:
         backend = active.client
         observation = backend.reset(entry.scene, entry.seed)
-        executor = SkillExecutor(entry.seed, observation)
+        require_v4_registration(observation)
+        executor = SkillExecutor(entry.seed, observation, kinematics=copy(corrected_kinematics()))
         initial_can = backend.get_ground_truth().object_poses["CAN"]
         attachment_offset = None
         for index, selected in enumerate(probes):
@@ -206,6 +215,7 @@ def run_skill_diagnostic(
         summary = {
             "mode": "oracle-assisted",
             "split": "train",
+            **V4_REGISTRATION_RECORD,
             "scene": entry.scene.name,
             "seed": entry.seed,
             "probe": "empty-grasp-recovery" if empty_grasp else skill.value,

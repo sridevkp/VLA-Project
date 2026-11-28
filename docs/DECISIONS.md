@@ -4261,3 +4261,16 @@ joint safety check. Every planned waypoint must pass preflight, and every
 actual command is audited again. Full-arm sweep remains unverified. The
 model, weights, candidate enumeration, and verified HOME requirements
 remain frozen. Faulty endpoint forecasts are retained in the trace.
+
+V4 online diagnostics and outcome collection now bind the existing registered
+URDF in both processes. The brain checks the pinned bytes before launch and
+requires the simulator's FK registration digest before dispatch. The previous
+71.2 mm unregistered discrepancy remains documented in the reproduction audit.
+
+The clearance-lift candidate requires measured attachment and prior CAN
+elevation. It checks a bounded vertical recovery against the existing LIFT
+geometry, with the unchanged TRANSIT floor required at the endpoint. Ordinary
+TRANSIT remains subject to its original floor for the entire trajectory.
+Recovery eligibility and scoring are explicit rules. Every live command is
+rechecked and the measured clearance and grasp must verify before the
+episode continues.

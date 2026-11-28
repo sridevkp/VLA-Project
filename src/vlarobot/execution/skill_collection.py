@@ -6,7 +6,7 @@ from time import perf_counter
 
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.skill_diagnostic import run_skill_diagnostic
-from vlarobot.execution.skills import Skill
+from vlarobot.execution.skills import V4_REGISTRATION_RECORD, Skill, v4_simulator_environment
 
 
 def collect_approach_pairs(
@@ -48,6 +48,7 @@ def collect_approach_pairs(
     executed = sum(result["executed"] for pair in pairs for result in pair["results"])
     report = {
         "split": "train",
+        **V4_REGISTRATION_RECORD,
         "seed": seed,
         "cohort": "internal-train-evaluation" if internal else "fit",
         "attempts": 6,
@@ -63,7 +64,6 @@ def collect_approach_pairs(
 def collect_outcomes(out: Path, webots: str | None, seed: int, target: int) -> dict:
     """Collect varied eligible outcomes with one persistent simulator per worker."""
     from shutil import disk_usage
-    from sys import executable
 
     from vlarobot.execution.episode_runner import launch_webots_session
 
@@ -88,7 +88,7 @@ def collect_outcomes(out: Path, webots: str | None, seed: int, target: int) -> d
             webots=webots,
             trace_dir=folder,
             headless=True,
-            extra_env={"WEBOTS_PYTHON": executable},
+            extra_env=v4_simulator_environment(),
         ) as session:
             for cycle in range(12):
                 index = (worker_id, (6, 7, 5)[worker_id])[cycle % 2]
@@ -149,6 +149,7 @@ def collect_outcomes(out: Path, webots: str | None, seed: int, target: int) -> d
     elapsed = perf_counter() - started
     report = {
         "split": "train",
+        **V4_REGISTRATION_RECORD,
         "target": target,
         "wall_s": elapsed,
         "workers": results,

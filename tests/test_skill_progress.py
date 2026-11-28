@@ -274,6 +274,8 @@ def test_admission_requires_verified_home_and_preserves_all_24_trials(
         "profile": skill_live.PROFILE_ID,
         "urdf_registration_sha256": skill_live.CORRECTED_REGISTRATION_SHA256,
         "waypoint_forecast_policy": skill_live.WAYPOINT_FORECAST_POLICY,
+        "clearance_policy": skill_live.CLEARANCE_POLICY,
+        "urdf_registration": skill_live.CORRECTED_REGISTRATION_RELATIVE.as_posix(),
         "home_tolerance_rad": skill_live.HOME_VERIFICATION_TOLERANCE_RAD,
         "utility_context": "predicted",
         "stop_reason": "termination selected",
@@ -324,3 +326,29 @@ def test_waypoint_forecast_requires_a_complete_passing_preflight(
     chosen, recorded_veto = _waypoint_forecast(nominal, [audited], preflight_passed=passed)
     assert chosen == (audited if replace_forecast else nominal)
     assert recorded_veto == (nominal_reasons if replace_forecast else None)
+
+
+def test_clearance_recovery_is_bounded_and_requires_transit_height() -> None:
+    from vlarobot.execution.skill_proxy import clearance_path_passes
+
+    origin = np.array([0.7, 0.0, 0.947])
+    floor = 0.949
+    end = origin + [0.0, 0.001, 0.008]
+    assert clearance_path_passes(np.array([origin, end]), origin, floor, True)
+    for bad in (origin + [0.0, 0.0, 0.001], end + [0.01, 0, 0], end + [0, 0, 0.02]):
+        assert not clearance_path_passes(np.array([origin, bad]), origin, floor, True)
+    dipped = origin + [0.0, 0.0, -0.002]
+    assert not clearance_path_passes(np.array([origin, dipped, end]), origin, floor, True)
+
+
+def test_v4_rejects_missing_or_different_simulator_registration() -> None:
+    from vlarobot.execution.skills import V4_REGISTRATION_RECORD, require_v4_registration
+
+    initial = FakeBackend().reset(ScenarioSpec(), 0)
+    for diagnostics in ({}, {"urdf_registration_sha256": "unregistered"}):
+        observation = replace(initial, robot=replace(initial.robot, diagnostics=diagnostics))
+        with pytest.raises(ValueError, match="required V4 URDF registration"):
+            require_v4_registration(observation)
+    require_v4_registration(
+        replace(initial, robot=replace(initial.robot, diagnostics=V4_REGISTRATION_RECORD))
+    )

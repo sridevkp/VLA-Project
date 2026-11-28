@@ -3,10 +3,16 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from sys import executable
 
 from vlarobot.backends.webots.config import ARM_JOINTS
 from vlarobot.backends.webots.kinematics import Kinematics
-from vlarobot.backends.worldmind_bindings import runtime_safety_limits
+from vlarobot.backends.worldmind_bindings import (
+    CORRECTED_REGISTRATION_RELATIVE,
+    CORRECTED_REGISTRATION_SHA256,
+    corrected_registration_path,
+    runtime_safety_limits,
+)
 from vlarobot.core.interfaces import RobotBackend
 from vlarobot.core.types import (
     Action,
@@ -23,6 +29,27 @@ from vlarobot.execution.scripted_can import ScriptedCanPolicy
 HOME_VERIFICATION_TOLERANCE_RAD = 0.01
 
 
+V4_REGISTRATION_RECORD = {
+    "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
+    "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
+}
+
+
+def v4_simulator_environment() -> dict[str, str]:
+    return {
+        "WEBOTS_PYTHON": executable,
+        "VLAROBOT_URDF_REGISTRATION_FILE": str(corrected_registration_path()),
+    }
+
+
+def require_v4_registration(observation: Observation) -> None:
+    if (
+        observation.robot.diagnostics.get("urdf_registration_sha256")
+        != CORRECTED_REGISTRATION_SHA256
+    ):
+        raise ValueError("Webots did not attest the required V4 URDF registration.")
+
+
 class Skill(StrEnum):
     APPROACH = "PREGRASP"
     DESCEND = "DESCEND"
@@ -34,9 +61,12 @@ class Skill(StrEnum):
     CLOSE = "CLOSE"
     RELEASE = "RELEASE"
     HOME = "HOME"
+    CLEARANCE_LIFT = "CLEARANCE_LIFT"
 
 
-EMPIRICAL_SKILLS = tuple(skill for skill in Skill if skill is not Skill.HOME)
+EMPIRICAL_SKILLS = tuple(
+    skill for skill in Skill if skill not in (Skill.HOME, Skill.CLEARANCE_LIFT)
+)
 
 
 @dataclass(frozen=True)
@@ -145,6 +175,8 @@ class SkillExecutor(ScriptedCanPolicy):
         *,
         audit: CommandAudit | None = None,
     ) -> SkillOutcome:
+        if action.skill is Skill.CLEARANCE_LIFT and audit is None:
+            raise ValueError("Clearance lift requires a command-time audit.")
         checked = _CheckedBackend(backend, self.monitor, observation, audit)
         self._last_observation = observation
         self._last_failure_reason = None
@@ -170,9 +202,10 @@ class SkillExecutor(ScriptedCanPolicy):
                 q = self._full_joint_vector(observation.robot.joint_pos)
                 settled = self._move_to(checked, q, target, action.skill.value) is not None
             else:
-                settled = (
-                    self._move_linear(checked, observation, target, action.skill.value) is not None
+                phase = (
+                    Skill.LIFT.value if action.skill is Skill.CLEARANCE_LIFT else action.skill.value
                 )
+                settled = self._move_linear(checked, observation, target, phase) is not None
         return SkillOutcome(
             settled=settled,
             observation=checked.observation,

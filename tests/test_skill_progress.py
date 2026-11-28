@@ -352,3 +352,32 @@ def test_v4_rejects_missing_or_different_simulator_registration() -> None:
     require_v4_registration(
         replace(initial, robot=replace(initial.robot, diagnostics=V4_REGISTRATION_RECORD))
     )
+
+
+def test_attachment_sample_uses_world_can_and_current_tool_frame() -> None:
+    from vlarobot.core.types import GroundTruth, Pose3D, Vec3
+    from vlarobot.execution.skill_live import _attachment_sample
+    from vlarobot.world_model.rollout import compose
+
+    initial = FakeBackend().reset(ScenarioSpec(), 0)
+    half_turn = np.sqrt(0.5)
+    base = Pose3D(Vec3(1.0, 2.0, 0.5), (0.0, 0.0, half_turn, half_turn))
+    tool = Pose3D(Vec3(0.4, 0.3, 0.6), (0.0, half_turn, 0.0, half_turn))
+    observed = replace(
+        initial,
+        robot=replace(
+            initial.robot,
+            base_pose_world=base,
+            ee_pose=tool,
+            gripper_opening=0.030,
+            gripper_holding=None,
+        ),
+    )
+    offset = np.array([0.017, -0.002, -0.023])
+    for shift in (0.0, 0.011):
+        relative = Pose3D(Vec3(*(offset + [shift, 0, 0])), (0.0, 0.0, 0.0, 1.0))
+        can = compose(compose(base, tool), relative)
+        row = _attachment_sample(observed, GroundTruth({"CAN": can}), offset, 0.95)
+        assert row["attachment_residual_m"] == pytest.approx(shift)
+        assert row["attachment_pass"] is (shift == 0)
+        assert row["can_tool"]["orientation"] == pytest.approx(relative.orientation)

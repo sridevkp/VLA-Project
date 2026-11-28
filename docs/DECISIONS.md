@@ -4274,3 +4274,15 @@ TRANSIT remains subject to its original floor for the entire trajectory.
 Recovery eligibility and scoring are explicit rules. Every live command is
 rechecked and the measured clearance and grasp must verify before the
 episode continues.
+
+The clearance-lift diagnostic achieved the TRANSIT height but failed the
+existing tool-relative attachment check. The stored LIFT endpoint reference
+was [17.128, -1.953, -23.082] mm at 19.296 s simulation time. At 19.680 s,
+the archive records a failed gate and lacks the final measured orientations.
+A command-based reconstruction estimates an 11.28 mm residual against the
+unchanged 8 mm limit. The estimate is separate from synchronized measurements.
+
+The optional V4 attachment trace pairs each lockstep observation with a
+ground-truth read before advancing the simulation. It preserves base, tool and
+CAN pose, the attachment reference and capture time, wrist Solid and gripper
+telemetry, and predicted and observed clearance. This adds evidence only.

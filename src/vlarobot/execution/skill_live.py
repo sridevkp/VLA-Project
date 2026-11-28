@@ -304,6 +304,49 @@ def _attached(observation: Observation, truth: GroundTruth, offset: np.ndarray |
     return bool(np.linalg.norm(measured.position.as_array() - offset) < CLOSE_ALIGN_TOL)
 
 
+def _attachment_sample(
+    observation: Observation,
+    truth: GroundTruth,
+    offset: np.ndarray | None,
+    floor: float,
+) -> dict:
+    robot = observation.robot
+    base = robot.base_pose_world
+    can = truth.object_poses["CAN"]
+    tool = compose(base, robot.ee_pose) if base is not None else None
+    relative = compose(_inverse_pose(tool), can) if tool is not None else None
+    residual = (
+        float(np.linalg.norm(relative.position.as_array() - offset))
+        if relative is not None and offset is not None
+        else None
+    )
+    diagnostics = robot.diagnostics
+    return {
+        "sim_time_s": observation.t,
+        "physics_step": diagnostics.get("physics_step_count"),
+        "base_world": asdict(base) if base is not None else None,
+        "tool_base": asdict(robot.ee_pose),
+        "tool_world": asdict(tool) if tool is not None else None,
+        "can_world": asdict(can),
+        "can_tool": asdict(relative) if relative is not None else None,
+        "gripper_opening_m": robot.gripper_opening,
+        "gripper_holding": robot.gripper_holding,
+        "contact_nodes": diagnostics.get("contact_nodes"),
+        "finger_joint_sensor_rad": diagnostics.get("finger_joint_sensor_rad"),
+        "finger_force_n": diagnostics.get("finger_force_n"),
+        "arm7_solid_world_m": diagnostics.get("arm_7_joint_ground_truth_world_xyz_m"),
+        "arm7_solid_rotation_world": diagnostics.get("arm_7_joint_ground_truth_orientation_rows"),
+        "pad_midpoint_world_m": diagnostics.get("pad_midpoint_arm7_solid_measured_world_xyz_m"),
+        "finger_midpoint_world_m": diagnostics.get("finger_midpoint_world_xyz_m"),
+        "attachment_reference_tool_m": None if offset is None else offset.tolist(),
+        "attachment_residual_m": residual,
+        "attachment_threshold_m": CLOSE_ALIGN_TOL,
+        "attachment_pass": _attached(observation, truth, offset),
+        "transit_floor_world_m": floor,
+        "measured_transit_clearance_m": None if tool is None else tool.position.z - floor,
+    }
+
+
 def _waypoint_forecast(
     nominal: Trajectory | None,
     audited: list[Trajectory],
@@ -360,6 +403,7 @@ def run_learned_smoke(
     context: str = "smoke",
     max_decisions: int = 6,
     scene_index: int = 0,
+    trace_attachment: bool = False,
 ) -> dict:
     """Run bounded receding-horizon decisions with scoped predictive vetoes."""
     if scene_index not in (0, 1, 2):
@@ -372,6 +416,7 @@ def run_learned_smoke(
         localizer_path=localizer_path,
         context=context,
         max_decisions=max_decisions,
+        trace_attachment=trace_attachment,
     )
 
 
@@ -384,6 +429,7 @@ def _run_train_episode(
     localizer_path: Path | None = None,
     context: str,
     max_decisions: int,
+    trace_attachment: bool = False,
 ) -> dict:
     if not 1 <= max_decisions <= 16:
         raise ValueError("Bounded diagnostic requires 1–16 decisions")
@@ -454,6 +500,8 @@ def _run_train_episode(
         best_approach_gap = None
         attachment_offset = None
         observed_release = False
+        attachment_reference_time = None
+        attachment_trace_active = False
         for index in range(max_decisions):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
@@ -704,17 +752,62 @@ def _run_train_episode(
                     return ApplyResult(False, "clearance recovery lost measured grasp")
                 return check(action, current, measured, terminal)
 
+            attachment_trace_active |= trace_attachment and candidate.skill is Skill.CLOSE
+            trace_path = out / f"attachment-{index:02d}.jsonl"
+            planned_z = []
+            if attachment_trace_active:
+                planned_z = [
+                    base.position.z
+                    + rotate(np.asarray(base.orientation), point.as_array())[2]
+                    - floor
+                    for check in rehearsals[decision.selected_index][1]
+                    for point in check.predicted_tool_base_m
+                ]
+
+            def log_attachment(
+                current: Observation,
+                measured: GroundTruth,
+                event: str = "step",
+                *,
+                offset: np.ndarray | None = attachment_offset,
+                reference_time: float | None = attachment_reference_time,
+                path: Path = trace_path,
+                skill: Skill = candidate.skill,
+                decision_index: int = index,
+                planned_clearances: list[float] = planned_z,
+                audits=live_audits,
+            ) -> None:
+                sample = _attachment_sample(current, measured, offset, floor)
+                sample.update(
+                    event=event,
+                    skill=skill.value,
+                    decision=decision_index,
+                    attachment_reference_sim_time_s=reference_time,
+                    planned_clearance_min_m=min(planned_clearances, default=None),
+                    planned_clearance_endpoint_m=planned_clearances[-1]
+                    if planned_clearances
+                    else None,
+                    commands_audited=len(audits),
+                )
+                with path.open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(sample) + "\n")
+
+            if attachment_trace_active:
+                log_attachment(obs, truth, "before")
             actual = executor.run_skill(
                 backend,
                 obs,
                 candidate,
                 audit=checked_audit,
+                step_observer=log_attachment if attachment_trace_active else None,
             )
             obs_before = obs
             tool_before = obs.robot.ee_pose.position
             obs = actual.observation
             after_truth = backend.get_ground_truth()
             pose_after = after_truth.object_poses["CAN"]
+            if attachment_trace_active:
+                log_attachment(obs, after_truth, "after")
             recovery_verified = None
             if recovery_selected:
                 after_base = obs.robot.base_pose_world
@@ -743,8 +836,18 @@ def _run_train_episode(
                 )
                 if new_attachment is not None:
                     attachment_offset = new_attachment
+                    attachment_reference_time = obs.t
+                    if attachment_trace_active:
+                        log_attachment(
+                            obs,
+                            after_truth,
+                            "reference_captured",
+                            offset=attachment_offset,
+                            reference_time=attachment_reference_time,
+                        )
                 if obs.robot.gripper_opening >= GRIPPER_OPEN - 0.002:
                     attachment_offset = None
+                    attachment_reference_time = None
             if candidate.skill is Skill.APPROACH and obs.robot.base_pose_world is not None:
                 can_after_base = compose(_inverse_pose(obs.robot.base_pose_world), pose_after)
                 gap = float(
@@ -804,6 +907,7 @@ def _run_train_episode(
             "utility_context": context,
             "stop_reason": stop_reason,
             "decision_budget": max_decisions,
+            "attachment_trace": trace_attachment,
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
             "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,

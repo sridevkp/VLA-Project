@@ -99,6 +99,7 @@ class SkillOutcome:
 
 
 CommandAudit = Callable[[Action, Observation, GroundTruth, bool], ApplyResult]
+StepObserver = Callable[[Observation, GroundTruth], None]
 
 
 class _CheckedBackend:
@@ -108,6 +109,7 @@ class _CheckedBackend:
         monitor: SafetyMonitor,
         observation: Observation,
         audit: CommandAudit | None = None,
+        step_observer: StepObserver | None = None,
     ) -> None:
         self.backend = backend
         self.monitor = monitor
@@ -115,6 +117,7 @@ class _CheckedBackend:
         self.vetoes: list[str] = []
         self.dispatched: list[Action] = []
         self.audit = audit
+        self.step_observer = step_observer
         self.terminal = True
 
     def apply(self, action: Action) -> ApplyResult:
@@ -137,6 +140,8 @@ class _CheckedBackend:
 
     def step(self, n_steps: int = 1) -> Observation:
         self.observation = self.backend.step(n_steps)
+        if self.step_observer is not None:
+            self.step_observer(self.observation, self.backend.get_ground_truth())
         return self.observation
 
     def get_ground_truth(self) -> GroundTruth:
@@ -174,10 +179,11 @@ class SkillExecutor(ScriptedCanPolicy):
         action: SkillAction,
         *,
         audit: CommandAudit | None = None,
+        step_observer: StepObserver | None = None,
     ) -> SkillOutcome:
         if action.skill is Skill.CLEARANCE_LIFT and audit is None:
             raise ValueError("Clearance lift requires a command-time audit.")
-        checked = _CheckedBackend(backend, self.monitor, observation, audit)
+        checked = _CheckedBackend(backend, self.monitor, observation, audit, step_observer)
         self._last_observation = observation
         self._last_failure_reason = None
         self._last_failure_is_safety = False

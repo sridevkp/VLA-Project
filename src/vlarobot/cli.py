@@ -2733,6 +2733,7 @@ def v4_learned_smoke(
     context: str = "smoke",
     scene_index: int = 0,
     max_decisions: int = 6,
+    trace_attachment: bool = False,
 ) -> None:
     """Run a bounded oracle-assisted V4 TRAIN diagnostic."""
     from vlarobot.execution.skill_live import run_learned_smoke
@@ -2747,6 +2748,7 @@ def v4_learned_smoke(
                 context=context,
                 scene_index=scene_index,
                 max_decisions=max_decisions,
+                trace_attachment=trace_attachment,
             ),
             indent=2,
         )

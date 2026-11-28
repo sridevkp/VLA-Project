@@ -78,7 +78,7 @@ def run_skill_diagnostic(
         if skill is Skill.APPROACH
         else _PROBE_ORDER[: _PROBE_ORDER.index(skill) + 1]
     )
-    from vlarobot.execution.skill_live import grasp_evidence, measured_attachment
+    from vlarobot.execution.skill_live import ATTACHMENT_FRAME, grasp_evidence, measured_attachment
     from vlarobot.execution.worldmind_pipeline import _inverse_pose
     from vlarobot.world_model.rollout import compose
 
@@ -175,7 +175,7 @@ def run_skill_diagnostic(
                 "can_before_world_m": asdict(before),
                 "can_after_world_m": asdict(after),
                 "can_rise_m": result.can_rise_m,
-                "observed_attachment_tool_m": None
+                "observed_attachment_finger_m": None
                 if attachment_offset is None
                 else attachment_offset.tolist(),
                 "robot_before": robot_before,
@@ -223,6 +223,7 @@ def run_skill_diagnostic(
             "standoff": standoff,
             "initial_can_world_m": asdict(initial_can.position),
             "independent_final_metrics": placement,
+            "attachment_frame": ATTACHMENT_FRAME,
             "place_target_world_m": SETTINGS.place_world,
             "settled": len(rows) == len(probes) and all(row["settled"] for row in rows),
             "isolated": len(rows) == len(probes) and all(row["isolated"] for row in rows),

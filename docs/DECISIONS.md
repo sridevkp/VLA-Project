@@ -4286,3 +4286,16 @@ The optional V4 attachment trace pairs each lockstep observation with a
 ground-truth read before advancing the simulation. It preserves base, tool and
 CAN pose, the attachment reference and capture time, wrist Solid and gripper
 telemetry, and predicted and observed clearance. This adds evidence only.
+
+The registered synchronized rerun reproduced the rejection at 19.680 s.
+The wrist-fixed gate measured 11.348 mm against 8 mm, and an independent
+wrist Solid frame measured 11.409 mm. The CAN moved with the measured finger
+midpoint. Relative to that midpoint in the same tool axes its position
+changed by less than 0.01 mm during clearance recovery.
+The finger sensors moved in opposite directions while mean aperture stayed
+near 30.7 mm. Thus the wrist origin misclassified carriage motion as CAN
+motion relative to the jaws. V4 attachment evidence now uses the measured
+finger midpoint with the same registered tool axes, co-motion requirements
+and 8 mm limit. Missing midpoint evidence fails closed. Wrist-relative pose
+continues to be logged independently. No finger command or clearance
+constraint changed.

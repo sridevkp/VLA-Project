@@ -69,6 +69,7 @@ from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
 from vlarobot.world_model.rollout import Trajectory, compose, rotate
 
+ATTACHMENT_FRAME = "measured-finger-midpoint-in-registered-tool-axes-v1"
 CLEARANCE_POLICY = "bounded-vertical-held-can-v1"
 WAYPOINT_FORECAST_POLICY = "open-hand-approach-recovery-audited-joint-path-v1"
 
@@ -111,6 +112,19 @@ class _PreviewBackend:
         return self.observation
 
 
+def _finger_frame_world(observation: Observation) -> Pose3D | None:
+    robot = observation.robot
+    base = robot.base_pose_world
+    midpoint = robot.diagnostics.get("finger_midpoint_world_xyz_m")
+    if base is None or not isinstance(midpoint, (list, tuple)) or len(midpoint) != 3:
+        return None
+    position = np.asarray(midpoint, dtype=float)
+    if not np.all(np.isfinite(position)):
+        return None
+    orientation = compose(base, robot.ee_pose).orientation
+    return Pose3D(Vec3(*map(float, position)), orientation)
+
+
 def measured_attachment(
     before: Observation,
     after: Observation,
@@ -120,13 +134,11 @@ def measured_attachment(
     previous_offset: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """Establish attachment by lifting, then refresh it on measured carrying motion."""
-    old_base, new_base = before.robot.base_pose_world, after.robot.base_pose_world
-    if old_base is None or new_base is None:
+    old_tool, new_tool = _finger_frame_world(before), _finger_frame_world(after)
+    if old_tool is None or new_tool is None:
         return None
     if not 0.002 < after.robot.gripper_opening < GRIPPER_OPEN - 0.002:
         return None
-    old_tool = compose(old_base, before.robot.ee_pose)
-    new_tool = compose(new_base, after.robot.ee_pose)
     tool_delta = new_tool.position.as_array() - old_tool.position.as_array()
     can_delta = can_after_world.as_array() - can_before_world.as_array()
     can_in_tool = compose(_inverse_pose(new_tool), Pose3D(can_after_world, (0.0, 0.0, 0.0, 1.0)))
@@ -153,15 +165,19 @@ def grasp_evidence(
 ) -> bool:
     """Require current aperture plus alignment or a still-observed measured attachment."""
     robot = observation.robot
+    if attachment_offset is not None:
+        base = robot.base_pose_world
+        return bool(
+            base is not None
+            and measured_can_base is not None
+            and _attachment_matches(
+                observation, compose(base, measured_can_base), attachment_offset
+            )
+        )
     if robot.gripper_holding is not None:
         return robot.gripper_holding
     if not 0.002 < robot.gripper_opening < GRIPPER_OPEN - 0.002:
         return False
-    if attachment_offset is not None and measured_can_base is not None:
-        observed_offset = compose(_inverse_pose(robot.ee_pose), measured_can_base).position
-        return bool(
-            np.linalg.norm(observed_offset.as_array() - attachment_offset) < CLOSE_ALIGN_TOL
-        )
     return bool(np.linalg.norm(robot.ee_pose.position.as_array() - grasp_base) < CLOSE_ALIGN_TOL)
 
 
@@ -293,15 +309,21 @@ def _clearance_target(observation: Observation, floor: float) -> SkillAction | N
     return SkillAction(Skill.CLEARANCE_LIFT, Vec3(*map(float, tool.as_array() + displacement)))
 
 
-def _attached(observation: Observation, truth: GroundTruth, offset: np.ndarray | None) -> bool:
-    base = observation.robot.base_pose_world
-    if base is None or offset is None:
+def _attachment_matches(
+    observation: Observation, can_world: Pose3D, offset: np.ndarray | None
+) -> bool:
+    frame = _finger_frame_world(observation)
+    if frame is None or offset is None:
         return False
     robot = observation.robot
     if robot.gripper_holding is False or not 0.002 < robot.gripper_opening < GRIPPER_OPEN - 0.002:
         return False
-    measured = compose(_inverse_pose(compose(base, robot.ee_pose)), truth.object_poses["CAN"])
+    measured = compose(_inverse_pose(frame), can_world)
     return bool(np.linalg.norm(measured.position.as_array() - offset) < CLOSE_ALIGN_TOL)
+
+
+def _attached(observation: Observation, truth: GroundTruth, offset: np.ndarray | None) -> bool:
+    return _attachment_matches(observation, truth.object_poses["CAN"], offset)
 
 
 def _attachment_sample(
@@ -315,9 +337,11 @@ def _attachment_sample(
     can = truth.object_poses["CAN"]
     tool = compose(base, robot.ee_pose) if base is not None else None
     relative = compose(_inverse_pose(tool), can) if tool is not None else None
+    fingers = _finger_frame_world(observation)
+    in_fingers = compose(_inverse_pose(fingers), can) if fingers is not None else None
     residual = (
-        float(np.linalg.norm(relative.position.as_array() - offset))
-        if relative is not None and offset is not None
+        float(np.linalg.norm(in_fingers.position.as_array() - offset))
+        if in_fingers is not None and offset is not None
         else None
     )
     diagnostics = robot.diagnostics
@@ -329,6 +353,8 @@ def _attachment_sample(
         "tool_world": asdict(tool) if tool is not None else None,
         "can_world": asdict(can),
         "can_tool": asdict(relative) if relative is not None else None,
+        "can_attachment_frame": asdict(in_fingers) if in_fingers is not None else None,
+        "attachment_frame": ATTACHMENT_FRAME,
         "gripper_opening_m": robot.gripper_opening,
         "gripper_holding": robot.gripper_holding,
         "contact_nodes": diagnostics.get("contact_nodes"),
@@ -338,7 +364,7 @@ def _attachment_sample(
         "arm7_solid_rotation_world": diagnostics.get("arm_7_joint_ground_truth_orientation_rows"),
         "pad_midpoint_world_m": diagnostics.get("pad_midpoint_arm7_solid_measured_world_xyz_m"),
         "finger_midpoint_world_m": diagnostics.get("finger_midpoint_world_xyz_m"),
-        "attachment_reference_tool_m": None if offset is None else offset.tolist(),
+        "attachment_reference_finger_m": None if offset is None else offset.tolist(),
         "attachment_residual_m": residual,
         "attachment_threshold_m": CLOSE_ALIGN_TOL,
         "attachment_pass": _attached(observation, truth, offset),
@@ -696,7 +722,7 @@ def _run_train_episode(
                 "transit_clearance_m": clearance,
                 "current_attachment_valid": attached_before,
                 "causal_best_approach_gap_m": best_approach_gap,
-                "observed_attachment_tool_m": (
+                "observed_attachment_finger_m": (
                     None if attachment_offset is None else attachment_offset.tolist()
                 ),
                 "can_estimate_base_m": asdict(can.position),
@@ -913,6 +939,7 @@ def _run_train_episode(
             "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
             "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
             "clearance_policy": CLEARANCE_POLICY,
+            "attachment_frame": ATTACHMENT_FRAME,
             "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
             "privileged_inputs": [
                 "CAN pose for grasp and release safety, completion scoring and verification",
@@ -973,6 +1000,7 @@ def run_train_admission(
         "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
         "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
         "clearance_policy": CLEARANCE_POLICY,
+        "attachment_frame": ATTACHMENT_FRAME,
         "urdf_registration": CORRECTED_REGISTRATION_RELATIVE.as_posix(),
         "model_sha256": model_sha,
         "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,

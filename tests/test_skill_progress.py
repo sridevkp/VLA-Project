@@ -163,6 +163,18 @@ def test_transport_uses_live_attachment_evidence_after_observed_lift() -> None:
 
     old = compose(base, old_pose).position
     new = compose(base, new_pose).position
+    before = replace(
+        before,
+        robot=replace(
+            before.robot, diagnostics={"finger_midpoint_world_xyz_m": old.as_array().tolist()}
+        ),
+    )
+    after = replace(
+        after,
+        robot=replace(
+            after.robot, diagnostics={"finger_midpoint_world_xyz_m": new.as_array().tolist()}
+        ),
+    )
     can_before = Vec3(old.x + 0.025, old.y, old.z)
     can_after = Vec3(new.x + 0.025, new.y, new.z)
     measured = measured_attachment(before, after, can_before, can_after)
@@ -236,6 +248,18 @@ def test_existing_attachment_can_refresh_from_horizontal_co_motion() -> None:
     after = replace(before, robot=replace(before.robot, ee_pose=moved))
     start = compose(base, old).position
     end = compose(base, moved).position
+    before = replace(
+        before,
+        robot=replace(
+            before.robot, diagnostics={"finger_midpoint_world_xyz_m": start.as_array().tolist()}
+        ),
+    )
+    after = replace(
+        after,
+        robot=replace(
+            after.robot, diagnostics={"finger_midpoint_world_xyz_m": end.as_array().tolist()}
+        ),
+    )
     can_start = Vec3(start.x - 0.015, start.y, start.z)
     can_end = Vec3(end.x + 0.025, end.y, end.z)
     previous = np.array([-0.015, 0, 0])
@@ -275,6 +299,7 @@ def test_admission_requires_verified_home_and_preserves_all_24_trials(
         "urdf_registration_sha256": skill_live.CORRECTED_REGISTRATION_SHA256,
         "waypoint_forecast_policy": skill_live.WAYPOINT_FORECAST_POLICY,
         "clearance_policy": skill_live.CLEARANCE_POLICY,
+        "attachment_frame": skill_live.ATTACHMENT_FRAME,
         "urdf_registration": skill_live.CORRECTED_REGISTRATION_RELATIVE.as_posix(),
         "home_tolerance_rad": skill_live.HOME_VERIFICATION_TOLERANCE_RAD,
         "utility_context": "predicted",
@@ -354,7 +379,7 @@ def test_v4_rejects_missing_or_different_simulator_registration() -> None:
     )
 
 
-def test_attachment_sample_uses_world_can_and_current_tool_frame() -> None:
+def test_attachment_sample_tracks_moving_fingers_and_rejects_relative_slip() -> None:
     from vlarobot.core.types import GroundTruth, Pose3D, Vec3
     from vlarobot.execution.skill_live import _attachment_sample
     from vlarobot.world_model.rollout import compose
@@ -363,12 +388,17 @@ def test_attachment_sample_uses_world_can_and_current_tool_frame() -> None:
     half_turn = np.sqrt(0.5)
     base = Pose3D(Vec3(1.0, 2.0, 0.5), (0.0, 0.0, half_turn, half_turn))
     tool = Pose3D(Vec3(0.4, 0.3, 0.6), (0.0, half_turn, 0.0, half_turn))
+    tool_world = compose(base, tool)
+    finger_frame = replace(
+        tool_world, position=replace(tool_world.position, x=tool_world.position.x + 0.011)
+    )
     observed = replace(
         initial,
         robot=replace(
             initial.robot,
             base_pose_world=base,
             ee_pose=tool,
+            diagnostics={"finger_midpoint_world_xyz_m": finger_frame.position.as_array().tolist()},
             gripper_opening=0.030,
             gripper_holding=None,
         ),
@@ -376,8 +406,12 @@ def test_attachment_sample_uses_world_can_and_current_tool_frame() -> None:
     offset = np.array([0.017, -0.002, -0.023])
     for shift in (0.0, 0.011):
         relative = Pose3D(Vec3(*(offset + [shift, 0, 0])), (0.0, 0.0, 0.0, 1.0))
-        can = compose(compose(base, tool), relative)
+        can = compose(finger_frame, relative)
         row = _attachment_sample(observed, GroundTruth({"CAN": can}), offset, 0.95)
         assert row["attachment_residual_m"] == pytest.approx(shift)
         assert row["attachment_pass"] is (shift == 0)
-        assert row["can_tool"]["orientation"] == pytest.approx(relative.orientation)
+        assert row["can_attachment_frame"]["orientation"] == pytest.approx(relative.orientation)
+    missing = replace(observed, robot=replace(observed.robot, diagnostics={}))
+    assert not _attachment_sample(missing, GroundTruth({"CAN": can}), offset, 0.95)[
+        "attachment_pass"
+    ]

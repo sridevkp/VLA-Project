@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ _PHASE_SKILL = {
     "LIFT": Skill.LIFT,
     "TRANSIT": Skill.TRANSFER,
     "PLACE_DESCEND": Skill.LOWER,
-    "RELEASE": Skill.OPEN,
+    "RELEASE": Skill.RELEASE,
     "RETREAT": Skill.RETREAT,
 }
 
@@ -62,9 +63,11 @@ def demonstration_decisions(manifest: Path) -> Iterator[dict[str, Any]]:
                 before = pending.pop(phase)
                 skill = _PHASE_SKILL[phase]
                 target = (
-                    None if skill in (Skill.OPEN, Skill.CLOSE) else before["commanded_base_xyz_m"]
+                    None
+                    if skill in (Skill.OPEN, Skill.CLOSE, Skill.RELEASE)
+                    else before["commanded_base_xyz_m"]
                 )
-                if skill not in (Skill.OPEN, Skill.CLOSE) and target is None:
+                if skill not in (Skill.OPEN, Skill.CLOSE, Skill.RELEASE) and target is None:
                     raise ValueError(f"missing Cartesian target for {phase} in {raw}")
                 yield {
                     "scene_group": f"train-{metadata['family']}-i{metadata['index']:02d}",
@@ -80,3 +83,41 @@ def demonstration_decisions(manifest: Path) -> Iterator[dict[str, Any]]:
                     "label_source": "demonstration",
                     "measurement_source": "simulator-observed",
                 }
+
+
+def partition_demonstrations(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Validate demonstrated decisions and reserve one TRAIN base scene per family."""
+    keys = set()
+    by_family: dict[str, set[str]] = {}
+    for row in rows:
+        key = (row["scene"], row["seed"], row["skill"])
+        if key in keys:
+            raise ValueError(f"duplicate demonstrated decision: {key}")
+        keys.add(key)
+        group = row["scene_group"]
+        family = group.removeprefix("train-").rsplit("-i", 1)[0]
+        by_family.setdefault(family, set()).add(group)
+        before, after = row["observed_before"], row["offline_observed_after"]
+        values = [row["offline_can_rise_m"], *(row["target_base_m"] or [])]
+        for snapshot in (before, after):
+            values.extend(snapshot["joint_position_rad"].values())
+            values.extend((snapshot["sim_time_s"], snapshot["gripper_opening_m"]))
+            for field in (
+                "tool_base_m",
+                "oracle_can_base_m",
+                "oracle_can_world_m",
+                "robot_base_world_m",
+                "robot_base_world_orientation_xyzw",
+            ):
+                values.extend(snapshot[field])
+        if (
+            row["offline_failed"] is not False
+            or not all(isfinite(value) for value in values)
+            or after["sim_time_s"] < before["sim_time_s"]
+        ):
+            raise ValueError(f"ineligible demonstrated decision: {key}")
+    if not by_family or any(len(groups) < 2 for groups in by_family.values()):
+        raise ValueError("need at least two TRAIN base scene groups per represented family")
+    internal = {max(groups) for groups in by_family.values()}
+    train = set().union(*by_family.values()) - internal
+    return {"fit_groups": sorted(train), "internal_train_evaluation_groups": sorted(internal)}

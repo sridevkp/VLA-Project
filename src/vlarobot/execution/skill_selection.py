@@ -37,7 +37,8 @@ def enumerate_skills(
         if np.linalg.norm(target.as_array() - tool) > position_tolerance_m
     ]
     if state.robot.gripper_opening < open_position_m - open_tolerance_m:
-        choices.append(SkillAction(Skill.OPEN))
+        opening_skill = Skill.RELEASE if state.robot.gripper_holding is True else Skill.OPEN
+        choices.append(SkillAction(opening_skill))
     if state.robot.gripper_opening > open_tolerance_m:
         choices.append(SkillAction(Skill.CLOSE))
     return tuple(choices)
@@ -196,7 +197,9 @@ def predict_candidates(
     candidates = []
     for action in actions:
         if action.target_base is None:
-            command = GripperCmd(open_position_m if action.skill is Skill.OPEN else 0.0)
+            command = GripperCmd(
+                open_position_m if action.skill in (Skill.OPEN, Skill.RELEASE) else 0.0
+            )
         else:
             command = EEPoseTarget(
                 Pose3D(action.target_base, state.robot.ee_pose.orientation),

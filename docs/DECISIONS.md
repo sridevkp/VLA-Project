@@ -4149,3 +4149,22 @@ decision boundaries from 160 distinct TRAIN episodes across eight scene
 groups. It records the decision-time snapshot separately from simulator
 measurements after the expert action. This export contains demonstrated
 actions. Counterfactual candidate outcomes require separate collection.
+
+V4 now exposes RELEASE as a single gripper-opening action. The isolation
+harness explicitly selects setup and probe actions, records measured outcomes
+after each dispatch, and supports bounded off-expert probes on TRAIN. These
+measurements remain separate from analytic forecasts. The demonstration
+export checks uniqueness, finite observations, ordered timestamps, and
+successful skill exits. It reserves the highest base scene index per family
+for internal TRAIN evaluation. This yields 945 fit decisions and 495 internal
+evaluation decisions from the 1,440 demonstrated boundaries.
+
+The evaluated V1 archive uses a predictive tool-envelope proxy scoped to the
+table and named obstacles. It excludes the other arm links and background
+geometry. Its checked conclusion cannot satisfy the full-arm callback in
+`AnalyticSurrogate.predict_trajectory`. The evaluated archive also carries
+the blocked sweep template. The production binding still requires a reviewed
+certificate pinned to its contract, geometry and review cases. A future
+binding must check the joint transitions implied by each actual skill path,
+including intermediate waypoints. Candidate endpoint forecasts alone do
+not establish clearance for the dispatched path.

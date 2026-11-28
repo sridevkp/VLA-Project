@@ -401,3 +401,11 @@ with the existing TRAIN URDF registration selected in
 Use `uv run python -m vlarobot.cli v4-extract-demonstrations <fresh-output.json> <original-accepted.json> <v3-accepted.json>`
 to extract decision examples. The input manifests must identify admitted
 TRAIN episodes and the raw trace directories must be available.
+
+For the manipulation probes, use `--skill RELEASE`. The harness explicitly
+dispatches the setup skills and each probe through the independent runtime
+SafetyMonitor. It saves each result as soon as the skill returns and stops on
+a motion failure or loss of command isolation. Use `--empty-grasp` for a
+close and reopen away from the CAN. Use `--skill PREGRASP --imperfect-approach`
+for a one-CAN-radius lateral perturbation. Both options use the same clear
+TRAIN scene with fresh output directories.

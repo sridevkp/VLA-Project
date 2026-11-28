@@ -1,7 +1,10 @@
 from unittest.mock import patch
 
+import pytest
+
 from vlarobot.backends.fake.backend import FakeBackend
-from vlarobot.core.types import ApplyResult, GripperCmd, ScenarioSpec
+from vlarobot.backends.webots.config import GRIPPER_OPEN
+from vlarobot.core.types import ApplyResult, GripperCmd, ScenarioSpec, Vec3
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
 
 
@@ -37,3 +40,34 @@ def test_live_profile_supplies_velocity_limits_for_all_arm_joints() -> None:
     monitor = SkillExecutor(0, initial).monitor
     assert monitor.limits.joint_position.keys() == monitor.limits.joint_velocity.keys()
     assert len(monitor.limits.joint_velocity) == 7
+
+
+@pytest.mark.parametrize(
+    "skill", [Skill.DESCEND, Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RETREAT]
+)
+def test_cartesian_skill_calls_only_its_linear_primitive(skill: Skill) -> None:
+    backend = FakeBackend()
+    initial = backend.reset(ScenarioSpec(), 0)
+    executor = SkillExecutor(0, initial)
+    with (
+        patch.object(executor, "_move_linear", return_value=(None, initial)) as motion,
+        patch.object(backend, "apply", wraps=backend.apply) as apply,
+    ):
+        result = executor.run_skill(backend, initial, SkillAction(skill, Vec3(0.5, 0, 0.8)))
+    assert result.settled
+    assert motion.call_count == 1
+    assert motion.call_args.args[-1] == skill.value
+    apply.assert_not_called()
+
+
+@pytest.mark.parametrize("skill, opening", [(Skill.CLOSE, 0.0), (Skill.RELEASE, GRIPPER_OPEN)])
+def test_gripper_skill_dispatches_only_its_gripper_command(skill: Skill, opening: float) -> None:
+    backend = FakeBackend()
+    initial = backend.reset(ScenarioSpec(), 0)
+    executor = SkillExecutor(0, initial)
+    result = executor.run_skill(backend, initial, SkillAction(skill))
+    assert result.settled
+    assert len(result.dispatched) == 1
+    command = result.dispatched[0]
+    assert isinstance(command, GripperCmd)
+    assert command.opening == opening

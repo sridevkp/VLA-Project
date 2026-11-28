@@ -20,6 +20,7 @@ class Skill(StrEnum):
     RETREAT = "RETREAT"
     OPEN = "OPEN"
     CLOSE = "CLOSE"
+    RELEASE = "RELEASE"
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class SkillAction:
     target_base: Vec3 | None = None
 
     def __post_init__(self) -> None:
-        gripper_only = self.skill in (Skill.OPEN, Skill.CLOSE)
+        gripper_only = self.skill in (Skill.OPEN, Skill.CLOSE, Skill.RELEASE)
         if gripper_only != (self.target_base is None):
             raise ValueError("Cartesian skills require a base-frame target.")
 
@@ -93,7 +94,7 @@ class SkillExecutor(ScriptedCanPolicy):
             name: observation.robot.joint_pos[name] for name in ARM_JOINTS
         }
         can_before = self._can_pose(backend.get_ground_truth())[2]
-        if action.skill is Skill.OPEN:
+        if action.skill in (Skill.OPEN, Skill.RELEASE):
             settled = self._open_gripper(checked, observation) is not None
         elif action.skill is Skill.CLOSE:
             settled = self._close_gripper(checked)

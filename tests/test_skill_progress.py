@@ -66,7 +66,7 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
         "grasp": tool,
         "lift": tool + [0, 0, 0.12],
         "transit": tool + [0.2, 0, 0.12],
-        "place_descend": tool + [0.2, 0, 0],
+        "place_descend": tool + [0.05, 0, -0.05],
         "retreat": tool + [0, 0, 0.12],
     }
     scene = SceneState([ObjectState("CAN", "can", obs.robot.ee_pose, Vec3(0.06, 0.06, 0.1), 1)])
@@ -113,3 +113,18 @@ def test_descent_measures_progress_and_object_disturbance() -> None:
     assert measured_utility({**row, "can_after_world_m": xyz(0.65)}) == 0.0
     assert measured_utility({**row, "tool_after_base_m": xyz(0.9)}) == 0.0
     assert measured_utility({**row, "can_orientation_after_xyzw": (1, 0, 0, 0)}) == 0.0
+
+
+def test_approach_history_prefers_a_real_improvement_over_a_repeated_hover() -> None:
+    from vlarobot.core.types import Vec3
+    from vlarobot.execution.skill_live import approach_progress_score
+    from vlarobot.execution.skills import Skill, SkillAction
+
+    can = Vec3(0.7, -0.2, 0.75)
+    centered = SkillAction(Skill.APPROACH, Vec3(0.7, -0.2, 0.9))
+    offset = SkillAction(Skill.APPROACH, Vec3(0.7, -0.17, 0.9))
+    assert approach_progress_score(0.5, centered, can, None) == 0.5
+    assert approach_progress_score(0.5, centered, can, 0.03) == 0.5
+    assert approach_progress_score(0.5, centered, can, 0.002) < 0
+    assert approach_progress_score(0.5, offset, can, 0.002) < 0
+    assert approach_progress_score(0.4, SkillAction(Skill.OPEN), can, 0.002) == 0.4

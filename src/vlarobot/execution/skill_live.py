@@ -13,6 +13,7 @@ from vlarobot.backends.webots.config import (
     CLOSE_ALIGN_TOL,
     GRIPPER_OPEN,
     LIFT_MIN,
+    PLACE_TOLERANCE_M,
     SETTINGS,
     TIME_STEP,
 )
@@ -113,11 +114,20 @@ def generate_candidates(
     retreat_z = max(tool_pose.z, targets[Skill.APPROACH].z, targets[Skill.RETREAT].z)
     targets[Skill.RETREAT] = replace(tool_pose, z=retreat_z)
     plausible_grasp = grasp_evidence(observation, anchors["grasp"])
-    if state.robot.gripper_opening < GRIPPER_OPEN - 0.002:
+    grasp = targets[Skill.DESCEND].as_array()
+    tool = tool_pose.as_array()
+    if (
+        state.robot.gripper_opening < GRIPPER_OPEN - 0.002
+        or np.linalg.norm((tool - grasp)[:2]) > CAN_RADIUS_M + CLOSE_ALIGN_TOL
+        or tool[2] <= grasp[2]
+    ):
         targets.pop(Skill.DESCEND)
+    lower = targets[Skill.LOWER].as_array()
+    if np.linalg.norm((tool - lower)[:2]) > PLACE_TOLERANCE_M or tool[2] <= lower[2]:
+        targets.pop(Skill.LOWER)
     if not plausible_grasp:
         for carry in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER):
-            del targets[carry]
+            targets.pop(carry, None)
     if can_rise_m < LIFT_MIN:
         targets.pop(Skill.TRANSFER, None)
         targets.pop(Skill.LOWER, None)
@@ -147,6 +157,21 @@ def generate_candidates(
         ),
         *alternate,
     )
+
+
+def approach_progress_score(
+    raw_score: float, candidate: SkillAction, can_base: Vec3, best_gap_m: float | None
+) -> float:
+    """Discount another approach that cannot improve the measured current approach streak."""
+    if candidate.skill is not Skill.APPROACH or best_gap_m is None:
+        return raw_score
+    target = candidate.target_base
+    assert target is not None
+    target_gap = float(np.linalg.norm((target.as_array() - can_base.as_array())[:2]))
+    remaining_gain = best_gap_m - target_gap
+    if remaining_gain > CLOSE_ALIGN_TOL:
+        return raw_score
+    return min(raw_score, (remaining_gain - CLOSE_ALIGN_TOL) / CAN_RADIUS_M)
 
 
 def run_learned_smoke(
@@ -204,6 +229,7 @@ def run_learned_smoke(
         initial = backend.get_ground_truth().object_poses["CAN"]
         decisions = []
         stop_reason = "decision budget"
+        best_approach_gap = None
         for index in range(max_decisions):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
@@ -252,7 +278,10 @@ def run_learned_smoke(
                 future = None
                 if uses_context:
                     future = state if context == "controlled" else futures[candidate_index]
-                score = model.score(state, candidate, future)
+                raw_score = model.score(state, candidate, future)
+                score = approach_progress_score(
+                    raw_score, candidate, can.position, best_approach_gap
+                )
                 assessments.append(
                     CandidateAssessment((("proxy", safe),), (score, None, None, None))
                 )
@@ -260,6 +289,7 @@ def run_learned_smoke(
                     {
                         "action": asdict(candidate),
                         "score": score,
+                        "raw_model_score": raw_score,
                         "strict_forecast_reasons": None
                         if forecast is None
                         else forecast.hard_reasons,
@@ -282,6 +312,7 @@ def run_learned_smoke(
             decision = gate.select(assessments)
             record = {
                 "index": index,
+                "causal_best_approach_gap_m": best_approach_gap,
                 "can_estimate_base_m": asdict(can.position),
                 "localization_error_m": None
                 if localize is None
@@ -322,6 +353,21 @@ def run_learned_smoke(
             tool_before = obs.robot.ee_pose.position
             obs = actual.observation
             pose_after = backend.get_ground_truth().object_poses["CAN"]
+            if candidate.skill is Skill.APPROACH and obs.robot.base_pose_world is not None:
+                can_after_base = compose(_inverse_pose(obs.robot.base_pose_world), pose_after)
+                gap = float(
+                    np.linalg.norm(
+                        (
+                            obs.robot.ee_pose.position.as_array()
+                            - can_after_base.position.as_array()
+                        )[:2]
+                    )
+                )
+                best_approach_gap = (
+                    gap if best_approach_gap is None else min(gap, best_approach_gap)
+                )
+            else:
+                best_approach_gap = None
             x, y, _, _ = pose_after.orientation
             tilt_deg = float(np.degrees(np.arccos(np.clip(1 - 2 * (x * x + y * y), -1, 1))))
             record["actual"] = {

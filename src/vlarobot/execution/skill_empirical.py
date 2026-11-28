@@ -238,7 +238,12 @@ def measured_utility(row: dict) -> float | None:
         before = row.get("tip_can_xy_before_m")
         accuracy = CAN_RADIUS_M / (CAN_RADIUS_M + after)
         if before is None:
-            return accuracy
+            robot = row["robot_before"]
+            base = robot["base_pose_world"]
+            transform = _inverse_pose(Pose3D(Vec3(**base["position"]), tuple(base["orientation"])))
+            can = compose(transform, Pose3D(Vec3(**row["can_before_world_m"]), _IDENTITY))
+            tool = Vec3(**row["tool_before_base_m"]).as_array()
+            before = float(np.linalg.norm((can.position.as_array() - tool)[:2]))
         return accuracy * float(np.clip((before - after) / CAN_RADIUS_M, 0, 1))
     if "tip_can_xy_before_m" not in row:
         return None
@@ -351,7 +356,7 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
     )
     result = {
         "identity": "v4-initial-empirical-nominal-no-context",
-        "measured_label_version": "v4-skill-progress-with-descent-v1",
+        "measured_label_version": "v4-skill-progress-with-descent-v2",
         "partition": partition,
         "measured_only_forecast_comparison": _matched_models(forecasts, fit_groups),
         "demonstration_fit_n": sum(row.scene_group in fit_groups for row in examples),

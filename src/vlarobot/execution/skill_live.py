@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 from pathlib import Path
 from sys import executable
@@ -33,7 +34,8 @@ from vlarobot.core.types import (
     Vec3,
     WorldState,
 )
-from vlarobot.eval.runner import build_episode_plan
+from vlarobot.eval.metrics import wilson_interval
+from vlarobot.eval.runner import EvalEpisode, build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import launch_webots_session
@@ -290,10 +292,31 @@ def run_learned_smoke(
     scene_index: int = 0,
 ) -> dict:
     """Run bounded receding-horizon decisions with scoped predictive vetoes."""
-    if not 1 <= max_decisions <= 16:
-        raise ValueError("Bounded diagnostic requires 1–16 decisions")
     if scene_index not in (0, 1, 2):
         raise ValueError("Choose one of the three approved TRAIN diagnostic scenes")
+    return _run_train_episode(
+        out,
+        model_path,
+        webots,
+        build_episode_plan("train", 0, n=3)[scene_index],
+        localizer_path=localizer_path,
+        context=context,
+        max_decisions=max_decisions,
+    )
+
+
+def _run_train_episode(
+    out: Path,
+    model_path: Path,
+    webots: str | None,
+    entry: EvalEpisode,
+    *,
+    localizer_path: Path | None = None,
+    context: str,
+    max_decisions: int,
+) -> dict:
+    if not 1 <= max_decisions <= 16:
+        raise ValueError("Bounded diagnostic requires 1–16 decisions")
     model_bytes = model_path.read_bytes()
     artifact = json.loads(model_bytes)
     localize = None
@@ -327,7 +350,6 @@ def run_learned_smoke(
         required_constraints=("proxy",),
         inactive_components=(1, 2, 3),
     )
-    entry = build_episode_plan("train", 0, n=3)[scene_index]
     out.mkdir(parents=True, exist_ok=False)
     with launch_webots_session(
         webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
@@ -630,3 +652,83 @@ def run_matched_clear(
             trials[context] = {"error": str(error)}
         write_json(out / "matched-progress.json", trials)
     return trials
+
+
+def run_train_admission(
+    out: Path, model: Path, webots: str | None, *, verified_clear: Path
+) -> dict:
+    """Run the frozen 24 TRAIN trials only after verified predicted-context termination."""
+    prerequisite = json.loads(verified_clear.read_bytes())
+    model_bytes = model.read_bytes()
+    model_sha = hashlib.sha256(model_bytes).hexdigest()
+    plan = build_episode_plan("train", 0)
+    expected = {
+        "split": "train",
+        "scene": plan[0].scene.name,
+        "seed": plan[0].seed,
+        "mode": "oracle-assisted",
+        "utility_context": "predicted",
+        "profile": PROFILE_ID,
+        "model_sha256": model_sha,
+        "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
+        "stop_reason": "termination selected",
+    }
+    if any(prerequisite.get(key) != value for key, value in expected.items()) or not all(
+        prerequisite.get("verification", {}).get(key) is True
+        for key in ("success", "home_reached", "place_distance_ok", "can_height_ok", "can_tilt_ok")
+    ):
+        raise ValueError(
+            "Admission requires independently verified completion by the frozen policy."
+        )
+    budget = prerequisite["decision_budget"]
+    if not 1 <= budget <= 16 or len(plan) != 24:
+        raise ValueError("Admission requires the unchanged diagnostic budget and 24 TRAIN trials.")
+
+    out.mkdir(parents=True, exist_ok=False)
+    frozen = out / "frozen-model.json"
+    frozen.write_bytes(model_bytes)
+    write_json(out / "verified-clear.json", prerequisite)
+    source = Path(__file__).resolve().parent
+    runtime_modules = ("skill_live.py", "skill_proxy.py", "skill_selection.py", "skills.py")
+    runtime_hashes = {
+        name: hashlib.sha256((source / name).read_bytes()).hexdigest() for name in runtime_modules
+    }
+    write_json(
+        out / "admission-plan.json",
+        {
+            **expected,
+            "decision_budget": budget,
+            "minimum_successes": 10,
+            "runtime_module_sha256": runtime_hashes,
+            "plan": [
+                {"index": item.index, "scene": item.scene.name, "seed": item.seed} for item in plan
+            ],
+        },
+    )
+
+    def run(entry: EvalEpisode) -> dict:
+        folder = out / f"episode-{entry.index:02d}"
+        row = {"index": entry.index, "scene": entry.scene.name, "seed": entry.seed}
+        try:
+            return row | _run_train_episode(
+                folder, frozen, webots, entry, context="predicted", max_decisions=budget
+            )
+        except Exception as error:
+            return row | {"execution_error": str(error)}
+
+    report = {"split": "train", "threshold": 10, "total": 24, "episodes": []}
+    with ThreadPoolExecutor(max_workers=3) as workers:
+        for row in workers.map(run, plan):
+            report["episodes"].append(row)
+            write_json(out / "admission-progress.json", report)
+    measured = [row for row in report["episodes"] if "verification" in row]
+    successes = sum(row["verification"]["success"] for row in measured)
+    complete = len(measured) == 24
+    report.update(
+        measured=len(measured),
+        successes=successes,
+        wilson_95=wilson_interval(successes, 24) if complete else None,
+        passed=successes >= 10 if complete else None,
+    )
+    write_json(out / "admission-summary.json", report)
+    return report

@@ -1,6 +1,10 @@
+import hashlib
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
+import pytest
 
 from vlarobot.backends.fake.backend import FakeBackend
 from vlarobot.backends.webots.config import GRIPPER_OPEN
@@ -242,3 +246,55 @@ def test_existing_attachment_can_refresh_from_horizontal_co_motion() -> None:
     assert (
         measured_attachment(before, after, can_start, can_start, previous_offset=previous) is None
     )
+
+
+def test_admission_requires_verified_home_and_preserves_all_24_trials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from vlarobot.execution import skill_live
+
+    model = tmp_path / "model.json"
+    model.write_bytes(b"frozen model")
+    prerequisite = tmp_path / "clear.json"
+    out = tmp_path / "admission"
+    clear = skill_live.build_episode_plan("train", 0, n=1)[0]
+    criteria = {
+        "success": True,
+        "home_reached": False,
+        "place_distance_ok": True,
+        "can_height_ok": True,
+        "can_tilt_ok": True,
+    }
+    payload = {
+        "split": "train",
+        "mode": "oracle-assisted",
+        "scene": clear.scene.name,
+        "seed": clear.seed,
+        "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+        "profile": skill_live.PROFILE_ID,
+        "home_tolerance_rad": skill_live.HOME_VERIFICATION_TOLERANCE_RAD,
+        "utility_context": "predicted",
+        "stop_reason": "termination selected",
+        "decision_budget": 16,
+        "verification": criteria,
+    }
+    prerequisite.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="independently verified"):
+        skill_live.run_train_admission(out, model, None, verified_clear=prerequisite)
+    assert not out.exists()
+
+    criteria["home_reached"] = True
+    prerequisite.write_text(json.dumps(payload), encoding="utf-8")
+
+    def run(folder, frozen, webots, episode, *, context, max_decisions):
+        assert frozen.read_bytes() == b"frozen model"
+        assert context == "predicted"
+        assert max_decisions == 16
+        return {"verification": {"success": episode.index < 10}}
+
+    monkeypatch.setattr(skill_live, "_run_train_episode", run)
+    report = skill_live.run_train_admission(out, model, None, verified_clear=prerequisite)
+    assert report["measured"] == 24
+    assert report["successes"] == 10
+    assert report["passed"] is True
+    assert [row["index"] for row in report["episodes"]] == list(range(24))

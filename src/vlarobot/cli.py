@@ -2806,5 +2806,18 @@ def v4_matched_clear(out: Path, model: Path, webots: str | None = None) -> None:
     typer.echo(json.dumps(run_matched_clear(out, model, webots), indent=2))
 
 
+@app.command("v4-train-admission")
+def v4_train_admission(
+    out: Path, model: Path, verified_clear: Path, webots: str | None = None
+) -> None:
+    """Run the 24 TRAIN episodes after a verified clear-scene completion."""
+    from vlarobot.execution.skill_live import run_train_admission
+
+    result = run_train_admission(out, model, webots, verified_clear=verified_clear)
+    typer.echo(json.dumps(result, indent=2))
+    if result["passed"] is not True:
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

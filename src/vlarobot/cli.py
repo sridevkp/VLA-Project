@@ -2763,5 +2763,38 @@ def v4_fit_localizer(dataset: Path, sources: Path, cache: Path, output: Path) ->
     )
 
 
+@app.command("v4-collect-outcomes")
+def v4_collect_outcomes(
+    out: Path, webots: str | None = None, seed: int = 2, target: int = 150
+) -> None:
+    """Collect bounded TRAIN skill outcomes using three persistent sessions."""
+    from vlarobot.execution.skill_collection import collect_outcomes
+
+    typer.echo(json.dumps(collect_outcomes(out, webots, seed, target), indent=2))
+
+
+@app.command("v4-update-outcome-models")
+def v4_update_outcome_models(
+    batch: Path,
+    dataset: Path,
+    out: Path,
+    prior: list[Path],
+    *,
+    watch: bool = False,
+) -> None:
+    """Fit incremental empirical snapshots while the TRAIN batch runs."""
+    from vlarobot.execution.skill_collection import update_outcome_models
+
+    typer.echo(json.dumps(update_outcome_models(batch, dataset, out, prior, watch=watch), indent=2))
+
+
+@app.command("v4-matched-clear")
+def v4_matched_clear(out: Path, model: Path, webots: str | None = None) -> None:
+    """Run all four matched prediction-context conditions on the clear TRAIN scene."""
+    from vlarobot.execution.skill_live import run_matched_clear
+
+    typer.echo(json.dumps(run_matched_clear(out, model, webots), indent=2))
+
+
 if __name__ == "__main__":
     app()

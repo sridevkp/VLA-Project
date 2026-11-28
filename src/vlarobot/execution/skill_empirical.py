@@ -8,7 +8,16 @@ from typing import Any
 
 import numpy as np
 
-from vlarobot.backends.webots.config import ARM_JOINTS, CAN_RADIUS_M, GRIPPER_OPEN, SETTINGS
+from vlarobot.backends.webots.config import (
+    ARM_JOINTS,
+    CAN_RADIUS_M,
+    CLOSE_ALIGN_TOL,
+    GRIPPER_OPEN,
+    LIFT_MIN,
+    PLACE_TOLERANCE_M,
+    PLACE_WORLD,
+    SETTINGS,
+)
 from vlarobot.backends.worldmind_bindings import (
     _corrected_forward,
     _full_joint_vector,
@@ -217,6 +226,50 @@ def _matched_models(rows: list[UtilityExample], fit_groups: set[str]) -> dict:
     }
 
 
+def measured_utility(row: dict) -> float | None:
+    """Label measured progress within each action's physical outcome channel."""
+    if not row.get("settled") or not row.get("isolated"):
+        return None
+    skill = Skill(row["skill"])
+    if row.get("empty_grasp_verified") is True:
+        return 0.0
+    if skill is Skill.APPROACH:
+        after = row["tip_can_xy_after_m"]
+        before = row.get("tip_can_xy_before_m")
+        accuracy = CAN_RADIUS_M / (CAN_RADIUS_M + after)
+        if before is None:
+            return accuracy
+        return accuracy * float(np.clip((before - after) / CAN_RADIUS_M, 0, 1))
+    if "tip_can_xy_before_m" not in row:
+        return None
+    if skill is Skill.CLOSE:
+        retained_opening = 0.002 < row["gripper_after_m"] < GRIPPER_OPEN - 0.002
+        return float(retained_opening and row["tip_can_xy_after_m"] <= CLOSE_ALIGN_TOL)
+    if skill is Skill.OPEN:
+        return float(
+            np.clip((row["gripper_after_m"] - row["gripper_before_m"]) / GRIPPER_OPEN, 0, 1)
+        )
+    if skill is Skill.LIFT:
+        return float(np.clip(row["can_rise_m"] / LIFT_MIN, 0, 1))
+    if skill in (Skill.TRANSFER, Skill.LOWER, Skill.RELEASE, Skill.RETREAT):
+        before = Vec3(**row["can_before_world_m"]).as_array()
+        after = Vec3(**row["can_after_world_m"]).as_array()
+        goal = np.asarray(PLACE_WORLD)
+        old_error, new_error = np.linalg.norm(before - goal), np.linalg.norm(after - goal)
+        orientation = row["can_orientation_after_xyzw"]
+        tilt = np.degrees(
+            np.arccos(np.clip(1 - 2 * (orientation[0] ** 2 + orientation[1] ** 2), -1, 1))
+        )
+        if tilt >= SETTINGS.can_tilt_limit_deg:
+            return 0.0
+        if skill in (Skill.RELEASE, Skill.RETREAT):
+            return float(
+                new_error <= PLACE_TOLERANCE_M and row["gripper_after_m"] >= GRIPPER_OPEN - 0.002
+            )
+        return float(np.clip((old_error - new_error) / CAN_RADIUS_M, 0, 1))
+    return None
+
+
 def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[str, Any]:
     """Fit a no-context utility baseline before candidate forecasts are available."""
     if output.exists():
@@ -247,17 +300,14 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
     forecasts = []
     for path in measured:
         report = json.loads(path.read_text(encoding="utf-8"))
-        if report["split"] != "train" or not report["isolated"]:
+        if report["split"] != "train":
             raise ValueError(f"isolated TRAIN evidence required: {path}")
         group = report["scene"].rsplit("-s", 1)[0]
         for row in report["rows"]:
             if row["measurement_source"] != "simulator-observed":
                 raise ValueError(f"measured outcome required: {path}")
-            if row["skill"] == Skill.APPROACH and "tip_can_xy_after_m" in row:
-                utility = CAN_RADIUS_M / (CAN_RADIUS_M + row["tip_can_xy_after_m"])
-            elif row.get("empty_grasp_verified") is True:
-                utility = 0.0
-            else:
+            utility = measured_utility(row)
+            if utility is None:
                 continue
             robot = row["robot_before"]
             base = robot["base_pose_world"]
@@ -289,9 +339,13 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
         "partition": partition,
         "measured_only_forecast_comparison": _matched_models(forecasts, fit_groups),
         "demonstration_fit_n": sum(row.scene_group in fit_groups for row in examples),
+        "measured_label_counts_by_skill": {
+            skill.value: sum(row.candidate.action.skill is skill for row in outcomes)
+            for skill in Skill
+        },
         "measured_fit_n": sum(row.scene_group in fit_groups for row in outcomes),
         "observed_reward": (
-            "CAN radius / (CAN radius + final planar error), or 0 for verified empty close"
+            "Measured alignment, aperture, lift and placement progress; empty close is 0"
         ),
         "demonstration_preference_label": 1.0,
         "mean": model.mean.tolist(),

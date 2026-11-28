@@ -12,6 +12,7 @@ from vlarobot.backends.webots.config import (
     CAN_RADIUS_M,
     CLOSE_ALIGN_TOL,
     GRIPPER_OPEN,
+    LIFT_MIN,
     SETTINGS,
     TIME_STEP,
 )
@@ -80,8 +81,25 @@ class _PreviewBackend:
         return self.observation
 
 
+def grasp_evidence(observation: Observation, grasp_base: np.ndarray) -> bool:
+    """Use current aperture and alignment when a direct holding sensor is absent."""
+    robot = observation.robot
+    if robot.gripper_holding is not None:
+        return robot.gripper_holding
+    aperture = robot.gripper_opening
+    return bool(
+        0.002 < aperture < GRIPPER_OPEN - 0.002
+        and np.linalg.norm(robot.ee_pose.position.as_array() - grasp_base) < CLOSE_ALIGN_TOL
+    )
+
+
 def generate_candidates(
-    executor: SkillExecutor, backend, observation: Observation, state: WorldState
+    executor: SkillExecutor,
+    backend,
+    observation: Observation,
+    state: WorldState,
+    *,
+    can_rise_m: float,
 ) -> tuple[SkillAction, ...]:
     """Use current geometry and aperture, independent of the previous task phase."""
     base = observation.robot.base_pose_world
@@ -90,16 +108,15 @@ def generate_candidates(
     can_world = compose(base, state.scene.objects[0].pose).position.as_array()
     anchors = executor._base_frame_targets(backend, observation, can_world=can_world)
     targets = {skill: Vec3(*map(float, anchors[key])) for skill, key in _TARGETS.items()}
-    tool = state.robot.ee_pose.position.as_array()
-    aperture = state.robot.gripper_opening
-    plausible_grasp = state.robot.gripper_holding is True or (
-        state.robot.gripper_holding is None
-        and 0.002 < aperture < GRIPPER_OPEN - 0.002
-        and np.linalg.norm(tool - anchors["grasp"]) < CLOSE_ALIGN_TOL
-    )
+    plausible_grasp = grasp_evidence(observation, anchors["grasp"])
     if not plausible_grasp:
         for carry in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER):
             del targets[carry]
+    if can_rise_m < LIFT_MIN:
+        targets.pop(Skill.TRANSFER, None)
+        targets.pop(Skill.LOWER, None)
+    else:
+        targets.pop(Skill.LIFT, None)
     state = replace(state, robot=replace(state.robot, gripper_holding=plausible_grasp))
     candidates = enumerate_skills(
         state,
@@ -110,7 +127,11 @@ def generate_candidates(
     )
     approach = targets[Skill.APPROACH]
     return (
-        *candidates,
+        *(
+            candidate
+            for candidate in candidates
+            if candidate.skill is not Skill.RELEASE or can_rise_m < LIFT_MIN
+        ),
         SkillAction(Skill.APPROACH, replace(approach, y=approach.y + CAN_RADIUS_M)),
     )
 
@@ -122,8 +143,11 @@ def run_learned_smoke(
     *,
     localizer_path: Path | None = None,
     context: str = "smoke",
+    max_decisions: int = 6,
 ) -> dict:
-    """Run six receding-horizon decisions with a learned utility and scoped predictive vetoes."""
+    """Run bounded receding-horizon decisions with scoped predictive vetoes."""
+    if not 1 <= max_decisions <= 16:
+        raise ValueError("Bounded diagnostic requires 1–16 decisions")
     model_bytes = model_path.read_bytes()
     artifact = json.loads(model_bytes)
     localize = None
@@ -164,7 +188,7 @@ def run_learned_smoke(
         initial = backend.get_ground_truth().object_poses["CAN"]
         decisions = []
         stop_reason = "decision budget"
-        for index in range(6):
+        for index in range(max_decisions):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
             if base is None:
@@ -177,7 +201,10 @@ def run_learned_smoke(
                 SceneState([ObjectState("CAN", "can", can, Vec3(0, 0, 0), 1.0)]), obs.robot
             )
             executor = SkillExecutor(entry.seed, obs)
-            candidates = generate_candidates(executor, backend, obs, state)
+            measured_rise = truth.object_poses["CAN"].position.z - initial.position.z
+            candidates = generate_candidates(
+                executor, backend, obs, state, can_rise_m=measured_rise
+            )
             forecasts = (
                 [forecast_candidate(state, candidate).trajectory for candidate in candidates]
                 if context != "smoke"
@@ -245,6 +272,14 @@ def run_learned_smoke(
                 else float(
                     np.linalg.norm(can.position.as_array() - oracle_can.position.as_array())
                 ),
+                "carrying_candidates": [
+                    c.skill.value
+                    for c in candidates
+                    if c.skill in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RELEASE)
+                ],
+                "measured_gripper_opening_m": obs.robot.gripper_opening,
+                "measured_holding": obs.robot.gripper_holding,
+                "measured_can_rise_m": measured_rise,
                 "candidates": rows,
                 "decision": asdict(decision),
                 "feasible_skill_count": len(
@@ -319,3 +354,20 @@ def run_learned_smoke(
         }
         write_json(out / "learned-summary.json", result)
     return result
+
+
+def run_matched_clear(out: Path, model: Path, webots: str | None) -> dict:
+    """Freeze model bytes once and run all four matched clear TRAIN conditions."""
+    out.mkdir(parents=True, exist_ok=False)
+    frozen = out / "frozen-model.json"
+    frozen.write_bytes(model.read_bytes())
+    trials = {}
+    for context in ("matched-none", "predicted", "shuffled", "controlled"):
+        try:
+            trials[context] = run_learned_smoke(
+                out / context, frozen, webots, context=context, max_decisions=10
+            )
+        except Exception as error:
+            trials[context] = {"error": str(error)}
+        write_json(out / "matched-progress.json", trials)
+    return trials

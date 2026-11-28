@@ -437,3 +437,16 @@ context weights when complete analytic forecasts are present. The live command
 accepts `--context matched-none`, `predicted`, `shuffled`, or `controlled`
 with that artifact. All four use the original candidate forecast vetoes and
 the command-time proxy.
+
+Use `v4-collect-outcomes <fresh-dir> --target 150` for the bounded
+three-session TRAIN batch. The persistent Webots sessions use the existing
+soft reset. Records include command, isolation, settling, and observed
+outcome evidence. Use `v4-update-outcome-models <batch-dir> <eligible-decisions.json> <fresh-dir> <prior-skill-result.json> ... --watch`
+for incremental frozen fits and a live count of strict reset matches.
+Use `v4-matched-clear <fresh-dir> <empirical-fit.json>` for the four
+closed-loop conditions under one frozen model artifact and profile.
+
+The visual canary used a separate CPU Python environment with
+PyTorch 2.15.0+cpu and Transformers 5.24.1 and the pinned local DINOv2
+snapshot. Keep those optional packages separate from the simulator
+environment. The encoder weights were loaded read-only.

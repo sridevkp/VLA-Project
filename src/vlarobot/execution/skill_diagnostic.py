@@ -1,5 +1,6 @@
 """Bounded, explicit single-skill probes on the first TRAIN clear scene."""
 
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from sys import executable
@@ -10,7 +11,7 @@ from vlarobot.core.types import GripperCmd, JointTarget, Vec3
 from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
-from vlarobot.execution.episode_runner import launch_webots_session
+from vlarobot.execution.episode_runner import WebotsSession, launch_webots_session
 from vlarobot.execution.skill_proxy import command_proxy
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
 
@@ -46,6 +47,8 @@ def run_skill_diagnostic(
     scene_index: int = 0,
     proxy: bool = False,
     seed: int = 0,
+    session: WebotsSession | None = None,
+    standoff: bool = False,
 ) -> dict[str, Any]:
     """Issue each setup and test action explicitly, keeping one observed result per dispatch."""
     if imperfect_approach and (empty_grasp or skill is not Skill.APPROACH):
@@ -61,23 +64,41 @@ def run_skill_diagnostic(
         if skill is Skill.APPROACH
         else _PROBE_ORDER[: _PROBE_ORDER.index(skill) + 1]
     )
+    if standoff and skill is not Skill.APPROACH:
+        raise ValueError("Standoff requires an isolated approach.")
     rows: list[dict[str, Any]] = []
-    with launch_webots_session(
-        webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
-    ) as session:
-        backend = session.client
+    context = (
+        nullcontext(session)
+        if session is not None
+        else launch_webots_session(
+            webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
+        )
+    )
+    with context as active:
+        backend = active.client
         observation = backend.reset(entry.scene, entry.seed)
         executor = SkillExecutor(entry.seed, observation)
         initial_can = backend.get_ground_truth().object_poses["CAN"]
         for index, selected in enumerate(probes):
             before = backend.get_ground_truth().object_poses["CAN"].position
+            gap_before = executor._tip_to_can_xy_m(backend, observation)
             target = None
             if selected in _CARTESIAN:
                 targets = executor._base_frame_targets(backend, observation)
                 x, y, z = map(float, targets[_CARTESIAN[selected]])
-                target = Vec3(x, y + (CAN_RADIUS_M if imperfect_approach else 0.0), z)
+                target = Vec3(
+                    x,
+                    y + (CAN_RADIUS_M if imperfect_approach else 0.0),
+                    z + (CAN_RADIUS_M if standoff else 0.0),
+                )
             audits = []
             audit = command_proxy(executor.monitor, selected, audits.append) if proxy else None
+            if proxy and selected in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RELEASE):
+                from vlarobot.execution.skill_live import grasp_evidence
+
+                anchor = executor._base_frame_targets(backend, observation)["grasp"]
+                if not grasp_evidence(observation, anchor):
+                    break
             result = executor.run_skill(
                 backend, observation, SkillAction(selected, target), audit=audit
             )
@@ -91,7 +112,8 @@ def run_skill_diagnostic(
                 )
             else:
                 isolated = bool(commands) and all(isinstance(cmd, JointTarget) for cmd in commands)
-            after = backend.get_ground_truth().object_poses["CAN"].position
+            final_pose = backend.get_ground_truth().object_poses["CAN"]
+            after = final_pose.position
             robot_before = asdict(observation.robot)
             robot_before.pop("diagnostics")
             tip_gap = executor._tip_to_can_xy_m(backend, result.observation)
@@ -108,7 +130,9 @@ def run_skill_diagnostic(
                 "can_after_world_m": asdict(after),
                 "can_rise_m": result.can_rise_m,
                 "robot_before": robot_before,
+                "tip_can_xy_before_m": gap_before,
                 "tip_can_xy_after_m": tip_gap,
+                "can_orientation_after_xyzw": final_pose.orientation,
                 "empty_grasp_verified": (
                     selected is Skill.CLOSE and result.settled and tip_gap > CLOSE_ALIGN_TOL
                     if empty_grasp
@@ -146,6 +170,7 @@ def run_skill_diagnostic(
             "seed": entry.seed,
             "probe": "empty-grasp-recovery" if empty_grasp else skill.value,
             "imperfect_approach": imperfect_approach,
+            "standoff": standoff,
             "initial_can_world_m": asdict(initial_can.position),
             "independent_final_metrics": placement,
             "place_target_world_m": SETTINGS.place_world,

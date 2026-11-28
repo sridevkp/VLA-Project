@@ -4193,3 +4193,14 @@ The initial empirical ridge fit combines demonstrated preferences with the
 available measured approach error and empty-close outcomes. It is a
 no-context baseline. It uses oracle CAN position and does not use observed
 future geometry as a decision feature.
+
+After the empty-hand carry failures, transport and placement candidates
+require current holding evidence and measured CAN elevation above reset.
+When direct holding telemetry is unavailable, the gate uses measured
+aperture and tool-to-CAN alignment. This is an oracle-assisted plausibility
+test, with actual CAN rise used separately. Release at carry height is
+excluded. The existing proxy and independent command checks also apply.
+Train collection counts dispatched, settled and isolated, labeled, and
+strictly matched records separately. The pilot fit uses observed skill
+progress as its utility target, including zero reward on repeated approach
+without alignment progress or on a verified empty close.

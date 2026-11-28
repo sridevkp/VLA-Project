@@ -22,6 +22,7 @@ def fit_cached_localizer(dataset: Path, source_manifest: Path, cache: Path, outp
         keys, features = archive["keys"], archive["pooled"]
         encoder = json.loads(archive["meta"].tobytes())
     labels = np.empty((len(keys), 3))
+    phases = np.empty(len(keys), dtype="<U24")
     fit = np.zeros(len(keys), dtype=bool)
     maximum_alignment_s = 0.0
     for episode in np.unique(keys[:, 0]):
@@ -37,22 +38,38 @@ def fit_cached_localizer(dataset: Path, source_manifest: Path, cache: Path, outp
             for line in stream:
                 row = json.loads(line)
                 if row.get("can_base_xyz_m") is not None and row.get("sim_time_s") is not None:
-                    entries.append((row["sim_time_s"], row["can_base_xyz_m"]))
-        trace_times = np.array([t for t, _ in entries])
+                    entries.append(
+                        (row["sim_time_s"], row["can_base_xyz_m"], row.get("state") or "")
+                    )
+        trace_times = np.array([t for t, _, _ in entries])
         nearest = np.abs(times[:, None] - trace_times).argmin(axis=1)
         maximum_alignment_s = max(
             maximum_alignment_s, float(np.abs(times - trace_times[nearest]).max())
         )
         labels[mask] = np.array([entries[i][1] for i in nearest])
+        phases[mask] = np.array([entries[i][2] for i in nearest])
         fit[mask] = source["scene"]["name"].rsplit("-s", 1)[0] in fit_groups
     model = _ridge_fit(features[fit], labels[fit])
+    predicted = _ridge_pred(model, features[~fit])
+    errors = np.linalg.norm((predicted - labels[~fit])[:, :2], axis=1)
+    held_phases = phases[~fit]
+    tails = {}
+    for name, mask in (
+        ("all", np.ones(len(errors), dtype=bool)),
+        ("approach", np.isin(held_phases, ["PREGRASP", "DESCEND"])),
+        ("grasp", held_phases == "CLOSE"),
+    ):
+        if mask.any():
+            p50, p90, p95 = np.percentile(errors[mask], [50, 90, 95])
+            tails[name] = {"n": int(mask.sum()), "p50_m": p50, "p90_m": p90, "p95_m": p95}
     result = {
         "identity": "v4-frozen-dinov2-cls-can-localizer",
         "encoder": encoder,
         "partition": partition["partition"],
         "fit_n": int(fit.sum()),
         "internal_train_evaluation_n": int((~fit).sum()),
-        "internal_train_error": _metrics(_ridge_pred(model, features[~fit]), labels[~fit]),
+        "internal_train_error": _metrics(predicted, labels[~fit]),
+        "internal_train_lateral_error": tails,
         "maximum_label_alignment_s": maximum_alignment_s,
         "model": {key: value.tolist() for key, value in model.items()},
     }

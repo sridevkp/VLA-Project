@@ -166,13 +166,15 @@ def save_feature_cache(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = json.dumps(asdict(spec), sort_keys=True).encode("utf-8")
+    tmp = path.with_suffix(".tmp.npz")
     np.savez_compressed(
-        path,
+        tmp,
         keys=keys.astype(np.int32),
         pooled=pooled.astype(np.float32),
         spatial=spatial.astype(np.float16),
         meta=np.frombuffer(meta, dtype=np.uint8),
     )
+    tmp.replace(path)
 
 
 def load_feature_cache(path: Path) -> dict[str, Any] | None:
@@ -186,3 +188,64 @@ def load_feature_cache(path: Path) -> dict[str, Any] | None:
             "spatial": data["spatial"],
             "meta": meta,
         }
+
+
+def build_resumable_cache(
+    image_bytes_by_key: dict[tuple[int, int], bytes],
+    *,
+    cache_path: Path,
+    model_name: str = DEFAULT_MODEL,
+    batch_size: int = 8,
+    device: str = "cpu",
+    checkpoint_every: int = 64,
+) -> dict[str, Any]:
+    """Encode images into a resumable cache; existing keys are skipped."""
+    spec = describe_encoder(model_name)
+    existing = load_feature_cache(cache_path)
+    done: dict[tuple[int, int], int] = {}
+    keys_list: list[tuple[int, int]] = []
+    pooled_list: list[np.ndarray] = []
+    spatial_list: list[np.ndarray] = []
+    if existing and existing.get("meta", {}).get("model_name") == spec.model_name:
+        old_keys = [tuple(int(x) for x in row) for row in existing["keys"].tolist()]
+        for i, k in enumerate(old_keys):
+            if k in image_bytes_by_key and k not in done:
+                done[k] = len(keys_list)
+                keys_list.append(k)
+                pooled_list.append(existing["pooled"][i])
+                spatial_list.append(existing["spatial"][i])
+    pending = [k for k in image_bytes_by_key.keys() if k not in done]
+    t0 = perf_counter()
+    for i in range(0, len(pending), batch_size):
+        batch_keys = pending[i : i + batch_size]
+        batch = [image_bytes_by_key[k] for k in batch_keys]
+        out = encode_image_bytes(batch, model_name=model_name, batch_size=batch_size, device=device)
+        for j, k in enumerate(batch_keys):
+            keys_list.append(k)
+            pooled_list.append(out["pooled"][j])
+            spatial_list.append(out["spatial"][j])
+        checkpoint = (i // batch_size) % max(1, checkpoint_every // max(1, batch_size)) == 0
+        if checkpoint or i + batch_size >= len(pending):
+            save_feature_cache(
+                cache_path,
+                keys=np.array(keys_list, dtype=np.int32),
+                pooled=np.stack(pooled_list).astype(np.float32),
+                spatial=np.stack(spatial_list).astype(np.float16),
+                spec=spec,
+            )
+    if keys_list:
+        save_feature_cache(
+            cache_path,
+            keys=np.array(keys_list, dtype=np.int32),
+            pooled=np.stack(pooled_list).astype(np.float32),
+            spatial=np.stack(spatial_list).astype(np.float16),
+            spec=spec,
+        )
+    return {
+        "cache": str(cache_path),
+        "total_requested": len(image_bytes_by_key),
+        "newly_encoded": len(pending),
+        "cached_total": len(keys_list),
+        "seconds": round(perf_counter() - t0, 3),
+        "spec": asdict(spec),
+    }

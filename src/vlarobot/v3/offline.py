@@ -501,19 +501,40 @@ def build_offline_evidence(
             sample_keys = [(s.episode_index, s.frame_index) for s in samples]
             if all(k in key_to_idx for k in sample_keys):
                 idx = [key_to_idx[k] for k in sample_keys]
-                pooled = data["pooled"][idx].astype(np.float32)
-                spatial = data["spatial"][idx].astype(np.float32)
-                # Coarse spatial map for localization-aware but compact baselines: 4x4 mean pool.
+                pooled = data["pooled"][idx].astype(np.float32)  # [N,384] CLS
+                spatial = data["spatial"][idx].astype(np.float32)  # [N,16,16,384]
                 n, h, w, c = spatial.shape
-                spatial_coarse = spatial.reshape(n, 4, h // 4, 4, w // 4, c).mean(axis=(2, 4))
-                spatial_flat = spatial_coarse.reshape(n, -1)
-                features["pretrained_image_pooled"] = pooled
-                features["pretrained_image_spatial4x4"] = spatial_flat
-                features["state_pretrained_image"] = np.column_stack([states, pooled, spatial_flat])
-                features["state_prev_action_pretrained_image"] = np.column_stack(
-                    [states, prev_actions, pooled, spatial_flat]
+                s4 = spatial.reshape(n, 4, h // 4, 4, w // 4, c).mean(axis=(2, 4)).reshape(n, -1)
+                s2 = spatial.reshape(n, 2, h // 2, 2, w // 2, c).mean(axis=(2, 4)).reshape(n, -1)
+                features["pretrained_cls"] = pooled
+                features["pretrained_spatial2x2"] = s2
+                features["pretrained_spatial4x4"] = s4
+                features["pretrained_cls_spatial4x4"] = np.column_stack([pooled, s4])
+                features["state_pretrained_cls"] = np.column_stack([states, pooled])
+                features["state_prev_action_pretrained_cls"] = np.column_stack(
+                    [states, prev_actions, pooled]
+                )
+                features["state_pretrained_cls_spatial4x4"] = np.column_stack([states, pooled, s4])
+                features["state_prev_action_pretrained_cls_spatial4x4"] = np.column_stack(
+                    [states, prev_actions, pooled, s4]
                 )
                 dino_meta = json.loads(bytes(data["meta"].tolist()).decode("utf-8"))
+                # Regularized spatial representation: PCA fit on TRAIN groups only.
+                for name, mat, k in [
+                    ("pretrained_spatial4x4_pca64", s4, 64),
+                    ("pretrained_spatial2x2_pca32", s2, 32),
+                ]:
+                    xtr = mat[train_index]
+                    mu = xtr.mean(axis=0)
+                    xc = xtr - mu
+                    # SVD on train only
+                    _, _, vt = np.linalg.svd(xc, full_matrices=False)
+                    comp = vt[: min(k, vt.shape[0])]
+                    proj = (mat - mu) @ comp.T
+                    features[name] = proj.astype(np.float32)
+                    features[f"state_prev_action_{name}"] = np.column_stack(
+                        [states, prev_actions, proj]
+                    ).astype(np.float32)
     image_features = load_image_features(dataset_root, samples, size=image_size)
     image_keys = [(sample.episode_index, sample.frame_index) for sample in samples]
     missing_images = sum(1 for key in image_keys if key not in image_features)
@@ -528,11 +549,23 @@ def build_offline_evidence(
         ("state_only", "state"),
         ("state_plus_prev_action", "state_prev_action"),
     ]
-    if "pretrained_image_pooled" in features:
+    if "pretrained_cls" in features:
         requested += [
-            ("pretrained_image_only", "pretrained_image_spatial4x4"),
-            ("state_plus_pretrained_image", "state_pretrained_image"),
-            ("state_prev_action_plus_pretrained_image", "state_prev_action_pretrained_image"),
+            ("pretrained_cls_only", "pretrained_cls"),
+            ("pretrained_spatial2x2_only", "pretrained_spatial2x2"),
+            ("pretrained_spatial4x4_only", "pretrained_spatial4x4"),
+            ("pretrained_spatial4x4_pca64_only", "pretrained_spatial4x4_pca64"),
+            ("state_plus_pretrained_cls", "state_pretrained_cls"),
+            ("state_prev_action_plus_pretrained_cls", "state_prev_action_pretrained_cls"),
+            ("state_plus_pretrained_cls_spatial4x4", "state_pretrained_cls_spatial4x4"),
+            (
+                "state_prev_action_plus_pretrained_cls_spatial4x4",
+                "state_prev_action_pretrained_cls_spatial4x4",
+            ),
+            (
+                "state_prev_action_plus_pretrained_spatial4x4_pca64",
+                "state_prev_action_pretrained_spatial4x4_pca64",
+            ),
         ]
     else:
         requested += [
@@ -555,8 +588,8 @@ def build_offline_evidence(
     baselines.append(_persistence_result(samples, targets, train_index, validation_index))
     folds = loso_folds(samples)
     loso_key = (
-        "state_prev_action_pretrained_image"
-        if "state_prev_action_pretrained_image" in features
+        "state_prev_action_pretrained_cls_spatial4x4"
+        if "state_prev_action_pretrained_cls_spatial4x4" in features
         else "state_prev_action"
     )
     loso = _loso_summary(samples, features[loso_key], targets, folds, alpha=alpha)
@@ -601,6 +634,14 @@ def build_offline_evidence(
         "pretrained_encoder": dino_meta,
         "loso": {"feature": loso_key, **loso},
         "gripper": _gripper_metrics(gripper, train_index, validation_index),
+        "phase_focus": {
+            b["name"]: {
+                p: b.get("validation_by_phase", {}).get(p)
+                for p in ["PREGRASP", "DESCEND", "PLACE_DESCEND"]
+            }
+            for b in baselines
+            if "validation_by_phase" in b
+        },
         "encoder": [
             {
                 "input_dim": row.input_dim,

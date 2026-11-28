@@ -128,13 +128,20 @@ def generate_candidates(
         open_position_m=GRIPPER_OPEN,
     )
     approach = targets[Skill.APPROACH]
+    offset = replace(approach, y=approach.y + CAN_RADIUS_M)
+    tool = state.robot.ee_pose.position.as_array()
+    alternate = (
+        (SkillAction(Skill.APPROACH, offset),)
+        if np.linalg.norm(offset.as_array() - tool) > 0.02
+        else ()
+    )
     return (
         *(
             candidate
             for candidate in candidates
             if candidate.skill is not Skill.RELEASE or can_rise_m < LIFT_MIN
         ),
-        SkillAction(Skill.APPROACH, replace(approach, y=approach.y + CAN_RADIUS_M)),
+        *alternate,
     )
 
 
@@ -305,6 +312,7 @@ def run_learned_smoke(
                 candidate,
                 audit=command_proxy(executor.monitor, candidate.skill, live_audits.append),
             )
+            tool_before = obs.robot.ee_pose.position
             obs = actual.observation
             pose_after = backend.get_ground_truth().object_poses["CAN"]
             x, y, _, _ = pose_after.orientation
@@ -313,6 +321,10 @@ def run_learned_smoke(
                 "settled": actual.settled,
                 "can_rise_m": actual.can_rise_m,
                 "can_tilt_deg": tilt_deg,
+                "tool_before_base_m": asdict(tool_before),
+                "tool_after_base_m": asdict(obs.robot.ee_pose.position),
+                "can_before_world_m": asdict(truth.object_poses["CAN"].position),
+                "can_after_world_m": asdict(pose_after.position),
                 "gripper_opening_m": obs.robot.gripper_opening,
                 "commands": [asdict(command) for command in actual.dispatched],
                 "failure": actual.failure_reason,

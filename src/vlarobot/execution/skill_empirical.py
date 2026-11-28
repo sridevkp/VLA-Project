@@ -242,6 +242,21 @@ def measured_utility(row: dict) -> float | None:
         return accuracy * float(np.clip((before - after) / CAN_RADIUS_M, 0, 1))
     if "tip_can_xy_before_m" not in row:
         return None
+    if skill is Skill.DESCEND:
+        target = Vec3(**row["target_base_m"]).as_array()
+        before = Vec3(**row["tool_before_base_m"]).as_array()
+        after = Vec3(**row["tool_after_base_m"]).as_array()
+        can_before = Vec3(**row["can_before_world_m"]).as_array()
+        can_after = Vec3(**row["can_after_world_m"]).as_array()
+        orientation = row["can_orientation_after_xyzw"]
+        tilt = np.degrees(
+            np.arccos(np.clip(1 - 2 * (orientation[0] ** 2 + orientation[1] ** 2), -1, 1))
+        )
+        if tilt >= SETTINGS.can_tilt_limit_deg:
+            return 0.0
+        progress = np.linalg.norm(before - target) - np.linalg.norm(after - target)
+        disturbance = np.linalg.norm(can_after - can_before)
+        return float(np.clip((progress - disturbance) / CAN_RADIUS_M, 0, 1))
     if skill is Skill.CLOSE:
         retained_opening = 0.002 < row["gripper_after_m"] < GRIPPER_OPEN - 0.002
         return float(retained_opening and row["tip_can_xy_after_m"] <= CLOSE_ALIGN_TOL)
@@ -336,6 +351,7 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
     )
     result = {
         "identity": "v4-initial-empirical-nominal-no-context",
+        "measured_label_version": "v4-skill-progress-with-descent-v1",
         "partition": partition,
         "measured_only_forecast_comparison": _matched_models(forecasts, fit_groups),
         "demonstration_fit_n": sum(row.scene_group in fit_groups for row in examples),
@@ -345,7 +361,7 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
         },
         "measured_fit_n": sum(row.scene_group in fit_groups for row in outcomes),
         "observed_reward": (
-            "Measured alignment, aperture, lift and placement progress; empty close is 0"
+            "Measured alignment, descent, aperture, lift and placement progress; empty close is 0"
         ),
         "demonstration_preference_label": 1.0,
         "mean": model.mean.tolist(),

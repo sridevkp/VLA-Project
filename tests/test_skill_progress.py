@@ -88,3 +88,25 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
             executor, backend, closed, WorldState(scene, closed.robot), can_rise_m=rise
         )
         assert Skill.DESCEND not in {action.skill for action in closed_actions}
+
+
+def test_descent_measures_progress_and_object_disturbance() -> None:
+    def xyz(z: float) -> dict[str, float]:
+        return {"x": 0.0, "y": 0.0, "z": z}
+
+    row = {
+        "skill": "DESCEND",
+        "settled": True,
+        "isolated": True,
+        "tip_can_xy_before_m": 0.0,
+        "target_base_m": xyz(0.8),
+        "tool_before_base_m": xyz(0.9),
+        "tool_after_base_m": xyz(0.8),
+        "can_before_world_m": xyz(0.8),
+        "can_after_world_m": xyz(0.8),
+        "can_orientation_after_xyzw": (0.0, 0.0, 0.0, 1.0),
+    }
+    assert measured_utility(row) == 1.0
+    assert measured_utility({**row, "can_after_world_m": xyz(0.65)}) == 0.0
+    assert measured_utility({**row, "tool_after_base_m": xyz(0.9)}) == 0.0
+    assert measured_utility({**row, "can_orientation_after_xyzw": (1, 0, 0, 0)}) == 0.0

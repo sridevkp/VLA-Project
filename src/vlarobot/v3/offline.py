@@ -40,6 +40,7 @@ class WaypointSample:
     frame_index: int
     state: np.ndarray
     action: np.ndarray
+    prev_action: np.ndarray
     target_xyz: np.ndarray
     gripper_target: float
     phase: str
@@ -142,6 +143,10 @@ def align_samples(
             frame_index = int(np.argmin(np.abs(times - float(event["t"]))))
             row = rows[frame_index]
             action = np.asarray(row["action"], dtype=float)
+            prev_idx = max(0, frame_index - 1)
+            prev_action = np.asarray(rows[prev_idx]["action"], dtype=float)
+            if frame_index == 0:
+                prev_action = np.zeros_like(action)
             samples.append(
                 WaypointSample(
                     episode_index=episode_index,
@@ -152,6 +157,7 @@ def align_samples(
                     frame_index=int(row["frame_index"]),
                     state=np.asarray(row["observation.state"], dtype=float),
                     action=action,
+                    prev_action=prev_action,
                     target_xyz=np.asarray(event["target"], dtype=float),
                     gripper_target=float(action[6]),
                     phase=str(event["phase"]),
@@ -276,12 +282,15 @@ def load_image_features(
     return {key: image_feature(value, size=size) for key, value in encoded.items()}
 
 
-def _matrix(samples: list[WaypointSample]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _matrix(
+    samples: list[WaypointSample],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     states = np.stack([sample.state for sample in samples])
     actions = np.stack([sample.action for sample in samples])
+    prev_actions = np.stack([sample.prev_action for sample in samples])
     targets = np.stack([sample.target_xyz for sample in samples])
     gripper = np.asarray([sample.gripper_target for sample in samples], dtype=float)
-    return states, actions, targets, gripper
+    return states, actions, prev_actions, targets, gripper
 
 
 def _ridge_result(
@@ -347,20 +356,55 @@ def _persistence_result(
     }
 
 
-def _gripper_summary(
-    gripper: np.ndarray, train: np.ndarray, validation: np.ndarray
+def _gripper_metrics(
+    gripper: np.ndarray, train: np.ndarray, validation: np.ndarray, threshold: float = 0.02
 ) -> dict[str, Any]:
-    values, counts = np.unique(np.round(gripper, 6), return_counts=True)
-    majority = float(values[int(np.argmax(counts))])
-    accuracy = float(np.mean(np.isclose(gripper[validation], majority, atol=1e-6)))
+    """Binary gripper metrics: close=1 when target > threshold."""
+    y_true = (gripper[validation] > threshold).astype(int)
+    # baseline: majority class from train
+    majority_close = int(np.mean(gripper[train] > threshold) >= 0.5)
+    y_pred = np.full_like(y_true, majority_close)
+    tp = int(np.sum((y_pred == 1) & (y_true == 1)))
+    fp = int(np.sum((y_pred == 1) & (y_true == 0)))
+    fn = int(np.sum((y_pred == 0) & (y_true == 1)))
+    tn = int(np.sum((y_pred == 0) & (y_true == 0)))
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    accuracy = float(np.mean(y_pred == y_true)) if len(y_true) else 0.0
     return {
-        "unique_targets_m": [float(value) for value in values],
-        "counts": [int(count) for count in counts],
-        "majority_target_m": majority,
-        "validation_majority_accuracy": round(accuracy, 6),
+        "threshold_m": threshold,
+        "positive_class": "close",
+        "train_close_rate": round(float(np.mean(gripper[train] > threshold)), 6),
+        "validation_close_rate": round(float(np.mean(y_true)), 6),
+        "majority_baseline": {
+            "predicted_close": bool(majority_close),
+            "accuracy": round(accuracy, 6),
+            "precision": round(precision, 6),
+            "recall": round(recall, 6),
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+            "tn": tn,
+        },
         "train_samples": int(len(train)),
         "validation_samples": int(len(validation)),
     }
+
+
+def _phase_position_errors(
+    samples: list[WaypointSample],
+    prediction: np.ndarray,
+    targets: np.ndarray,
+    indices: np.ndarray,
+) -> dict[str, Any]:
+    by_phase: dict[str, list[int]] = {}
+    for pos, idx in enumerate(indices.tolist()):
+        by_phase.setdefault(samples[idx].phase, []).append(pos)
+    out = {}
+    for phase, pos in sorted(by_phase.items()):
+        p = np.asarray(pos, dtype=int)
+        out[phase] = mean_abs_error(prediction[p], targets[p]) | {"n": int(len(p))}
+    return out
 
 
 def _loso_summary(
@@ -435,43 +479,87 @@ def build_offline_evidence(
     samples = align_samples(sources, rows)
     validation_bases = choose_validation_bases(samples)
     train, validation = split_by_bases(samples, validation_bases)
-    states, actions, targets, gripper = _matrix(samples)
+    states, actions, prev_actions, targets, gripper = _matrix(samples)
     train_ids = {id(sample) for sample in train}
     validation_ids = {id(sample) for sample in validation}
     train_index = np.asarray(
-        [index for index, sample in enumerate(samples) if id(sample) in train_ids]
+        [index for index, sample in enumerate(samples) if id(sample) in train_ids], dtype=int
     )
     validation_index = np.asarray(
-        [index for index, sample in enumerate(samples) if id(sample) in validation_ids]
+        [index for index, sample in enumerate(samples) if id(sample) in validation_ids], dtype=int
     )
     features = {
         "state": states,
-        "state_action": np.column_stack([states, actions]),
+        "state_prev_action": np.column_stack([states, prev_actions]),
     }
+    # Prefer cached DINOv2 features when available; fall back to legacy 16x16 grayscale.
+    dino_meta = None
+    dino_cache = Path("runs/v3/features/facebook__dinov2-small-224.npz")
+    if dino_cache.exists():
+        with np.load(dino_cache, allow_pickle=False) as data:
+            key_to_idx = {(int(k[0]), int(k[1])): i for i, k in enumerate(data["keys"].tolist())}
+            sample_keys = [(s.episode_index, s.frame_index) for s in samples]
+            if all(k in key_to_idx for k in sample_keys):
+                idx = [key_to_idx[k] for k in sample_keys]
+                pooled = data["pooled"][idx].astype(np.float32)
+                spatial = data["spatial"][idx].astype(np.float32)
+                # Coarse spatial map for localization-aware but compact baselines: 4x4 mean pool.
+                n, h, w, c = spatial.shape
+                spatial_coarse = spatial.reshape(n, 4, h // 4, 4, w // 4, c).mean(axis=(2, 4))
+                spatial_flat = spatial_coarse.reshape(n, -1)
+                features["pretrained_image_pooled"] = pooled
+                features["pretrained_image_spatial4x4"] = spatial_flat
+                features["state_pretrained_image"] = np.column_stack([states, pooled, spatial_flat])
+                features["state_prev_action_pretrained_image"] = np.column_stack(
+                    [states, prev_actions, pooled, spatial_flat]
+                )
+                dino_meta = json.loads(bytes(data["meta"].tolist()).decode("utf-8"))
     image_features = load_image_features(dataset_root, samples, size=image_size)
     image_keys = [(sample.episode_index, sample.frame_index) for sample in samples]
     missing_images = sum(1 for key in image_keys if key not in image_features)
-    if missing_images == 0:
+    if missing_images == 0 and "pretrained_image_pooled" not in features:
         images = np.stack([image_features[key] for key in image_keys])
         features["image"] = images
         features["state_image"] = np.column_stack([states, images])
+
     baselines = [_constant_result(train_index, validation_index, targets)]
-    for name in ("state", "state_action", "image", "state_image"):
-        if name in features:
-            baselines.append(
-                _ridge_result(
-                    f"{name}_ridge",
-                    features[name],
-                    targets,
-                    train_index,
-                    validation_index,
-                    alpha=alpha,
-                )
+    # Requested baseline set (use pretrained when available).
+    requested = [
+        ("state_only", "state"),
+        ("state_plus_prev_action", "state_prev_action"),
+    ]
+    if "pretrained_image_pooled" in features:
+        requested += [
+            ("pretrained_image_only", "pretrained_image_spatial4x4"),
+            ("state_plus_pretrained_image", "state_pretrained_image"),
+            ("state_prev_action_plus_pretrained_image", "state_prev_action_pretrained_image"),
+        ]
+    else:
+        requested += [
+            ("image_only_legacy16x16", "image"),
+            ("state_plus_image_legacy16x16", "state_image"),
+        ]
+    for label, key in requested:
+        if key in features:
+            res = _ridge_result(
+                label, features[key], targets, train_index, validation_index, alpha=alpha
             )
+            pred = predict_ridge(
+                fit_ridge(features[key][train_index], targets[train_index], alpha=alpha),
+                features[key][validation_index],
+            )
+            res["validation_by_phase"] = _phase_position_errors(
+                samples, pred, targets[validation_index], validation_index
+            )
+            baselines.append(res)
     baselines.append(_persistence_result(samples, targets, train_index, validation_index))
     folds = loso_folds(samples)
-    loso_features = features["state_action"]
-    loso = _loso_summary(samples, loso_features, targets, folds, alpha=alpha)
+    loso_key = (
+        "state_prev_action_pretrained_image"
+        if "state_prev_action_pretrained_image" in features
+        else "state_prev_action"
+    )
+    loso = _loso_summary(samples, features[loso_key], targets, folds, alpha=alpha)
 
     encoder = CompactEncoder(input_dim=image_size * image_size)
     encoder_results = benchmark_encoder(encoder, iterations=encoder_iterations)
@@ -506,11 +594,13 @@ def build_offline_evidence(
         "baselines": baselines,
         "image_coverage": {
             "waypoint_samples": len(samples),
-            "missing": int(missing_images),
-            "image_baselines_available": "image" in features,
+            "missing_legacy_images": int(missing_images),
+            "legacy_16x16_available": "image" in features,
+            "pretrained_dinov2_available": "pretrained_image_pooled" in features,
         },
-        "loso_state_action_ridge": loso,
-        "gripper": _gripper_summary(gripper, train_index, validation_index),
+        "pretrained_encoder": dino_meta,
+        "loso": {"feature": loso_key, **loso},
+        "gripper": _gripper_metrics(gripper, train_index, validation_index),
         "encoder": [
             {
                 "input_dim": row.input_dim,

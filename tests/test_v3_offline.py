@@ -42,6 +42,7 @@ def _sample(
         frame_index=episode * 10 + int(t * 10) if frame is None else frame,
         state=np.asarray([t, 0.0, 0.0], dtype=float),
         action=np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.02], dtype=float),
+        prev_action=np.zeros(7, dtype=float),
         target_xyz=np.asarray(target, dtype=float),
         gripper_target=0.02,
         phase="TRANSPORT",

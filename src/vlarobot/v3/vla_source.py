@@ -69,7 +69,11 @@ class V3ChunkSource:
         # delta from current EE
         ee = observation.robot.ee_pose.position.as_array().astype(np.float32)
         delta = (pred_xyz - ee).astype(np.float32)
-        delta = np.clip(delta, -0.04, 0.04)  # safety bound for learned delta
+        # Bounded feasible step: preserve direction, cap norm for IK feasibility.
+        norm = float(np.linalg.norm(delta))
+        max_step = 0.01
+        if norm > max_step:
+            delta = delta * (max_step / norm)
         action = np.array([delta[0], delta[1], delta[2], 0.0, 0.0, 0.0, grip_target], dtype=np.float32)
         self.prev_action = action.copy()  # policy-generated prev action
         timing = {"infer_s": perf_counter() - t0, "dino_s": dino_s}

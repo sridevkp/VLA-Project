@@ -221,6 +221,18 @@ def release_progress_score(raw_score: float, candidate: SkillAction, can_world: 
     return min(raw_score, 0.0) if error > PLACE_TOLERANCE_M else raw_score
 
 
+def close_progress_score(
+    raw_score: float,
+    candidate: SkillAction,
+    aperture_m: float,
+    grasp_available: bool,
+) -> float:
+    """A settled closed or grasping hand earns no added progress for another close."""
+    if candidate.skill is Skill.CLOSE and (aperture_m <= 0.002 or grasp_available):
+        return min(raw_score, 0.0)
+    return raw_score
+
+
 def run_learned_smoke(
     out: Path,
     model_path: Path,
@@ -341,6 +353,15 @@ def run_learned_smoke(
                     raw_score, candidate, can.position, best_approach_gap
                 )
                 score = release_progress_score(score, candidate, truth.object_poses["CAN"].position)
+                score = close_progress_score(
+                    score,
+                    candidate,
+                    obs.robot.gripper_opening,
+                    any(
+                        option.skill in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RELEASE)
+                        for option in candidates
+                    ),
+                )
                 assessments.append(
                     CandidateAssessment((("proxy", safe),), (score, None, None, None))
                 )

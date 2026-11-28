@@ -204,3 +204,13 @@ def test_lift_forecast_uses_multiple_cartesian_waypoints() -> None:
     assert len(chunk.actions) >= 3
     assert chunk.actions[-1].pose.position == target
     assert pose.position.z < chunk.actions[0].pose.position.z < target.z
+
+
+def test_close_progress_does_not_reward_recommanding_a_settled_grasp() -> None:
+    from vlarobot.execution.skill_live import close_progress_score
+    from vlarobot.execution.skills import Skill, SkillAction
+
+    close = SkillAction(Skill.CLOSE)
+    assert close_progress_score(0.8, close, GRIPPER_OPEN, False) == 0.8
+    assert close_progress_score(0.8, close, 0.0308, True) == 0.0
+    assert close_progress_score(0.8, close, 0.001, False) == 0.0

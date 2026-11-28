@@ -76,3 +76,15 @@ def test_learned_preference_responds_to_prediction_and_cannot_override_veto() ->
         state, vetoed, model, gate, context_mode=ContextMode.PREDICTED, seed=0
     )
     assert decision.selected_index == 0
+    no_context = fit_utility(
+        examples, train_groups={"train-a"}, prediction_context=False, ridge=0.1
+    )
+    decision, scores = select_skill(
+        state, candidates, no_context, gate, context_mode=ContextMode.NONE, seed=0
+    )
+    assert decision.selected_index == 0
+    assert scores == (0.5, 0.5)
+    shuffled, _ = select_skill(
+        state, candidates, model, gate, context_mode=ContextMode.SHUFFLED, seed=3
+    )
+    assert shuffled.selected_index == 0

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from vlarobot.backends.webots.config import ARM_JOINTS
+from vlarobot.backends.worldmind_bindings import runtime_safety_limits
 from vlarobot.core.interfaces import RobotBackend
 from vlarobot.core.types import Action, ApplyResult, GripperCmd, GroundTruth, Observation, Vec3
-from vlarobot.execution.safety_monitor import SafetyLimits, SafetyMonitor
+from vlarobot.execution.safety_monitor import SafetyMonitor
 from vlarobot.execution.scripted_can import ScriptedCanPolicy
 
 
@@ -76,9 +77,7 @@ class SkillExecutor(ScriptedCanPolicy):
         super().__init__()
         self.kinematics.set_seed(seed)
         self._reset_base_pose_world = initial.robot.base_pose_world
-        self.monitor = SafetyMonitor(
-            SafetyLimits(joint_position={name: self.kinematics.bounds(name) for name in ARM_JOINTS})
-        )
+        self.monitor = SafetyMonitor(runtime_safety_limits())
 
     def execute(self, backend: RobotBackend, seed: int) -> None:
         raise TypeError("Use run_skill with an explicit SkillAction.")

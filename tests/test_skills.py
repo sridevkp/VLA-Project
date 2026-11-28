@@ -29,3 +29,11 @@ def test_monitor_veto_stops_dispatch() -> None:
     assert not outcome.settled
     assert outcome.vetoes == ("veto",)
     apply.assert_not_called()
+
+
+def test_live_profile_supplies_velocity_limits_for_all_arm_joints() -> None:
+    backend = FakeBackend()
+    initial = backend.reset(ScenarioSpec(), 0)
+    monitor = SkillExecutor(0, initial).monitor
+    assert monitor.limits.joint_position.keys() == monitor.limits.joint_velocity.keys()
+    assert len(monitor.limits.joint_velocity) == 7

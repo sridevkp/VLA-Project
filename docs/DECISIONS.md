@@ -4136,3 +4136,16 @@ shipped `configs/worldmind_arm_sweep.yaml` is a blocked template. A reviewed
 transition checker must be bound before any live learned dispatch can pass
 this hard check. The isolated expert-primitive diagnostic has its own
 explicit command monitor and does not exercise learned selection.
+
+The isolated Linux Webots probes both settled on `train-clear-i00-s0`.
+OPEN dispatched one gripper command and reached 0.04310 m. PREGRASP
+dispatched ten joint commands and kept the gripper closed. The first
+PREGRASP attempt was vetoed before dispatch because the prototype omitted
+velocity limits. The executor now uses the existing effective runtime
+safety limits for joint positions, velocities, workspace and gripper.
+
+The V4 extractor processed both accepted manifests and produced 1,440
+decision boundaries from 160 distinct TRAIN episodes across eight scene
+groups. It records the decision-time snapshot separately from simulator
+measurements after the expert action. This export contains demonstrated
+actions. Counterfactual candidate outcomes require separate collection.

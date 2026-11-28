@@ -2655,13 +2655,28 @@ def bench_steps(
 def v4_skill_diagnostic(out: Path, webots: str | None = None, skill: str = "OPEN") -> None:
     """Check that one explicit V4 skill executes in isolation on TRAIN."""
     from vlarobot.execution.skill_diagnostic import run_skill_diagnostic
-
     from vlarobot.execution.skills import Skill
 
     result = run_skill_diagnostic(out, webots, Skill(skill))
     typer.echo(json.dumps(result, indent=2))
     if not result["settled"] or not result["isolated"]:
         raise typer.Exit(1)
+
+
+@app.command("v4-extract-demonstrations")
+def v4_extract_demonstrations(out: Path, manifests: list[Path]) -> None:
+    """Extract decision boundaries from accepted TRAIN demonstrations."""
+    from vlarobot.execution.demo_collection import write_json
+    from vlarobot.execution.skill_demonstrations import demonstration_decisions
+
+    if out.exists():
+        raise typer.BadParameter("Choose a fresh output file.")
+    decisions = [row for manifest in manifests for row in demonstration_decisions(manifest)]
+    if not decisions:
+        raise typer.BadParameter("No decision boundaries found.")
+    write_json(out, {"split": "train", "decisions": decisions})
+    episodes = {(row["scene"], row["seed"]) for row in decisions}
+    typer.echo(f"{len(decisions)} decisions from {len(episodes)} TRAIN episodes.")
 
 
 if __name__ == "__main__":

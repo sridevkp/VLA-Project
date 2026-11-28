@@ -397,3 +397,7 @@ clear scene at seed 0 and records the dispatched command types and measured
 settling in `skill-result.json`. For the Cartesian probe, use `--skill PREGRASP`
 with the existing TRAIN URDF registration selected in
 `VLAROBOT_URDF_REGISTRATION_FILE` and a separate output directory.
+
+Use `uv run python -m vlarobot.cli v4-extract-demonstrations <fresh-output.json> <original-accepted.json> <v3-accepted.json>`
+to extract decision examples. The input manifests must identify admitted
+TRAIN episodes and the raw trace directories must be available.

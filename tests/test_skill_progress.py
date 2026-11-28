@@ -63,7 +63,7 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
     tool = obs.robot.ee_pose.position.as_array()
     executor._base_frame_targets.return_value = {
         "pregrasp": tool + [0, 0, 0.12],
-        "grasp": tool,
+        "grasp": tool + [0, 0, -0.05],
         "lift": tool + [0, 0, 0.12],
         "transit": tool + [0.2, 0, 0.12],
         "place_descend": tool + [0.05, 0, -0.05],
@@ -91,6 +91,18 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
             executor, backend, closed, WorldState(scene, closed.robot), can_rise_m=rise
         )
         assert Skill.DESCEND not in {action.skill for action in closed_actions}
+
+    open_obs = replace(obs, robot=replace(obs.robot, gripper_opening=GRIPPER_OPEN))
+    open_state = WorldState(scene, open_obs.robot)
+    assert Skill.DESCEND in {
+        action.skill
+        for action in generate_candidates(executor, backend, open_obs, open_state, can_rise_m=0.0)
+    }
+    executor._base_frame_targets.return_value["grasp"] = tool + [0.2, 0, -0.05]
+    assert Skill.DESCEND not in {
+        action.skill
+        for action in generate_candidates(executor, backend, open_obs, open_state, can_rise_m=0.0)
+    }
 
 
 def test_descent_measures_progress_and_object_disturbance() -> None:

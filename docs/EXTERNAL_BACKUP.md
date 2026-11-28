@@ -37,6 +37,7 @@ for original in "${vla_originals[@]}"; do vla_sources+=("$HOME/Downloads/$origin
 vla_external=()
 vla_sources+=("${vla_external[@]}")
 for source in "${vla_sources[@]}"; do test -r "$source"; done
+test -s docs/evidence/v2-recovered-step21000-receipt.json
 vla_v2="$HOME/Downloads/v2-transition-warmstart-01"
 for file in optimizer-steps.jsonl step-021000/{model.safetensors,recovery-optimizer.pt,optimizer-steps.jsonl,export-manifest.json,recovery-provenance.json,training-approval.json}; do
   test -f "$vla_v2/$file"

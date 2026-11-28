@@ -1,0 +1,84 @@
+{
+  "status": "measured",
+  "n_samples": 2757,
+  "n_train": 1718,
+  "n_val": 1039,
+  "val_bases": [
+    "train-clear-i00",
+    "train-cluttered-i01",
+    "train-reach-limited-i02"
+  ],
+  "dino_meta": {
+    "hidden_size": 384,
+    "image_size": 224,
+    "license": "apache-2.0",
+    "model_name": "facebook/dinov2-small",
+    "num_register_tokens": 0,
+    "patch_grid_dim": 98304,
+    "patch_size": 14,
+    "pooled_dim": 384,
+    "preprocess": {
+      "backend": "transformers.AutoImageProcessor",
+      "center_crop": [
+        224,
+        224
+      ],
+      "do_normalize": true,
+      "do_rescale": true,
+      "image_mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "image_std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "interpolation": "3",
+      "rescale_factor": 0.00392156862745098,
+      "resize_shortest_edge": 256
+    },
+    "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+    "spatial_hw": [
+      16,
+      16
+    ]
+  },
+  "results": {
+    "state_only": {
+      "mae_x_m": 0.011251372854539856,
+      "mae_y_m": 0.02316885855696012,
+      "mae_z_m": 0.02897732661584183,
+      "mae_euclidean_m": 0.04274641043393445,
+      "median_euclidean_m": 0.03861736120730118
+    },
+    "dino_cls": {
+      "mae_x_m": 0.02221070682473296,
+      "mae_y_m": 0.02960096359129533,
+      "mae_z_m": 0.03439173039294072,
+      "mae_euclidean_m": 0.057213462415175234,
+      "median_euclidean_m": 0.05098312866068267
+    },
+    "dino_spatial4x4_pca64": {
+      "mae_x_m": 0.014582974560359794,
+      "mae_y_m": 0.01723358394482813,
+      "mae_z_m": 0.02567707345309234,
+      "mae_euclidean_m": 0.03938001207543635,
+      "median_euclidean_m": 0.03523794723577621
+    },
+    "state_plus_dino_pca64": {
+      "mae_x_m": 0.01107503458015689,
+      "mae_y_m": 0.015176197785622052,
+      "mae_z_m": 0.015583333403078476,
+      "mae_euclidean_m": 0.02795116761438074,
+      "median_euclidean_m": 0.025254898549715393
+    }
+  },
+  "displacement_response": {
+    "n_pairs": 186703,
+    "corr_dx": 0.9060429152023796,
+    "corr_dy": 0.9769343305472833
+  },
+  "note": "GT CAN positions used as offline training labels/eval refs only."
+}

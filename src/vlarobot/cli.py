@@ -2731,13 +2731,23 @@ def v4_learned_smoke(
     webots: str | None = None,
     localizer: Path | None = None,
     context: str = "smoke",
+    scene_index: int = 0,
+    max_decisions: int = 6,
 ) -> None:
-    """Run the bounded oracle-assisted V4 clear TRAIN diagnostic."""
+    """Run a bounded oracle-assisted V4 TRAIN diagnostic."""
     from vlarobot.execution.skill_live import run_learned_smoke
 
     typer.echo(
         json.dumps(
-            run_learned_smoke(out, model, webots, localizer_path=localizer, context=context),
+            run_learned_smoke(
+                out,
+                model,
+                webots,
+                localizer_path=localizer,
+                context=context,
+                scene_index=scene_index,
+                max_decisions=max_decisions,
+            ),
             indent=2,
         )
     )

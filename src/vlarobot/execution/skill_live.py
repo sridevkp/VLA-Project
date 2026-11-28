@@ -153,10 +153,13 @@ def run_learned_smoke(
     localizer_path: Path | None = None,
     context: str = "smoke",
     max_decisions: int = 6,
+    scene_index: int = 0,
 ) -> dict:
     """Run bounded receding-horizon decisions with scoped predictive vetoes."""
     if not 1 <= max_decisions <= 16:
         raise ValueError("Bounded diagnostic requires 1–16 decisions")
+    if scene_index not in (0, 1, 2):
+        raise ValueError("Choose one of the three approved TRAIN diagnostic scenes")
     model_bytes = model_path.read_bytes()
     artifact = json.loads(model_bytes)
     localize = None
@@ -186,7 +189,7 @@ def run_learned_smoke(
         required_constraints=("proxy",),
         inactive_components=(1, 2, 3),
     )
-    entry = build_episode_plan("train", 0, n=1)[0]
+    entry = build_episode_plan("train", 0, n=3)[scene_index]
     out.mkdir(parents=True, exist_ok=False)
     with launch_webots_session(
         webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
@@ -343,6 +346,7 @@ def run_learned_smoke(
             "mode": "oracle-assisted" if localize is None else "visual-can-oracle-safety",
             "utility_context": context,
             "stop_reason": stop_reason,
+            "decision_budget": max_decisions,
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
             "privileged_inputs": [

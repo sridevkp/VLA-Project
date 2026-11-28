@@ -4204,3 +4204,19 @@ Train collection counts dispatched, settled and isolated, labeled, and
 strictly matched records separately. The pilot fit uses observed skill
 progress as its utility target, including zero reward on repeated approach
 without alignment progress or on a verified empty close.
+
+The V4 segmented-LIFT forecast applies the existing tracking and joint checks
+at Cartesian waypoints instead of treating a lift as one joint jump. On eight
+recorded TRAIN lift starts, six single-endpoint forecasts failed a joint
+safety check. All eight segmented forecasts completed within the declared
+proxy scope. The model artifact identifies the forecast profile so matched
+runtime modes use a fit made with the same forecast.
+
+The next learned clear run lifted the CAN by 118.6 mm and transported it
+270.0 mm laterally. The CAN then dropped by 131.1 mm after OPEN. The run
+failed independent verification. V4 now excludes OPEN and RELEASE while
+observed CAN elevation meets the existing lift threshold, including when
+grasp evidence is inconclusive. A prior attachment can refresh after
+substantial measured tool–CAN co-motion with a partially closed gripper and
+a tool–CAN separation within one CAN diameter. An initial attachment still
+requires observed lift. Independent safety and proxy checks still run.

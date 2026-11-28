@@ -109,6 +109,8 @@ def generate_candidates(
     anchors = executor._base_frame_targets(backend, observation, can_world=can_world)
     targets = {skill: Vec3(*map(float, anchors[key])) for skill, key in _TARGETS.items()}
     plausible_grasp = grasp_evidence(observation, anchors["grasp"])
+    if state.robot.gripper_opening < GRIPPER_OPEN - 0.002:
+        targets.pop(Skill.DESCEND)
     if not plausible_grasp:
         for carry in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER):
             del targets[carry]

@@ -82,3 +82,9 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
         observed = {action.skill for action in candidates}
         assert expected <= observed
         assert (Skill.LOWER in observed) == (holding and rise > 0)
+
+        closed = replace(current, robot=replace(current.robot, gripper_opening=0.0))
+        closed_actions = generate_candidates(
+            executor, backend, closed, WorldState(scene, closed.robot), can_rise_m=rise
+        )
+        assert Skill.DESCEND not in {action.skill for action in closed_actions}

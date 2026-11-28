@@ -108,6 +108,10 @@ def generate_candidates(
     can_world = compose(base, state.scene.objects[0].pose).position.as_array()
     anchors = executor._base_frame_targets(backend, observation, can_world=can_world)
     targets = {skill: Vec3(*map(float, anchors[key])) for skill, key in _TARGETS.items()}
+    # Retreat clears a low tool locally. Traversing to the placement hover is a separate skill.
+    tool_pose = state.robot.ee_pose.position
+    retreat_z = max(tool_pose.z, targets[Skill.APPROACH].z, targets[Skill.RETREAT].z)
+    targets[Skill.RETREAT] = replace(tool_pose, z=retreat_z)
     plausible_grasp = grasp_evidence(observation, anchors["grasp"])
     if state.robot.gripper_opening < GRIPPER_OPEN - 0.002:
         targets.pop(Skill.DESCEND)

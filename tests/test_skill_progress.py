@@ -79,6 +79,9 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
         candidates = generate_candidates(
             executor, backend, current, WorldState(scene, current.robot), can_rise_m=rise
         )
+        retreat = next(action for action in candidates if action.skill is Skill.RETREAT)
+        assert retreat.target_base is not None
+        np.testing.assert_allclose(retreat.target_base.as_array()[:2], tool[:2])
         observed = {action.skill for action in candidates}
         assert expected <= observed
         assert (Skill.LOWER in observed) == (holding and rise > 0)

@@ -387,3 +387,13 @@ the frozen scripted-primary `vla_risk_veto` arm for FakeBackend fixtures. It eva
 candidate checks, selects the first eligible original draw, and applies the independent motor
 veto. The fixture has no CLI or scientific execution entry point. Run
 `uv run pytest -q tests/test_worldmind_heuristic_comparison.py` for offline verification.
+
+### V4 skill isolation on TRAIN
+
+From the V4 worktree, run `uv sync --extra dev`, then run
+`uv run python -m vlarobot.cli v4-skill-diagnostic runs/v4/open-check --skill OPEN --webots <executable>`.
+Use a fresh output directory each time. The diagnostic uses the first TRAIN
+clear scene at seed 0 and records the dispatched command types and measured
+settling in `skill-result.json`. For the Cartesian probe, use `--skill PREGRASP`
+with the existing TRAIN URDF registration selected in
+`VLAROBOT_URDF_REGISTRATION_FILE` and a separate output directory.

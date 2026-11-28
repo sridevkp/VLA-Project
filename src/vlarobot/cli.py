@@ -2651,5 +2651,18 @@ def bench_steps(
         client.close()
 
 
+@app.command("v4-skill-diagnostic")
+def v4_skill_diagnostic(out: Path, webots: str | None = None, skill: str = "OPEN") -> None:
+    """Check that one explicit V4 skill executes in isolation on TRAIN."""
+    from vlarobot.execution.skill_diagnostic import run_skill_diagnostic
+
+    from vlarobot.execution.skills import Skill
+
+    result = run_skill_diagnostic(out, webots, Skill(skill))
+    typer.echo(json.dumps(result, indent=2))
+    if not result["settled"] or not result["isolated"]:
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

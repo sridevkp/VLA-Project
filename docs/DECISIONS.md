@@ -4108,3 +4108,31 @@ evaluation on VALIDATION/TEST requires explicit owner approval after the V3
 configuration is frozen by commit. Evidence and plan:
 `docs/VLA_ALTERNATIVES_ASSESSMENT.md`, `docs/V3_DAILY_REPORT.md` and
 `docs/evidence/v3-demo-plan-80.json`.
+
+## V4 skill experiment — oracle-assisted TRAIN milestone (2026-11-28)
+
+The owner approved a separate skill-selection arm starting at V3 recovery commit
+`33962ad`. Each dispatch runs one Cartesian or gripper skill with the existing
+IK and settling logic and an independent command monitor. The utility prototype
+uses NumPy ridge regression on candidate features and optionally the final
+analytic state. Context interventions change the score inputs while the
+original surrogate vetoes remain authoritative. Runtime privileged inputs
+include the oracle CAN pose for world-state construction and CAN-rise logging.
+Demonstration and simulator-observed utility labels are offline sources.
+Synthetic fixture labels are used in unit tests.
+
+The original TRAIN export contains 80 episodes and 63,081 frames. All 85
+files in its integrity manifest matched SHA-256. The additional TRAIN collector
+logged 99 completed attempts, with 81 successful and 18 quarantined. The
+collector caps the sorted accepted manifest at its requested 80 episodes.
+Attempt 98 (`train-reach-limited-i02-s212`) is the successful surplus. All 80
+manifest entries had unique attempt IDs, successful independent audit flags
+for grasp, lift, transport and placement, nonempty trace files, and readable
+step arrays. This verifies the inputs at the collection level. V4 decision
+extraction and training eligibility still require checks.
+
+V4 honors `unverified-arm-sweep` from the existing analytic surrogate. The
+shipped `configs/worldmind_arm_sweep.yaml` is a blocked template. A reviewed
+transition checker must be bound before any live learned dispatch can pass
+this hard check. The isolated expert-primitive diagnostic has its own
+explicit command monitor and does not exercise learned selection.

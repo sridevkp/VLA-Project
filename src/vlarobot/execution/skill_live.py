@@ -3,6 +3,7 @@
 import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
+from copy import copy
 from dataclasses import asdict, replace
 from pathlib import Path
 from sys import executable
@@ -20,7 +21,12 @@ from vlarobot.backends.webots.config import (
     SETTINGS,
     TIME_STEP,
 )
-from vlarobot.backends.worldmind_bindings import _corrected_forward
+from vlarobot.backends.worldmind_bindings import (
+    CORRECTED_REGISTRATION_SHA256,
+    _corrected_forward,
+    corrected_kinematics,
+    corrected_registration_path,
+)
 from vlarobot.core.types import (
     Action,
     ApplyResult,
@@ -350,14 +356,36 @@ def _run_train_episode(
         required_constraints=("proxy",),
         inactive_components=(1, 2, 3),
     )
+    registration = corrected_registration_path()
+    kinematics = corrected_kinematics()
     out.mkdir(parents=True, exist_ok=False)
     with launch_webots_session(
-        webots=webots, trace_dir=out, headless=True, extra_env={"WEBOTS_PYTHON": executable}
+        webots=webots,
+        trace_dir=out,
+        headless=True,
+        extra_env={
+            "WEBOTS_PYTHON": executable,
+            "VLAROBOT_URDF_REGISTRATION_FILE": str(registration),
+        },
     ) as session:
         backend = session.client
         obs = backend.reset(entry.scene, entry.seed)
         home = obs.robot.joint_pos.copy()
         initial = backend.get_ground_truth().object_poses["CAN"]
+        write_json(
+            out / "reset-observation.json",
+            {
+                "tool_base": asdict(obs.robot.ee_pose),
+                "joint_pos_rad": home,
+                "base_world": asdict(obs.robot.base_pose_world)
+                if obs.robot.base_pose_world is not None
+                else None,
+                "gripper_opening_m": obs.robot.gripper_opening,
+                "can_world": asdict(initial),
+                "reset_fingerprint": obs.robot.diagnostics.get("reset_fingerprint"),
+                "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
+            },
+        )
         decisions = []
         stop_reason = "decision budget"
         best_approach_gap = None
@@ -375,7 +403,7 @@ def _run_train_episode(
             state = WorldState(
                 SceneState([ObjectState("CAN", "can", can, Vec3(0, 0, 0), 1.0)]), obs.robot
             )
-            executor = SkillExecutor(entry.seed, obs)
+            executor = SkillExecutor(entry.seed, obs, kinematics=copy(kinematics))
             measured_rise = truth.object_poses["CAN"].position.z - initial.position.z
             candidates = generate_candidates(
                 executor,
@@ -415,7 +443,7 @@ def _run_train_episode(
             for candidate_index, candidate in enumerate(candidates):
                 checks = []
                 rehearsal = _PreviewBackend(obs, truth)
-                preview = SkillExecutor(entry.seed, obs)
+                preview = SkillExecutor(entry.seed, obs, kinematics=copy(kinematics))
                 predicted = preview.run_skill(
                     rehearsal,
                     obs,
@@ -613,6 +641,7 @@ def _run_train_episode(
             "decision_budget": max_decisions,
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
+            "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
             "privileged_inputs": [
                 "CAN pose for grasp and release safety, completion scoring and verification",
                 "HAM/APP poses for proxy",
@@ -669,6 +698,7 @@ def run_train_admission(
         "mode": "oracle-assisted",
         "utility_context": "predicted",
         "profile": PROFILE_ID,
+        "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
         "model_sha256": model_sha,
         "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
         "stop_reason": "termination selected",

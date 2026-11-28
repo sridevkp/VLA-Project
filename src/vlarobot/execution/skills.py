@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from vlarobot.backends.webots.config import ARM_JOINTS
+from vlarobot.backends.webots.kinematics import Kinematics
 from vlarobot.backends.worldmind_bindings import runtime_safety_limits
 from vlarobot.core.interfaces import RobotBackend
 from vlarobot.core.types import (
@@ -115,8 +116,10 @@ class _CheckedBackend:
 class SkillExecutor(ScriptedCanPolicy):
     """Reuse expert primitives with an explicit one-skill entry point and command guard."""
 
-    def __init__(self, seed: int, initial: Observation) -> None:
-        super().__init__()
+    def __init__(
+        self, seed: int, initial: Observation, *, kinematics: Kinematics | None = None
+    ) -> None:
+        super().__init__(kinematics=kinematics)
         self.kinematics.set_seed(seed)
         self._reset_base_pose_world = initial.robot.base_pose_world
         self.monitor = SafetyMonitor(runtime_safety_limits())

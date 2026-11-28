@@ -272,6 +272,7 @@ def test_admission_requires_verified_home_and_preserves_all_24_trials(
         "seed": clear.seed,
         "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
         "profile": skill_live.PROFILE_ID,
+        "urdf_registration_sha256": skill_live.CORRECTED_REGISTRATION_SHA256,
         "home_tolerance_rad": skill_live.HOME_VERIFICATION_TOLERANCE_RAD,
         "utility_context": "predicted",
         "stop_reason": "termination selected",

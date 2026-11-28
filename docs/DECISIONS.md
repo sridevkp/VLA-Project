@@ -4236,3 +4236,14 @@ completion objective ranks HOME, local retreat, and termination at valid
 placement. The empirical utility and candidate scores before placement retain
 their existing meaning. A task verification claim still requires the frozen
 independent predicate.
+
+The V4 reproduction audit found that an omitted
+`VLAROBOT_URDF_REGISTRATION_FILE` changed the reported reset tool position by
+71.2 mm with effectively identical recorded CAN world position and arm starts
+inferred from the linear waypoint preview. The archived tool position agrees
+with the existing registered URDF. V4 live diagnostics and admission now pin
+that registration in Webots, the skill executor, and the existing analytic
+binding. The reset snapshot records joint, tool, base, and CAN state plus the
+registration digest. The original archived observation record has no full
+robot-state frames, so reconstruction uses the logged tool and waypoint
+evidence.

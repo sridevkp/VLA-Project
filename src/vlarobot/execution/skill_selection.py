@@ -145,7 +145,7 @@ def fit_utility(
         raise ValueError("finite training features and utility required")
     mean = x.mean(axis=0)
     scale = x.std(axis=0)
-    scale[scale == 0] = 1.0
+    scale[scale < np.sqrt(np.finfo(x.dtype).eps)] = 1.0
     z = (x - mean) / scale
     intercept = float(y.mean())
     coefficients = np.linalg.solve(z.T @ z + ridge * np.eye(z.shape[1]), z.T @ (y - intercept))

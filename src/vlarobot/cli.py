@@ -2724,5 +2724,35 @@ def v4_train_empirical(dataset: Path, output: Path, measured: list[Path]) -> Non
     )
 
 
+@app.command("v4-learned-smoke")
+def v4_learned_smoke(
+    out: Path, model: Path, webots: str | None = None, localizer: Path | None = None
+) -> None:
+    """Run the bounded oracle-assisted V4 clear TRAIN diagnostic."""
+    from vlarobot.execution.skill_live import run_learned_smoke
+
+    typer.echo(
+        json.dumps(run_learned_smoke(out, model, webots, localizer_path=localizer), indent=2)
+    )
+
+
+@app.command("v4-collect-approach-pairs")
+def v4_collect_approach_pairs(out: Path, webots: str | None = None, seed: int = 1) -> None:
+    """Collect a bounded three-worker batch of TRAIN approach alternatives."""
+    from vlarobot.execution.skill_collection import collect_approach_pairs
+
+    typer.echo(json.dumps(collect_approach_pairs(out, webots, seed), indent=2))
+
+
+@app.command("v4-fit-localizer")
+def v4_fit_localizer(dataset: Path, sources: Path, cache: Path, output: Path) -> None:
+    """Fit a CAN localizer on cached V3 frozen visual features."""
+    from vlarobot.execution.skill_vision import fit_cached_localizer
+
+    typer.echo(
+        json.dumps(fit_cached_localizer(dataset, sources, cache, output)["internal_train_error"])
+    )
+
+
 if __name__ == "__main__":
     app()

@@ -418,3 +418,15 @@ scenes, respectively.
 Add `--proxy` to an isolated V4 TRAIN skill probe to run the separate
 geometric audit before each dispatched command. To fit the initial
 no-context utility model, run `uv run python -m vlarobot.cli v4-train-empirical <eligible-decisions.json> <fresh-model.json> <observed-skill-result.json> ...`.
+
+Use `uv run python -m vlarobot.cli v4-learned-smoke <fresh-dir> <initial-empirical-model.json>`
+for the bounded clear TRAIN oracle-assisted diagnostic. It previews each
+candidate through the skill executor, ranks eligible candidates, and
+rechecks live commands against the separate proxy before dispatch.
+The optional `--localizer` requires the pinned DINOv2 model in the local
+cache and a Python environment with PyTorch and Transformers.
+
+Use `uv run python -m vlarobot.cli v4-collect-approach-pairs <fresh-dir> --seed 1`
+for a bounded three-worker TRAIN throughput batch. Each scene resets
+separately for its centered and offset proposal. Vetoes and incomplete
+attempts stay in the output.

@@ -167,3 +167,40 @@ def test_transport_uses_live_attachment_evidence_after_observed_lift() -> None:
     assert grasp_evidence(after, far, measured_can_base=can_base, attachment_offset=measured)
     moved = replace(can_base, position=replace(can_base.position, x=can_base.position.x + 0.02))
     assert not grasp_evidence(after, far, measured_can_base=moved, attachment_offset=measured)
+
+
+def test_release_away_from_destination_remains_a_recovery_option() -> None:
+    from vlarobot.backends.webots.config import PLACE_WORLD
+    from vlarobot.core.types import Vec3
+    from vlarobot.execution.skill_live import release_progress_score
+    from vlarobot.execution.skills import Skill, SkillAction
+
+    release = SkillAction(Skill.RELEASE)
+    target = Vec3(*PLACE_WORLD)
+    assert release_progress_score(0.8, release, target) == 0.8
+    assert release_progress_score(0.8, release, replace(target, x=target.x + 1.0)) == 0.0
+
+
+def test_lift_forecast_uses_multiple_cartesian_waypoints() -> None:
+    from unittest.mock import patch
+
+    from vlarobot.core.types import ObjectState, SceneState, Vec3, WorldState
+    from vlarobot.execution.skill_empirical import forecast_candidate
+    from vlarobot.execution.skills import Skill, SkillAction
+    from vlarobot.world_model.rollout import Trajectory
+
+    observation = FakeBackend().reset(ScenarioSpec(), 0)
+    pose = observation.robot.ee_pose
+    state = WorldState(
+        SceneState([ObjectState("CAN", "can", pose, Vec3(0.06, 0.06, 0.1), 1.0)]),
+        observation.robot,
+    )
+    target = replace(pose.position, z=pose.position.z + 0.12)
+    with patch("vlarobot.execution.skill_empirical.AnalyticSurrogate") as surrogate:
+        predictor = surrogate.return_value
+        predictor.predict_trajectory.return_value = Trajectory((state,), 1.0, (), (), ())
+        forecast_candidate(state, SkillAction(Skill.LIFT, target))
+    _, chunk = predictor.predict_trajectory.call_args.args
+    assert len(chunk.actions) >= 3
+    assert chunk.actions[-1].pose.position == target
+    assert pose.position.z < chunk.actions[0].pose.position.z < target.z

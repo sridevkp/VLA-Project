@@ -14,6 +14,7 @@ from vlarobot.backends.webots.config import (
     GRIPPER_OPEN,
     LIFT_MIN,
     PLACE_TOLERANCE_M,
+    PLACE_WORLD,
     SETTINGS,
     TIME_STEP,
 )
@@ -35,7 +36,7 @@ from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import launch_webots_session
-from vlarobot.execution.skill_empirical import forecast_candidate
+from vlarobot.execution.skill_empirical import FORECAST_PROFILE, forecast_candidate
 from vlarobot.execution.skill_proxy import PROFILE_ID, command_proxy
 from vlarobot.execution.skill_selection import UtilityModel, enumerate_skills
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
@@ -212,6 +213,14 @@ def approach_progress_score(
     return min(raw_score, (remaining_gain - CLOSE_ALIGN_TOL) / CAN_RADIUS_M)
 
 
+def release_progress_score(raw_score: float, candidate: SkillAction, can_world: Vec3) -> float:
+    """Treat releasing away from the destination as recovery with no placement credit."""
+    if candidate.skill is not Skill.RELEASE:
+        return raw_score
+    error = float(np.linalg.norm(can_world.as_array() - np.asarray(PLACE_WORLD)))
+    return min(raw_score, 0.0) if error > PLACE_TOLERANCE_M else raw_score
+
+
 def run_learned_smoke(
     out: Path,
     model_path: Path,
@@ -241,6 +250,10 @@ def run_learned_smoke(
     uses_context = context in {"predicted", "shuffled", "controlled"}
     weights = artifact
     if context != "smoke":
+        if artifact.get("forecast_profile") != FORECAST_PROFILE:
+            raise ValueError(
+                "Refit the matched utility model for the current LIFT forecast profile"
+            )
         matched = artifact["measured_only_forecast_comparison"]
         weights = matched["context_model" if uses_context else "matched_no_context_model"]
     model = UtilityModel(
@@ -327,6 +340,7 @@ def run_learned_smoke(
                 score = approach_progress_score(
                     raw_score, candidate, can.position, best_approach_gap
                 )
+                score = release_progress_score(score, candidate, truth.object_poses["CAN"].position)
                 assessments.append(
                     CandidateAssessment((("proxy", safe),), (score, None, None, None))
                 )

@@ -14,6 +14,8 @@ from vlarobot.backends.webots.config import (
     CLOSE_ALIGN_TOL,
     GRIPPER_OPEN,
     LIFT_MIN,
+    LINEAR_WAYPOINT_SPACING_M,
+    MAX_JOINT_STEP_RAD,
     PLACE_TOLERANCE_M,
     PLACE_WORLD,
     SETTINGS,
@@ -25,6 +27,8 @@ from vlarobot.backends.worldmind_bindings import (
     runtime_safety_limits,
 )
 from vlarobot.core.types import (
+    ActionChunk,
+    EEPoseTarget,
     JointTarget,
     ObjectState,
     Pose2D,
@@ -36,6 +40,7 @@ from vlarobot.core.types import (
 )
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.safety_monitor import SafetyMonitor
+from vlarobot.execution.scripted_can import _ik_tolerance_for_state
 from vlarobot.execution.skill_demonstrations import partition_demonstrations
 from vlarobot.execution.skill_selection import (
     ScoringInput,
@@ -48,6 +53,7 @@ from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.world_model.kinematic import VelocityLimitedKinematics
 from vlarobot.world_model.rollout import AnalyticSurrogate, Trajectory, compose
 
+FORECAST_PROFILE = "v4-segmented-lift-v1"
 _IDENTITY = (0.0, 0.0, 0.0, 1.0)
 _RESET_MATCH_TOLERANCE = 1e-6
 
@@ -91,14 +97,23 @@ def forecast_candidate(state: WorldState, action: SkillAction) -> ScoringInput:
     kin = corrected_kinematics()
     kin.set_seed(0)
 
+    segmented = action.skill is Skill.LIFT and action.target_base is not None
+    position_tolerance = (
+        _ik_tolerance_for_state(action.skill.value) if segmented else SETTINGS.ik_tol
+    )
+
     def inverse(pose: Pose3D, current: RobotState) -> JointTarget | None:
         try:
             q, error, tilt = kin.solve(
-                pose.position.as_array(), _full_joint_vector(current.joint_pos), restarts=True
+                pose.position.as_array(),
+                _full_joint_vector(current.joint_pos),
+                restarts=True,
+                position_tolerance=position_tolerance,
+                max_joint_step_rad=MAX_JOINT_STEP_RAD if segmented else None,
             )
         except RuntimeError:
             return None
-        if error > SETTINGS.ik_tol or tilt > SETTINGS.max_tilt_deg:
+        if error > position_tolerance or tilt > SETTINGS.max_tilt_deg:
             return None
         return JointTarget({name: float(q[kin.idx[name]]) for name in ARM_JOINTS})
 
@@ -111,6 +126,26 @@ def forecast_candidate(state: WorldState, action: SkillAction) -> ScoringInput:
         support_z_m={"CAN": can_z},
         validate=lambda a, r: monitor.validate(a, r).accepted,
     )
+    if segmented:
+        assert action.target_base is not None
+        start = state.robot.ee_pose.position.as_array()
+        target = action.target_base.as_array()
+        count = max(2, int(np.linalg.norm(target - start) / LINEAR_WAYPOINT_SPACING_M))
+        commands = [
+            EEPoseTarget(
+                Pose3D(
+                    Vec3(*map(float, (1 - alpha) * start + alpha * target)),
+                    state.robot.ee_pose.orientation,
+                ),
+                gripper=None,
+                duration=1.0,
+            )
+            for alpha in np.linspace(0.0, 1.0, count + 1)[1:]
+        ]
+        trajectory = surrogate.predict_trajectory(state, ActionChunk(commands, 1.0, "vla"))
+        return ScoringInput(
+            action, trajectory, tuple((reason, False) for reason in trajectory.hard_reasons)
+        )
     return predict_candidates(
         state, (action,), surrogate, horizon_s=1.0, open_position_m=GRIPPER_OPEN
     )[0]
@@ -356,6 +391,7 @@ def train_empirical(dataset: Path, output: Path, measured: list[Path]) -> dict[s
     )
     result = {
         "identity": "v4-initial-empirical-nominal-no-context",
+        "forecast_profile": FORECAST_PROFILE,
         "measured_label_version": "v4-skill-progress-with-descent-v2",
         "partition": partition,
         "measured_only_forecast_comparison": _matched_models(forecasts, fit_groups),

@@ -15,7 +15,23 @@ def _sigmoid(x):
 
 
 class V3ChunkSource:
-    def __init__(self, *, ridge_base, ridge_resid, grip_w, grip_b, grip_mu, grip_sd, pca_mu, pca_comp, dino, feature_mode="no_prev_grip"):
+    def __init__(
+        self,
+        *,
+        ridge_base,
+        ridge_resid,
+        grip_w,
+        grip_b,
+        grip_mu,
+        grip_sd,
+        pca_mu,
+        pca_comp,
+        dino,
+        feature_mode="no_prev_grip",
+        can_model=None,
+        waypoint_mode="absolute",  # absolute | object_relative
+        waypoint_model=None,
+    ):
         self.ridge_base = ridge_base
         self.ridge_resid = ridge_resid
         self.grip_w = grip_w
@@ -28,6 +44,9 @@ class V3ChunkSource:
         self.feature_mode = feature_mode
         self.prev_action = np.zeros(7, dtype=np.float32)
         self.last_timing = {}
+        self.can_model = can_model
+        self.waypoint_mode = waypoint_mode
+        self.waypoint_model = waypoint_model
 
     def reset(self, seed: int) -> None:
         self.prev_action = np.zeros(7, dtype=np.float32)
@@ -60,10 +79,26 @@ class V3ChunkSource:
         elif self.feature_mode == "no_prev":
             prev = np.zeros(7, dtype=np.float32)
         x = np.concatenate([state, prev, vis]).reshape(1, -1)
-        base_x = x[:, :15]
-        pred_xyz = (predict_ridge(self.ridge_base, base_x) + predict_ridge(self.ridge_resid, x[:, 15:])).reshape(3)
-        gx = (x - self.grip_mu) / self.grip_sd
-        grip_logit = float(gx @ self.grip_w + self.grip_b)
+        can_pred = None
+        if self.can_model is not None:
+            X_loc = np.concatenate([state, vis]).reshape(1, -1)
+            can_pred = predict_ridge(self.can_model, X_loc).reshape(3)
+        if self.waypoint_mode == "object_relative" and self.waypoint_model is not None and can_pred is not None:
+            X_wp = np.concatenate([state, prev, can_pred, vis]).reshape(1, -1)
+            rel = predict_ridge(self.waypoint_model, X_wp).reshape(3)
+            pred_xyz = (can_pred + rel).reshape(3)
+        else:
+            base_x = x[:, :15]
+            pred_xyz = (
+                predict_ridge(self.ridge_base, base_x) + predict_ridge(self.ridge_resid, x[:, 15:])
+            ).reshape(3)
+        gx_in = np.concatenate([state, prev, vis, can_pred]).reshape(1, -1) if can_pred is not None else x
+        if gx_in.shape[1] == self.grip_mu.shape[0]:
+            gx = (gx_in - self.grip_mu) / self.grip_sd
+            grip_logit = float(gx @ self.grip_w + self.grip_b)
+        else:
+            gx = (x - self.grip_mu) / self.grip_sd
+            grip_logit = float(gx @ self.grip_w + self.grip_b)
         grip_open = grip_logit > 0.0
         grip_target = 0.045 if grip_open else 0.0
         # delta from current EE

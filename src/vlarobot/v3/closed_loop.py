@@ -16,7 +16,7 @@ from vlarobot.execution.episode_runner import DEFAULT_WORLD, launch_webots_sessi
 from vlarobot.execution.vla_campaign import CanEpisodeScorer, make_vla_adapter
 from vlarobot.execution.vla_episode import VLAEpisodePolicy
 from vlarobot.vla.settings import load_vla_settings
-from vlarobot.v3.offline import load_metadata_rows, load_sources, align_samples, choose_validation_bases, split_by_bases, fit_ridge
+from vlarobot.v3.offline import load_metadata_rows, load_sources, align_samples, choose_validation_bases, split_by_bases, fit_ridge, predict_ridge
 from vlarobot.v3.train import _load_dino_cache, _pca_fit_transform, _fit_gripper_logistic
 from vlarobot.v3.vla_source import V3ChunkSource
 
@@ -68,11 +68,23 @@ def build_v3_source(dataset_root: Path, cache_path: Path) -> V3ChunkSource:
     ridge_base = fit_ridge(Xb[tr_idx], targets[tr_idx])
     resid = targets[tr_idx] - (np.column_stack([np.ones(len(tr_idx)), (Xb[tr_idx]-ridge_base['mean'])/ridge_base['scale']]) @ ridge_base['coefficients'])
     ridge_resid = fit_ridge(pca64[tr_idx], resid)
+    # CAN localization model (offline GT labels only)
+    from vlarobot.v3.localization import _can_base_at_frame
+    y_can=[]
+    for s in samples:
+        c=_can_base_at_frame(Path(sources[s.episode_index]['raw_dir']), s.t)
+        y_can.append(c if c is not None else np.zeros(3,dtype=np.float32))
+    y_can=np.stack(y_can).astype(np.float32)
+    X_loc=np.concatenate([state,pca64],axis=1)
+    can_model=fit_ridge(X_loc[tr_idx], y_can[tr_idx])
+    can_pred=predict_ridge(can_model, X_loc)
+    # object-relative waypoint model
+    rel_target=targets-can_pred
+    X_wp=np.concatenate([state,prev_no_grip,can_pred,pca64],axis=1)
+    waypoint_model=fit_ridge(X_wp[tr_idx], rel_target[tr_idx])
     # gripper without prev gripper action (deployment candidate)
-    Xg = np.column_stack([state, prev_no_grip, pca64])
+    Xg = np.column_stack([state, prev_no_grip, pca64, can_pred])
     grip = _fit_gripper_logistic(Xg[tr_idx], yg[tr_idx], Xg[tr_idx], yg[tr_idx])
-    pca_mu = spatial[tr_idx].mean(axis=0)
-    # recompute pca mu/comp on spatial4
     xtr = spatial[tr_idx]
     mu = xtr.mean(axis=0)
     _, _, vt = np.linalg.svd(xtr - mu, full_matrices=False)
@@ -81,7 +93,8 @@ def build_v3_source(dataset_root: Path, cache_path: Path) -> V3ChunkSource:
     return V3ChunkSource(
         ridge_base=ridge_base, ridge_resid=ridge_resid,
         grip_w=grip['W'], grip_b=grip['b'], grip_mu=grip['mu'], grip_sd=grip['sd'],
-        pca_mu=mu, pca_comp=comp, dino=dino, feature_mode='no_prev_grip'
+        pca_mu=mu, pca_comp=comp, dino=dino, feature_mode='no_prev_grip',
+        can_model=can_model, waypoint_mode='object_relative', waypoint_model=waypoint_model,
     )
 
 

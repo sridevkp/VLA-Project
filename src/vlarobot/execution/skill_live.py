@@ -82,16 +82,47 @@ class _PreviewBackend:
         return self.observation
 
 
-def grasp_evidence(observation: Observation, grasp_base: np.ndarray) -> bool:
-    """Use current aperture and alignment when a direct holding sensor is absent."""
+def measured_attachment(
+    before: Observation,
+    after: Observation,
+    can_before_world: Vec3,
+    can_after_world: Vec3,
+) -> np.ndarray | None:
+    """Establish a tool-relative CAN offset only after observed upward co-motion."""
+    old_base, new_base = before.robot.base_pose_world, after.robot.base_pose_world
+    if old_base is None or new_base is None:
+        return None
+    if not 0.002 < after.robot.gripper_opening < GRIPPER_OPEN - 0.002:
+        return None
+    old_tool = compose(old_base, before.robot.ee_pose)
+    new_tool = compose(new_base, after.robot.ee_pose)
+    tool_delta = new_tool.position.as_array() - old_tool.position.as_array()
+    can_delta = can_after_world.as_array() - can_before_world.as_array()
+    if can_delta[2] < LIFT_MIN or np.linalg.norm(can_delta - tool_delta) > CAN_RADIUS_M:
+        return None
+    can_in_tool = compose(_inverse_pose(new_tool), Pose3D(can_after_world, (0.0, 0.0, 0.0, 1.0)))
+    return can_in_tool.position.as_array()
+
+
+def grasp_evidence(
+    observation: Observation,
+    grasp_base: np.ndarray,
+    *,
+    measured_can_base: Pose3D | None = None,
+    attachment_offset: np.ndarray | None = None,
+) -> bool:
+    """Require current aperture plus alignment or a still-observed measured attachment."""
     robot = observation.robot
     if robot.gripper_holding is not None:
         return robot.gripper_holding
-    aperture = robot.gripper_opening
-    return bool(
-        0.002 < aperture < GRIPPER_OPEN - 0.002
-        and np.linalg.norm(robot.ee_pose.position.as_array() - grasp_base) < CLOSE_ALIGN_TOL
-    )
+    if not 0.002 < robot.gripper_opening < GRIPPER_OPEN - 0.002:
+        return False
+    if attachment_offset is not None and measured_can_base is not None:
+        observed_offset = compose(_inverse_pose(robot.ee_pose), measured_can_base).position
+        return bool(
+            np.linalg.norm(observed_offset.as_array() - attachment_offset) < CLOSE_ALIGN_TOL
+        )
+    return bool(np.linalg.norm(robot.ee_pose.position.as_array() - grasp_base) < CLOSE_ALIGN_TOL)
 
 
 def generate_candidates(
@@ -101,6 +132,8 @@ def generate_candidates(
     state: WorldState,
     *,
     can_rise_m: float,
+    measured_can_base: Pose3D | None = None,
+    attachment_offset: np.ndarray | None = None,
 ) -> tuple[SkillAction, ...]:
     """Use current geometry and aperture, independent of the previous task phase."""
     base = observation.robot.base_pose_world
@@ -113,7 +146,12 @@ def generate_candidates(
     tool_pose = state.robot.ee_pose.position
     retreat_z = max(tool_pose.z, targets[Skill.APPROACH].z, targets[Skill.RETREAT].z)
     targets[Skill.RETREAT] = replace(tool_pose, z=retreat_z)
-    plausible_grasp = grasp_evidence(observation, anchors["grasp"])
+    plausible_grasp = grasp_evidence(
+        observation,
+        anchors["grasp"],
+        measured_can_base=measured_can_base,
+        attachment_offset=attachment_offset,
+    )
     grasp = targets[Skill.DESCEND].as_array()
     tool = tool_pose.as_array()
     if (
@@ -230,6 +268,7 @@ def run_learned_smoke(
         decisions = []
         stop_reason = "decision budget"
         best_approach_gap = None
+        attachment_offset = None
         for index in range(max_decisions):
             truth = backend.get_ground_truth()
             base = obs.robot.base_pose_world
@@ -245,7 +284,13 @@ def run_learned_smoke(
             executor = SkillExecutor(entry.seed, obs)
             measured_rise = truth.object_poses["CAN"].position.z - initial.position.z
             candidates = generate_candidates(
-                executor, backend, obs, state, can_rise_m=measured_rise
+                executor,
+                backend,
+                obs,
+                state,
+                can_rise_m=measured_rise,
+                measured_can_base=oracle_can,
+                attachment_offset=attachment_offset,
             )
             forecasts = (
                 [forecast_candidate(state, candidate).trajectory for candidate in candidates]
@@ -313,6 +358,9 @@ def run_learned_smoke(
             record = {
                 "index": index,
                 "causal_best_approach_gap_m": best_approach_gap,
+                "observed_attachment_tool_m": (
+                    None if attachment_offset is None else attachment_offset.tolist()
+                ),
                 "can_estimate_base_m": asdict(can.position),
                 "localization_error_m": None
                 if localize is None
@@ -350,9 +398,18 @@ def run_learned_smoke(
                 candidate,
                 audit=command_proxy(executor.monitor, candidate.skill, live_audits.append),
             )
+            obs_before = obs
             tool_before = obs.robot.ee_pose.position
             obs = actual.observation
             pose_after = backend.get_ground_truth().object_poses["CAN"]
+            if actual.settled:
+                new_attachment = measured_attachment(
+                    obs_before, obs, truth.object_poses["CAN"].position, pose_after.position
+                )
+                if new_attachment is not None:
+                    attachment_offset = new_attachment
+                if obs.robot.gripper_opening >= GRIPPER_OPEN - 0.002:
+                    attachment_offset = None
             if candidate.skill is Skill.APPROACH and obs.robot.base_pose_world is not None:
                 can_after_base = compose(_inverse_pose(obs.robot.base_pose_world), pose_after)
                 gap = float(

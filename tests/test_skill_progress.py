@@ -140,3 +140,30 @@ def test_approach_history_prefers_a_real_improvement_over_a_repeated_hover() -> 
     assert approach_progress_score(0.5, centered, can, 0.002) < 0
     assert approach_progress_score(0.5, offset, can, 0.002) < 0
     assert approach_progress_score(0.4, SkillAction(Skill.OPEN), can, 0.002) == 0.4
+
+
+def test_transport_uses_live_attachment_evidence_after_observed_lift() -> None:
+    from vlarobot.core.types import Vec3
+    from vlarobot.execution.skill_live import measured_attachment
+
+    obs = FakeBackend().reset(ScenarioSpec(), 0)
+    base = obs.robot.base_pose_world
+    assert base is not None
+    old_pose = obs.robot.ee_pose
+    new_pose = replace(old_pose, position=replace(old_pose.position, z=old_pose.position.z + 0.11))
+    before = replace(obs, robot=replace(obs.robot, gripper_holding=None, gripper_opening=0.03))
+    after = replace(before, robot=replace(before.robot, ee_pose=new_pose))
+    from vlarobot.world_model.rollout import compose
+
+    old = compose(base, old_pose).position
+    new = compose(base, new_pose).position
+    can_before = Vec3(old.x + 0.025, old.y, old.z)
+    can_after = Vec3(new.x + 0.025, new.y, new.z)
+    measured = measured_attachment(before, after, can_before, can_after)
+    assert measured is not None
+    assert measured_attachment(before, after, can_before, can_before) is None
+    can_base = replace(new_pose, position=replace(new_pose.position, x=new_pose.position.x + 0.025))
+    far = new_pose.position.as_array() + np.array([0.025, 0, 0])
+    assert grasp_evidence(after, far, measured_can_base=can_base, attachment_offset=measured)
+    moved = replace(can_base, position=replace(can_base.position, x=can_base.position.x + 0.02))
+    assert not grasp_evidence(after, far, measured_can_base=moved, attachment_offset=measured)

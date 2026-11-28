@@ -64,6 +64,10 @@ def run_skill_diagnostic(
         if skill is Skill.APPROACH
         else _PROBE_ORDER[: _PROBE_ORDER.index(skill) + 1]
     )
+    from vlarobot.execution.skill_live import grasp_evidence, measured_attachment
+    from vlarobot.execution.worldmind_pipeline import _inverse_pose
+    from vlarobot.world_model.rollout import compose
+
     if standoff and skill is not Skill.APPROACH:
         raise ValueError("Standoff requires an isolated approach.")
     rows: list[dict[str, Any]] = []
@@ -79,8 +83,10 @@ def run_skill_diagnostic(
         observation = backend.reset(entry.scene, entry.seed)
         executor = SkillExecutor(entry.seed, observation)
         initial_can = backend.get_ground_truth().object_poses["CAN"]
+        attachment_offset = None
         for index, selected in enumerate(probes):
-            before = backend.get_ground_truth().object_poses["CAN"].position
+            before_pose = backend.get_ground_truth().object_poses["CAN"]
+            before = before_pose.position
             gap_before = executor._tip_to_can_xy_m(backend, observation)
             target = None
             if selected in _CARTESIAN:
@@ -94,10 +100,17 @@ def run_skill_diagnostic(
             audits = []
             audit = command_proxy(executor.monitor, selected, audits.append) if proxy else None
             if proxy and selected in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RELEASE):
-                from vlarobot.execution.skill_live import grasp_evidence
-
                 anchor = executor._base_frame_targets(backend, observation)["grasp"]
-                if not grasp_evidence(observation, anchor):
+                base_pose = observation.robot.base_pose_world
+                can_base = (
+                    None if base_pose is None else compose(_inverse_pose(base_pose), before_pose)
+                )
+                if not grasp_evidence(
+                    observation,
+                    anchor,
+                    measured_can_base=can_base,
+                    attachment_offset=attachment_offset,
+                ):
                     break
             result = executor.run_skill(
                 backend, observation, SkillAction(selected, target), audit=audit
@@ -114,6 +127,12 @@ def run_skill_diagnostic(
                 isolated = bool(commands) and all(isinstance(cmd, JointTarget) for cmd in commands)
             final_pose = backend.get_ground_truth().object_poses["CAN"]
             after = final_pose.position
+            if result.settled:
+                observed = measured_attachment(observation, result.observation, before, after)
+                if observed is not None:
+                    attachment_offset = observed
+                if result.observation.robot.gripper_opening >= GRIPPER_OPEN - 0.002:
+                    attachment_offset = None
             robot_before = asdict(observation.robot)
             robot_before.pop("diagnostics")
             tip_gap = executor._tip_to_can_xy_m(backend, result.observation)
@@ -129,6 +148,9 @@ def run_skill_diagnostic(
                 "can_before_world_m": asdict(before),
                 "can_after_world_m": asdict(after),
                 "can_rise_m": result.can_rise_m,
+                "observed_attachment_tool_m": None
+                if attachment_offset is None
+                else attachment_offset.tolist(),
                 "robot_before": robot_before,
                 "tip_can_xy_before_m": gap_before,
                 "tip_can_xy_after_m": tip_gap,

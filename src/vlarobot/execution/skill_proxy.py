@@ -74,6 +74,12 @@ def _clearance_configuration() -> tuple[dict, str]:
     return json.loads(clearance), hashlib.sha256(raw).hexdigest()
 
 
+def placement_clearance_offset_m() -> float:
+    """Use half the pinned terminal tolerance for a higher placement alternative."""
+    settings, _ = _clearance_configuration()
+    return float(settings["contact_height_m"]["PLACE_DESCEND"]["tolerance_m"]) / 2
+
+
 @dataclass(frozen=True)
 class SkillProxyAssessment:
     profile: str

@@ -37,12 +37,12 @@ from vlarobot.eval.vla_metrics import final_can_outcome
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.episode_runner import launch_webots_session
 from vlarobot.execution.skill_empirical import FORECAST_PROFILE, forecast_candidate
-from vlarobot.execution.skill_proxy import PROFILE_ID, command_proxy
+from vlarobot.execution.skill_proxy import PROFILE_ID, command_proxy, placement_clearance_offset_m
 from vlarobot.execution.skill_selection import UtilityModel, enumerate_skills
 from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor
 from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
-from vlarobot.world_model.rollout import compose
+from vlarobot.world_model.rollout import compose, rotate
 
 _TARGETS = {
     Skill.APPROACH: "pregrasp",
@@ -199,6 +199,13 @@ def generate_candidates(
         if np.linalg.norm(offset.as_array() - tool) > 0.02
         else ()
     )
+    lower_alternative = ()
+    if Skill.LOWER in targets:
+        lifted_target = targets[Skill.LOWER].as_array() + rotate(
+            np.asarray(_inverse_pose(base).orientation),
+            np.array((0.0, 0.0, placement_clearance_offset_m())),
+        )
+        lower_alternative = (SkillAction(Skill.LOWER, Vec3(*map(float, lifted_target))),)
     return (
         *(
             candidate
@@ -206,6 +213,7 @@ def generate_candidates(
             if candidate.skill not in (Skill.OPEN, Skill.RELEASE) or can_rise_m < LIFT_MIN
         ),
         *alternate,
+        *lower_alternative,
     )
 
 

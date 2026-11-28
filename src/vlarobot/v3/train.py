@@ -32,7 +32,15 @@ def _load_dino_cache(cache_path: Path, samples) -> tuple[np.ndarray, np.ndarray,
     return pooled, spatial_coarse.astype(np.float32), meta
 
 
-def _feature_matrix(samples, pooled, spatial_coarse, mode: str) -> np.ndarray:
+def _pca_fit_transform(mat: np.ndarray, train_mask: np.ndarray, k: int) -> np.ndarray:
+    xtr = mat[train_mask]
+    mu = xtr.mean(axis=0)
+    _, _, vt = np.linalg.svd(xtr - mu, full_matrices=False)
+    comp = vt[: min(k, vt.shape[0])]
+    return ((mat - mu) @ comp.T).astype(np.float32)
+
+
+def _feature_matrix(samples, pooled, spatial_coarse, mode: str, pca64=None) -> np.ndarray:
     state = np.stack([s.state for s in samples]).astype(np.float32)
     prev = np.stack([s.prev_action for s in samples]).astype(np.float32)
     if mode == "state":
@@ -41,6 +49,10 @@ def _feature_matrix(samples, pooled, spatial_coarse, mode: str) -> np.ndarray:
         return np.column_stack([state, prev])
     if mode == "state_prev_action_pretrained_image":
         return np.column_stack([state, prev, pooled, spatial_coarse])
+    if mode == "state_prev_action_pretrained_pca64":
+        if pca64 is None:
+            raise ValueError("pca64 required")
+        return np.column_stack([state, prev, pca64])
     if mode == "state_pretrained_image":
         return np.column_stack([state, pooled, spatial_coarse])
     raise ValueError(mode)
@@ -64,22 +76,39 @@ def run_training(
     train_mask = np.array([id(s) in train_ids for s in samples])
     val_mask = ~train_mask
 
+    pca64 = _pca_fit_transform(spatial_coarse, train_mask, 64)
+
     def pack(mask, mode):
         idx = np.where(mask)[0]
-        x = _feature_matrix([samples[i] for i in idx], pooled[idx], spatial_coarse[idx], mode)
+        x = _feature_matrix(
+            [samples[i] for i in idx], pooled[idx], spatial_coarse[idx], mode, pca64=pca64[idx]
+        )
         yxyz = np.stack([samples[i].target_xyz for i in idx]).astype(np.float32)
         ygrip = np.array([samples[i].gripper_target for i in idx], dtype=np.float32)
         return idx, x, yxyz, ygrip
 
-    mode = "state_prev_action_pretrained_image"
+    mode = "state_prev_action_pretrained_pca64"
     tr_idx, x_tr, yxyz_tr, yg_tr = pack(train_mask, mode)
     va_idx, x_va, yxyz_va, yg_va = pack(val_mask, mode)
-    cfg = PolicyConfig(input_dim=x_tr.shape[1], seed=seed, epochs=epochs)
+    # class weight: open is >0.02, closed otherwise; weight positives (open) inversely.
+    open_rate = float(np.mean(yg_tr > 0.02))
+    pos_weight = (1.0 - open_rate) / max(open_rate, 1e-6)
+    cfg = PolicyConfig(
+        input_dim=x_tr.shape[1],
+        seed=seed,
+        epochs=epochs,
+        gripper_pos_weight=float(pos_weight),
+        gripper_loss_weight=0.0,  # gripper handled by separate balanced logistic
+    )
     trained = train_policy(x_tr, yxyz_tr, yg_tr, x_va, yxyz_va, yg_va, cfg)
     model: CompactWaypointPolicy = trained["model"]
+    # Separate gripper logistic head (class-weighted) - MLP trunk struggled with imbalance.
+    grip_model = _fit_gripper_logistic(x_tr, yg_tr, x_va, yg_va)
     pred = model.predict(x_va)
+    pred["gripper_logit"] = grip_model["predict_logit"](x_va)
     phase = _phase_position_errors(samples, pred["xyz"], yxyz_va, va_idx)
-    overall = evaluate_policy(model, x_va, yxyz_va, yg_va)
+    overall = evaluate_policy(model, x_va, yxyz_va, yg_va, pred=pred)
+    overall["gripper_model"] = "separate_logistic_balanced"
 
     # observational visual-conditioning proxy: correlate predicted xyz delta with can offset delta
     # for same base scene and phase, across episodes with different can offsets.
@@ -89,11 +118,14 @@ def run_training(
         can_by_ep[ep] = np.array(off[:2], dtype=float)
     intervention = _visual_sensitivity_proxy(samples, va_idx, pred["xyz"], can_by_ep)
 
+    # Gripper transition timing (validation, per episode sequence order)
+    trans = _gripper_transition_timing(samples, va_idx, pred["gripper_logit"], yg_va)
+
     out_dir.mkdir(parents=True, exist_ok=True)
     model.save(out_dir / "compact_waypoint_policy.pt")
     result = {
         "status": "measured-offline-prototype",
-        "model": "compact_mlp_waypoint_v3",
+        "model": "compact_mlp_waypoint_v3_pca64",
         "config": asdict(cfg),
         "dataset": str(dataset_root),
         "dino_cache": str(cache_path),
@@ -105,6 +137,7 @@ def run_training(
         },
         "overall_validation": overall,
         "validation_by_phase": phase,
+        "gripper_transition_timing": trans,
         "visual_sensitivity_proxy": intervention,
         "history_tail": trained["history"][-5:],
         "notes": [
@@ -163,3 +196,73 @@ def _visual_sensitivity_proxy(samples, val_idx, pred_xyz, can_by_ep) -> dict[str
         "mean_abs_dpred_xy_m": round(float(np.mean(np.abs(np.stack([dpredx, dpredy], 1)))), 6),
         "mean_abs_dcan_xy_m": round(float(np.mean(np.abs(np.stack([dx, dy], 1)))), 6),
     }
+
+
+def _gripper_transition_timing(samples, val_idx, pred_logit, y_grip_true, threshold_m=0.02):
+    pred_open = (1 / (1 + np.exp(-pred_logit)) > 0.5).astype(int)
+    true_open = (y_grip_true > threshold_m).astype(int)
+    # group by episode in val order
+    by_ep = {}
+    for pos, idx in enumerate(val_idx.tolist()):
+        by_ep.setdefault(samples[idx].episode_index, []).append(pos)
+    deltas = []
+    for positions in by_ep.values():
+        positions = sorted(positions, key=lambda p: samples[val_idx[p]].t)
+        t_true = [
+            i
+            for i, p in enumerate(positions)
+            if i > 0 and true_open[positions[i]] != true_open[positions[i - 1]]
+        ]
+        t_pred = [
+            i
+            for i, p in enumerate(positions)
+            if i > 0 and pred_open[positions[i]] != pred_open[positions[i - 1]]
+        ]
+        for tt in t_true:
+            if not t_pred:
+                continue
+            nearest = min(t_pred, key=lambda tp: abs(tp - tt))
+            deltas.append(int(nearest - tt))
+    if not deltas:
+        return {"status": "no_transitions_or_predictions", "n_deltas": 0}
+    arr = np.array(deltas)
+    return {
+        "status": "measured",
+        "n_deltas": int(len(arr)),
+        "mean_abs_steps": round(float(np.mean(np.abs(arr))), 3),
+        "mean_steps": round(float(np.mean(arr)), 3),
+        "median_steps": round(float(np.median(arr)), 3),
+    }
+
+
+def _fit_gripper_logistic(x_tr, yg_tr, x_va, yg_va, threshold_m=0.02, lr=0.1, steps=2000):
+    # Standardize on train
+    mu = x_tr.mean(axis=0)
+    sd = x_tr.std(axis=0)
+    sd[sd < 1e-6] = 1.0
+    X = (x_tr - mu) / sd
+    y = (yg_tr > threshold_m).astype(np.float32)
+    # class weights
+    pos = y.sum()
+    neg = len(y) - pos
+    w_pos = len(y) / (2 * max(pos, 1))
+    w_neg = len(y) / (2 * max(neg, 1))
+    sample_w = np.where(y > 0.5, w_pos, w_neg).astype(np.float32)
+    # logistic regression via GD
+    rng = np.random.default_rng(0)
+    W = rng.normal(0, 0.01, size=X.shape[1]).astype(np.float32)
+    b = 0.0
+    for _ in range(steps):
+        z = X @ W + b
+        p = 1 / (1 + np.exp(-np.clip(z, -20, 20)))
+        err = (p - y) * sample_w
+        grad_w = (X.T @ err) / len(y)
+        grad_b = float(err.mean())
+        W -= lr * grad_w
+        b -= lr * grad_b
+
+    def predict_logit(x):
+        xn = (x - mu) / sd
+        return (xn @ W + b).astype(np.float32)
+
+    return {"predict_logit": predict_logit, "W": W, "b": b, "mu": mu, "sd": sd}

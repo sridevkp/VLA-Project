@@ -359,32 +359,31 @@ def _persistence_result(
 def _gripper_metrics(
     gripper: np.ndarray, train: np.ndarray, validation: np.ndarray, threshold: float = 0.02
 ) -> dict[str, Any]:
-    """Binary gripper metrics: close=1 when target > threshold."""
-    y_true = (gripper[validation] > threshold).astype(int)
-    # baseline: majority class from train
-    majority_close = int(np.mean(gripper[train] > threshold) >= 0.5)
-    y_pred = np.full_like(y_true, majority_close)
-    tp = int(np.sum((y_pred == 1) & (y_true == 1)))
-    fp = int(np.sum((y_pred == 1) & (y_true == 0)))
-    fn = int(np.sum((y_pred == 0) & (y_true == 1)))
-    tn = int(np.sum((y_pred == 0) & (y_true == 0)))
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
-    accuracy = float(np.mean(y_pred == y_true)) if len(y_true) else 0.0
+    """Binary gripper metrics. Physical semantics: 0.0m=CLOSED, 0.045m=OPEN."""
+    y_true_open = (gripper[validation] > threshold).astype(int)
+    majority_open = int(np.mean(gripper[train] > threshold) >= 0.5)
+    y_pred = np.full_like(y_true_open, majority_open)
+    tp = int(np.sum((y_pred == 1) & (y_true_open == 1)))
+    fp = int(np.sum((y_pred == 1) & (y_true_open == 0)))
+    fn = int(np.sum((y_pred == 0) & (y_true_open == 1)))
+    tn = int(np.sum((y_pred == 0) & (y_true_open == 0)))
+    prec_open = tp / (tp + fp) if (tp + fp) else 0.0
+    rec_open = tp / (tp + fn) if (tp + fn) else 0.0
+    prec_closed = tn / (tn + fn) if (tn + fn) else 0.0
+    rec_closed = tn / (tn + fp) if (tn + fp) else 0.0
     return {
         "threshold_m": threshold,
-        "positive_class": "close",
-        "train_close_rate": round(float(np.mean(gripper[train] > threshold)), 6),
-        "validation_close_rate": round(float(np.mean(y_true)), 6),
+        "semantics": {"open_gt_threshold": 0.045, "closed_le_threshold": 0.0},
+        "train_open_rate": round(float(np.mean(gripper[train] > threshold)), 6),
+        "validation_open_rate": round(float(np.mean(y_true_open)), 6),
         "majority_baseline": {
-            "predicted_close": bool(majority_close),
-            "accuracy": round(accuracy, 6),
-            "precision": round(precision, 6),
-            "recall": round(recall, 6),
-            "tp": tp,
-            "fp": fp,
-            "fn": fn,
-            "tn": tn,
+            "predicted_open": bool(majority_open),
+            "accuracy": round(float(np.mean(y_pred == y_true_open)), 6),
+            "open_precision": round(prec_open, 6),
+            "open_recall": round(rec_open, 6),
+            "closed_precision": round(prec_closed, 6),
+            "closed_recall": round(rec_closed, 6),
+            "confusion": {"tp_open": tp, "fp_open": fp, "fn_open": fn, "tn_open": tn},
         },
         "train_samples": int(len(train)),
         "validation_samples": int(len(validation)),

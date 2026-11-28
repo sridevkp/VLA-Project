@@ -24,7 +24,9 @@ class PolicyConfig:
     batch_size: int = 64
     epochs: int = 30
     seed: int = 0
-    gripper_threshold_m: float = 0.02
+    gripper_threshold_m: float = 0.02  # > threshold means OPEN (0.045m); <= means CLOSED (0.0m)
+    gripper_pos_weight: float = 1.0
+    gripper_loss_weight: float = 1.0
 
 
 def _mlp(in_dim: int, hidden: int, out_dim: int):
@@ -90,7 +92,8 @@ def train_policy(
     model = CompactWaypointPolicy(cfg)
     opt = torch.optim.AdamW(model.net.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     mse = nn.MSELoss()
-    bce = nn.BCEWithLogitsLoss()
+    pos_weight = torch.tensor([cfg.gripper_pos_weight], dtype=torch.float32)
+    bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     def batches(x, yx, yg):
         idx = np.arange(len(x))
@@ -109,7 +112,7 @@ def train_policy(
         for xb, yxb, ygb in batches(x_train, y_xyz_train, y_grip_train):
             opt.zero_grad(set_to_none=True)
             out = model.net(xb)
-            loss = mse(out[:, :3], yxb) + bce(out[:, 3], ygb)
+            loss = mse(out[:, :3], yxb) + cfg.gripper_loss_weight * bce(out[:, 3], ygb)
             loss.backward()
             opt.step()
             losses.append(float(loss.detach().cpu()))
@@ -124,28 +127,38 @@ def evaluate_policy(
     y_xyz: np.ndarray,
     y_grip: np.ndarray,
     threshold_m: float = 0.02,
+    pred: dict[str, np.ndarray] | None = None,
 ) -> dict[str, Any]:
-    pred = model.predict(x)
+    if pred is None:
+        pred = model.predict(x)
     xyz_err = np.abs(pred["xyz"] - y_xyz)
     per_axis = xyz_err.mean(axis=0)
-    grip_true = (y_grip > threshold_m).astype(int)
-    grip_pred = (1 / (1 + np.exp(-pred["gripper_logit"])) > 0.5).astype(int)
-    tp = int(np.sum((grip_pred == 1) & (grip_true == 1)))
-    fp = int(np.sum((grip_pred == 1) & (grip_true == 0)))
-    fn = int(np.sum((grip_pred == 0) & (grip_true == 1)))
-    tn = int(np.sum((grip_pred == 0) & (grip_true == 0)))
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    # Physical semantics: 0.0m = CLOSED, 0.045m = OPEN.
+    grip_true_open = (y_grip > threshold_m).astype(int)
+    grip_pred_open = (1 / (1 + np.exp(-pred["gripper_logit"])) > 0.5).astype(int)
+    tp = int(np.sum((grip_pred_open == 1) & (grip_true_open == 1)))
+    fp = int(np.sum((grip_pred_open == 1) & (grip_true_open == 0)))
+    fn = int(np.sum((grip_pred_open == 0) & (grip_true_open == 1)))
+    tn = int(np.sum((grip_pred_open == 0) & (grip_true_open == 0)))
+    prec_open = tp / (tp + fp) if (tp + fp) else 0.0
+    rec_open = tp / (tp + fn) if (tp + fn) else 0.0
+    prec_closed = tn / (tn + fn) if (tn + fn) else 0.0
+    rec_closed = tn / (tn + fp) if (tn + fp) else 0.0
     return {
         "xyz_mae_m": round(float(per_axis.mean()), 6),
         "xyz_mae_x_m": round(float(per_axis[0]), 6),
         "xyz_mae_y_m": round(float(per_axis[1]), 6),
         "xyz_mae_z_m": round(float(per_axis[2]), 6),
-        "gripper_accuracy": round(float(np.mean(grip_pred == grip_true)), 6),
-        "gripper_precision": round(float(precision), 6),
-        "gripper_recall": round(float(recall), 6),
-        "gripper_tp": tp,
-        "gripper_fp": fp,
-        "gripper_fn": fn,
-        "gripper_tn": tn,
+        "gripper_accuracy": round(float(np.mean(grip_pred_open == grip_true_open)), 6),
+        "gripper_semantics": {"open_gt_0.02m": 0.045, "closed_le_0.02m": 0.0},
+        "open_precision": round(float(prec_open), 6),
+        "open_recall": round(float(rec_open), 6),
+        "closed_precision": round(float(prec_closed), 6),
+        "closed_recall": round(float(rec_closed), 6),
+        "confusion": {
+            "tp_open": tp,
+            "fp_open": fp,
+            "fn_open": fn,
+            "tn_open": tn,
+        },
     }

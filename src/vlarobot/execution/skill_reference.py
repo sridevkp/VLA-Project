@@ -9,7 +9,7 @@ import numpy as np
 
 from vlarobot.execution.demo_collection import write_json
 from vlarobot.execution.skill_demonstrations import partition_demonstrations
-from vlarobot.execution.skills import Skill
+from vlarobot.execution.skills import EMPIRICAL_SKILLS
 
 
 def train_reference(dataset: Path, output: Path) -> dict[str, Any]:
@@ -24,7 +24,7 @@ def train_reference(dataset: Path, output: Path) -> dict[str, Any]:
     partition = partition_demonstrations(rows)
     if partition != payload["partition"]:
         raise ValueError("TRAIN partition mismatch")
-    skills = tuple(skill.value for skill in Skill)
+    skills = tuple(skill.value for skill in EMPIRICAL_SKILLS)
     features = []
     for row in rows:
         before = row["observed_before"]

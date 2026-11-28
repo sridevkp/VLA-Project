@@ -11,12 +11,19 @@ from vlarobot.core.types import (
     Decision,
     EEPoseTarget,
     GripperCmd,
+    JointTarget,
     Observation,
     Pose3D,
     Vec3,
     WorldState,
 )
-from vlarobot.execution.skills import Skill, SkillAction, SkillExecutor, SkillOutcome
+from vlarobot.execution.skills import (
+    EMPIRICAL_SKILLS,
+    Skill,
+    SkillAction,
+    SkillExecutor,
+    SkillOutcome,
+)
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
 from vlarobot.world_model.rollout import AnalyticSurrogate, Attachment, Trajectory
 
@@ -73,9 +80,9 @@ def _features(state: WorldState, action: SkillAction, future: WorldState | None)
         obj.pose.position.as_array() for obj in state.scene.objects if obj.object_id == "CAN"
     )
     target = tool if action.target_base is None else action.target_base.as_array()
-    identity = np.array(
-        [skill == action.skill for skill in Skill if skill is not Skill.HOME], dtype=float
-    )
+    if action.skill not in EMPIRICAL_SKILLS:
+        raise ValueError("HOME has no empirical utility model.")
+    identity = np.array([skill == action.skill for skill in EMPIRICAL_SKILLS], dtype=float)
     current = np.r_[
         tool,
         can - tool,
@@ -200,7 +207,9 @@ def predict_candidates(
     """Predict a nominal candidate endpoint and retain all surrogate hard vetoes."""
     candidates = []
     for action in actions:
-        if action.target_base is None:
+        if action.skill is Skill.HOME:
+            command = JointTarget(dict(action.home_joints))
+        elif action.target_base is None:
             command = GripperCmd(
                 open_position_m if action.skill in (Skill.OPEN, Skill.RELEASE) else 0.0
             )

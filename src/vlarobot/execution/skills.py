@@ -35,6 +35,9 @@ class Skill(StrEnum):
     HOME = "HOME"
 
 
+EMPIRICAL_SKILLS = tuple(skill for skill in Skill if skill is not Skill.HOME)
+
+
 @dataclass(frozen=True)
 class SkillAction:
     skill: Skill

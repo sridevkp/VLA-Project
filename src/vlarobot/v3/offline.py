@@ -629,7 +629,7 @@ def build_offline_evidence(
             "waypoint_samples": len(samples),
             "missing_legacy_images": int(missing_images),
             "legacy_16x16_available": "image" in features,
-            "pretrained_dinov2_available": "pretrained_image_pooled" in features,
+            "pretrained_dinov2_available": "pretrained_cls" in features,
         },
         "pretrained_encoder": dino_meta,
         "loso": {"feature": loso_key, **loso},

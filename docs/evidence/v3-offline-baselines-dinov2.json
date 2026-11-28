@@ -1,0 +1,1611 @@
+{
+  "generated_at_utc": "2026-11-28T06:56:28.282154+00:00",
+  "status": "measured-offline",
+  "dataset": "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1",
+  "source_provenance_sha256": "de7aff693700bbb0c8f0abb0b5a41564e52a6d1b17fb838f4590cef39564f602",
+  "sample_count": 2757,
+  "episode_count": 80,
+  "base_scene_count": 8,
+  "base_scene_counts": {
+    "train-clear-i00": 413,
+    "train-clear-i03": 409,
+    "train-clear-i06": 378,
+    "train-cluttered-i01": 376,
+    "train-cluttered-i04": 344,
+    "train-cluttered-i07": 341,
+    "train-reach-limited-i02": 250,
+    "train-reach-limited-i05": 246
+  },
+  "phase_counts": {
+    "DESCEND": 469,
+    "DONE": 80,
+    "HOME": 80,
+    "INIT": 160,
+    "LIFT": 435,
+    "PLACE_DESCEND": 320,
+    "PREGRASP": 80,
+    "PREGRASP_REALIGN": 80,
+    "RELEASE": 80,
+    "RETREAT": 320,
+    "TRANSIT": 653
+  },
+  "development_split": {
+    "validation_bases": [
+      "train-clear-i00",
+      "train-cluttered-i01",
+      "train-reach-limited-i02"
+    ],
+    "train_samples": 1718,
+    "validation_samples": 1039
+  },
+  "baselines": [
+    {
+      "name": "constant_train_mean",
+      "train": {
+        "overall_m": 0.069204,
+        "x_m": 0.052212,
+        "y_m": 0.107258,
+        "z_m": 0.048142
+      },
+      "validation": {
+        "overall_m": 0.071421,
+        "x_m": 0.052676,
+        "y_m": 0.113466,
+        "z_m": 0.048122
+      }
+    },
+    {
+      "name": "state_only",
+      "train": {
+        "overall_m": 0.03797,
+        "x_m": 0.035277,
+        "y_m": 0.05077,
+        "z_m": 0.027862
+      },
+      "validation": {
+        "overall_m": 0.038227,
+        "x_m": 0.035311,
+        "y_m": 0.051383,
+        "z_m": 0.027988
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.026666,
+          "x_m": 0.017989,
+          "y_m": 0.032773,
+          "z_m": 0.029235,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.016237,
+          "x_m": 0.011569,
+          "y_m": 0.017208,
+          "z_m": 0.019933,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.290198,
+          "x_m": 0.355677,
+          "y_m": 0.446624,
+          "z_m": 0.068293,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.039779,
+          "x_m": 0.022984,
+          "y_m": 0.036352,
+          "z_m": 0.06,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.025292,
+          "x_m": 0.022252,
+          "y_m": 0.028453,
+          "z_m": 0.025172,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.030119,
+          "x_m": 0.020965,
+          "y_m": 0.02836,
+          "z_m": 0.041034,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.037524,
+          "x_m": 0.026066,
+          "y_m": 0.061603,
+          "z_m": 0.024904,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.023543,
+          "x_m": 0.012305,
+          "y_m": 0.03316,
+          "z_m": 0.025164,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.026657,
+          "x_m": 0.016777,
+          "y_m": 0.029897,
+          "z_m": 0.033298,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.049406,
+          "x_m": 0.047998,
+          "y_m": 0.067722,
+          "z_m": 0.032498,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.028565,
+          "x_m": 0.030212,
+          "y_m": 0.046318,
+          "z_m": 0.009166,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_plus_prev_action",
+      "train": {
+        "overall_m": 0.027785,
+        "x_m": 0.022404,
+        "y_m": 0.036549,
+        "z_m": 0.024403
+      },
+      "validation": {
+        "overall_m": 0.029115,
+        "x_m": 0.023249,
+        "y_m": 0.039877,
+        "z_m": 0.02422
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.017992,
+          "x_m": 0.009775,
+          "y_m": 0.022424,
+          "z_m": 0.021775,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.014854,
+          "x_m": 0.014668,
+          "y_m": 0.02444,
+          "z_m": 0.005454,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.178419,
+          "x_m": 0.224071,
+          "y_m": 0.288689,
+          "z_m": 0.022497,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.039599,
+          "x_m": 0.022747,
+          "y_m": 0.036051,
+          "z_m": 0.06,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.017805,
+          "x_m": 0.008385,
+          "y_m": 0.024875,
+          "z_m": 0.020154,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.017035,
+          "x_m": 0.005541,
+          "y_m": 0.013841,
+          "z_m": 0.031724,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.025405,
+          "x_m": 0.008839,
+          "y_m": 0.025566,
+          "z_m": 0.041811,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.016503,
+          "x_m": 0.013344,
+          "y_m": 0.013676,
+          "z_m": 0.022489,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.018699,
+          "x_m": 0.009301,
+          "y_m": 0.020396,
+          "z_m": 0.0264,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.053793,
+          "x_m": 0.056186,
+          "y_m": 0.075963,
+          "z_m": 0.029229,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.022722,
+          "x_m": 0.016693,
+          "y_m": 0.037134,
+          "z_m": 0.014339,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "pretrained_cls_only",
+      "train": {
+        "overall_m": 0.034496,
+        "x_m": 0.03089,
+        "y_m": 0.046115,
+        "z_m": 0.026483
+      },
+      "validation": {
+        "overall_m": 0.054933,
+        "x_m": 0.052047,
+        "y_m": 0.07413,
+        "z_m": 0.038623
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.060725,
+          "x_m": 0.054742,
+          "y_m": 0.074941,
+          "z_m": 0.052492,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.041688,
+          "x_m": 0.034396,
+          "y_m": 0.05283,
+          "z_m": 0.037837,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.230792,
+          "x_m": 0.287082,
+          "y_m": 0.374641,
+          "z_m": 0.030652,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.057106,
+          "x_m": 0.05031,
+          "y_m": 0.058445,
+          "z_m": 0.062564,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.052457,
+          "x_m": 0.046504,
+          "y_m": 0.070212,
+          "z_m": 0.040654,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.037158,
+          "x_m": 0.030449,
+          "y_m": 0.045115,
+          "z_m": 0.035909,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.053831,
+          "x_m": 0.051646,
+          "y_m": 0.072283,
+          "z_m": 0.037564,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.053331,
+          "x_m": 0.05724,
+          "y_m": 0.069226,
+          "z_m": 0.033527,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.038668,
+          "x_m": 0.038447,
+          "y_m": 0.054413,
+          "z_m": 0.023145,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.057824,
+          "x_m": 0.061486,
+          "y_m": 0.082449,
+          "z_m": 0.029536,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.041941,
+          "x_m": 0.03508,
+          "y_m": 0.059568,
+          "z_m": 0.031175,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "pretrained_spatial2x2_only",
+      "train": {
+        "overall_m": 0.021397,
+        "x_m": 0.019075,
+        "y_m": 0.028683,
+        "z_m": 0.016434
+      },
+      "validation": {
+        "overall_m": 0.05756,
+        "x_m": 0.048524,
+        "y_m": 0.073979,
+        "z_m": 0.050177
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.058426,
+          "x_m": 0.045411,
+          "y_m": 0.069699,
+          "z_m": 0.060168,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.036536,
+          "x_m": 0.032908,
+          "y_m": 0.048538,
+          "z_m": 0.028163,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.200661,
+          "x_m": 0.242951,
+          "y_m": 0.307997,
+          "z_m": 0.051034,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.056606,
+          "x_m": 0.043658,
+          "y_m": 0.055766,
+          "z_m": 0.070392,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.0556,
+          "x_m": 0.041879,
+          "y_m": 0.067604,
+          "z_m": 0.057317,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.039189,
+          "x_m": 0.02853,
+          "y_m": 0.048327,
+          "z_m": 0.04071,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.063257,
+          "x_m": 0.048808,
+          "y_m": 0.074133,
+          "z_m": 0.066831,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.060853,
+          "x_m": 0.049162,
+          "y_m": 0.064748,
+          "z_m": 0.068648,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.038746,
+          "x_m": 0.030476,
+          "y_m": 0.047993,
+          "z_m": 0.037768,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.070035,
+          "x_m": 0.072629,
+          "y_m": 0.102612,
+          "z_m": 0.034863,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.047879,
+          "x_m": 0.034898,
+          "y_m": 0.063301,
+          "z_m": 0.045439,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "pretrained_spatial4x4_only",
+      "train": {
+        "overall_m": 0.017845,
+        "x_m": 0.016203,
+        "y_m": 0.024645,
+        "z_m": 0.012688
+      },
+      "validation": {
+        "overall_m": 0.044228,
+        "x_m": 0.037219,
+        "y_m": 0.051133,
+        "z_m": 0.044332
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.036566,
+          "x_m": 0.025768,
+          "y_m": 0.034732,
+          "z_m": 0.049197,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.024382,
+          "x_m": 0.017973,
+          "y_m": 0.025436,
+          "z_m": 0.029736,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.198896,
+          "x_m": 0.236605,
+          "y_m": 0.303142,
+          "z_m": 0.05694,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.03961,
+          "x_m": 0.025322,
+          "y_m": 0.031584,
+          "z_m": 0.061923,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.03627,
+          "x_m": 0.02743,
+          "y_m": 0.037995,
+          "z_m": 0.043386,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.031715,
+          "x_m": 0.02322,
+          "y_m": 0.031808,
+          "z_m": 0.040119,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.039326,
+          "x_m": 0.026205,
+          "y_m": 0.032792,
+          "z_m": 0.05898,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.037988,
+          "x_m": 0.028291,
+          "y_m": 0.033734,
+          "z_m": 0.051937,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.02622,
+          "x_m": 0.019004,
+          "y_m": 0.027095,
+          "z_m": 0.03256,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.063601,
+          "x_m": 0.066284,
+          "y_m": 0.086399,
+          "z_m": 0.03812,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.039916,
+          "x_m": 0.030224,
+          "y_m": 0.04822,
+          "z_m": 0.041303,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "pretrained_spatial4x4_pca64_only",
+      "train": {
+        "overall_m": 0.035901,
+        "x_m": 0.031461,
+        "y_m": 0.046402,
+        "z_m": 0.029839
+      },
+      "validation": {
+        "overall_m": 0.040409,
+        "x_m": 0.035901,
+        "y_m": 0.052835,
+        "z_m": 0.032491
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.03059,
+          "x_m": 0.022435,
+          "y_m": 0.031266,
+          "z_m": 0.038067,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.027426,
+          "x_m": 0.02112,
+          "y_m": 0.042024,
+          "z_m": 0.019135,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.226363,
+          "x_m": 0.278296,
+          "y_m": 0.360117,
+          "z_m": 0.040675,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.044143,
+          "x_m": 0.034612,
+          "y_m": 0.037816,
+          "z_m": 0.06,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.033393,
+          "x_m": 0.026124,
+          "y_m": 0.044145,
+          "z_m": 0.02991,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.027009,
+          "x_m": 0.016976,
+          "y_m": 0.027783,
+          "z_m": 0.036267,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.030781,
+          "x_m": 0.02524,
+          "y_m": 0.032964,
+          "z_m": 0.034139,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.028938,
+          "x_m": 0.025382,
+          "y_m": 0.031641,
+          "z_m": 0.029791,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.026476,
+          "x_m": 0.017021,
+          "y_m": 0.029273,
+          "z_m": 0.033133,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.05788,
+          "x_m": 0.060856,
+          "y_m": 0.081334,
+          "z_m": 0.03145,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.032501,
+          "x_m": 0.02666,
+          "y_m": 0.047786,
+          "z_m": 0.023059,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_plus_pretrained_cls",
+      "train": {
+        "overall_m": 0.031184,
+        "x_m": 0.028003,
+        "y_m": 0.041204,
+        "z_m": 0.024345
+      },
+      "validation": {
+        "overall_m": 0.05168,
+        "x_m": 0.050263,
+        "y_m": 0.070422,
+        "z_m": 0.034353
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.049161,
+          "x_m": 0.044255,
+          "y_m": 0.057443,
+          "z_m": 0.045787,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.030796,
+          "x_m": 0.028534,
+          "y_m": 0.041263,
+          "z_m": 0.022591,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.217184,
+          "x_m": 0.270029,
+          "y_m": 0.353261,
+          "z_m": 0.028261,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.050484,
+          "x_m": 0.042597,
+          "y_m": 0.046676,
+          "z_m": 0.06218,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.044655,
+          "x_m": 0.040246,
+          "y_m": 0.056638,
+          "z_m": 0.037081,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.042981,
+          "x_m": 0.036551,
+          "y_m": 0.054545,
+          "z_m": 0.037849,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.047465,
+          "x_m": 0.045447,
+          "y_m": 0.057561,
+          "z_m": 0.039386,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.041977,
+          "x_m": 0.042011,
+          "y_m": 0.056387,
+          "z_m": 0.027533,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.042434,
+          "x_m": 0.04203,
+          "y_m": 0.060355,
+          "z_m": 0.024916,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.064862,
+          "x_m": 0.071417,
+          "y_m": 0.094673,
+          "z_m": 0.028496,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.041617,
+          "x_m": 0.038101,
+          "y_m": 0.064162,
+          "z_m": 0.022587,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_prev_action_plus_pretrained_cls",
+      "train": {
+        "overall_m": 0.02421,
+        "x_m": 0.019925,
+        "y_m": 0.031254,
+        "z_m": 0.021452
+      },
+      "validation": {
+        "overall_m": 0.033861,
+        "x_m": 0.028601,
+        "y_m": 0.043365,
+        "z_m": 0.029616
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.027148,
+          "x_m": 0.019266,
+          "y_m": 0.026575,
+          "z_m": 0.035602,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.016525,
+          "x_m": 0.012571,
+          "y_m": 0.022538,
+          "z_m": 0.014467,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.180582,
+          "x_m": 0.226365,
+          "y_m": 0.294328,
+          "z_m": 0.021053,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.040982,
+          "x_m": 0.032833,
+          "y_m": 0.030112,
+          "z_m": 0.06,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.025656,
+          "x_m": 0.015435,
+          "y_m": 0.028594,
+          "z_m": 0.032938,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.019004,
+          "x_m": 0.011135,
+          "y_m": 0.020397,
+          "z_m": 0.025479,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.030421,
+          "x_m": 0.018995,
+          "y_m": 0.026905,
+          "z_m": 0.045364,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.020821,
+          "x_m": 0.014471,
+          "y_m": 0.023779,
+          "z_m": 0.024213,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.016914,
+          "x_m": 0.014167,
+          "y_m": 0.022794,
+          "z_m": 0.01378,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.05622,
+          "x_m": 0.060801,
+          "y_m": 0.081957,
+          "z_m": 0.025904,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.0271,
+          "x_m": 0.01842,
+          "y_m": 0.039587,
+          "z_m": 0.023294,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_plus_pretrained_cls_spatial4x4",
+      "train": {
+        "overall_m": 0.017828,
+        "x_m": 0.016191,
+        "y_m": 0.024627,
+        "z_m": 0.012666
+      },
+      "validation": {
+        "overall_m": 0.042333,
+        "x_m": 0.036608,
+        "y_m": 0.050611,
+        "z_m": 0.039781
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.03583,
+          "x_m": 0.026375,
+          "y_m": 0.03574,
+          "z_m": 0.045376,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.022656,
+          "x_m": 0.017016,
+          "y_m": 0.023426,
+          "z_m": 0.027527,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.196459,
+          "x_m": 0.235564,
+          "y_m": 0.302755,
+          "z_m": 0.051058,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.038069,
+          "x_m": 0.023739,
+          "y_m": 0.029299,
+          "z_m": 0.06117,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.034547,
+          "x_m": 0.026899,
+          "y_m": 0.039038,
+          "z_m": 0.037706,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.029607,
+          "x_m": 0.02192,
+          "y_m": 0.029984,
+          "z_m": 0.036918,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.038197,
+          "x_m": 0.026245,
+          "y_m": 0.033939,
+          "z_m": 0.054408,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.035593,
+          "x_m": 0.027441,
+          "y_m": 0.032001,
+          "z_m": 0.047335,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.023844,
+          "x_m": 0.017685,
+          "y_m": 0.025451,
+          "z_m": 0.028396,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.061087,
+          "x_m": 0.065895,
+          "y_m": 0.085453,
+          "z_m": 0.031912,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.037485,
+          "x_m": 0.029294,
+          "y_m": 0.047113,
+          "z_m": 0.036048,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_prev_action_plus_pretrained_cls_spatial4x4",
+      "train": {
+        "overall_m": 0.017792,
+        "x_m": 0.016153,
+        "y_m": 0.024584,
+        "z_m": 0.012639
+      },
+      "validation": {
+        "overall_m": 0.036876,
+        "x_m": 0.031869,
+        "y_m": 0.044704,
+        "z_m": 0.034056
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.029694,
+          "x_m": 0.021543,
+          "y_m": 0.027748,
+          "z_m": 0.03979,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.017852,
+          "x_m": 0.01374,
+          "y_m": 0.021679,
+          "z_m": 0.018138,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.188339,
+          "x_m": 0.230631,
+          "y_m": 0.296592,
+          "z_m": 0.037793,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.034775,
+          "x_m": 0.01991,
+          "y_m": 0.023845,
+          "z_m": 0.06057,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.029666,
+          "x_m": 0.022915,
+          "y_m": 0.03388,
+          "z_m": 0.032202,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.022877,
+          "x_m": 0.015258,
+          "y_m": 0.02302,
+          "z_m": 0.030354,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.036962,
+          "x_m": 0.024061,
+          "y_m": 0.030449,
+          "z_m": 0.056378,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.030165,
+          "x_m": 0.023342,
+          "y_m": 0.026628,
+          "z_m": 0.040525,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.018427,
+          "x_m": 0.013478,
+          "y_m": 0.021059,
+          "z_m": 0.020742,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.056463,
+          "x_m": 0.062228,
+          "y_m": 0.081179,
+          "z_m": 0.025983,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.031558,
+          "x_m": 0.023731,
+          "y_m": 0.040804,
+          "z_m": 0.030139,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "state_prev_action_plus_pretrained_spatial4x4_pca64",
+      "train": {
+        "overall_m": 0.025311,
+        "x_m": 0.020358,
+        "y_m": 0.032085,
+        "z_m": 0.023488
+      },
+      "validation": {
+        "overall_m": 0.027988,
+        "x_m": 0.02287,
+        "y_m": 0.037088,
+        "z_m": 0.024005
+      },
+      "validation_by_phase": {
+        "DESCEND": {
+          "overall_m": 0.016005,
+          "x_m": 0.008995,
+          "y_m": 0.01549,
+          "z_m": 0.023531,
+          "n": 176
+        },
+        "DONE": {
+          "overall_m": 0.014197,
+          "x_m": 0.013476,
+          "y_m": 0.021533,
+          "z_m": 0.007583,
+          "n": 30
+        },
+        "HOME": {
+          "overall_m": 0.181206,
+          "x_m": 0.227106,
+          "y_m": 0.293211,
+          "z_m": 0.023301,
+          "n": 30
+        },
+        "INIT": {
+          "overall_m": 0.033507,
+          "x_m": 0.02384,
+          "y_m": 0.016682,
+          "z_m": 0.06,
+          "n": 60
+        },
+        "LIFT": {
+          "overall_m": 0.021183,
+          "x_m": 0.012857,
+          "y_m": 0.029824,
+          "z_m": 0.020868,
+          "n": 161
+        },
+        "PLACE_DESCEND": {
+          "overall_m": 0.015084,
+          "x_m": 0.004814,
+          "y_m": 0.013348,
+          "z_m": 0.02709,
+          "n": 120
+        },
+        "PREGRASP": {
+          "overall_m": 0.022518,
+          "x_m": 0.00878,
+          "y_m": 0.014671,
+          "z_m": 0.044102,
+          "n": 30
+        },
+        "PREGRASP_REALIGN": {
+          "overall_m": 0.01211,
+          "x_m": 0.008325,
+          "y_m": 0.011863,
+          "z_m": 0.016143,
+          "n": 30
+        },
+        "RELEASE": {
+          "overall_m": 0.013955,
+          "x_m": 0.007211,
+          "y_m": 0.016522,
+          "z_m": 0.018132,
+          "n": 30
+        },
+        "RETREAT": {
+          "overall_m": 0.053169,
+          "x_m": 0.055663,
+          "y_m": 0.075348,
+          "z_m": 0.028495,
+          "n": 120
+        },
+        "TRANSIT": {
+          "overall_m": 0.021157,
+          "x_m": 0.013787,
+          "y_m": 0.034239,
+          "z_m": 0.015444,
+          "n": 252
+        }
+      }
+    },
+    {
+      "name": "previous_waypoint_persistence",
+      "train": {
+        "overall_m": 0.046168,
+        "x_m": 0.036043,
+        "y_m": 0.054163,
+        "z_m": 0.048297
+      },
+      "validation": {
+        "overall_m": 0.046379,
+        "x_m": 0.035974,
+        "y_m": 0.055302,
+        "z_m": 0.047862
+      }
+    }
+  ],
+  "image_coverage": {
+    "waypoint_samples": 2757,
+    "missing_legacy_images": 0,
+    "legacy_16x16_available": true,
+    "pretrained_dinov2_available": true
+  },
+  "pretrained_encoder": {
+    "hidden_size": 384,
+    "image_size": 224,
+    "license": "apache-2.0",
+    "model_name": "facebook/dinov2-small",
+    "num_register_tokens": 0,
+    "patch_grid_dim": 98304,
+    "patch_size": 14,
+    "pooled_dim": 384,
+    "preprocess": {
+      "backend": "transformers.AutoImageProcessor",
+      "center_crop": [
+        224,
+        224
+      ],
+      "do_normalize": true,
+      "do_rescale": true,
+      "image_mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "image_std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "interpolation": "3",
+      "rescale_factor": 0.00392156862745098,
+      "resize_shortest_edge": 256
+    },
+    "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+    "spatial_hw": [
+      16,
+      16
+    ]
+  },
+  "loso": {
+    "feature": "state_prev_action_pretrained_cls_spatial4x4",
+    "folds": [
+      {
+        "base_scene": "train-clear-i00",
+        "train_samples": 2344,
+        "validation_samples": 413,
+        "train": {
+          "overall_m": 0.017861,
+          "x_m": 0.016188,
+          "y_m": 0.024743,
+          "z_m": 0.012652
+        },
+        "validation": {
+          "overall_m": 0.030223,
+          "x_m": 0.024085,
+          "y_m": 0.038023,
+          "z_m": 0.028561
+        }
+      },
+      {
+        "base_scene": "train-clear-i03",
+        "train_samples": 2348,
+        "validation_samples": 409,
+        "train": {
+          "overall_m": 0.017835,
+          "x_m": 0.016117,
+          "y_m": 0.02476,
+          "z_m": 0.012626
+        },
+        "validation": {
+          "overall_m": 0.030862,
+          "x_m": 0.025047,
+          "y_m": 0.040489,
+          "z_m": 0.027051
+        }
+      },
+      {
+        "base_scene": "train-clear-i06",
+        "train_samples": 2379,
+        "validation_samples": 378,
+        "train": {
+          "overall_m": 0.017867,
+          "x_m": 0.016173,
+          "y_m": 0.024786,
+          "z_m": 0.012642
+        },
+        "validation": {
+          "overall_m": 0.029279,
+          "x_m": 0.023213,
+          "y_m": 0.034704,
+          "z_m": 0.029921
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i01",
+        "train_samples": 2381,
+        "validation_samples": 376,
+        "train": {
+          "overall_m": 0.017846,
+          "x_m": 0.016161,
+          "y_m": 0.024748,
+          "z_m": 0.012629
+        },
+        "validation": {
+          "overall_m": 0.042237,
+          "x_m": 0.033488,
+          "y_m": 0.04728,
+          "z_m": 0.045943
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i04",
+        "train_samples": 2413,
+        "validation_samples": 344,
+        "train": {
+          "overall_m": 0.017851,
+          "x_m": 0.016096,
+          "y_m": 0.024808,
+          "z_m": 0.012651
+        },
+        "validation": {
+          "overall_m": 0.039684,
+          "x_m": 0.032403,
+          "y_m": 0.046801,
+          "z_m": 0.039848
+        }
+      },
+      {
+        "base_scene": "train-cluttered-i07",
+        "train_samples": 2416,
+        "validation_samples": 341,
+        "train": {
+          "overall_m": 0.01786,
+          "x_m": 0.016089,
+          "y_m": 0.024853,
+          "z_m": 0.012638
+        },
+        "validation": {
+          "overall_m": 0.036714,
+          "x_m": 0.026851,
+          "y_m": 0.046538,
+          "z_m": 0.036754
+        }
+      },
+      {
+        "base_scene": "train-reach-limited-i02",
+        "train_samples": 2507,
+        "validation_samples": 250,
+        "train": {
+          "overall_m": 0.017849,
+          "x_m": 0.016136,
+          "y_m": 0.024703,
+          "z_m": 0.012708
+        },
+        "validation": {
+          "overall_m": 0.040322,
+          "x_m": 0.035339,
+          "y_m": 0.048272,
+          "z_m": 0.037356
+        }
+      },
+      {
+        "base_scene": "train-reach-limited-i05",
+        "train_samples": 2511,
+        "validation_samples": 246,
+        "train": {
+          "overall_m": 0.017902,
+          "x_m": 0.016296,
+          "y_m": 0.024721,
+          "z_m": 0.012691
+        },
+        "validation": {
+          "overall_m": 0.030413,
+          "x_m": 0.024512,
+          "y_m": 0.037202,
+          "z_m": 0.029525
+        }
+      }
+    ],
+    "mean_validation_mae_m": 0.034967
+  },
+  "gripper": {
+    "threshold_m": 0.02,
+    "positive_class": "close",
+    "train_close_rate": 0.403376,
+    "validation_close_rate": 0.400385,
+    "majority_baseline": {
+      "predicted_close": false,
+      "accuracy": 0.599615,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 416,
+      "tn": 623
+    },
+    "train_samples": 1718,
+    "validation_samples": 1039
+  },
+  "phase_focus": {
+    "state_only": {
+      "PREGRASP": {
+        "overall_m": 0.037524,
+        "x_m": 0.026066,
+        "y_m": 0.061603,
+        "z_m": 0.024904,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.026666,
+        "x_m": 0.017989,
+        "y_m": 0.032773,
+        "z_m": 0.029235,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.030119,
+        "x_m": 0.020965,
+        "y_m": 0.02836,
+        "z_m": 0.041034,
+        "n": 120
+      }
+    },
+    "state_plus_prev_action": {
+      "PREGRASP": {
+        "overall_m": 0.025405,
+        "x_m": 0.008839,
+        "y_m": 0.025566,
+        "z_m": 0.041811,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.017992,
+        "x_m": 0.009775,
+        "y_m": 0.022424,
+        "z_m": 0.021775,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.017035,
+        "x_m": 0.005541,
+        "y_m": 0.013841,
+        "z_m": 0.031724,
+        "n": 120
+      }
+    },
+    "pretrained_cls_only": {
+      "PREGRASP": {
+        "overall_m": 0.053831,
+        "x_m": 0.051646,
+        "y_m": 0.072283,
+        "z_m": 0.037564,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.060725,
+        "x_m": 0.054742,
+        "y_m": 0.074941,
+        "z_m": 0.052492,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.037158,
+        "x_m": 0.030449,
+        "y_m": 0.045115,
+        "z_m": 0.035909,
+        "n": 120
+      }
+    },
+    "pretrained_spatial2x2_only": {
+      "PREGRASP": {
+        "overall_m": 0.063257,
+        "x_m": 0.048808,
+        "y_m": 0.074133,
+        "z_m": 0.066831,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.058426,
+        "x_m": 0.045411,
+        "y_m": 0.069699,
+        "z_m": 0.060168,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.039189,
+        "x_m": 0.02853,
+        "y_m": 0.048327,
+        "z_m": 0.04071,
+        "n": 120
+      }
+    },
+    "pretrained_spatial4x4_only": {
+      "PREGRASP": {
+        "overall_m": 0.039326,
+        "x_m": 0.026205,
+        "y_m": 0.032792,
+        "z_m": 0.05898,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.036566,
+        "x_m": 0.025768,
+        "y_m": 0.034732,
+        "z_m": 0.049197,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.031715,
+        "x_m": 0.02322,
+        "y_m": 0.031808,
+        "z_m": 0.040119,
+        "n": 120
+      }
+    },
+    "pretrained_spatial4x4_pca64_only": {
+      "PREGRASP": {
+        "overall_m": 0.030781,
+        "x_m": 0.02524,
+        "y_m": 0.032964,
+        "z_m": 0.034139,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.03059,
+        "x_m": 0.022435,
+        "y_m": 0.031266,
+        "z_m": 0.038067,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.027009,
+        "x_m": 0.016976,
+        "y_m": 0.027783,
+        "z_m": 0.036267,
+        "n": 120
+      }
+    },
+    "state_plus_pretrained_cls": {
+      "PREGRASP": {
+        "overall_m": 0.047465,
+        "x_m": 0.045447,
+        "y_m": 0.057561,
+        "z_m": 0.039386,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.049161,
+        "x_m": 0.044255,
+        "y_m": 0.057443,
+        "z_m": 0.045787,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.042981,
+        "x_m": 0.036551,
+        "y_m": 0.054545,
+        "z_m": 0.037849,
+        "n": 120
+      }
+    },
+    "state_prev_action_plus_pretrained_cls": {
+      "PREGRASP": {
+        "overall_m": 0.030421,
+        "x_m": 0.018995,
+        "y_m": 0.026905,
+        "z_m": 0.045364,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.027148,
+        "x_m": 0.019266,
+        "y_m": 0.026575,
+        "z_m": 0.035602,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.019004,
+        "x_m": 0.011135,
+        "y_m": 0.020397,
+        "z_m": 0.025479,
+        "n": 120
+      }
+    },
+    "state_plus_pretrained_cls_spatial4x4": {
+      "PREGRASP": {
+        "overall_m": 0.038197,
+        "x_m": 0.026245,
+        "y_m": 0.033939,
+        "z_m": 0.054408,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.03583,
+        "x_m": 0.026375,
+        "y_m": 0.03574,
+        "z_m": 0.045376,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.029607,
+        "x_m": 0.02192,
+        "y_m": 0.029984,
+        "z_m": 0.036918,
+        "n": 120
+      }
+    },
+    "state_prev_action_plus_pretrained_cls_spatial4x4": {
+      "PREGRASP": {
+        "overall_m": 0.036962,
+        "x_m": 0.024061,
+        "y_m": 0.030449,
+        "z_m": 0.056378,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.029694,
+        "x_m": 0.021543,
+        "y_m": 0.027748,
+        "z_m": 0.03979,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.022877,
+        "x_m": 0.015258,
+        "y_m": 0.02302,
+        "z_m": 0.030354,
+        "n": 120
+      }
+    },
+    "state_prev_action_plus_pretrained_spatial4x4_pca64": {
+      "PREGRASP": {
+        "overall_m": 0.022518,
+        "x_m": 0.00878,
+        "y_m": 0.014671,
+        "z_m": 0.044102,
+        "n": 30
+      },
+      "DESCEND": {
+        "overall_m": 0.016005,
+        "x_m": 0.008995,
+        "y_m": 0.01549,
+        "z_m": 0.023531,
+        "n": 176
+      },
+      "PLACE_DESCEND": {
+        "overall_m": 0.015084,
+        "x_m": 0.004814,
+        "y_m": 0.013348,
+        "z_m": 0.02709,
+        "n": 120
+      }
+    }
+  },
+  "encoder": [
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 1,
+      "iterations": 50,
+      "mean_ms": 0.087506,
+      "p95_ms": 0.054188,
+      "images_per_s": 11427.848
+    },
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 8,
+      "iterations": 50,
+      "mean_ms": 0.184345,
+      "p95_ms": 0.145202,
+      "images_per_s": 43396.896
+    },
+    {
+      "input_dim": 256,
+      "hidden_dim": 128,
+      "output_dim": 32,
+      "batch_size": 32,
+      "iterations": 50,
+      "mean_ms": 0.15085,
+      "p95_ms": 0.192008,
+      "images_per_s": 212131.2
+    }
+  ],
+  "image_feature_timing": {
+    "status": "measured",
+    "samples": 38,
+    "mean_ms": 7.869716,
+    "p95_ms": 12.429713,
+    "operation": "jpeg decode + grayscale resize + float normalise"
+  },
+  "waypoint_samples_path": "runs/v3/offline/waypoint_samples.npz",
+  "notes": [
+    "Waypoints come from recorded commanded_ee_base_xyz_m changes.",
+    "Runtime expert phase labels and CAN ground truth are not model inputs.",
+    "The development split is grouped by base scene identity.",
+    "LOSO is a memorization check, not a holdout evaluation."
+  ]
+}

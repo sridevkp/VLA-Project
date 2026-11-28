@@ -1,0 +1,245 @@
+{
+  "status": "measured-offline-prototype",
+  "model": "compact_mlp_waypoint_v3",
+  "config": {
+    "input_dim": 6543,
+    "hidden_dim": 256,
+    "dropout": 0.0,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "batch_size": 64,
+    "epochs": 30,
+    "seed": 0,
+    "gripper_threshold_m": 0.02
+  },
+  "dataset": "/home/tj330/programs/VLA-Project/runs/datasets/tiago-train-v1",
+  "dino_cache": "runs/v3/features/facebook__dinov2-small-224.npz",
+  "dino_meta": {
+    "hidden_size": 384,
+    "image_size": 224,
+    "license": "apache-2.0",
+    "model_name": "facebook/dinov2-small",
+    "num_register_tokens": 0,
+    "patch_grid_dim": 98304,
+    "patch_size": 14,
+    "pooled_dim": 384,
+    "preprocess": {
+      "backend": "transformers.AutoImageProcessor",
+      "center_crop": [
+        224,
+        224
+      ],
+      "do_normalize": true,
+      "do_rescale": true,
+      "image_mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "image_std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "interpolation": "3",
+      "rescale_factor": 0.00392156862745098,
+      "resize_shortest_edge": 256
+    },
+    "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+    "spatial_hw": [
+      16,
+      16
+    ]
+  },
+  "split": {
+    "validation_bases": [
+      "train-clear-i00",
+      "train-cluttered-i01",
+      "train-reach-limited-i02"
+    ],
+    "train": 1718,
+    "val": 1039
+  },
+  "overall_validation": {
+    "xyz_mae_m": 0.039284,
+    "xyz_mae_x_m": 0.036505,
+    "xyz_mae_y_m": 0.0442,
+    "xyz_mae_z_m": 0.037147,
+    "gripper_accuracy": 0.599615,
+    "gripper_precision": 0.0,
+    "gripper_recall": 0.0,
+    "gripper_tp": 0,
+    "gripper_fp": 0,
+    "gripper_fn": 416,
+    "gripper_tn": 623
+  },
+  "validation_by_phase": {
+    "DESCEND": {
+      "overall_m": 0.028771,
+      "x_m": 0.023098,
+      "y_m": 0.019615,
+      "z_m": 0.043599,
+      "n": 176
+    },
+    "DONE": {
+      "overall_m": 0.031853,
+      "x_m": 0.024302,
+      "y_m": 0.044399,
+      "z_m": 0.026857,
+      "n": 30
+    },
+    "HOME": {
+      "overall_m": 0.222468,
+      "x_m": 0.291291,
+      "y_m": 0.347892,
+      "z_m": 0.028221,
+      "n": 30
+    },
+    "INIT": {
+      "overall_m": 0.037388,
+      "x_m": 0.028394,
+      "y_m": 0.023771,
+      "z_m": 0.06,
+      "n": 60
+    },
+    "LIFT": {
+      "overall_m": 0.029569,
+      "x_m": 0.024278,
+      "y_m": 0.030156,
+      "z_m": 0.034274,
+      "n": 161
+    },
+    "PLACE_DESCEND": {
+      "overall_m": 0.029723,
+      "x_m": 0.022321,
+      "y_m": 0.022032,
+      "z_m": 0.044817,
+      "n": 120
+    },
+    "PREGRASP": {
+      "overall_m": 0.027947,
+      "x_m": 0.023514,
+      "y_m": 0.02251,
+      "z_m": 0.037818,
+      "n": 30
+    },
+    "PREGRASP_REALIGN": {
+      "overall_m": 0.027906,
+      "x_m": 0.028561,
+      "y_m": 0.018292,
+      "z_m": 0.036866,
+      "n": 30
+    },
+    "RELEASE": {
+      "overall_m": 0.033251,
+      "x_m": 0.027799,
+      "y_m": 0.026218,
+      "z_m": 0.045736,
+      "n": 30
+    },
+    "RETREAT": {
+      "overall_m": 0.054603,
+      "x_m": 0.054779,
+      "y_m": 0.074756,
+      "z_m": 0.034275,
+      "n": 120
+    },
+    "TRANSIT": {
+      "overall_m": 0.033043,
+      "x_m": 0.028315,
+      "y_m": 0.042843,
+      "z_m": 0.02797,
+      "n": 252
+    }
+  },
+  "visual_sensitivity_proxy": {
+    "status": "measured_proxy",
+    "pairs": 24565,
+    "corr_dcanx_dpredx": 0.08535015249293845,
+    "corr_dcany_dpredy": 0.09671918990865214,
+    "mean_abs_dpred_xy_m": 0.047157,
+    "mean_abs_dcan_xy_m": 0.032531
+  },
+  "history_tail": [
+    {
+      "epoch": 26,
+      "train_loss": 0.08417756000050793,
+      "xyz_mae_m": 0.042128,
+      "xyz_mae_x_m": 0.040927,
+      "xyz_mae_y_m": 0.047673,
+      "xyz_mae_z_m": 0.037782,
+      "gripper_accuracy": 0.599615,
+      "gripper_precision": 0.0,
+      "gripper_recall": 0.0,
+      "gripper_tp": 0,
+      "gripper_fp": 0,
+      "gripper_fn": 416,
+      "gripper_tn": 623
+    },
+    {
+      "epoch": 27,
+      "train_loss": 0.08363673394476925,
+      "xyz_mae_m": 0.042062,
+      "xyz_mae_x_m": 0.036845,
+      "xyz_mae_y_m": 0.050483,
+      "xyz_mae_z_m": 0.038858,
+      "gripper_accuracy": 0.599615,
+      "gripper_precision": 0.0,
+      "gripper_recall": 0.0,
+      "gripper_tp": 0,
+      "gripper_fp": 0,
+      "gripper_fn": 416,
+      "gripper_tn": 623
+    },
+    {
+      "epoch": 28,
+      "train_loss": 0.08330681947646318,
+      "xyz_mae_m": 0.044834,
+      "xyz_mae_x_m": 0.035986,
+      "xyz_mae_y_m": 0.058032,
+      "xyz_mae_z_m": 0.040485,
+      "gripper_accuracy": 0.599615,
+      "gripper_precision": 0.0,
+      "gripper_recall": 0.0,
+      "gripper_tp": 0,
+      "gripper_fp": 0,
+      "gripper_fn": 416,
+      "gripper_tn": 623
+    },
+    {
+      "epoch": 29,
+      "train_loss": 0.08308717360099156,
+      "xyz_mae_m": 0.042204,
+      "xyz_mae_x_m": 0.035922,
+      "xyz_mae_y_m": 0.051064,
+      "xyz_mae_z_m": 0.039626,
+      "gripper_accuracy": 0.599615,
+      "gripper_precision": 0.0,
+      "gripper_recall": 0.0,
+      "gripper_tp": 0,
+      "gripper_fp": 0,
+      "gripper_fn": 416,
+      "gripper_tn": 623
+    },
+    {
+      "epoch": 30,
+      "train_loss": 0.08281834699489453,
+      "xyz_mae_m": 0.039284,
+      "xyz_mae_x_m": 0.036505,
+      "xyz_mae_y_m": 0.0442,
+      "xyz_mae_z_m": 0.037147,
+      "gripper_accuracy": 0.599615,
+      "gripper_precision": 0.0,
+      "gripper_recall": 0.0,
+      "gripper_tp": 0,
+      "gripper_fp": 0,
+      "gripper_fn": 416,
+      "gripper_tn": 623
+    }
+  ],
+  "notes": [
+    "Prototype trained on existing 80-demo TRAIN dataset only; no holdout.",
+    "Prev-action is causally available previous frame action.",
+    "Visual sensitivity is an observational proxy over existing can offsets, not a physically rendered counterfactual."
+  ]
+}

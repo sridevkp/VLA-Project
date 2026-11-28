@@ -1,0 +1,53 @@
+{
+  "model": {
+    "model_name": "facebook/dinov2-small",
+    "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+    "license": "apache-2.0",
+    "hidden_size": 384,
+    "patch_size": 14,
+    "image_size": 224,
+    "num_register_tokens": 0,
+    "spatial_hw": [
+      16,
+      16
+    ],
+    "pooled_dim": 384,
+    "patch_grid_dim": 98304,
+    "preprocess": {
+      "backend": "transformers.AutoImageProcessor",
+      "resize_shortest_edge": 256,
+      "center_crop": [
+        224,
+        224
+      ],
+      "do_rescale": true,
+      "rescale_factor": 0.00392156862745098,
+      "do_normalize": true,
+      "image_mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "image_std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "interpolation": "3"
+    }
+  },
+  "samples": 2757,
+  "unique_frames": 2117,
+  "pooled_shape": [
+    2117,
+    384
+  ],
+  "spatial_shape": [
+    2117,
+    16,
+    16,
+    384
+  ],
+  "cache_bytes": 388109912,
+  "seconds": 2098.851
+}

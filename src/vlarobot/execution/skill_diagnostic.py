@@ -6,7 +6,13 @@ from pathlib import Path
 from sys import executable
 from typing import Any
 
-from vlarobot.backends.webots.config import CAN_RADIUS_M, CLOSE_ALIGN_TOL, GRIPPER_OPEN, SETTINGS
+from vlarobot.backends.webots.config import (
+    CAN_RADIUS_M,
+    CLOSE_ALIGN_TOL,
+    GRIPPER_OPEN,
+    LIFT_MIN,
+    SETTINGS,
+)
 from vlarobot.core.types import GripperCmd, JointTarget, Vec3
 from vlarobot.eval.runner import build_episode_plan
 from vlarobot.eval.vla_metrics import final_can_outcome
@@ -99,6 +105,12 @@ def run_skill_diagnostic(
                 )
             audits = []
             audit = command_proxy(executor.monitor, selected, audits.append) if proxy else None
+            if (
+                proxy
+                and selected in (Skill.OPEN, Skill.RELEASE)
+                and before.z - initial_can.position.z >= LIFT_MIN
+            ):
+                break
             if proxy and selected in (Skill.LIFT, Skill.TRANSFER, Skill.LOWER, Skill.RELEASE):
                 anchor = executor._base_frame_targets(backend, observation)["grasp"]
                 base_pose = observation.robot.base_pose_world
@@ -128,7 +140,13 @@ def run_skill_diagnostic(
             final_pose = backend.get_ground_truth().object_poses["CAN"]
             after = final_pose.position
             if result.settled:
-                observed = measured_attachment(observation, result.observation, before, after)
+                observed = measured_attachment(
+                    observation,
+                    result.observation,
+                    before,
+                    after,
+                    previous_offset=attachment_offset,
+                )
                 if observed is not None:
                     attachment_offset = observed
                 if result.observation.robot.gripper_opening >= GRIPPER_OPEN - 0.002:

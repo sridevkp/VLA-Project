@@ -88,8 +88,10 @@ def measured_attachment(
     after: Observation,
     can_before_world: Vec3,
     can_after_world: Vec3,
+    *,
+    previous_offset: np.ndarray | None = None,
 ) -> np.ndarray | None:
-    """Establish a tool-relative CAN offset only after observed upward co-motion."""
+    """Establish attachment by lifting, then refresh it on measured carrying motion."""
     old_base, new_base = before.robot.base_pose_world, after.robot.base_pose_world
     if old_base is None or new_base is None:
         return None
@@ -99,10 +101,19 @@ def measured_attachment(
     new_tool = compose(new_base, after.robot.ee_pose)
     tool_delta = new_tool.position.as_array() - old_tool.position.as_array()
     can_delta = can_after_world.as_array() - can_before_world.as_array()
-    if can_delta[2] < LIFT_MIN or np.linalg.norm(can_delta - tool_delta) > CAN_RADIUS_M:
-        return None
     can_in_tool = compose(_inverse_pose(new_tool), Pose3D(can_after_world, (0.0, 0.0, 0.0, 1.0)))
-    return can_in_tool.position.as_array()
+    offset = can_in_tool.position.as_array()
+    separation_error = np.linalg.norm(can_delta - tool_delta)
+    if previous_offset is None:
+        valid = can_delta[2] >= LIFT_MIN and separation_error <= CAN_RADIUS_M
+    else:
+        diameter = 2 * CAN_RADIUS_M
+        valid = (
+            min(np.linalg.norm(can_delta), np.linalg.norm(tool_delta)) >= LIFT_MIN
+            and separation_error <= diameter
+            and np.linalg.norm(offset) <= diameter
+        )
+    return offset if valid else None
 
 
 def grasp_evidence(
@@ -192,7 +203,7 @@ def generate_candidates(
         *(
             candidate
             for candidate in candidates
-            if candidate.skill is not Skill.RELEASE or can_rise_m < LIFT_MIN
+            if candidate.skill not in (Skill.OPEN, Skill.RELEASE) or can_rise_m < LIFT_MIN
         ),
         *alternate,
     )
@@ -439,7 +450,11 @@ def run_learned_smoke(
             pose_after = backend.get_ground_truth().object_poses["CAN"]
             if actual.settled:
                 new_attachment = measured_attachment(
-                    obs_before, obs, truth.object_poses["CAN"].position, pose_after.position
+                    obs_before,
+                    obs,
+                    truth.object_poses["CAN"].position,
+                    pose_after.position,
+                    previous_offset=attachment_offset,
                 )
                 if new_attachment is not None:
                     attachment_offset = new_attachment

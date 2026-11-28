@@ -85,6 +85,8 @@ def test_placement_requires_grasp_and_measured_elevation() -> None:
         observed = {action.skill for action in candidates}
         assert expected <= observed
         assert (Skill.LOWER in observed) == (holding and rise > 0)
+        if rise > 0:
+            assert observed.isdisjoint({Skill.OPEN, Skill.RELEASE})
 
         closed = replace(current, robot=replace(current.robot, gripper_opening=0.0))
         closed_actions = generate_candidates(
@@ -214,3 +216,29 @@ def test_close_progress_does_not_reward_recommanding_a_settled_grasp() -> None:
     assert close_progress_score(0.8, close, GRIPPER_OPEN, False) == 0.8
     assert close_progress_score(0.8, close, 0.0308, True) == 0.0
     assert close_progress_score(0.8, close, 0.001, False) == 0.0
+
+
+def test_existing_attachment_can_refresh_from_horizontal_co_motion() -> None:
+    from vlarobot.core.types import Vec3
+    from vlarobot.execution.skill_live import measured_attachment
+    from vlarobot.world_model.rollout import compose
+
+    obs = FakeBackend().reset(ScenarioSpec(), 0)
+    base = obs.robot.base_pose_world
+    assert base is not None
+    old = obs.robot.ee_pose
+    moved = replace(old, position=replace(old.position, x=old.position.x + 0.23))
+    before = replace(obs, robot=replace(obs.robot, gripper_opening=0.0305))
+    after = replace(before, robot=replace(before.robot, ee_pose=moved))
+    start = compose(base, old).position
+    end = compose(base, moved).position
+    can_start = Vec3(start.x - 0.015, start.y, start.z)
+    can_end = Vec3(end.x + 0.025, end.y, end.z)
+    previous = np.array([-0.015, 0, 0])
+    assert measured_attachment(before, after, can_start, can_end) is None
+    assert (
+        measured_attachment(before, after, can_start, can_end, previous_offset=previous) is not None
+    )
+    assert (
+        measured_attachment(before, after, can_start, can_start, previous_offset=previous) is None
+    )

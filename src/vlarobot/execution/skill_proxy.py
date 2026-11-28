@@ -194,6 +194,8 @@ def command_proxy(
     monitor: SafetyMonitor,
     skill: Skill,
     record: Callable[[SkillProxyAssessment], None],
+    *,
+    record_accepted_forecast: Callable[[Trajectory], None] | None = None,
 ) -> Callable[[Action, Observation, GroundTruth, bool], ApplyResult]:
     """Reforecast the exact current command before dispatch under the separate proxy scope."""
     dt = TIME_STEP / 1000.0
@@ -264,6 +266,8 @@ def command_proxy(
             )
         )
         failed = [name for name, result in assessment.checks if result is not True]
+        if not failed and record_accepted_forecast is not None:
+            record_accepted_forecast(trajectory)
         return ApplyResult(not failed, ", ".join(failed) if failed else None)
 
     return check

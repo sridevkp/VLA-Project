@@ -56,7 +56,9 @@ from vlarobot.execution.skills import (
 )
 from vlarobot.execution.worldmind_pipeline import _inverse_pose
 from vlarobot.risk.gate import CandidateAssessment, RiskGate
-from vlarobot.world_model.rollout import compose, rotate
+from vlarobot.world_model.rollout import Trajectory, compose, rotate
+
+WAYPOINT_FORECAST_POLICY = "open-hand-approach-recovery-audited-joint-path-v1"
 
 _TARGETS = {
     Skill.APPROACH: "pregrasp",
@@ -266,6 +268,32 @@ def close_progress_score(
     return raw_score
 
 
+def _waypoint_forecast(
+    nominal: Trajectory | None,
+    audited: list[Trajectory],
+    *,
+    preflight_passed: bool,
+) -> tuple[Trajectory | None, tuple[str, ...] | None]:
+    if (
+        nominal is None
+        or nominal.hard_reasons != ("ik-joint-safety-veto",)
+        or not preflight_passed
+        or not audited
+        or any(
+            len(path.states) <= 1 or set(path.hard_reasons) - {"unverified-arm-sweep"}
+            for path in audited
+        )
+    ):
+        return nominal, None
+    # An open hand leaves the estimated CAN state unchanged in the utility forecast.
+    scene = nominal.states[0].scene
+    terminal = audited[-1]
+    return (
+        replace(terminal, states=tuple(replace(state, scene=scene) for state in terminal.states)),
+        nominal.hard_reasons,
+    )
+
+
 def _verify_pose(initial: Pose3D, current: Pose3D, home_reached: bool) -> dict:
     return final_can_outcome(
         initial,
@@ -428,10 +456,6 @@ def _run_train_episode(
                 if context != "smoke"
                 else []
             )
-            futures = [item.states[-1] for item in forecasts]
-            if context == "shuffled" and len(futures) > 1:
-                shift = int(np.random.default_rng(entry.seed + index).integers(1, len(futures)))
-                futures = futures[shift:] + futures[:shift]
             # HOME has exact joint forecasts and no empirical labels in this fit.
             if placed_and_released and not home_reached:
                 candidates += (
@@ -439,25 +463,49 @@ def _run_train_episode(
                         Skill.HOME, home_joints=tuple((name, home[name]) for name in ARM_JOINTS)
                     ),
                 )
-            rows, assessments = [], []
+            rehearsals = []
             for candidate_index, candidate in enumerate(candidates):
                 checks = []
+                audited_waypoints: list[Trajectory] = []
+                recoverable = (
+                    candidate.skill in (Skill.APPROACH, Skill.RETREAT)
+                    and obs.robot.gripper_opening >= GRIPPER_OPEN - 0.002
+                    and measured_rise < LIFT_MIN
+                )
                 rehearsal = _PreviewBackend(obs, truth)
                 preview = SkillExecutor(entry.seed, obs, kinematics=copy(kinematics))
                 predicted = preview.run_skill(
                     rehearsal,
                     obs,
                     candidate,
-                    audit=command_proxy(preview.monitor, candidate.skill, checks.append),
+                    audit=command_proxy(
+                        preview.monitor,
+                        candidate.skill,
+                        checks.append,
+                        record_accepted_forecast=audited_waypoints.append if recoverable else None,
+                    ),
                 )
                 safe = predicted.settled and bool(checks) and not predicted.vetoes
-                forecast = forecasts[candidate_index] if candidate_index < len(forecasts) else None
+                nominal = forecasts[candidate_index] if candidate_index < len(forecasts) else None
+                forecast, original_veto = _waypoint_forecast(
+                    nominal,
+                    audited_waypoints,
+                    preflight_passed=safe and len(audited_waypoints) == len(predicted.dispatched),
+                )
                 if forecast is not None:
                     safe = (
                         safe
                         and len(forecast.states) > 1
                         and set(forecast.hard_reasons) <= {"unverified-arm-sweep"}
                     )
+                rehearsals.append((predicted, checks, safe, forecast, original_veto))
+            futures = [forecast.states[-1] for _, _, _, forecast, _ in rehearsals if forecast]
+            if context == "shuffled" and len(futures) > 1:
+                shift = int(np.random.default_rng(entry.seed + index).integers(1, len(futures)))
+                futures = futures[shift:] + futures[:shift]
+            rows, assessments = [], []
+            for candidate_index, candidate in enumerate(candidates):
+                predicted, checks, safe, forecast, original_veto = rehearsals[candidate_index]
                 future = None
                 if uses_context and forecast is not None:
                     future = state if context == "controlled" else futures[candidate_index]
@@ -499,6 +547,12 @@ def _run_train_episode(
                         "score": score,
                         "raw_model_score": raw_score,
                         "score_source": score_source,
+                        "endpoint_forecast_veto": original_veto,
+                        "forecast_source": "audited-joint-waypoints"
+                        if original_veto is not None
+                        else "nominal"
+                        if forecast is not None
+                        else None,
                         "strict_forecast_reasons": None
                         if forecast is None
                         else forecast.hard_reasons,
@@ -524,6 +578,8 @@ def _run_train_episode(
             decision = gate.select(assessments)
             record = {
                 "index": index,
+                "joint_pos_rad": obs.robot.joint_pos,
+                "base_pose_world": asdict(base),
                 "placed_and_released": placed_and_released,
                 "home_reached": home_reached,
                 "causal_best_approach_gap_m": best_approach_gap,
@@ -642,6 +698,7 @@ def _run_train_episode(
             "model_sha256": hashlib.sha256(model_bytes).hexdigest(),
             "profile": PROFILE_ID,
             "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
+            "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
             "privileged_inputs": [
                 "CAN pose for grasp and release safety, completion scoring and verification",
                 "HAM/APP poses for proxy",
@@ -699,6 +756,7 @@ def run_train_admission(
         "utility_context": "predicted",
         "profile": PROFILE_ID,
         "urdf_registration_sha256": CORRECTED_REGISTRATION_SHA256,
+        "waypoint_forecast_policy": WAYPOINT_FORECAST_POLICY,
         "model_sha256": model_sha,
         "home_tolerance_rad": HOME_VERIFICATION_TOLERANCE_RAD,
         "stop_reason": "termination selected",

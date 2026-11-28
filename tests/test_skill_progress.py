@@ -273,6 +273,7 @@ def test_admission_requires_verified_home_and_preserves_all_24_trials(
         "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
         "profile": skill_live.PROFILE_ID,
         "urdf_registration_sha256": skill_live.CORRECTED_REGISTRATION_SHA256,
+        "waypoint_forecast_policy": skill_live.WAYPOINT_FORECAST_POLICY,
         "home_tolerance_rad": skill_live.HOME_VERIFICATION_TOLERANCE_RAD,
         "utility_context": "predicted",
         "stop_reason": "termination selected",
@@ -299,3 +300,27 @@ def test_admission_requires_verified_home_and_preserves_all_24_trials(
     assert report["successes"] == 10
     assert report["passed"] is True
     assert [row["index"] for row in report["episodes"]] == list(range(24))
+
+
+@pytest.mark.parametrize(
+    ("nominal_reasons", "path_reasons", "passed", "replace_forecast"),
+    [
+        (("ik-joint-safety-veto",), ("unverified-arm-sweep",), True, True),
+        (("ik-joint-safety-veto",), ("unverified-arm-sweep",), False, False),
+        (("ik-joint-safety-veto",), ("safety-monitor-veto",), True, False),
+        (("unverified-arm-sweep",), ("unverified-arm-sweep",), True, False),
+    ],
+)
+def test_waypoint_forecast_requires_a_complete_passing_preflight(
+    nominal_reasons, path_reasons, passed, replace_forecast
+) -> None:
+    from vlarobot.core.types import SceneState, WorldState
+    from vlarobot.execution.skill_live import _waypoint_forecast
+    from vlarobot.world_model.rollout import Trajectory
+
+    state = WorldState(SceneState([]), FakeBackend().reset(ScenarioSpec(), 0).robot)
+    nominal = Trajectory((state,), 1.0, nominal_reasons, (), ())
+    audited = Trajectory((state, state), 0.032, path_reasons, (), ())
+    chosen, recorded_veto = _waypoint_forecast(nominal, [audited], preflight_passed=passed)
+    assert chosen == (audited if replace_forecast else nominal)
+    assert recorded_veto == (nominal_reasons if replace_forecast else None)

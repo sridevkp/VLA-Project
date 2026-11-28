@@ -4247,3 +4247,17 @@ binding. The reset snapshot records joint, tool, base, and CAN state plus the
 registration digest. The original archived observation record has no full
 robot-state frames, so reconstruction uses the logged tool and waypoint
 evidence.
+
+Three immutable, registered TRAIN reruns of `fbb2dcb` with the frozen model
+produced zero placements and zero complete episodes. Two chose CLOSE after
+a single-endpoint RETREAT forecast veto, then timed out during DESCEND. The
+other took an offset approach after the same kind of endpoint veto on the
+centered PREGRASP and exhausted the budget before release. The exact joint
+waypoint preflight passed for the affected candidate in each case.
+
+The bounded follow-up uses the accepted analytic waypoint forecasts for
+open-hand PREGRASP or RETREAT only when the nominal endpoint fails its IK
+joint safety check. Every planned waypoint must pass preflight, and every
+actual command is audited again. Full-arm sweep remains unverified. The
+model, weights, candidate enumeration, and verified HOME requirements
+remain frozen. Faulty endpoint forecasts are retained in the trace.
